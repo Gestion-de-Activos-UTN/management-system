@@ -1,8 +1,15 @@
 # Comandos — SIAM
 
-Referencia rápida de todos los comandos del proyecto: qué hacen y dónde correrlos (host o dentro del contenedor `app`).
+Referencia rápida de todos los comandos del proyecto: qué hacen y dónde correrlos (host o dentro del contenedor `app`, con `docker compose exec app <cmd>`).
 
-Convención: `docker compose exec app <cmd>` corre el comando dentro del contenedor ya levantado (usa su `node_modules` y red hacia Postgres). Si no tenés el stack levantado, `pnpm <cmd>` en el host funciona igual siempre que `DATABASE_URL` en `.env.local` sea alcanzable desde tu máquina (ej. `localhost:5432` en vez de `postgres:5432`).
+## ¿Cuándo hace falta `docker compose exec app`?
+
+Dos motivos independientes obligan a correr algo dentro del contenedor en vez de en el host:
+
+1. **No tenés `node_modules` en el host.** El contenedor instala dependencias en su propio filesystem (no en el bind-mount del código), así que si nunca corriste `pnpm install` localmente, `pnpm <cmd>` en el host va a fallar con "command not found" o módulos faltantes. Solución: correr `pnpm install` una vez en el host, o usar `docker compose exec app`.
+2. **El comando necesita hablar con Postgres.** El hostname `postgres` del `DATABASE_URL` (`.env.local`) solo resuelve dentro de la red interna de Compose. Desde el host, esa misma conexión sería `localhost:5432`. Si corrés algo que toca la DB directo en el host, tenés que exportar un `DATABASE_URL` distinto apuntando a `localhost` — más simple: usar `docker compose exec app`, que ya tiene el `DATABASE_URL` correcto seteado como variable de entorno del contenedor.
+
+En la práctica: comandos que **no** tocan la DB (lint, format, type-check, tests unitarios) solo dependen del motivo 1 — corren en el host sin problema si ya instalaste dependencias ahí. Comandos que **sí** tocan la DB (migraciones, tests de integración) dependen también del motivo 2 — por eso se recomienda siempre `docker compose exec app` para esos, salvo que reconfigures `DATABASE_URL` a mano.
 
 ## Docker (ciclo de vida del stack)
 
@@ -19,21 +26,23 @@ Se corren siempre en el **host**, desde la raíz del proyecto.
 
 ## Desarrollo
 
+No tocan la DB — alcanza con tener `node_modules` en algún lado (host si corriste `pnpm install`, o el contenedor).
+
 | Comando | Dónde | Qué hace |
 |---|---|---|
-| `pnpm dev` | Host o `docker compose exec app pnpm dev` | Next dev server (Turbopack). Si usás `docker compose up`, ya corre automáticamente como comando del contenedor. |
-| `pnpm build` | Host | Build de producción de Next |
-| `pnpm lint` | Host | ESLint |
-| `pnpm format` | Host | Prettier sobre todo el repo |
-| `pnpm type-check` | Host | `tsc --noEmit` |
-| `pnpm spell-check` | Host | cspell manual (no corre en CI) |
+| `pnpm dev` | No hace falta correrlo manual: `docker compose up` ya lo ejecuta dentro del contenedor. Si preferís correrlo en el host, necesitás `pnpm install` local. | Next dev server (Turbopack) |
+| `pnpm build` | Host (con deps instaladas) | Build de producción de Next |
+| `pnpm lint` | Host (con deps instaladas) | ESLint |
+| `pnpm format` | Host (con deps instaladas) | Prettier sobre todo el repo |
+| `pnpm type-check` | Host (con deps instaladas) | `tsc --noEmit` |
+| `pnpm spell-check` | Host (con deps instaladas) | cspell manual (no corre en CI) |
 
 ## Tests
 
 | Comando | Dónde | Qué hace |
 |---|---|---|
-| `pnpm test` | Host | Tests unitarios (`node --test` vía `tsx`) |
-| `pnpm test:integration` | Host, requiere Postgres accesible (`docker compose up postgres`) | Tests de integración contra DB real |
+| `pnpm test` | Host (con deps instaladas) | Tests unitarios (`node --test` vía `tsx`), no tocan la DB |
+| `pnpm test:integration` | `docker compose exec app pnpm test:integration` | Toca Postgres real — necesita el `DATABASE_URL` del contenedor (motivo 2) |
 
 ## Migraciones
 
@@ -42,9 +51,11 @@ Requieren `DATABASE_URL` accesible. Correrlas dentro del contenedor evita config
 | Comando | Dónde | Qué hace |
 |---|---|---|
 | `docker compose exec app pnpm migrate` | Contenedor | Aplica migraciones pendientes |
-| `docker compose exec app pnpm migrate:create` | Contenedor | Genera una nueva migración a partir de cambios en el schema |
+| `docker compose exec app pnpm migrate:create -- <description>` | Contenedor | Genera una nueva migración a partir de cambios en el schema. El `--` es necesario para que `<description>` pase como argumento a `payload migrate:create` y no a `pnpm` |
 | `docker compose exec app pnpm migrate:status` | Contenedor | Lista migraciones aplicadas/pendientes |
 | `docker compose exec app pnpm migrate:fresh` | Contenedor | Dropea y recrea el schema, reaplica todas las migraciones (destructivo) |
+
+Ejemplo: `docker compose exec app pnpm migrate:create -- add_inventory_items`
 
 Alternativa sin Docker: levantar solo Postgres (`docker compose up postgres`) y correr `pnpm migrate` en el host con `DATABASE_URL=postgresql://payload:payload@localhost:5432/payloadcms`.
 

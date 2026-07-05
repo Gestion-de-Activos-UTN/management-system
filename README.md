@@ -4,13 +4,13 @@ Andamiaje inicial, basado en la arquitectura de SafeLink (multi-tenant, RBAC, ri
 
 ## Requisitos
 
-- Docker + Docker Compose
-- Node.js 22 (ver `.nvmrc`) si querés correr fuera de Docker
+- Docker Engine con el plugin Compose v2 (comando `docker compose`)
+- Node.js 22 (ver `.nvmrc`) y pnpm, solo si querés correr algo fuera de Docker
 - pnpm (`corepack enable pnpm`)
 
-## Levantar el proyecto localmente
+## Levantar el proyecto
 
-1. Copiar variables de entorno:
+1. Variables de entorno:
 
    ```bash
    cp .env.example .env.local
@@ -21,30 +21,25 @@ Andamiaje inicial, basado en la arquitectura de SafeLink (multi-tenant, RBAC, ri
 2. Levantar Postgres + app:
 
    ```bash
-   docker-compose up
+   docker compose up
    ```
 
-   La app queda disponible en `http://localhost:3000`, Postgres en `localhost:5432` (user/pass/db: `payload`).
+   La app queda en `http://localhost:3000`, Postgres en `localhost:5432` (user/pass/db: `payload`). El contenedor `app` ya corre `pnpm dev` solo.
 
-3. Correr migraciones (dentro del contenedor `app` o localmente con `DATABASE_URL` apuntando al Postgres levantado):
+3. En otra terminal, aplicar migraciones dentro del contenedor:
 
    ```bash
-   pnpm migrate
+   docker compose exec app pnpm migrate
    ```
 
-## Scripts
+4. Bajar el stack cuando termines:
 
-| Script | Descripción |
-|---|---|
-| `pnpm dev` | Next dev server (Turbopack) |
-| `pnpm build` | Build de producción |
-| `pnpm test` | Tests unitarios (`node --test` vía `tsx`) |
-| `pnpm test:integration` | Tests de integración |
-| `pnpm type-check` | `tsc --noEmit` |
-| `pnpm lint` | ESLint (flat config) |
-| `pnpm format` | Prettier sobre todo el repo |
-| `pnpm migrate` / `migrate:create` / `migrate:status` / `migrate:fresh` | Migraciones de Payload |
-| `pnpm spell-check` | cspell manual |
+   ```bash
+   docker compose down          # conserva los datos
+   docker compose down -v       # borra también los volúmenes (reset total)
+   ```
+
+Ver [COMMANDS.md](./COMMANDS.md) para el resto de los comandos (tests, lint, crear migraciones, etc.) y si corren en el host o dentro del contenedor.
 
 ## Estructura
 
