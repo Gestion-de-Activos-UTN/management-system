@@ -1,0 +1,67 @@
+{
+  "name": "siam",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "test": "cross-env NODE_ENV=test PAYLOAD_DISABLE_JOBS=1 node --import tsx --test --test-force-exit $(find . -name \"*.test.ts\" -not -name \"*.integration.test.ts\" -not -path \"./node_modules/*\" -not -path \"./.next/*\")",
+    "test:integration": "cross-env NODE_ENV=test PAYLOAD_DISABLE_JOBS=1 node --import tsx --test --test-force-exit $(find . -name \"*.integration.test.ts\" -not -path \"./node_modules/*\" -not -path \"./.next/*\")",
+    "type-check": "tsc --noEmit",
+    "lint": "next lint",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,scss,md}\"",
+    "prepare": "husky",
+    "migrate": "cross-env NODE_OPTIONS=--no-deprecation payload migrate",
+    "migrate:create": "cross-env NODE_OPTIONS=--no-deprecation payload migrate:create",
+    "migrate:status": "cross-env NODE_OPTIONS=--no-deprecation payload migrate:status",
+    "migrate:fresh": "cross-env NODE_OPTIONS=--no-deprecation payload migrate:fresh --force-accept-warning",
+    "spell-check": "cspell \"**/*\" --config cspell.json --exclude \".git/**\" --exclude \"node_modules/**\" --exclude \".next/**\""
+  },
+  "dependencies": {
+    "next": "~15.4.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "payload": "^3.0.0",
+    "@payloadcms/db-postgres": "^3.0.0",
+    "@payloadcms/next": "^3.0.0",
+    "@payloadcms/richtext-lexical": "^3.0.0",
+    "@auth0/nextjs-auth0": "^4.0.0",
+    "zod": "^4.3.6",
+    "react-hook-form": "^7.72.1",
+    "@hookform/resolvers": "^5.2.2",
+    "lucide-react": "^0.400.0",
+    "sonner": "^1.5.0",
+    "clsx": "^2.1.0",
+    "class-variance-authority": "^0.7.0",
+    "tailwind-merge": "^2.5.0",
+    "pg": "^8.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "tailwindcss": "^4.2.2",
+    "@tailwindcss/postcss": "^4.2.2",
+    "eslint": "^10.0.0",
+    "eslint-config-next": "^16.1.6",
+    "eslint-config-prettier": "^10.1.8",
+    "@eslint/eslintrc": "^3.0.0",
+    "prettier": "^3.8.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "cross-env": "^7.0.3",
+    "tsx": "^4.16.0",
+    "dotenv": "^16.4.0",
+    "cspell": "^8.14.0"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,json,css,scss,md}": [
+      "prettier --write"
+    ]
+  }
+}

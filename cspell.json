@@ -1,0 +1,19 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "words": [
+    "payloadcms",
+    "SIAM",
+    "auth0",
+    "rbac",
+    "tsx",
+    "pnpm",
+    "lexical",
+    "shadcn",
+    "cspell",
+    "lucide",
+    "clsx",
+    "corepack"
+  ],
+  "ignorePaths": ["node_modules/**", ".next/**", "migrations/**"]
+}
