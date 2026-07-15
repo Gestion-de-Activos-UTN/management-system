@@ -1,0 +1,54 @@
+# SIAM — Cursor Rules
+
+Full rationale: see `SYSTEM_PROMPT.md`. This file is the terse, imperative version for inline/agent edits. Same rules, no exceptions.
+
+## Git
+- Flow: `RamaPersonal → PR → dev → PR → main`. Every suggested change targets a PR into `dev`. Never propose direct commits to `dev`/`main`, never propose branch → `main` directly.
+
+## AuditLog / Notification Bell (not built yet — comment, don't build)
+- Any entity create/update/delete you write or touch: add `// AUDIT: ...` above it naming the entity_type/action, noting it needs an AuditLogs entry (chain_hash, per-org chain, written via domain function w/ overrideAccess, never direct API write).
+- Any user-facing event that plausibly needs to alert someone: add `// NOTIFY: ...` naming the audience. Do not build a notification table/queue — comment only until scoped.
+- Known confirmed audit triggers: `organization.deactivate`, `user.invite`, `inventory_snapshot.create`.
+
+## DRY / UI
+- Mantine only for UI primitives. Lucide (`lucide-react`) only for icons, direct import by name.
+- Never call `useReactTable` raw — always go through `components/ui/<DataTable>`.
+- `components/ui/` = generic, no domain knowledge. `modules/<domain>/components/` = domain-specific.
+- Search `components/ui/`, `lib/`, `modules/<domain>/` before writing anything new. Reuse first.
+
+## State
+- TanStack Query = server state, always. Zustand = UI state only, one store per module. Never copy Query results into Zustand or `useState`.
+- Never `useQuery`/`useMutation` in a presentation component — only in `modules/<domain>/hooks/use-*.ts`.
+- Never Redux/Redux Toolkit.
+- Query keys: hierarchical arrays `['assets', officeId, {filters}]`, never strings.
+
+## Contracts
+- Zod is the only source of truth. Location: `management-system/contracts/*.schema.ts`.
+- Pipeline: Zod → JSON Schema (`zod-to-json-schema`) → OpenAPI 3.1 → Pydantic (`datamodel-code-generator` → `scanner-prototype/src/siam_agent/contracts.py`).
+- Never hand-write a duplicate TS interface or Pydantic model. Never add a shared npm+PyPI package between the two languages.
+- One Zod schema validates both client form and server endpoint — never two definitions.
+
+## HTTP
+- Never `fetch` in a component. Chain: Component → hook → `modules/<domain>/service.ts` → `lib/http-client.ts` → API.
+- Scanner↔Platform: HTTP(S)/JSON only. Breaking API changes require `/api/v1/...` versioning, never in-place path changes.
+
+## Multi-tenant / security
+- `OrganizationMemberships` is the bridge table — `Users` never FKs directly to `Organizations`.
+- One active membership per user. `organization`/`user` FK immutable after creation.
+- Role-rank escalation check = compare `role.rank` at hook level, never a static enum.
+- Never allow removing the last active `OrgAdmin` of an org.
+- Row-level scoping (`organization_id`/`office_id`) always applied, even after RBAC passes.
+- RBAC `canDo(...)` always takes explicit `organizationId` from `TenantContext` — never inferred from the user object.
+- Auth0 fail-closed in prod: no session → `req.user = null`, no fallback. Dev-only fallback strictly behind `NODE_ENV !== 'production'`.
+- Never auto-create a `User` because Auth0 says the person is real — fail explicitly instead.
+- No frontend component computes RBAC itself (no `role === 'OrgAdmin'` checks) — read `TenantContext`, never derive.
+
+## Testing (defined here — not in /documentation)
+- Unit/integration (`management-system`): Vitest, colocated `*.test.ts` next to source. Never a mirrored `__tests__/` tree.
+- Unit (`scanner-prototype`): `pytest`, in `scanner-prototype/tests/`, mirroring module names.
+- E2E: Playwright, `management-system/e2e/*.spec.ts`, named by user flow (`org-onboarding.spec.ts`), not by page. E2E only for cross-layer flows; don't E2E what a unit test already covers.
+- Mandatory tests: AuditLog hash chaining, RBAC/tenant scoping, subscription feature reset on deactivation, bootstrap creation order.
+
+## Naming
+- Collections PascalCase, fields snake_case, N:M FK arrays end in `_ids`.
+- Modules plural (`modules/assets/`). Components PascalCase.tsx. Hooks `use*`. Services `<module>.service.ts`. Stores `<module>.store.ts`. Non-component files kebab-case.
