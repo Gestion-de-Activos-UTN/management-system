@@ -1,0 +1,1 @@
+See `SYSTEM_PROMPT.md` in this same directory — it is the canonical instruction set for this repo (git workflow, AuditLog/Notification Bell trigger comments, DRY/UI rules, state management, Zod contracts, HTTP client, multi-tenancy/security, testing conventions). Read it before writing or suggesting any code here.
