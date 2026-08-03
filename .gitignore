@@ -1,0 +1,21 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# next.js
+.next/
+out/
+
+# build
+*.tsbuildinfo
+
+# runtime data
+uploads/
+
+# env (keep .env.example and .env.local template, ignore anything else)
+.env
+.env.*.local
+
+# misc
+.DS_Store
+*.log

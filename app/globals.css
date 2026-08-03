@@ -1,0 +1,30 @@
+@import 'tailwindcss';
+
+/*
+ * Mantine owns components (buttons, tables, forms, layout shells).
+ * Tailwind is for utility spacing/one-off layout only — never a
+ * competing set of buttons/inputs (SYSTEM_PROMPT.md #3).
+ */
+
+/* Tie the app surface to the "bone" scale in both color schemes —
+   otherwise the palette is invisible outside active/hover states. */
+[data-mantine-color-scheme='light'] {
+  --mantine-color-body: var(--mantine-color-bone-0);
+  --mantine-color-text: var(--mantine-color-bone-9);
+}
+
+[data-mantine-color-scheme='dark'] {
+  --mantine-color-body: var(--mantine-color-bone-9);
+  --mantine-color-text: var(--mantine-color-bone-1);
+}
+
+/* NavLink's built-in hover (gray-0 on light / dark-6 on dark) is nearly
+   invisible against the bone body — use mantine's static Styles API class
+   (stable across versions, unlike the hashed module class) to strengthen it. */
+[data-mantine-color-scheme='light'] .mantine-NavLink-root:hover {
+  background-color: var(--mantine-color-bone-2);
+}
+
+[data-mantine-color-scheme='dark'] .mantine-NavLink-root:hover {
+  background-color: var(--mantine-color-dark-5);
+}
