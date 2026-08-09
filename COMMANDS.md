@@ -9,7 +9,7 @@ Dos motivos independientes obligan a correr algo dentro del contenedor en vez de
 1. **No tenés `node_modules` en el host.** El contenedor instala dependencias en su propio filesystem (no en el bind-mount del código), así que si nunca corriste `pnpm install` localmente, `pnpm <cmd>` en el host va a fallar con "command not found" o módulos faltantes. Solución: correr `pnpm install` una vez en el host, o usar `docker compose exec app`.
 2. **El comando necesita hablar con Postgres.** El hostname `postgres` del `DATABASE_URL` (`.env.local`) solo resuelve dentro de la red interna de Compose. Desde el host, esa misma conexión sería `localhost:5432`. Si corrés algo que toca la DB directo en el host, tenés que exportar un `DATABASE_URL` distinto apuntando a `localhost` — más simple: usar `docker compose exec app`, que ya tiene el `DATABASE_URL` correcto seteado como variable de entorno del contenedor.
 
-En la práctica: comandos que **no** tocan la DB (lint, format, type-check, tests unitarios) solo dependen del motivo 1 — corren en el host sin problema si ya instalaste dependencias ahí. Comandos que **sí** tocan la DB (migraciones, tests de integración) dependen también del motivo 2 — por eso se recomienda siempre `docker compose exec app` para esos, salvo que reconfigures `DATABASE_URL` a mano.
+En la práctica: comandos que **no** tocan la DB (lint, format, type-check, tests unitarios) solo dependen del motivo 1 — corren en el host sin problema si ya instalaste dependencias ahí. Comandos que **sí** tocan la DB (tests de integración) dependen también del motivo 2 — por eso se recomienda siempre `docker compose exec app` para esos, salvo que reconfigures `DATABASE_URL` a mano.
 
 ## Docker (ciclo de vida del stack)
 
@@ -44,20 +44,28 @@ No tocan la DB — alcanza con tener `node_modules` en algún lado (host si corr
 | `pnpm test` | Host (con deps instaladas) | Tests unitarios (`node --test` vía `tsx`), no tocan la DB |
 | `pnpm test:integration` | `docker compose exec app pnpm test:integration` | Toca Postgres real — necesita el `DATABASE_URL` del contenedor (motivo 2) |
 
-## Migraciones
+## Schema de la base
 
-Requieren `DATABASE_URL` accesible. Correrlas dentro del contenedor evita configurar una conexión extra desde el host.
+Sin migraciones: el deploy de este proyecto recrea imagen y DB desde cero cada vez, así que no hay estado incremental que preservar entre versiones. Con `NODE_ENV=development` (el `docker-compose.yml` de este repo), Payload sincroniza el schema de Postgres solo, en cada arranque de la app (`pushDevSchema`, sin comando manual).
+
+## Provisioning de Agents
 
 | Comando | Dónde | Qué hace |
 |---|---|---|
-| `docker compose exec app pnpm migrate` | Contenedor | Aplica migraciones pendientes |
-| `docker compose exec app pnpm migrate:create -- <description>` | Contenedor | Genera una nueva migración a partir de cambios en el schema. El `--` es necesario para que `<description>` pase como argumento a `payload migrate:create` y no a `pnpm` |
-| `docker compose exec app pnpm migrate:status` | Contenedor | Lista migraciones aplicadas/pendientes |
-| `docker compose exec app pnpm migrate:fresh` | Contenedor | Dropea y recrea el schema, reaplica todas las migraciones (destructivo) |
+| `pnpm seed:agent` | Ya corre solo en `docker compose up` (idempotente: si `agent-001` ya existe, no lo recrea) | Crea Organization → Office → Agent demo, imprime el token en texto plano una sola vez |
 
-Ejemplo: `docker compose exec app pnpm migrate:create -- add_inventory_items`
+El token no se puede recuperar después (solo se guarda hasheado) — si lo perdiste, hay que revocar ese Agent en la DB y correr el seed de nuevo, o crear otro con la Local API a mano.
 
-Alternativa sin Docker: levantar solo Postgres (`docker compose up postgres`) y correr `pnpm migrate` en el host con `DATABASE_URL=postgresql://payload:payload@localhost:5432/payloadcms`.
+## Contratos Scanner-Platform
+
+Pipeline Zod (fuente de verdad, `contracts/*.schema.ts`) → JSON Schema → Pydantic (`scanner-prototype/src/siam_agent/contracts.py`). Los `.schema.json` generados se commitean — `scanner-prototype` los consume sin instalar nada de npm.
+
+| Comando | Dónde | Qué hace |
+|---|---|---|
+| `pnpm generate:contracts` | Host o contenedor (no toca la DB) | Zod → `contracts/generated/*.schema.json` |
+| `scanner-prototype/scripts/generate_contracts.sh` | Host, dentro de `scanner-prototype/`, con el venv activado | JSON Schema → `src/siam_agent/contracts.py` (requiere `pip install -e ".[dev]"` una vez) |
+
+Correr los dos en orden después de cambiar cualquier `contracts/*.schema.ts`. Test de regresión del lado Python: `pytest tests/test_contracts.py`.
 
 ## Git hooks
 

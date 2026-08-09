@@ -12,8 +12,9 @@ out/
 # runtime data
 uploads/
 
-# env (keep .env.example and .env.local template, ignore anything else)
+# env (solo .env.example queda trackeado)
 .env
+.env.local
 .env.*.local
 
 # misc
