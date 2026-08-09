@@ -1,0 +1,154 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "report_id": {
+      "type": "string"
+    },
+    "agent_id": {
+      "type": "string"
+    },
+    "network": {
+      "type": "string"
+    },
+    "scan_start": {
+      "type": "string"
+    },
+    "scan_end": {
+      "type": "string"
+    },
+    "hosts_up": {
+      "type": "integer",
+      "minimum": -9007199254740991,
+      "maximum": 9007199254740991
+    },
+    "assets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "asset_id": {
+            "type": "string"
+          },
+          "agent_id": {
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "mac": {
+            "type": "string"
+          },
+          "vendor": {
+            "type": "string"
+          },
+          "hostname": {
+            "type": "string"
+          },
+          "os": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "accuracy": {
+                    "type": "integer",
+                    "minimum": -9007199254740991,
+                    "maximum": 9007199254740991
+                  },
+                  "cpe": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "name",
+                  "accuracy",
+                  "cpe"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "port": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "protocol": {
+                  "type": "string"
+                },
+                "state": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "product": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                },
+                "extra_info": {
+                  "type": "string"
+                },
+                "cpe": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "port",
+                "protocol",
+                "state",
+                "name",
+                "product",
+                "version",
+                "extra_info",
+                "cpe"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "scan_time": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "asset_id",
+          "agent_id",
+          "ip",
+          "mac",
+          "vendor",
+          "hostname",
+          "os",
+          "services",
+          "scan_time"
+        ],
+        "additionalProperties": {}
+      }
+    }
+  },
+  "required": [
+    "report_id",
+    "agent_id",
+    "network",
+    "scan_start",
+    "scan_end",
+    "hosts_up",
+    "assets"
+  ],
+  "additionalProperties": {}
+}

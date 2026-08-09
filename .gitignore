@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# next.js
+.next/
+out/
+
+# build
+*.tsbuildinfo
+
+# runtime data
+uploads/
+
+# env (solo .env.example queda trackeado)
+.env
+.env.local
+.env.*.local
+
+# misc
+.DS_Store
+*.log

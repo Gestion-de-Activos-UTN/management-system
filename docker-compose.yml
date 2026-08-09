@@ -24,7 +24,11 @@ services:
     ports:
       - '3000:3000'
     env_file:
-      - .env.local
+      # Opcional: management-system/.env.local no es necesario para levantar el stack local —
+      # todo lo que Postgres/Payload necesitan ya está hardcodeado abajo en `environment:`.
+      # Solo hace falta ese archivo para secretos reales (Auth0, etc.), no para desarrollo local.
+      - path: .env.local
+        required: false
     environment:
       - DATABASE_URL=postgresql://payload:payload@postgres:5432/payloadcms
       - PAYLOAD_SECRET=your-secret-key-change-this
@@ -39,6 +43,11 @@ services:
       - /app/node_modules
       - /app/.next
       - uploads_data:/app/uploads
+    # Sin migraciones: el deploy de este proyecto recrea la imagen/DB desde cero cada vez, no
+    # las necesita. Payload sincroniza el schema solo con NODE_ENV=development (pushDevSchema).
+    # DEV ONLY — no copiar a un compose de producción sin sacar `pnpm seed:agent`:
+    # crea una "Org Demo" en cada arranque si no existe — no algo que quieras cerca de un cliente real.
+    command: sh -c "pnpm seed:agent && pnpm run dev"
 
 volumes:
   postgres_data:
