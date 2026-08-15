@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Center, Group, Loader, Stack, Text } from '@mantine/core';
@@ -18,7 +18,11 @@ import { OfficeSelector } from '@/modules/offices/components/OfficeSelector';
 // server-side gate possible today. Temporary: revisit when the Auth0 migration
 // (access/tenant/identityProvider.ts's documented auth0IdentityProvider swap) restores a
 // real session Next can read at request time.
-export default function PortalProtectedLayout({ children }: { children: React.ReactNode }) {
+// useSearchParams() needs a Suspense ancestor within this page's own render tree for
+// static prerendering (Next.js CSR bailout) — split out so the default export below can
+// provide one. Nested layouts/pages that also call useSearchParams (admin layout,
+// individual pages) render as `children` inside this same subtree, so they're covered too.
+function PortalProtectedLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const session = useSession();
   const searchParams = useSearchParams();
@@ -116,5 +120,19 @@ export default function PortalProtectedLayout({ children }: { children: React.Re
     >
       {children}
     </DashboardShell>
+  );
+}
+
+export default function PortalProtectedLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense
+      fallback={
+        <Center h="100vh">
+          <Loader />
+        </Center>
+      }
+    >
+      <PortalProtectedLayoutInner>{children}</PortalProtectedLayoutInner>
+    </Suspense>
   );
 }

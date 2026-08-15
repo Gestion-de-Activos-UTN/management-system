@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { ActionIcon, Badge, Center, Group, Loader } from '@mantine/core';
 import { Building2, X } from 'lucide-react';
@@ -16,7 +16,11 @@ import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context';
 // server-side gate possible today. Temporary: revisit when the Auth0 migration
 // (access/tenant/identityProvider.ts's documented auth0IdentityProvider swap) restores a
 // real session Next can read at request time.
-export default function AdminProtectedLayout({ children }: { children: React.ReactNode }) {
+// useSearchParams() needs a Suspense ancestor within this page's own render tree for
+// static prerendering (Next.js CSR bailout) — split out so the default export below can
+// provide one. Nested layouts/pages that also call useSearchParams (portal admin layout,
+// individual pages) render as `children` inside this same subtree, so they're covered too.
+function AdminProtectedLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const session = useSession();
@@ -71,5 +75,19 @@ export default function AdminProtectedLayout({ children }: { children: React.Rea
     >
       {children}
     </DashboardShell>
+  );
+}
+
+export default function AdminProtectedLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense
+      fallback={
+        <Center h="100vh">
+          <Loader />
+        </Center>
+      }
+    >
+      <AdminProtectedLayoutInner>{children}</AdminProtectedLayoutInner>
+    </Suspense>
   );
 }
