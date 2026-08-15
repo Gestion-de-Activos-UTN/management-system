@@ -1,12 +1,15 @@
 import { Group, Text, Burger } from '@mantine/core';
+import type { ReactNode } from 'react';
 import { ColorSchemeToggle } from '@/components/ui/ColorSchemeToggle';
 
 export function TopBar({
   opened,
   onToggle,
+  rightSection,
 }: {
   opened: boolean;
   onToggle: () => void;
+  rightSection?: ReactNode;
 }) {
   return (
     <Group h="100%" px="md" justify="space-between">
@@ -16,7 +19,10 @@ export function TopBar({
           SIAM
         </Text>
       </Group>
-      <ColorSchemeToggle />
+      <Group gap="sm">
+        {rightSection}
+        <ColorSchemeToggle />
+      </Group>
     </Group>
   );
 }

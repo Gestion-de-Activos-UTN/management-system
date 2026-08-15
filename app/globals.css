@@ -20,11 +20,71 @@
 
 /* NavLink's built-in hover (gray-0 on light / dark-6 on dark) is nearly
    invisible against the bone body — use mantine's static Styles API class
-   (stable across versions, unlike the hashed module class) to strengthen it. */
-[data-mantine-color-scheme='light'] .mantine-NavLink-root:hover {
-  background-color: var(--mantine-color-bone-2);
+   (stable across versions, unlike the hashed module class) to strengthen it.
+   A pine tint (not another bone shade) keeps hover clearly distinct from the
+   label's own dimmed-until-active text color — a bone-on-bone hover was too
+   close in luminance to read. Force the label/icon to full-contrast text on
+   hover too, since NavLink's own inactive styling dims them by design. */
+[data-mantine-color-scheme='light'] .mantine-NavLink-root:hover,
+[data-mantine-color-scheme='light'] .sidebar-profile-trigger:hover {
+  background-color: var(--mantine-color-pine-1);
 }
 
-[data-mantine-color-scheme='dark'] .mantine-NavLink-root:hover {
+[data-mantine-color-scheme='dark'] .mantine-NavLink-root:hover,
+[data-mantine-color-scheme='dark'] .sidebar-profile-trigger:hover {
   background-color: var(--mantine-color-dark-5);
+}
+
+.mantine-NavLink-root:hover .mantine-NavLink-label,
+.mantine-NavLink-root:hover .mantine-NavLink-section {
+  color: var(--mantine-color-text);
+}
+
+/* Same rounded-inset treatment as NavLink (see below), so the profile card at
+   the bottom of the sidebar reads as the same kind of interactive row. */
+.sidebar-profile-trigger {
+  border-radius: var(--mantine-radius-default);
+}
+
+/* NavLink has no `radius` prop — rounded, inset rows instead of edge-to-edge
+   bars read as distinct items (Sidebar already gives the list p="sm" inset). */
+.mantine-NavLink-root {
+  border-radius: var(--mantine-radius-default);
+}
+
+/* AppShell panels vs. main content — same body background by default, so the
+   sidebar/header read as part of one flat page. Give them their own subtle
+   surface + border so the shell reads as distinct panels. A border, not a
+   box-shadow — the navbar sits at a higher stacking order than the header
+   (Mantine's own AppShell z-indexes) and occludes any shadow the header casts
+   into their shared corner, so a shadow only showed up over Main, not Navbar. */
+.mantine-AppShell-navbar,
+.mantine-AppShell-header {
+  background-color: var(--mantine-color-bone-1);
+  border-color: var(--mantine-color-bone-3);
+}
+
+[data-mantine-color-scheme='dark'] .mantine-AppShell-navbar,
+[data-mantine-color-scheme='dark'] .mantine-AppShell-header {
+  background-color: var(--mantine-color-dark-7);
+  border-color: var(--mantine-color-dark-4);
+}
+
+/* Subtle, uniform hover motion — buttons/links/nav items/cards all ease instead of
+   snapping, and cards lift slightly to read as elevated surfaces on hover. */
+.mantine-Button-root,
+.mantine-ActionIcon-root,
+.mantine-NavLink-root,
+.sidebar-profile-trigger,
+.mantine-Card-root {
+  transition:
+    background-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 150ms ease,
+    border-color 150ms ease;
+}
+
+.mantine-Card-root[data-with-border]:hover {
+  box-shadow: var(--mantine-shadow-md);
+  transform: translateY(-1px);
 }

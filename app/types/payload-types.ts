@@ -63,6 +63,7 @@ export type SupportedTimezones =
 
 export interface Config {
   auth: {
+    admins: AdminAuthOperations;
     users: UserAuthOperations;
   };
   blocks: {};
@@ -72,8 +73,13 @@ export interface Config {
     agents: Agent;
     assets: Asset;
     'scan-reports': ScanReport;
-    'payload-kv': PayloadKv;
+    roles: Role;
+    'organization-settings': OrganizationSetting;
+    subscriptions: Subscription;
+    admins: Admin;
     users: User;
+    'organization-memberships': OrganizationMembership;
+    'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -85,14 +91,19 @@ export interface Config {
     agents: AgentsSelect<false> | AgentsSelect<true>;
     assets: AssetsSelect<false> | AssetsSelect<true>;
     'scan-reports': ScanReportsSelect<false> | ScanReportsSelect<true>;
-    'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
+    roles: RolesSelect<false> | RolesSelect<true>;
+    'organization-settings': OrganizationSettingsSelect<false> | OrganizationSettingsSelect<true>;
+    subscriptions: SubscriptionsSelect<false> | SubscriptionsSelect<true>;
+    admins: AdminsSelect<false> | AdminsSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
+    'organization-memberships': OrganizationMembershipsSelect<false> | OrganizationMembershipsSelect<true>;
+    'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
   };
   db: {
-    defaultIDType: number;
+    defaultIDType: string;
   };
   fallbackLocale: null;
   globals: {};
@@ -101,10 +112,28 @@ export interface Config {
   widgets: {
     collections: CollectionsWidget;
   };
-  user: User;
+  user: Admin | User;
   jobs: {
     tasks: unknown;
     workflows: unknown;
+  };
+}
+export interface AdminAuthOperations {
+  forgotPassword: {
+    email: string;
+    password: string;
+  };
+  login: {
+    email: string;
+    password: string;
+  };
+  registerFirstUser: {
+    email: string;
+    password: string;
+  };
+  unlock: {
+    email: string;
+    password: string;
   };
 }
 export interface UserAuthOperations {
@@ -130,9 +159,56 @@ export interface UserAuthOperations {
  * via the `definition` "organizations".
  */
 export interface Organization {
-  id: number;
+  id: string;
   name: string;
   is_active?: boolean | null;
+  settings?: (string | null) | OrganizationSetting;
+  subscription?: (string | null) | Subscription;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "organization-settings".
+ */
+export interface OrganizationSetting {
+  id: string;
+  organization: string | Organization;
+  industry: string;
+  risk_score_policy?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "subscriptions".
+ */
+export interface Subscription {
+  id: string;
+  organization: string | Organization;
+  level: 'basic' | 'premium' | 'custom';
+  max_users?: number | null;
+  max_offices?: number | null;
+  /**
+   * Mapa plano feature_key -> boolean, ver domain/subscriptions/features.ts
+   */
+  features?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -141,8 +217,8 @@ export interface Organization {
  * via the `definition` "offices".
  */
 export interface Office {
-  id: number;
-  organization: number | Organization;
+  id: string;
+  organization: string | Organization;
   name: string;
   county_fips?: string | null;
   is_active?: boolean | null;
@@ -158,8 +234,8 @@ export interface Agent {
    * agent_id tal cual lo manda el escáner (ej. agent-001)
    */
   id: string;
-  office: number | Office;
-  organization?: (number | null) | Organization;
+  office: string | Office;
+  organization?: (string | null) | Organization;
   last_heartbeat_at?: string | null;
   status?: ('online' | 'offline') | null;
   /**
@@ -180,11 +256,11 @@ export interface Agent {
  * via the `definition` "assets".
  */
 export interface Asset {
-  id: number;
+  id: string;
   asset_id: string;
   agent: string | Agent;
-  office?: (number | null) | Office;
-  organization?: (number | null) | Organization;
+  office?: (string | null) | Office;
+  organization?: (string | null) | Organization;
   ip?: string | null;
   last_seen?: string | null;
   mac?: string | null;
@@ -225,7 +301,7 @@ export interface ScanReport {
    */
   id: string;
   agent: string | Agent;
-  office?: (number | null) | Office;
+  office?: (string | null) | Office;
   network?: string | null;
   scan_start?: string | null;
   scan_end?: string | null;
@@ -247,27 +323,57 @@ export interface ScanReport {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "payload-kv".
+ * via the `definition` "roles".
  */
-export interface PayloadKv {
-  id: number;
-  key: string;
-  data:
+export interface Role {
+  id: string;
+  slug: string;
+  name: string;
+  /**
+   * 1 = máxima autoridad
+   */
+  rank: number;
+  scope: 'platform' | 'organization' | 'organization_office' | 'office_user';
+  is_platform_role?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "admins".
+ */
+export interface Admin {
+  id: string;
+  role: string | Role;
+  status?: ('active' | 'inactive') | null;
+  updatedAt: string;
+  createdAt: string;
+  email: string;
+  resetPasswordToken?: string | null;
+  resetPasswordExpiration?: string | null;
+  salt?: string | null;
+  hash?: string | null;
+  loginAttempts?: number | null;
+  lockUntil?: string | null;
+  sessions?:
     | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
+        id: string;
+        createdAt?: string | null;
+        expiresAt: string;
+      }[]
     | null;
+  password?: string | null;
+  collection: 'admins';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "users".
  */
 export interface User {
-  id: number;
+  id: string;
+  name: string;
+  status?: ('active' | 'inactive') | null;
+  organization_membership?: (string | null) | OrganizationMembership;
   updatedAt: string;
   createdAt: string;
   email: string;
@@ -289,18 +395,50 @@ export interface User {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "organization-memberships".
+ */
+export interface OrganizationMembership {
+  id: string;
+  user: string | User;
+  organization: string | Organization;
+  offices?: (string | Office)[] | null;
+  role: string | Role;
+  status?: ('onboarding' | 'active') | null;
+  is_active?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-kv".
+ */
+export interface PayloadKv {
+  id: string;
+  key: string;
+  data:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents".
  */
 export interface PayloadLockedDocument {
-  id: number;
+  id: string;
   document?:
     | ({
         relationTo: 'organizations';
-        value: number | Organization;
+        value: string | Organization;
       } | null)
     | ({
         relationTo: 'offices';
-        value: number | Office;
+        value: string | Office;
       } | null)
     | ({
         relationTo: 'agents';
@@ -308,21 +446,46 @@ export interface PayloadLockedDocument {
       } | null)
     | ({
         relationTo: 'assets';
-        value: number | Asset;
+        value: string | Asset;
       } | null)
     | ({
         relationTo: 'scan-reports';
         value: string | ScanReport;
       } | null)
     | ({
+        relationTo: 'roles';
+        value: string | Role;
+      } | null)
+    | ({
+        relationTo: 'organization-settings';
+        value: string | OrganizationSetting;
+      } | null)
+    | ({
+        relationTo: 'subscriptions';
+        value: string | Subscription;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null)
+    | ({
         relationTo: 'users';
-        value: number | User;
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'organization-memberships';
+        value: string | OrganizationMembership;
       } | null);
   globalSlug?: string | null;
-  user: {
-    relationTo: 'users';
-    value: number | User;
-  };
+  user:
+    | {
+        relationTo: 'admins';
+        value: string | Admin;
+      }
+    | {
+        relationTo: 'users';
+        value: string | User;
+      };
   updatedAt: string;
   createdAt: string;
 }
@@ -331,11 +494,16 @@ export interface PayloadLockedDocument {
  * via the `definition` "payload-preferences".
  */
 export interface PayloadPreference {
-  id: number;
-  user: {
-    relationTo: 'users';
-    value: number | User;
-  };
+  id: string;
+  user:
+    | {
+        relationTo: 'admins';
+        value: string | Admin;
+      }
+    | {
+        relationTo: 'users';
+        value: string | User;
+      };
   key?: string | null;
   value?:
     | {
@@ -354,7 +522,7 @@ export interface PayloadPreference {
  * via the `definition` "payload-migrations".
  */
 export interface PayloadMigration {
-  id: number;
+  id: string;
   name?: string | null;
   batch?: number | null;
   updatedAt: string;
@@ -367,6 +535,8 @@ export interface PayloadMigration {
 export interface OrganizationsSelect<T extends boolean = true> {
   name?: T;
   is_active?: T;
+  settings?: T;
+  subscription?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -461,17 +631,48 @@ export interface ScanReportsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "payload-kv_select".
+ * via the `definition` "roles_select".
  */
-export interface PayloadKvSelect<T extends boolean = true> {
-  key?: T;
-  data?: T;
+export interface RolesSelect<T extends boolean = true> {
+  slug?: T;
+  name?: T;
+  rank?: T;
+  scope?: T;
+  is_platform_role?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "users_select".
+ * via the `definition` "organization-settings_select".
  */
-export interface UsersSelect<T extends boolean = true> {
+export interface OrganizationSettingsSelect<T extends boolean = true> {
+  organization?: T;
+  industry?: T;
+  risk_score_policy?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "subscriptions_select".
+ */
+export interface SubscriptionsSelect<T extends boolean = true> {
+  organization?: T;
+  level?: T;
+  max_users?: T;
+  max_offices?: T;
+  features?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "admins_select".
+ */
+export interface AdminsSelect<T extends boolean = true> {
+  role?: T;
+  status?: T;
   updatedAt?: T;
   createdAt?: T;
   email?: T;
@@ -488,6 +689,53 @@ export interface UsersSelect<T extends boolean = true> {
         createdAt?: T;
         expiresAt?: T;
       };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "users_select".
+ */
+export interface UsersSelect<T extends boolean = true> {
+  name?: T;
+  status?: T;
+  organization_membership?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  email?: T;
+  resetPasswordToken?: T;
+  resetPasswordExpiration?: T;
+  salt?: T;
+  hash?: T;
+  loginAttempts?: T;
+  lockUntil?: T;
+  sessions?:
+    | T
+    | {
+        id?: T;
+        createdAt?: T;
+        expiresAt?: T;
+      };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "organization-memberships_select".
+ */
+export interface OrganizationMembershipsSelect<T extends boolean = true> {
+  user?: T;
+  organization?: T;
+  offices?: T;
+  role?: T;
+  status?: T;
+  is_active?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-kv_select".
+ */
+export interface PayloadKvSelect<T extends boolean = true> {
+  key?: T;
+  data?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

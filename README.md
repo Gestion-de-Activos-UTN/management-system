@@ -24,7 +24,7 @@ Andamiaje inicial, basado en la arquitectura de SafeLink (multi-tenant, RBAC, ri
    docker compose up
    ```
 
-   La app queda en `http://localhost:3000`, Postgres en `localhost:5432` (user/pass/db: `payload`). El contenedor `app` ya corre `pnpm seed:agent && pnpm dev` solo — sin migraciones: el deploy de este proyecto recrea imagen y DB desde cero, así que Payload sincroniza el schema directo contra Postgres en cada arranque (dev-only, requiere `NODE_ENV=development`).
+   La app queda en `http://localhost:3000`, Postgres en `localhost:5432` (user/pass/db: `payload`). El contenedor `app` ya corre `pnpm seed:navigation && pnpm seed:agent && pnpm dev` solo — sin migraciones: el deploy de este proyecto recrea imagen y DB desde cero, así que Payload sincroniza el schema directo contra Postgres en cada arranque (dev-only, requiere `NODE_ENV=development`).
 
 3. Bajar el stack cuando termines:
 
@@ -34,6 +34,23 @@ Andamiaje inicial, basado en la arquitectura de SafeLink (multi-tenant, RBAC, ri
    ```
 
 Ver [COMMANDS.md](./COMMANDS.md) para el resto de los comandos (tests, lint, seed, contratos, etc.) y si corren en el host o dentro del contenedor.
+
+## Login del frontend (Admin Portal / Portal de Organización)
+
+`docker compose up` corre `pnpm seed:navigation` en el arranque (además de `seed:agent`), que siembra los 3 `Roles` base y un usuario de demo por rol — email/password fijos a propósito (seed de navegación, no producción), idempotente (si `Org Demo Navegación` ya existe, no recrea nada):
+
+```bash
+docker compose logs app | grep -A3 "Credenciales de navegación"
+```
+
+Un único login (`http://localhost:3000/login`) para los dos portales — prueba `admins` y, si falla, `users`; el que responda decide a dónde redirige:
+
+| Rol | Portal | Ve "Administración" |
+|---|---|---|
+| `platform_admin` | Platform Admin (`/`) | — |
+| `org_admin` | Organización (`/portal`) | Sí |
+| `org_viewer` | Organización (`/portal`) | No |
+| `office_manager` | Organización (`/portal`) | No |
 
 ## Ingesta Scanner ↔ Platform
 

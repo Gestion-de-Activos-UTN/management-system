@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { NavLink, Stack } from '@mantine/core';
+import { NavLink, Stack, ThemeIcon } from '@mantine/core';
 import type { ReactNode } from 'react';
 
 export type SidebarItem = {
@@ -23,18 +23,31 @@ export function Sidebar({ items }: { items: SidebarItem[] }) {
   const pathname = usePathname();
 
   return (
-    <Stack gap={4} p="sm">
-      {items.map(({ label, href, icon }) => (
-        <NavLink
-          key={href}
-          component={Link}
-          href={href}
-          label={label}
-          leftSection={icon}
-          active={pathname === href || pathname.startsWith(`${href}/`)}
-          variant="filled"
-        />
-      ))}
+    <Stack gap={6} p="md">
+      {items.map(({ label, href, icon }) => {
+        // href may carry ?asOrganization= — compare on the path only, a
+        // querystring shouldn't break the active-item match.
+        const hrefPath = href.split('?')[0];
+        const active = pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
+
+        return (
+          <NavLink
+            key={href}
+            component={Link}
+            href={href}
+            label={label}
+            leftSection={
+              <ThemeIcon variant={active ? 'filled' : 'light'} color="pine" size={30} radius="md">
+                {icon}
+              </ThemeIcon>
+            }
+            active={active}
+            variant="filled"
+            py={10}
+            styles={{ label: { fontWeight: active ? 600 : 500 } }}
+          />
+        );
+      })}
     </Stack>
   );
 }

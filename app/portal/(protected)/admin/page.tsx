@@ -1,0 +1,43 @@
+'use client';
+
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { Card, SimpleGrid, Stack, Text } from '@mantine/core';
+import { Users, MapPin, Settings } from 'lucide-react';
+import { PageHeader } from '@/components/ui/PageHeader';
+
+const HUB_ITEMS = [
+  { label: 'Users', href: '/portal/admin/users', icon: Users, description: 'Members of your organization' },
+  { label: 'Offices', href: '/portal/admin/offices', icon: MapPin, description: 'Offices in your organization' },
+  { label: 'Settings', href: '/portal/admin/settings', icon: Settings, description: 'Organization-level settings' },
+];
+
+export default function PortalAdminHub() {
+  const asOrganization = useSearchParams().get('asOrganization');
+  const suffix = asOrganization ? `?asOrganization=${asOrganization}` : '';
+
+  return (
+    <Stack gap="md">
+      <PageHeader title="Administración" description="Manage your organization's users, offices and settings." />
+      <SimpleGrid cols={{ base: 1, sm: 3 }}>
+        {HUB_ITEMS.map((item) => (
+          <Card
+            key={item.href}
+            component={Link}
+            href={`${item.href}${suffix}`}
+            withBorder
+            padding="lg"
+          >
+            <Stack gap={4}>
+              <item.icon size={20} strokeWidth={1.5} />
+              <Text fw={600}>{item.label}</Text>
+              <Text size="sm" c="dimmed">
+                {item.description}
+              </Text>
+            </Stack>
+          </Card>
+        ))}
+      </SimpleGrid>
+    </Stack>
+  );
+}

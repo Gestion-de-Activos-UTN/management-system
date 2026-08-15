@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { orgScopedAccess } from '../../access/rbac/orgScopedAccess'
 
 // Escritura solo vía domain/inventories/ingestScanReport.ts con overrideAccess — mismo patrón que AuditLogs (SYSTEM_PROMPT.md §2).
 export const ScanReports: CollectionConfig = {
@@ -8,7 +9,8 @@ export const ScanReports: CollectionConfig = {
   },
   access: {
     create: () => false,
-    read: () => false,
+    // Sin campo `organization` propio (solo `office`) — scope por oficinas del actor, no por organización.
+    read: orgScopedAccess('scan-reports', 'read', { kind: 'offices', field: 'office' }),
     update: () => false,
     delete: () => false,
   },
