@@ -9,8 +9,8 @@ const PREFIX = TOKEN.slice(0, 8)
 async function makeAgent(overrides: Partial<{ is_active: boolean }> = {}) {
   return {
     id: 'agent-001',
-    office: 1,
-    organization: 1,
+    office: 'office-1',
+    organization: 'org-1',
     apiKeyHash: await bcrypt.hash(TOKEN, 4),
     is_active: true,
     ...overrides,
@@ -23,7 +23,7 @@ test('resuelve agente con token válido', async () => {
     { authorization: `Bearer ${TOKEN}`, 'x-agent-id': 'agent-001' },
     { findAgentByPrefix: async (p) => (p === PREFIX ? agent : null) },
   )
-  assert.deepEqual(result, { agentId: 'agent-001', officeId: 1, organizationId: 1 })
+  assert.deepEqual(result, { agentId: 'agent-001', officeId: 'office-1', organizationId: 'org-1' })
 })
 
 test('rechaza si el prefix no existe', async () => {

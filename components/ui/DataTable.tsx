@@ -85,7 +85,16 @@ export function DataTable<T>({
                         ? header.column.getToggleSortingHandler()
                         : undefined
                     }
-                    style={canSort ? { cursor: 'pointer' } : undefined}
+                    style={{
+                      ...(canSort ? { cursor: 'pointer' } : {}),
+                      // Opt-in only — a column with no explicit `size` in its
+                      // ColumnDef sizes to content instead of the library's
+                      // 150px default, so one flexible column (usually the
+                      // first) can absorb leftover width naturally.
+                      ...(header.column.columnDef.size !== undefined
+                        ? { width: header.getSize() }
+                        : {}),
+                    }}
                   >
                     <Group gap={4} wrap="nowrap">
                       {header.isPlaceholder
@@ -112,7 +121,14 @@ export function DataTable<T>({
           {table.getRowModel().rows.map((row) => (
             <Table.Tr key={row.id}>
               {row.getVisibleCells().map((cell) => (
-                <Table.Td key={cell.id}>
+                <Table.Td
+                  key={cell.id}
+                  style={
+                    cell.column.columnDef.size !== undefined
+                      ? { width: cell.column.getSize() }
+                      : undefined
+                  }
+                >
                   {flexRender(cell.column.columnDef.cell, cell.getContext())}
                 </Table.Td>
               ))}

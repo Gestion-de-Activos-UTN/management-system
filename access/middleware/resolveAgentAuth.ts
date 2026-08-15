@@ -5,15 +5,15 @@ export class AgentAuthError extends Error {}
 
 export interface AgentAuthResult {
   agentId: string
-  officeId: number
-  organizationId: number
+  officeId: string
+  organizationId: string
 }
 
 interface AgentAuthRecord {
   id: string
-  // Offices/Organizations usan el id numérico default de Payload (no los overrideamos como Agents/ScanReports).
-  office: number
-  organization: number
+  // Offices/Organizations usan el id UUID default de Payload (no los overrideamos como Agents/ScanReports).
+  office: string
+  organization: string
   apiKeyHash: string
   is_active: boolean
 }
@@ -55,9 +55,9 @@ export async function resolveAgentAuth(
   return { agentId: agent.id, officeId: agent.office, organizationId: agent.organization }
 }
 
-// depth:0 devuelve la FK cruda (number, para Offices/Organizations); con más depth vendría populado.
-const relationId = (value: unknown): number =>
-  typeof value === 'object' && value !== null ? (value as { id: number }).id : (value as number)
+// depth:0 devuelve la FK cruda (string, para Offices/Organizations); con más depth vendría populado.
+const relationId = (value: unknown): string =>
+  typeof value === 'object' && value !== null ? (value as { id: string }).id : (value as string)
 
 // Único punto donde el lookup de Agent toca la Local API — colección Agents no expone
 // read vía access pública, por eso overrideAccess:true acá (mismo patrón que scripts/seed-agent.ts).

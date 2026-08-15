@@ -24,17 +24,29 @@ async function main() {
     process.exit(0)
   }
 
-  const organization = await payload.create({
-    collection: 'organizations',
-    data: { name: 'Org Demo' },
+  // Reusa la Office de la organización demo de scripts/seed-navigation.ts si ya corrió (debería
+  // correr antes, ver docker-compose.yml) — evita una segunda organización solo para el Agent.
+  // Sin eso corriendo (ej. seed:agent standalone), crea su propia Organization/Office de fallback.
+  const existingOffice = await payload.find({
+    collection: 'offices',
     overrideAccess: true,
+    limit: 1,
+    sort: 'createdAt',
   })
 
-  const office = await payload.create({
-    collection: 'offices',
-    data: { organization: organization.id, name: 'Oficina Demo' },
-    overrideAccess: true,
-  })
+  let office = existingOffice.docs[0]
+  if (!office) {
+    const organization = await payload.create({
+      collection: 'organizations',
+      data: { name: 'Org Demo' },
+      overrideAccess: true,
+    })
+    office = await payload.create({
+      collection: 'offices',
+      data: { organization: organization.id, name: 'Oficina Demo' },
+      overrideAccess: true,
+    })
+  }
 
   const agent = await payload.create({
     collection: 'agents',
@@ -42,7 +54,6 @@ async function main() {
     overrideAccess: true,
   })
 
-  console.log('Organization:', organization.id)
   console.log('Office:', office.id)
   console.log('Agent:', agent.id)
   console.log('API key (texto plano, solo se muestra ahora):', agent.apiKey)

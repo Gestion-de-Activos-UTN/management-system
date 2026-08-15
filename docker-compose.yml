@@ -45,9 +45,12 @@ services:
       - uploads_data:/app/uploads
     # Sin migraciones: el deploy de este proyecto recrea la imagen/DB desde cero cada vez, no
     # las necesita. Payload sincroniza el schema solo con NODE_ENV=development (pushDevSchema).
-    # DEV ONLY — no copiar a un compose de producción sin sacar `pnpm seed:agent`:
-    # crea una "Org Demo" en cada arranque si no existe — no algo que quieras cerca de un cliente real.
-    command: sh -c "pnpm seed:agent && pnpm run dev"
+    # DEV ONLY — no copiar a un compose de producción sin sacar `pnpm seed:navigation`/`seed:agent`:
+    # `seed:navigation` crea los 4 Roles base + la única organización demo (Org/Office/Settings/
+    # Subscription) + un admin/org_admin/org_viewer/office_manager de demo con credenciales fijas;
+    # `seed:agent` corre después y reutiliza esa misma Office (no crea una segunda organización) —
+    # nada de esto es algo que quieras cerca de un cliente real.
+    command: sh -c "pnpm seed:navigation && pnpm seed:agent && pnpm run dev"
 
 volumes:
   postgres_data:

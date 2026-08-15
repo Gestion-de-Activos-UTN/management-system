@@ -1,4 +1,5 @@
 import type { CollectionConfig } from 'payload'
+import { orgScopedAccess } from '../../access/rbac/orgScopedAccess'
 
 const technicalFieldAccess = {
   // Bloque técnico: solo lo escribe el upsert de ingesta (domain/inventories/ingestScanReport.ts), nunca un humano.
@@ -16,7 +17,7 @@ export const Assets: CollectionConfig = {
   },
   access: {
     create: () => false,
-    read: () => false,
+    read: orgScopedAccess('assets', 'read'),
     update: () => false,
     delete: () => false,
   },

@@ -52,9 +52,21 @@ Sin migraciones: el deploy de este proyecto recrea imagen y DB desde cero cada v
 
 | Comando | Dónde | Qué hace |
 |---|---|---|
-| `pnpm seed:agent` | Ya corre solo en `docker compose up` (idempotente: si `agent-001` ya existe, no lo recrea) | Crea Organization → Office → Agent demo, imprime el token en texto plano una sola vez |
+| `pnpm seed:agent` | Ya corre solo en `docker compose up`, después de `seed:navigation` (idempotente: si `agent-001` ya existe, no lo recrea) | Crea el Agent demo en la Office ya sembrada por `seed:navigation` (fallback: crea su propia Organization/Office si corre solo), imprime el token en texto plano una sola vez |
 
 El token no se puede recuperar después (solo se guarda hasheado) — si lo perdiste, hay que revocar ese Agent en la DB y correr el seed de nuevo, o crear otro con la Local API a mano.
+
+## Seed de navegación (usuarios de demo para el frontend)
+
+| Comando | Dónde | Qué hace |
+|---|---|---|
+| `pnpm seed:navigation` | Ya corre solo en `docker compose up`, antes de `seed:agent` (idempotente: si `Org Demo Navegación` ya existe, no recrea nada) | Siembra los 4 `Roles` base (`platform_admin`, `org_admin`, `org_viewer`, `office_manager`) + la única organización demo completa (`domain/organizations/createOrgWithAdmin.ts`) + un `Admin`/`User` por rol, credenciales fijas (`scripts/seed-navigation.ts`) |
+
+Credenciales fijas a propósito (demo/navegación, no producción) — recuperables en cualquier momento, a diferencia del token de Agent:
+
+```bash
+docker compose logs app | grep -A3 "Credenciales de navegación"
+```
 
 ## Contratos Scanner-Platform
 
