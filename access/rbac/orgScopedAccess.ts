@@ -31,10 +31,10 @@ export function orgScopedAccess(
 
     if (ctx.isPlatformAdmin) {
       // Sin ?asOrganization=, platform_admin ve todo. Con uno válido, queda scoped por
-      // organización igual que cualquier otro rol (doc 03) — para scope `offices` no se
-      // resuelve el set de oficinas de esa org (fuera de alcance de esta fase de
-      // solo-lectura), platform_admin sigue viendo todo en ese caso.
-      if (!ctx.organizationId || scope.kind === 'offices') return true
+      // organización igual que cualquier otro rol (doc 03) — ctx.officeIds ya viene resuelto
+      // para la org visitada (resolveTenantContext::findOfficeIdsByOrganization), así que el
+      // scope `offices` también se filtra correctamente en este caso.
+      if (!ctx.organizationId) return true
       return scopeWhere(scope, ctx)
     }
 

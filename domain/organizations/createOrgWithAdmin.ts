@@ -27,9 +27,13 @@ export async function createOrgWithAdmin(
 ) {
   const ownsTransaction = !externalReq?.transactionID
   const transactionID = externalReq?.transactionID ?? (await payload.db.beginTransaction())
-  const req = externalReq ?? ({ transactionID } as PayloadRequest)
+  const req = externalReq
+    ? Object.assign(externalReq, { transactionID })
+    : ({ transactionID } as PayloadRequest)
 
   try {
+    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {name, is_active}, previous hash for this organization_id)
+    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
     const organization = await payload.create({
       collection: 'organizations',
       overrideAccess: true,
@@ -37,6 +41,8 @@ export async function createOrgWithAdmin(
       data: { name: input.organizationName, is_active: true },
     })
 
+    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {organization, industry, level, features}, previous hash for this organization_id)
+    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
     const [settings, subscription] = await Promise.all([
       payload.create({
         collection: 'organization-settings',
@@ -52,6 +58,8 @@ export async function createOrgWithAdmin(
       }),
     ])
 
+    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {settings, subscription}, previous hash for this organization_id)
+    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
     await payload.update({
       collection: 'organizations',
       id: organization.id,
@@ -60,6 +68,8 @@ export async function createOrgWithAdmin(
       data: { settings: settings.id, subscription: subscription.id },
     })
 
+    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {organization, name}, previous hash for this organization_id)
+    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
     const office = await payload.create({
       collection: 'offices',
       overrideAccess: true,
@@ -79,6 +89,8 @@ export async function createOrgWithAdmin(
       throw new Error('Role org_admin no sembrado — correr el seed de roles primero')
     }
 
+    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {email, name}, previous hash for this organization_id)
+    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
     const user = await payload.create({
       collection: 'users',
       overrideAccess: true,
@@ -86,6 +98,10 @@ export async function createOrgWithAdmin(
       data: { email: input.adminEmail, password: input.adminPassword, name: input.adminName },
     })
 
+    // AUDIT: this action must emit an AuditLogs entry (user.invite, chain_hash over {user, organization, role}, previous hash for this organization_id)
+    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+    // NOTIFY: this event should trigger a Notification Bell entry for {the new org_admin user}
+    // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
     await payload.create({
       collection: 'organization-memberships',
       overrideAccess: true,

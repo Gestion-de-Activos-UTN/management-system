@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { HttpError } from '@/lib/http-client';
 import { setSession, type Session } from '@/lib/session';
 import { loginAdmin, loginUser } from '../service';
@@ -13,6 +13,7 @@ type Credentials = { email: string; password: string };
 // on any failure (nonexistent email or wrong password), so trying both in sequence never
 // leaks which collection matched.
 export function useLogin() {
+  const queryClient = useQueryClient();
   return useMutation<NonNullable<Session>, HttpError, Credentials>({
     mutationFn: async ({ email, password }) => {
       try {
@@ -23,6 +24,13 @@ export function useLogin() {
         return { token: data.token, collection: 'users' as const };
       }
     },
-    onSuccess: (session) => setSession(session),
+    onSuccess: (session) => {
+      // Query keys (['tenant-context', asOrganization], assets/offices/organizations lists,
+      // ...) don't include the user's identity, so a stale, still-non-stale-by-staleTime
+      // cache entry from whoever was logged in before would otherwise render first for the
+      // new account until an unrelated refetch happened to correct it.
+      queryClient.clear();
+      setSession(session);
+    },
   });
 }

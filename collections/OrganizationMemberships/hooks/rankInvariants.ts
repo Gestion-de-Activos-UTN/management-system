@@ -1,6 +1,6 @@
 import type { CollectionBeforeChangeHook, CollectionBeforeDeleteHook, PayloadRequest } from 'payload'
-import { assertNoRankEscalation, assertNotLastActiveOrgAdmin } from '../invariants'
-import { relationId } from './relationId'
+import { assertNoRankEscalation, assertNotLastActiveOrgAdmin, isProtectedRole } from '../invariants'
+import { relationId } from '@/lib/relationId'
 
 async function getActorRoleRank(req: PayloadRequest): Promise<number | null> {
   if (!req.user) return null // bootstrap/overrideAccess sin sesión — sin actor, sin restricción
@@ -45,16 +45,41 @@ async function countOtherActiveOrgAdmins(
 // Bloqueo de rank-escalation cuando se asigna/cambia `role`.
 export const blockRankEscalation: CollectionBeforeChangeHook = async ({ data, req }) => {
   if (!data?.role) return data
-  const targetRole = await req.payload.findByID({
+  // Ambas son lecturas independientes — se disparan en paralelo.
+  const [targetRole, actorRank] = await Promise.all([
+    req.payload.findByID({
+      collection: 'roles',
+      id: data.role as string,
+      overrideAccess: true,
+      req,
+      depth: 0,
+    }),
+    getActorRoleRank(req),
+  ])
+  assertNoRankEscalation(actorRank, targetRole.rank)
+  return data
+}
+
+// Invariante compartido: si la membership que se desactiva/borra es la de un rol protegido
+// (org_admin), no puede ser la última activa de la organización. Usado por los hooks de
+// update y delete — ambos solo difieren en cómo llegan al `originalDoc`/`membershipId`.
+async function enforceLastActiveOrgAdminInvariant(
+  req: PayloadRequest,
+  organizationId: string,
+  membershipId: string,
+  roleId: string,
+): Promise<void> {
+  const role = await req.payload.findByID({
     collection: 'roles',
-    id: data.role as string,
+    id: roleId,
     overrideAccess: true,
     req,
     depth: 0,
   })
-  const actorRank = await getActorRoleRank(req)
-  assertNoRankEscalation(actorRank, targetRole.rank)
-  return data
+  if (!isProtectedRole(role.slug)) return
+
+  const countAfter = await countOtherActiveOrgAdmins(req, organizationId, membershipId, String(role.id))
+  assertNotLastActiveOrgAdmin(countAfter)
 }
 
 // Invariante último org_admin activo — antes de persistir is_active:false.
@@ -67,22 +92,12 @@ export const blockLastActiveOrgAdminOnUpdate: CollectionBeforeChangeHook = async
   if (operation !== 'update' || data?.is_active !== false || !originalDoc) return data
   if (originalDoc.is_active !== true) return data // ya estaba inactiva, no es una transición
 
-  const role = await req.payload.findByID({
-    collection: 'roles',
-    id: relationId(originalDoc.role),
-    overrideAccess: true,
-    req,
-    depth: 0,
-  })
-  if (role.slug !== 'org_admin') return data
-
-  const countAfter = await countOtherActiveOrgAdmins(
+  await enforceLastActiveOrgAdminInvariant(
     req,
     relationId(originalDoc.organization),
     String(originalDoc.id),
-    String(role.id),
+    relationId(originalDoc.role),
   )
-  assertNotLastActiveOrgAdmin(countAfter)
   return data
 }
 
@@ -96,14 +111,6 @@ export const blockLastActiveOrgAdminOnDelete: CollectionBeforeDeleteHook = async
     depth: 0,
   })
   if (!doc.is_active) return
-  const role = await req.payload.findByID({
-    collection: 'roles',
-    id: relationId(doc.role),
-    overrideAccess: true,
-    req,
-    depth: 0,
-  })
-  if (role.slug !== 'org_admin') return
-  const countAfter = await countOtherActiveOrgAdmins(req, relationId(doc.organization), String(doc.id), String(role.id))
-  assertNotLastActiveOrgAdmin(countAfter)
+
+  await enforceLastActiveOrgAdminInvariant(req, relationId(doc.organization), String(doc.id), relationId(doc.role))
 }

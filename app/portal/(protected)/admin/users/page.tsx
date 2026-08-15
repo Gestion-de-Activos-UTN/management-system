@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Stack } from '@mantine/core';
 import { DataTable } from '@/components/ui/DataTable';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge';
+import { useFakeLoading } from '@/lib/use-fake-loading';
 
 type FakeUserRow = { name: string; email: string; role: string; status: StatusTone };
 
@@ -34,12 +34,7 @@ const columns: ColumnDef<FakeUserRow, unknown>[] = [
 ];
 
 export default function AdminUsersPage() {
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 450);
-    return () => clearTimeout(timer);
-  }, []);
+  const loading = useFakeLoading();
 
   return (
     <Stack gap="md">

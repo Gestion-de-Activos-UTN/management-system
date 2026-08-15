@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Card, Group, SimpleGrid, Skeleton, Stack, Text } from '@mantine/core';
 import { Boxes, ShieldAlert, MapPin, ScanLine } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { useFakeLoading } from '@/lib/use-fake-loading';
 
 // ponytail: static placeholder metrics — wire to a real aggregation endpoint once the
 // dashboard backend ships.
@@ -15,12 +15,7 @@ const FAKE_METRICS = [
 ];
 
 export default function PortalDashboardPage() {
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
-  }, []);
+  const loading = useFakeLoading(500);
 
   return (
     <Stack gap="md">

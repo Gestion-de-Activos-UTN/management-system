@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Card, Group, RingProgress, Skeleton, Stack, Text } from '@mantine/core';
 import type { ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '@/components/ui/DataTable';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { useFakeLoading } from '@/lib/use-fake-loading';
 
 type RiskRow = { category: string; score: number; trend: string };
 
@@ -24,12 +24,7 @@ const columns: ColumnDef<RiskRow, unknown>[] = [
 ];
 
 export default function RiskScorePage() {
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
-  }, []);
+  const loading = useFakeLoading(500);
 
   return (
     <Stack gap="md">

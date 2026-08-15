@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter, usePathname } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { Avatar, Group, Menu, Stack, Text, UnstyledButton } from '@mantine/core';
 import { ChevronsUpDown, LogOut, Settings } from 'lucide-react';
 import { clearSession } from '@/lib/session';
@@ -14,9 +15,13 @@ import { clearSession } from '@/lib/session';
 export function SidebarProfile({ title, subtitle }: { title: string; subtitle?: string }) {
   const router = useRouter();
   const pathname = usePathname();
+  const queryClient = useQueryClient();
   const accountHref = pathname.startsWith('/portal') ? '/portal/account' : '/account';
 
   function handleLogout() {
+    // Same reason as useLogin's onSuccess: per-user cached queries (tenant-context, lists)
+    // must not survive into whoever logs in next on this tab.
+    queryClient.clear();
     clearSession();
     router.replace('/login');
   }

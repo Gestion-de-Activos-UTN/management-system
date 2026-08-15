@@ -1,18 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
 import { Card, Skeleton, Stack, Text, TextInput } from '@mantine/core';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { useFakeLoading } from '@/lib/use-fake-loading';
 
 // ponytail: static placeholder — OrganizationSettings has no read-only GET wired up yet;
 // build this once that endpoint (or mutation support) ships.
 export default function AdminSettingsPage() {
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 450);
-    return () => clearTimeout(timer);
-  }, []);
+  const loading = useFakeLoading();
 
   return (
     <Stack gap="md">
