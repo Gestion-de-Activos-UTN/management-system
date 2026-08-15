@@ -1,6 +1,7 @@
 import type { Payload, PayloadRequest } from 'payload'
 import type { RoleSlug } from '../rbac/permissions'
 import { payloadNativeIdentityProvider, type ResolvedIdentity } from './identityProvider'
+import { relationId } from '@/lib/relationId'
 
 export class TenantResolutionError extends Error {}
 
@@ -36,14 +37,18 @@ export async function resolveTenantContext(
   if (!identity) return null // fail-closed: sin sesión, sin fallback
 
   if (identity.collection === 'admins') {
-    const admin = await deps.findActiveAdminById(identity.externalId)
+    // findActiveAdminById y organizationExists son lecturas independientes — se disparan en
+    // paralelo (organizationExists no depende de admin, solo del query param).
+    const [admin, orgExists] = await Promise.all([
+      deps.findActiveAdminById(identity.externalId),
+      requestedOrganizationId ? deps.organizationExists(requestedOrganizationId) : Promise.resolve(null),
+    ])
     if (!admin) return null
 
     let organizationId: string | null = null
     let officeIds: string[] = []
     if (requestedOrganizationId) {
-      const exists = await deps.organizationExists(requestedOrganizationId)
-      if (!exists) throw new TenantResolutionError('asOrganization inválido: la organización no existe')
+      if (!orgExists) throw new TenantResolutionError('asOrganization inválido: la organización no existe')
       organizationId = requestedOrganizationId
       // "Visitar" una organización debe verse igual que un org_admin logueado (offices
       // reales de esa org para el OfficeSelector, no un array vacío) — ver frontend
@@ -78,9 +83,6 @@ export async function resolveTenantContext(
     isActive: membership.is_active,
   }
 }
-
-const relationId = (value: unknown): string =>
-  typeof value === 'object' && value !== null ? String((value as { id: unknown }).id) : String(value)
 
 export function createPayloadTenantResolverDeps(payload: Payload): TenantResolverDeps {
   return {

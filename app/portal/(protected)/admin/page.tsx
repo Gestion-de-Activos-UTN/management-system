@@ -18,7 +18,7 @@ export default function PortalAdminHub() {
 
   return (
     <Stack gap="md">
-      <PageHeader title="Administración" description="Manage your organization's users, offices and settings." />
+      <PageHeader title="Administration" description="Manage your organization's users, offices and settings." />
       <SimpleGrid cols={{ base: 1, sm: 3 }}>
         {HUB_ITEMS.map((item) => (
           <Card

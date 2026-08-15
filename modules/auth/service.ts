@@ -1,6 +1,6 @@
 import { httpClient } from '@/lib/http-client';
 
-type LoginResponse = { token: string; exp: number; user: { id: number; email: string } };
+type LoginResponse = { token: string; exp: number; user: { id: string; email: string } };
 
 export function loginAdmin(email: string, password: string) {
   return httpClient.post<LoginResponse>('/api/admins/login', { email, password });

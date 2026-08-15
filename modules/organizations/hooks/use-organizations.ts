@@ -1,11 +1,8 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useListQuery } from '@/lib/use-list-query';
 import { listOrganizations } from '../service';
 
 export function useOrganizationsList(asOrganization?: string) {
-  return useQuery({
-    queryKey: ['organizations', asOrganization],
-    queryFn: () => listOrganizations({ asOrganization }),
-  });
+  return useListQuery('organizations', () => listOrganizations({ asOrganization }), [asOrganization]);
 }

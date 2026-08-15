@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, Center, Group, Loader } from '@mantine/core';
+import { Button, Center, Group, Loader, Stack, Text } from '@mantine/core';
 import { ArrowLeft, LayoutDashboard, Gauge, Boxes, ShieldCheck } from 'lucide-react';
 import { DashboardShell } from '@/components/layout/DashboardShell';
 import { SidebarProfile } from '@/components/layout/SidebarProfile';
@@ -47,6 +47,23 @@ export default function PortalProtectedLayout({ children }: { children: React.Re
     );
   }
 
+  // A failed fetch here must not silently fall through with tenantContext.data left
+  // undefined — RBAC-gated nav (e.g. "Administration" below) reads isOrgAdmin as false
+  // in that case, hiding it with no visible error, until some unrelated page happens to
+  // mount its own useTenantContext() and TanStack Query's refetchOnMount papers over it.
+  if (tenantContext.isError) {
+    return (
+      <Center h="100vh">
+        <Stack align="center" gap="sm">
+          <Text c="dimmed">Couldn't load your organization context.</Text>
+          <Button variant="light" onClick={() => tenantContext.refetch()}>
+            Retry
+          </Button>
+        </Stack>
+      </Center>
+    );
+  }
+
   const suffix = asOrganization ? `?asOrganization=${asOrganization}` : '';
   const isOrgAdmin = isEffectiveOrgAdmin(tenantContext.data);
   const navItems: SidebarItem[] = [
@@ -68,7 +85,7 @@ export default function PortalProtectedLayout({ children }: { children: React.Re
     ...(isOrgAdmin
       ? [
           {
-            label: 'Administración',
+            label: 'Administration',
             href: `/portal/admin${suffix}`,
             icon: <ShieldCheck size={18} strokeWidth={1.5} />,
           },

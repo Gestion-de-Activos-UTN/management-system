@@ -1,13 +1,6 @@
-import { httpClient } from '@/lib/http-client';
+import { listResource } from '@/lib/list-resource';
 import type { Office } from '@/app/types/payload-types';
 
-type ListResponse<T> = { docs: T[] };
-
 export function listOffices(params?: { asOrganization?: string }) {
-  return httpClient
-    .get<ListResponse<Office>>('/api/offices', {
-      depth: '1',
-      asOrganization: params?.asOrganization,
-    })
-    .then((r) => r.docs);
+  return listResource<Office>('/api/offices', { depth: '1', asOrganization: params?.asOrganization });
 }

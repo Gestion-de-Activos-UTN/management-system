@@ -2,21 +2,11 @@ import Link from 'next/link';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Button } from '@mantine/core';
 import type { Organization } from '@/app/types/payload-types';
-import { StatusBadge } from '@/components/ui/StatusBadge';
+import { activeStatusColumn } from '@/components/ui/activeStatusColumn';
 
 export const organizationsColumns: ColumnDef<Organization, unknown>[] = [
   { accessorKey: 'name', header: 'Name' },
-  {
-    accessorKey: 'is_active',
-    header: 'Status',
-    size: 130,
-    cell: ({ row }) =>
-      row.original.is_active ? (
-        <StatusBadge tone="success" label="Active" />
-      ) : (
-        <StatusBadge tone="danger" label="Inactive" />
-      ),
-  },
+  activeStatusColumn<Organization>((org) => Boolean(org.is_active)),
   {
     id: 'actions',
     header: '',

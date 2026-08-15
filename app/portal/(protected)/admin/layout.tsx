@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Center, Loader } from '@mantine/core';
+import { Button, Center, Loader, Stack, Text } from '@mantine/core';
 import { useTenantContext, isEffectiveOrgAdmin } from '@/modules/auth/hooks/use-tenant-context';
 
 // ponytail/debt: role gate is client-side only, same limitation as portal/(protected)/layout.tsx
@@ -21,6 +21,23 @@ export default function PortalAdminLayout({ children }: { children: React.ReactN
       router.replace(`/portal/dashboard${suffix}`);
     }
   }, [tenantContext.data, isOrgAdmin, router, suffix]);
+
+  // Same failure mode as portal/(protected)/layout.tsx: without this, a failed fetch leaves
+  // tenantContext.data undefined -> isOrgAdmin false -> the effect above bounces the user
+  // out of /portal/admin even though they may well be an org_admin, just with a stale/errored
+  // tenant-context fetch.
+  if (tenantContext.isError) {
+    return (
+      <Center h="60vh">
+        <Stack align="center" gap="sm">
+          <Text c="dimmed">Couldn't load your organization context.</Text>
+          <Button variant="light" onClick={() => tenantContext.refetch()}>
+            Retry
+          </Button>
+        </Stack>
+      </Center>
+    );
+  }
 
   if (tenantContext.isPending || !isOrgAdmin) {
     return (
