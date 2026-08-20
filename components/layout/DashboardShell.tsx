@@ -10,11 +10,13 @@ export function DashboardShell({
   navItems,
   topBarRight,
   sidebarFooter,
+  homeHref,
   children,
 }: {
   navItems: SidebarItem[];
   topBarRight?: ReactNode;
   sidebarFooter?: ReactNode;
+  homeHref?: string;
   children: React.ReactNode;
 }) {
   const sidebarCollapsed = useUiStore((s) => s.sidebarCollapsed);
@@ -23,7 +25,7 @@ export function DashboardShell({
 
   return (
     <AppShell
-      header={{ height: 60 }}
+      header={{ height: 72 }}
       navbar={{
         width: 260,
         breakpoint: 'sm',
@@ -32,7 +34,7 @@ export function DashboardShell({
       padding="md"
     >
       <AppShell.Header>
-        <TopBar opened={opened} onToggle={toggleSidebar} rightSection={topBarRight} />
+        <TopBar opened={opened} onToggle={toggleSidebar} rightSection={topBarRight} homeHref={homeHref} />
       </AppShell.Header>
       <AppShell.Navbar>
         <Stack justify="space-between" h="100%" gap={0}>

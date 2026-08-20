@@ -88,3 +88,10 @@
   box-shadow: var(--mantine-shadow-md);
   transform: translateY(-1px);
 }
+
+/* Login card: a static entry point, not a hover-browsable list item — the
+   lift reads as unintentional jitter here rather than "elevated surface". */
+.login-card:hover {
+  box-shadow: var(--mantine-shadow-md);
+  transform: none;
+}
