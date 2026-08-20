@@ -32,6 +32,12 @@ export const OrganizationSettings: CollectionConfig = {
       name: 'risk_score_policy',
       type: 'json',
     },
+    {
+      // Default de NonNetworkAssets.next_review_at, aplicado en su beforeChange cuando el usuario
+      // no manda fecha (el override por-asset siempre gana).
+      name: 'review_policy',
+      type: 'json',
+    },
   ],
 }
 

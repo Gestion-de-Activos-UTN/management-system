@@ -72,6 +72,7 @@ export interface Config {
     offices: Office;
     agents: Agent;
     assets: Asset;
+    'non-network-assets': NonNetworkAsset;
     'scan-reports': ScanReport;
     roles: Role;
     'organization-settings': OrganizationSetting;
@@ -90,6 +91,7 @@ export interface Config {
     offices: OfficesSelect<false> | OfficesSelect<true>;
     agents: AgentsSelect<false> | AgentsSelect<true>;
     assets: AssetsSelect<false> | AssetsSelect<true>;
+    'non-network-assets': NonNetworkAssetsSelect<false> | NonNetworkAssetsSelect<true>;
     'scan-reports': ScanReportsSelect<false> | ScanReportsSelect<true>;
     roles: RolesSelect<false> | RolesSelect<true>;
     'organization-settings': OrganizationSettingsSelect<false> | OrganizationSettingsSelect<true>;
@@ -176,6 +178,15 @@ export interface OrganizationSetting {
   organization: string | Organization;
   industry: string;
   risk_score_policy?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  review_policy?:
     | {
         [k: string]: unknown;
       }
@@ -292,21 +303,21 @@ export interface Asset {
   createdAt: string;
 }
 /**
+ * Activos no descubribles por el escáner de red (antivirus/EDR, licencias, cloud, backups). Distinto de `Assets`, que es para activos network-discoverable (ver documentation/10-data-flow-and-adrs.md, ADR-001). Todo el registro lo carga un humano: no hay bloque técnico escrito por máquina.
+ *
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "scan-reports".
+ * via the `definition` "non-network-assets".
  */
-export interface ScanReport {
-  /**
-   * report_id tal cual lo manda el escáner
-   */
+export interface NonNetworkAsset {
   id: string;
-  agent: string | Agent;
-  office?: (string | null) | Office;
-  network?: string | null;
-  scan_start?: string | null;
-  scan_end?: string | null;
-  hosts_up?: number | null;
-  raw_payload?:
+  alias: string;
+  asset_category: 'antivirus_edr' | 'software_license' | 'cloud_asset' | 'backup' | 'other';
+  criticality: 'baja' | 'media' | 'alta' | 'critica';
+  owner: string | User;
+  location?: string | null;
+  status?: ('activo' | 'retirado') | null;
+  next_review_at?: string | null;
+  details?:
     | {
         [k: string]: unknown;
       }
@@ -315,55 +326,12 @@ export interface ScanReport {
     | number
     | boolean
     | null;
-  status?: ('received' | 'processed' | 'failed') | null;
-  processed_at?: string | null;
-  error?: string | null;
+  related_assets?: (string | Asset)[] | null;
+  office: string | Office;
+  organization: string | Organization;
+  last_updated_at?: string | null;
   updatedAt: string;
   createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "roles".
- */
-export interface Role {
-  id: string;
-  slug: string;
-  name: string;
-  /**
-   * 1 = máxima autoridad
-   */
-  rank: number;
-  scope: 'platform' | 'organization' | 'organization_office' | 'office_user';
-  is_platform_role?: boolean | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "admins".
- */
-export interface Admin {
-  id: string;
-  role: string | Role;
-  status?: ('active' | 'inactive') | null;
-  updatedAt: string;
-  createdAt: string;
-  email: string;
-  resetPasswordToken?: string | null;
-  resetPasswordExpiration?: string | null;
-  salt?: string | null;
-  hash?: string | null;
-  loginAttempts?: number | null;
-  lockUntil?: string | null;
-  sessions?:
-    | {
-        id: string;
-        createdAt?: string | null;
-        expiresAt: string;
-      }[]
-    | null;
-  password?: string | null;
-  collection: 'admins';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -410,6 +378,80 @@ export interface OrganizationMembership {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "roles".
+ */
+export interface Role {
+  id: string;
+  slug: string;
+  name: string;
+  /**
+   * 1 = máxima autoridad
+   */
+  rank: number;
+  scope: 'platform' | 'organization' | 'organization_office' | 'office_user';
+  is_platform_role?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "scan-reports".
+ */
+export interface ScanReport {
+  /**
+   * report_id tal cual lo manda el escáner
+   */
+  id: string;
+  agent: string | Agent;
+  office?: (string | null) | Office;
+  network?: string | null;
+  scan_start?: string | null;
+  scan_end?: string | null;
+  hosts_up?: number | null;
+  raw_payload?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  status?: ('received' | 'processed' | 'failed') | null;
+  processed_at?: string | null;
+  error?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "admins".
+ */
+export interface Admin {
+  id: string;
+  role: string | Role;
+  status?: ('active' | 'inactive') | null;
+  updatedAt: string;
+  createdAt: string;
+  email: string;
+  resetPasswordToken?: string | null;
+  resetPasswordExpiration?: string | null;
+  salt?: string | null;
+  hash?: string | null;
+  loginAttempts?: number | null;
+  lockUntil?: string | null;
+  sessions?:
+    | {
+        id: string;
+        createdAt?: string | null;
+        expiresAt: string;
+      }[]
+    | null;
+  password?: string | null;
+  collection: 'admins';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -447,6 +489,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'assets';
         value: string | Asset;
+      } | null)
+    | ({
+        relationTo: 'non-network-assets';
+        value: string | NonNetworkAsset;
       } | null)
     | ({
         relationTo: 'scan-reports';
@@ -612,6 +658,26 @@ export interface AssetsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "non-network-assets_select".
+ */
+export interface NonNetworkAssetsSelect<T extends boolean = true> {
+  alias?: T;
+  asset_category?: T;
+  criticality?: T;
+  owner?: T;
+  location?: T;
+  status?: T;
+  next_review_at?: T;
+  details?: T;
+  related_assets?: T;
+  office?: T;
+  organization?: T;
+  last_updated_at?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "scan-reports_select".
  */
 export interface ScanReportsSelect<T extends boolean = true> {
@@ -650,6 +716,7 @@ export interface OrganizationSettingsSelect<T extends boolean = true> {
   organization?: T;
   industry?: T;
   risk_score_policy?: T;
+  review_policy?: T;
   updatedAt?: T;
   createdAt?: T;
 }

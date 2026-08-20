@@ -22,7 +22,7 @@ function scopeWhere(scope: OrgScope, ctx: TenantCtxForScope): Where | false {
 export function orgScopedAccess(
   collection: CollectionSlug,
   action: Action,
-  scope: OrgScope = { kind: 'organization', field: 'organization' },
+  scope: OrgScope = { kind: 'organization', field: 'organization' }
 ): Access {
   return async ({ req }) => {
     const ctx = await getTenantContext(req)
@@ -44,12 +44,21 @@ export function orgScopedAccess(
   }
 }
 
-// Roles no es organization-scoped (catálogo global) — cualquier identidad activa con permiso
-// puede leerlo completo, sin filtro de fila.
-export function globalReadAccess(collection: CollectionSlug, action: Action): Access {
+// Solo canDo, sin filtro de fila. Dos casos legítimos, por motivos distintos:
+//   - `create`: todavía no hay fila que filtrar y Payload espera un boolean acá — el binding al
+//     tenant lo hace el beforeChange de la colección (ver collections/NonNetworkAssets).
+//   - catálogos globales no organization-scoped (Roles).
+// No usarlo para read/update/delete de una colección con dueño: ahí el filtro de fila es
+// obligatorio (doc 03.1) y corresponde orgScopedAccess.
+export function canDoAccess(collection: CollectionSlug, action: Action): Access {
   return async ({ req }) => {
     const ctx = await getTenantContext(req)
     if (!ctx || !ctx.isActive) return false
     return canDo(ctx.role, collection, action, ctx.organizationId)
   }
 }
+
+// Roles no es organization-scoped (catálogo global) — cualquier identidad activa con permiso
+// puede leerlo completo, sin filtro de fila. Alias semántico de canDoAccess: mismo comportamiento,
+// nombre que documenta el motivo en el call-site.
+export const globalReadAccess = canDoAccess
