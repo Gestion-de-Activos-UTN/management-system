@@ -8,6 +8,7 @@ import {
   Button,
   Card,
   Flex,
+  Group,
   PasswordInput,
   Stack,
   Text,
@@ -15,6 +16,7 @@ import {
   Title,
 } from '@mantine/core'
 import { useLogin } from '@/modules/auth/hooks/use-login'
+import { Logo } from '@/components/ui/Logo'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -41,23 +43,51 @@ export default function LoginPage() {
           backgroundSize: '24px 24px',
         }}
       >
-        <Stack h="100%" justify="center" p={60} gap="xs">
-          <Title c="white" order={1}>
-            SIAM
-          </Title>
+        <Stack h="100%" justify="center" align="center" ta="center" p={60} gap="xs">
+          <Group gap="md" align="center">
+            <Logo height={96} color="white" />
+            <Title c="white" order={1} fz="4rem" style={{ lineHeight: 1 }}>
+              SIAM
+            </Title>
+          </Group>
           <Text c="pine.1" maw={320}>
-            Sistema de Gestión de Activos.
+            Track assets, monitor risk, and keep every organization&apos;s inventory audit-ready
+            from one place.
           </Text>
         </Stack>
       </Box>
-      <Flex flex={1} align="center" justify="center" bg="bone.0" p="md">
-        <Card withBorder shadow="md" radius="md" padding="xl" w={360}>
+      <Flex
+        flex={1}
+        align="center"
+        justify="center"
+        p="md"
+        pos="relative"
+        style={{ overflow: 'hidden' }}
+      >
+        <Box
+          pos="absolute"
+          top="50%"
+          left="47%"
+          style={{ transform: 'translate(-50%, -50%)', opacity: 0.04, pointerEvents: 'none' }}
+        >
+          <Logo height={1300} color="var(--mantine-color-pine-7)" />
+        </Box>
+        <Card
+          withBorder
+          shadow="md"
+          radius="md"
+          padding="xl"
+          w={360}
+          className="login-card"
+          pos="relative"
+        >
           <form onSubmit={handleSubmit}>
             <Stack gap="md">
               <Stack gap={0}>
-                <Title order={3} hiddenFrom="sm">
-                  SIAM
-                </Title>
+                <Group gap="xs" hiddenFrom="sm">
+                  <Logo height={24} />
+                  <Title order={3}>SIAM</Title>
+                </Group>
                 <Title order={2} visibleFrom="sm">
                   Welcome back
                 </Title>

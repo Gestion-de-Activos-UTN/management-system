@@ -101,6 +101,7 @@ function PortalProtectedLayoutInner({ children }: { children: React.ReactNode })
     <DashboardShell
       navItems={navItems}
       sidebarFooter={<SidebarProfile title={roleLabel(tenantContext.data)} />}
+      homeHref={`/portal/dashboard${suffix}`}
       topBarRight={
         <Group gap="sm">
           {isAdminVisiting && (
