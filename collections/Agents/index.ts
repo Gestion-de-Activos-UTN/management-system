@@ -81,6 +81,15 @@ export const Agents: CollectionConfig = {
       },
     },
     {
+      // Solo cuenta intentos con apiKeyPrefix correcto pero hash inválido — un prefix
+      // desconocido no llega a asociarse a ningún Agent (resolveAgentAuth.ts). Se resetea
+      // a 0 en cada ingesta exitosa (reports.ts/heartbeat.ts), no solo en el auth.
+      name: 'failedAttempts',
+      type: 'number',
+      defaultValue: 0,
+      admin: { readOnly: true },
+    },
+    {
       name: 'apiKeyPrefix',
       type: 'text',
       unique: true,
