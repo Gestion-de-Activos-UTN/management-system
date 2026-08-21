@@ -7,6 +7,7 @@ import { Organizations } from './collections/Organizations'
 import { Offices } from './collections/Offices'
 import { Agents } from './collections/Agents'
 import { Assets } from './collections/Assets'
+import { NonNetworkAssets } from './collections/NonNetworkAssets'
 import { ScanReports } from './collections/ScanReports'
 import { Roles } from './collections/Roles'
 import { OrganizationSettings } from './collections/OrganizationSettings'
@@ -38,6 +39,7 @@ export default buildConfig({
     Offices,
     Agents,
     Assets,
+    NonNetworkAssets,
     ScanReports,
     Roles,
     OrganizationSettings,

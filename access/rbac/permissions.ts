@@ -1,5 +1,6 @@
 export type RoleSlug = 'platform_admin' | 'org_admin' | 'org_viewer' | 'office_manager'
-export type CollectionSlug = 'organizations' | 'offices' | 'assets' | 'scan-reports' | 'roles'
+export type CollectionSlug =
+  'organizations' | 'offices' | 'assets' | 'non-network-assets' | 'scan-reports' | 'roles'
 export type Action = 'create' | 'read' | 'update' | 'delete'
 
 // Matriz estática — decisión explícita (documentation/01-erd-core.md nota 9): el sistema no
@@ -15,6 +16,7 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     organizations: ['read'],
     offices: ['read'],
     assets: ['read'],
+    'non-network-assets': ['read'],
     'scan-reports': ['read'],
     roles: ['read'],
   },
@@ -22,18 +24,21 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     organizations: ['read'],
     offices: ['read'],
     assets: ['read'],
+    'non-network-assets': ['create', 'read', 'update', 'delete'],
     'scan-reports': ['read'],
   },
   org_viewer: {
     organizations: ['read'],
     offices: ['read'],
     assets: ['read'],
+    'non-network-assets': ['read'],
     'scan-reports': ['read'],
   },
   office_manager: {
     organizations: ['read'],
     offices: ['read'],
     assets: ['read'],
+    'non-network-assets': ['create', 'read', 'update'],
     'scan-reports': ['read'],
   },
 }
@@ -46,7 +51,7 @@ export function canDo(
   roleSlug: RoleSlug | null | undefined,
   collection: CollectionSlug,
   action: Action,
-  _organizationId: string | null,
+  _organizationId: string | null
 ): boolean {
   if (!roleSlug) return false
   return MATRIX[roleSlug]?.[collection]?.includes(action) ?? false
