@@ -1,44 +1,32 @@
-export type Session = { token: string; collection: 'admins' | 'users' } | null;
+export type Session = { collection: 'admins' | 'users' } | null;
 
-const STORAGE_KEY = 'siam.session';
 const listeners = new Set<() => void>();
 let cached: Session = null;
 let hydrated = false;
 
-function readStorage(): Session {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Session) : null;
-  } catch {
-    return null;
-  }
-}
-
-// Own cross-cutting layer, deliberately neither TanStack Query (not server-fetched
-// data with staleness) nor Zustand (reserved for UI state, not auth credentials) —
-// see the plan's rationale. Session lives here so lib/http-client.ts can read it
-// synchronously outside of React (a plain getter, not a hook).
+// No longer backed by localStorage: the JWT lives in the httpOnly `payload-token` cookie
+// (see lib/http-client.ts), which JS can't read. `cached` is hydrated once per page load
+// by lib/providers.tsx's SessionBootstrap (GET /api/v1/session) and kept in sync from there —
+// getSession() itself never fetches, it's a plain synchronous getter for http-client.ts to
+// read outside of React.
 export function getSession(): Session {
-  if (!hydrated) {
-    cached = readStorage();
-    hydrated = true;
-  }
   return cached;
 }
 
 export function setSession(session: NonNullable<Session>) {
   cached = session;
   hydrated = true;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
   listeners.forEach((listener) => listener());
 }
 
 export function clearSession() {
   cached = null;
   hydrated = true;
-  window.localStorage.removeItem(STORAGE_KEY);
   listeners.forEach((listener) => listener());
+}
+
+export function isSessionHydrated() {
+  return hydrated;
 }
 
 export function subscribeSession(callback: () => void) {

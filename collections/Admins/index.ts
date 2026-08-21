@@ -6,7 +6,16 @@ import { rejectInactiveLogin } from '../../access/auth/rejectInactiveLogin'
 // el login de Payload es un endpoint aparte del control de acceso CRUD de la collection.
 export const Admins: CollectionConfig = {
   slug: 'admins',
-  auth: { tokenExpiration: 60 * 60 * 24 * 7 },
+  auth: {
+    // Ver Users/index.ts — mismos valores, mismo razonamiento (cookie compartida, refresh reactivo).
+    tokenExpiration: 60 * 60,
+    cookies: {
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'Lax',
+    },
+    maxLoginAttempts: 5,
+    lockTime: 10 * 60 * 1000,
+  },
   admin: {
     useAsTitle: 'email',
   },

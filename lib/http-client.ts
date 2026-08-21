@@ -1,4 +1,4 @@
-import { getSession } from './session';
+import { clearSession, getSession } from './session';
 
 export type HttpError = { status: number; code: string; message: string };
 
@@ -12,24 +12,56 @@ function withParams(path: string, params?: Record<string, string | undefined>) {
   return search ? `${path}?${search}` : path;
 }
 
+// Single in-flight refresh shared by every request that hits a 401 at the same time —
+// without this, N concurrent requests failing together would each fire their own
+// /refresh-token, which is both wasteful and races on which one's cookie wins.
+let refreshPromise: Promise<boolean> | null = null;
+
+function refreshSession(): Promise<boolean> {
+  if (!refreshPromise) {
+    const session = getSession();
+    refreshPromise = (async () => {
+      if (!session) return false;
+      const res = await fetch(`/api/${session.collection}/refresh-token`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+      return res.ok;
+    })().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
+async function rawRequest(method: string, path: string, body?: unknown) {
+  return fetch(path, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    // The session lives in the httpOnly `payload-token` cookie now (see collections/Users
+    // and collections/Admins auth.cookies) — no more manual Authorization header.
+    credentials: 'include',
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+}
+
 async function request<T>(
   method: string,
   path: string,
-  opts?: { params?: Record<string, string | undefined>; body?: unknown },
+  opts?: { params?: Record<string, string | undefined>; body?: unknown; isRetry?: boolean },
 ): Promise<T> {
-  const session = getSession();
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (session?.token) headers.Authorization = `Bearer ${session.token}`;
+  const fullPath = withParams(path, opts?.params);
+  const res = await rawRequest(method, fullPath, opts?.body);
 
-  // Never credentials: 'include' — Payload keeps one global session cookie shared across
-  // the `users`/`admins` auth collections, so the frontend authenticates purely via the
-  // Bearer token above, never the cookie (see access/tenant/identityProvider.ts).
-  const res = await fetch(withParams(path, opts?.params), {
-    method,
-    headers,
-    credentials: 'omit',
-    body: opts?.body !== undefined ? JSON.stringify(opts.body) : undefined,
-  });
+  if (res.status === 401 && !opts?.isRetry && getSession()) {
+    const refreshed = await refreshSession();
+    if (refreshed) {
+      return request<T>(method, path, { ...opts, isRetry: true });
+    }
+    // Refresh failed too — the cookie is gone/expired for good, stop here instead of
+    // looping: clear local state so the protected layouts redirect to /login on their own.
+    clearSession();
+  }
 
   const data = await res.json().catch(() => null);
 

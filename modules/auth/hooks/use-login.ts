@@ -12,16 +12,19 @@ type Credentials = { email: string; password: string };
 // decides the session's `collection`. Both endpoints return a generic "invalid credentials"
 // on any failure (nonexistent email or wrong password), so trying both in sequence never
 // leaks which collection matched.
+// The response body's `token` is ignored — Payload already set it as the httpOnly
+// `payload-token` cookie (lib/http-client.ts sends credentials: 'include'); tracking
+// `collection` here is just to know which login succeeded.
 export function useLogin() {
   const queryClient = useQueryClient();
   return useMutation<NonNullable<Session>, HttpError, Credentials>({
     mutationFn: async ({ email, password }) => {
       try {
-        const data = await loginAdmin(email, password);
-        return { token: data.token, collection: 'admins' as const };
+        await loginAdmin(email, password);
+        return { collection: 'admins' as const };
       } catch {
-        const data = await loginUser(email, password);
-        return { token: data.token, collection: 'users' as const };
+        await loginUser(email, password);
+        return { collection: 'users' as const };
       }
     },
     onSuccess: (session) => {

@@ -242,6 +242,7 @@ export interface Agent {
    * false = token revocado, rechazar toda ingesta de este agente
    */
   is_active?: boolean | null;
+  failedAttempts?: number | null;
   apiKeyPrefix?: string | null;
   apiKeyHash?: string | null;
   /**
@@ -563,6 +564,7 @@ export interface AgentsSelect<T extends boolean = true> {
   last_heartbeat_at?: T;
   status?: T;
   is_active?: T;
+  failedAttempts?: T;
   apiKeyPrefix?: T;
   apiKeyHash?: T;
   apiKey?: T;

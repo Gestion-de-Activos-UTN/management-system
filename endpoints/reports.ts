@@ -17,6 +17,7 @@ export const reportsEndpoint: Endpoint = {
   path: '/v1/reports',
   method: 'post',
   handler: async (req) => {
+    const authDeps = createPayloadAgentAuthDeps(req.payload)
     let auth
     try {
       auth = await resolveAgentAuth(
@@ -24,12 +25,15 @@ export const reportsEndpoint: Endpoint = {
           authorization: req.headers.get('authorization'),
           'x-agent-id': req.headers.get('x-agent-id'),
         },
-        createPayloadAgentAuthDeps(req.payload),
+        authDeps,
       )
     } catch (err) {
       if (err instanceof AgentAuthError) return json({ error: err.message }, 401)
       throw err
     }
+    // Resetea acá, no solo al final: la resolución de auth arriba ya exigió el hash
+    // correcto, así que un retry idempotente (línea ~59, abajo) también cuenta como éxito.
+    await authDeps.resetAttempts(auth.agentId)
 
     const rawBody = await req.json!()
     const parseResult = ScanReportPayloadSchema.safeParse(rawBody)

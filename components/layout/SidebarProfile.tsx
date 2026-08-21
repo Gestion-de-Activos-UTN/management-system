@@ -4,7 +4,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import { Avatar, Group, Menu, Stack, Text, UnstyledButton } from '@mantine/core';
 import { ChevronsUpDown, LogOut, Settings } from 'lucide-react';
-import { clearSession } from '@/lib/session';
+import { httpClient } from '@/lib/http-client';
+import { clearSession, getSession } from '@/lib/session';
 
 /**
  * Account card pinned to the bottom of the sidebar — replaces a bare wordmark
@@ -18,7 +19,13 @@ export function SidebarProfile({ title, subtitle }: { title: string; subtitle?: 
   const queryClient = useQueryClient();
   const accountHref = pathname.startsWith('/portal') ? '/portal/account' : '/account';
 
-  function handleLogout() {
+  async function handleLogout() {
+    // Real server-side logout now that the session is a cookie, not just localStorage —
+    // without this the payload-token cookie would outlive the click.
+    const session = getSession();
+    if (session) {
+      await httpClient.post(`/api/${session.collection}/logout`).catch(() => {});
+    }
     // Same reason as useLogin's onSuccess: per-user cached queries (tenant-context, lists)
     // must not survive into whoever logs in next on this tab.
     queryClient.clear();

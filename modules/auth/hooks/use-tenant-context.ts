@@ -25,7 +25,7 @@ export function useTenantContext(asOrganization?: string) {
   return useQuery({
     queryKey: ['tenant-context', asOrganization],
     queryFn: () => httpClient.get<TenantContext>('/api/v1/session', { asOrganization }),
-    enabled: !!session?.token,
+    enabled: !!session,
     staleTime: 60_000,
   });
 }
