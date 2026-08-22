@@ -15,10 +15,17 @@ import { Subscriptions } from './collections/Subscriptions'
 import { Admins } from './collections/Admins'
 import { Users } from './collections/Users'
 import { OrganizationMemberships } from './collections/OrganizationMemberships'
+import { JobRun } from './collections/JobRun'
+import { InventorySnapshots } from './collections/InventorySnapshots'
 import { reportsEndpoint } from './endpoints/reports'
 import { heartbeatEndpoint } from './endpoints/heartbeat'
 import { vendorEndpoint } from './endpoints/vendor'
 import { sessionEndpoint } from './endpoints/session'
+import { nonNetworkAssetReviewEndpoint } from './endpoints/nonNetworkAssetReview'
+import { agingSweepEndpoint } from './endpoints/internalJobs'
+import { generateInventorySnapshotEndpoint } from './endpoints/inventorySnapshots'
+import { orgMembersEndpoint } from './endpoints/orgMembers'
+import { organizationSettingsGetEndpoint, organizationSettingsUpdateEndpoint } from './endpoints/organizationSettings'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -34,6 +41,14 @@ export default buildConfig({
     },
   }),
   editor: lexicalEditor(),
+  // El login prueba admins primero y users después (modules/auth/service.ts) — un login de
+  // usuario normal SIEMPRE dispara un 401 de admins antes del intento real. Ese 401 ya se
+  // devuelve al cliente (no es información que se pierda) y no es un malfuncionamiento del
+  // servidor, así que no amerita nivel 'error' con stack trace — solo ensucia los logs.
+  // Sigue vigente después de Auth0: ese flujo también va a tener su propio "401 esperado".
+  loggingLevels: {
+    AuthenticationError: 'info',
+  },
   collections: [
     Organizations,
     Offices,
@@ -47,11 +62,24 @@ export default buildConfig({
     Admins,
     Users,
     OrganizationMemberships,
+    JobRun,
+    InventorySnapshots,
   ],
   // Servidos vía app/(payload)/api/[...slug]/route.ts (catch-all de Next que reexporta
   // REST_GET/REST_POST/... de @payloadcms/next/routes) — sin ese archivo, Payload no recibe
   // tráfico, Next nunca delega la request.
-  endpoints: [reportsEndpoint, heartbeatEndpoint, vendorEndpoint, sessionEndpoint],
+  endpoints: [
+    reportsEndpoint,
+    heartbeatEndpoint,
+    vendorEndpoint,
+    sessionEndpoint,
+    nonNetworkAssetReviewEndpoint,
+    agingSweepEndpoint,
+    generateInventorySnapshotEndpoint,
+    orgMembersEndpoint,
+    organizationSettingsGetEndpoint,
+    organizationSettingsUpdateEndpoint,
+  ],
   typescript: {
     outputFile: path.resolve(dirname, 'app/types/payload-types.ts'),
   },

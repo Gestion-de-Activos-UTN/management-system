@@ -26,6 +26,7 @@ export function DataTable<T>({
   manualSorting = false,
   sorting: controlledSorting,
   onSortingChange,
+  maxHeight = 'calc(100vh - 320px)',
 }: {
   columns: ColumnDef<T, unknown>[];
   data: T[];
@@ -34,6 +35,8 @@ export function DataTable<T>({
   manualSorting?: boolean;
   sorting?: SortingState;
   onSortingChange?: (sorting: SortingState) => void;
+  /** Caps vertical overflow inside the table's own scroll container instead of the page body. */
+  maxHeight?: number | string;
 }) {
   const [internalSorting, setInternalSorting] = useState<SortingState>([]);
   const sorting = controlledSorting ?? internalSorting;
@@ -69,7 +72,7 @@ export function DataTable<T>({
   }
 
   return (
-    <Table.ScrollContainer minWidth={480}>
+    <Table.ScrollContainer minWidth={480} mah={maxHeight} style={{ overflowY: 'auto' }}>
       <Table highlightOnHover verticalSpacing="sm">
         <Table.Thead>
           {table.getHeaderGroups().map((headerGroup) => (
@@ -125,7 +128,10 @@ export function DataTable<T>({
                   key={cell.id}
                   style={
                     cell.column.columnDef.size !== undefined
-                      ? { width: cell.column.getSize() }
+                      // maxWidth + overflow: a sized <td> in an auto-layout <table> still grows
+                      // to fit nowrap/long content unless the cell itself clips — width alone
+                      // (as used for unsized columns) isn't enough for truncated cells.
+                      ? { width: cell.column.getSize(), maxWidth: cell.column.getSize(), overflow: 'hidden' }
                       : undefined
                   }
                 >

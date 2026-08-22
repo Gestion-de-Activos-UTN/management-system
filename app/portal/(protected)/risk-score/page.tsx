@@ -1,15 +1,20 @@
 'use client';
 
+import { useSearchParams } from 'next/navigation';
 import { Card, Group, RingProgress, Skeleton, Stack, Text } from '@mantine/core';
 import type { ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '@/components/ui/DataTable';
 import { PageHeader } from '@/components/ui/PageHeader';
-import { useFakeLoading } from '@/lib/use-fake-loading';
+import { useLatestSnapshot } from '@/modules/inventory-snapshots/hooks/use-latest-snapshot';
+import { formatDateTime } from '@/lib/format-date';
 
 type RiskRow = { category: string; score: number; trend: string };
 
-// ponytail: static placeholder — wire to a real risk-score domain once that backend ships.
-const FAKE_SCORE = 72;
+// ponytail: el desglose por categoría sigue siendo placeholder — esa granularidad no existe en
+// el modelo de datos (InventorySnapshot.risk_score solo tiene `global`, ver
+// documentation/05-inventory-architecture.md §5.2). Reemplazar cuando el algoritmo real de
+// risk score (fuera de alcance, RF-30) defina categorías. El número principal (RingProgress)
+// ya no es fake: viene de InventorySnapshots.risk_score.global del snapshot más reciente.
 const FAKE_ROWS: RiskRow[] = [
   { category: 'Network exposure', score: 68, trend: 'flat' },
   { category: 'Patch hygiene', score: 74, trend: 'up' },
@@ -24,31 +29,36 @@ const columns: ColumnDef<RiskRow, unknown>[] = [
 ];
 
 export default function RiskScorePage() {
-  const loading = useFakeLoading(500);
+  const asOrganization = useSearchParams().get('asOrganization') ?? undefined;
+  const { data: latestSnapshot, isPending } = useLatestSnapshot(asOrganization);
 
   return (
     <Stack gap="md">
       <PageHeader title="Risk Score" description="How your organization scores across key categories." />
       <Card withBorder padding="lg">
-        {loading ? (
+        {isPending ? (
           <Skeleton height={120} circle />
-        ) : (
+        ) : latestSnapshot ? (
           <Group>
             <RingProgress
               size={120}
               thickness={12}
-              sections={[{ value: FAKE_SCORE, color: 'pine' }]}
+              sections={[{ value: latestSnapshot.risk_score.global, color: 'pine' }]}
               label={
                 <Text ta="center" fw={700}>
-                  {FAKE_SCORE}
+                  {latestSnapshot.risk_score.global}
                 </Text>
               }
             />
-            <Text c="dimmed">Overall risk score, aggregated across offices.</Text>
+            <Text c="dimmed">
+              Overall risk score, from the snapshot taken on {formatDateTime(latestSnapshot.taken_at)}.
+            </Text>
           </Group>
+        ) : (
+          <Text c="dimmed">No snapshot has been generated yet for this office/organization.</Text>
         )}
       </Card>
-      <DataTable columns={columns} data={FAKE_ROWS} isLoading={loading} />
+      <DataTable columns={columns} data={FAKE_ROWS} isLoading={isPending} />
     </Stack>
   );
 }

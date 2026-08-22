@@ -52,7 +52,7 @@ Sin migraciones: el deploy de este proyecto recrea imagen y DB desde cero cada v
 
 | Comando | Dónde | Qué hace |
 |---|---|---|
-| `pnpm seed:agent` | Ya corre solo en `docker compose up`, después de `seed:navigation` (idempotente: si `agent-001` ya existe, no lo recrea) | Crea el Agent demo en la Office ya sembrada por `seed:navigation` (fallback: crea su propia Organization/Office si corre solo), imprime el token en texto plano una sola vez |
+| `pnpm seed:agent` | Ya corre solo en `docker compose up`, después de `seed:navigation` (idempotente: si `agent-001` ya existe, no lo recrea) | Crea el Agent demo en la Office ya sembrada por `seed:navigation` (fallback: crea su propia Organization/Office si corre solo). Con `DEMO_AGENT_API_KEY` seteada (ver `docker-compose.yml`) usa ese token fijo, sin imprimir nada — sin ella, genera uno random y lo imprime en texto plano una sola vez |
 
 El token no se puede recuperar después (solo se guarda hasheado) — si lo perdiste, hay que revocar ese Agent en la DB y correr el seed de nuevo, o crear otro con la Local API a mano.
 

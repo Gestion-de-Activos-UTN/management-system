@@ -1,20 +1,222 @@
 'use client';
 
+import { useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { Stack } from '@mantine/core';
+import { useQueryClient } from '@tanstack/react-query';
+import { Alert, Button, Group, Modal, Select, Stack, Tabs, Text, TextInput } from '@mantine/core';
+import { History, Plus, RefreshCw, Search } from 'lucide-react';
 import { DataTable } from '@/components/ui/DataTable';
 import { PageHeader } from '@/components/ui/PageHeader';
 import { useAssetsList } from '@/modules/assets/hooks/use-assets';
-import { assetsColumns } from '@/modules/assets/assets.columns';
+import { getAssetsColumns } from '@/modules/assets/assets.columns';
+import { useNonNetworkAssetsList } from '@/modules/non-network-assets/hooks/use-non-network-assets';
+import { getNonNetworkAssetsColumns } from '@/modules/non-network-assets/non-network-assets.columns';
+import { NonNetworkAssetForm } from '@/modules/non-network-assets/components/NonNetworkAssetForm';
+import { useOrgMembers } from '@/modules/users/hooks/use-org-members';
+import { useNewScanResultBanner } from '@/modules/scan-reports/hooks/use-new-scan-result-banner';
+import { ASSET_CATEGORY_OPTIONS, ASSET_STATUS_OPTIONS, CRITICALITY_OPTIONS } from '@/lib/enum-labels';
+import type { Asset, NonNetworkAsset } from '@/app/types/payload-types';
+
+const ALL = '';
+
+function matchesSearch(haystacks: Array<string | null | undefined>, query: string): boolean {
+  if (!query.trim()) return true;
+  const needle = query.trim().toLowerCase();
+  return haystacks.some((h) => h?.toLowerCase().includes(needle));
+}
 
 export default function InventoryPage() {
   const asOrganization = useSearchParams().get('asOrganization') ?? undefined;
-  const { data, isPending } = useAssetsList(asOrganization);
+  const { data: assets, isPending: assetsPending } = useAssetsList(asOrganization);
+  const { data: nonNetworkAssets, isPending: nonNetworkAssetsPending } = useNonNetworkAssetsList(asOrganization);
+  const { data: members } = useOrgMembers(asOrganization);
+  const { hasNewResult, acknowledge } = useNewScanResultBanner(asOrganization);
+  const queryClient = useQueryClient();
+
+  const ownerNameById = useMemo(
+    () => Object.fromEntries((members ?? []).map((m) => [m.id, m.name])),
+    [members],
+  );
+
+  // undefined = modal closed, null = modal open in "create" mode, object = "edit" mode.
+  const [editingAsset, setEditingAsset] = useState<NonNetworkAsset | null | undefined>(undefined);
+
+  const [assetSearch, setAssetSearch] = useState('');
+  const [assetCriticality, setAssetCriticality] = useState<string>(ALL);
+  const [assetStatus, setAssetStatus] = useState<string>(ALL);
+
+  const filteredAssets = useMemo(() => {
+    return (assets ?? []).filter(
+      (a: Asset) =>
+        matchesSearch([a.alias, a.hostname, a.ip], assetSearch) &&
+        (assetCriticality === ALL || a.criticality === assetCriticality) &&
+        (assetStatus === ALL || (a.status ?? 'active') === assetStatus),
+    );
+  }, [assets, assetSearch, assetCriticality, assetStatus]);
+
+  const [nnaSearch, setNnaSearch] = useState('');
+  const [nnaCategory, setNnaCategory] = useState<string>(ALL);
+  const [nnaCriticality, setNnaCriticality] = useState<string>(ALL);
+  const [nnaReviewStatus, setNnaReviewStatus] = useState<string>(ALL);
+
+  const filteredNonNetworkAssets = useMemo(() => {
+    return (nonNetworkAssets ?? []).filter(
+      (a: NonNetworkAsset) =>
+        matchesSearch([a.alias], nnaSearch) &&
+        (nnaCategory === ALL || a.asset_category === nnaCategory) &&
+        (nnaCriticality === ALL || a.criticality === nnaCriticality) &&
+        (nnaReviewStatus === ALL || a.review_status === nnaReviewStatus),
+    );
+  }, [nonNetworkAssets, nnaSearch, nnaCategory, nnaCriticality, nnaReviewStatus]);
+
+  const assetsColumns = useMemo(() => getAssetsColumns(ownerNameById), [ownerNameById]);
+  const nonNetworkAssetsColumns = useMemo(
+    () => getNonNetworkAssetsColumns((asset) => setEditingAsset(asset), ownerNameById),
+    [ownerNameById],
+  );
 
   return (
     <Stack gap="md">
-      <PageHeader title="Inventory" description="Assets discovered across your offices." />
-      <DataTable columns={assetsColumns} data={data ?? []} isLoading={isPending} emptyLabel="No assets" />
+      <Group justify="space-between" align="flex-end">
+        <PageHeader title="Inventory" description="Assets discovered across your offices, and manually tracked assets." />
+        <Button
+          component={Link}
+          href={`/portal/inventory/snapshots${asOrganization ? `?asOrganization=${asOrganization}` : ''}`}
+          variant="light"
+          leftSection={<History size={16} strokeWidth={1.5} />}
+        >
+          Snapshot History
+        </Button>
+      </Group>
+
+      {hasNewResult && (
+        // No auto-refetch: el poll (useNewScanResultBanner) solo mira si hay un scan-report
+        // "processed" más nuevo que el visto — nunca invalida ['assets']/['non-network-assets']
+        // por su cuenta. Si el usuario está a mitad del form de "New asset" (Modal de abajo),
+        // ese refetch solo pasa cuando clickea "Refresh", nunca por detrás sin avisar.
+        <Alert color="pine" variant="light">
+          <Group justify="space-between" wrap="nowrap">
+            <Text size="sm">New scan result received — the list below may be out of date.</Text>
+            <Button
+              size="xs"
+              variant="light"
+              leftSection={<RefreshCw size={14} strokeWidth={1.5} />}
+              onClick={() => {
+                queryClient.invalidateQueries({ queryKey: ['assets'] });
+                queryClient.invalidateQueries({ queryKey: ['non-network-assets'] });
+                acknowledge();
+              }}
+            >
+              Refresh
+            </Button>
+          </Group>
+        </Alert>
+      )}
+
+      <Tabs defaultValue="network">
+        <Tabs.List>
+          <Tabs.Tab value="network">Network</Tabs.Tab>
+          <Tabs.Tab value="non-network">Other Assets</Tabs.Tab>
+        </Tabs.List>
+
+        <Tabs.Panel value="network" pt="md">
+          <Stack gap="sm">
+            <Group gap="sm">
+              <TextInput
+                placeholder="Search alias, hostname, IP..."
+                leftSection={<Search size={16} strokeWidth={1.5} />}
+                value={assetSearch}
+                onChange={(e) => setAssetSearch(e.currentTarget.value)}
+                w={260}
+              />
+              <Select
+                placeholder="Criticality"
+                data={[{ value: ALL, label: 'All criticalities' }, ...CRITICALITY_OPTIONS]}
+                value={assetCriticality}
+                onChange={(v) => setAssetCriticality(v ?? ALL)}
+                w={180}
+              />
+              <Select
+                placeholder="Status"
+                data={[{ value: ALL, label: 'All statuses' }, ...ASSET_STATUS_OPTIONS]}
+                value={assetStatus}
+                onChange={(v) => setAssetStatus(v ?? ALL)}
+                w={160}
+              />
+            </Group>
+            <DataTable
+              columns={assetsColumns}
+              data={filteredAssets}
+              isLoading={assetsPending}
+              emptyLabel="No assets match these filters"
+            />
+          </Stack>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="non-network" pt="md">
+          <Stack gap="sm">
+            <Group justify="space-between" wrap="wrap">
+              <Group gap="sm">
+                <TextInput
+                  placeholder="Search alias..."
+                  leftSection={<Search size={16} strokeWidth={1.5} />}
+                  value={nnaSearch}
+                  onChange={(e) => setNnaSearch(e.currentTarget.value)}
+                  w={220}
+                />
+                <Select
+                  placeholder="Category"
+                  data={[{ value: ALL, label: 'All categories' }, ...ASSET_CATEGORY_OPTIONS]}
+                  value={nnaCategory}
+                  onChange={(v) => setNnaCategory(v ?? ALL)}
+                  w={180}
+                />
+                <Select
+                  placeholder="Criticality"
+                  data={[{ value: ALL, label: 'All criticalities' }, ...CRITICALITY_OPTIONS]}
+                  value={nnaCriticality}
+                  onChange={(v) => setNnaCriticality(v ?? ALL)}
+                  w={180}
+                />
+                <Select
+                  placeholder="Review"
+                  data={[
+                    { value: ALL, label: 'All review statuses' },
+                    { value: 'ok', label: 'Up to date' },
+                    { value: 'overdue', label: 'Review overdue' },
+                  ]}
+                  value={nnaReviewStatus}
+                  onChange={(v) => setNnaReviewStatus(v ?? ALL)}
+                  w={180}
+                />
+              </Group>
+              <Button leftSection={<Plus size={16} strokeWidth={1.5} />} onClick={() => setEditingAsset(null)}>
+                New asset
+              </Button>
+            </Group>
+            <DataTable
+              columns={nonNetworkAssetsColumns}
+              data={filteredNonNetworkAssets}
+              isLoading={nonNetworkAssetsPending}
+              emptyLabel="No manually tracked assets match these filters"
+            />
+          </Stack>
+        </Tabs.Panel>
+      </Tabs>
+
+      <Modal
+        opened={editingAsset !== undefined}
+        onClose={() => setEditingAsset(undefined)}
+        title={editingAsset ? 'Edit asset' : 'New asset'}
+        size="lg"
+      >
+        <NonNetworkAssetForm
+          asset={editingAsset ?? undefined}
+          asOrganization={asOrganization}
+          onSaved={() => setEditingAsset(undefined)}
+        />
+      </Modal>
     </Stack>
   );
 }

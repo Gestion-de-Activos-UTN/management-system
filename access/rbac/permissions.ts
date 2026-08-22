@@ -1,16 +1,23 @@
 export type RoleSlug = 'platform_admin' | 'org_admin' | 'org_viewer' | 'office_manager'
 export type CollectionSlug =
-  'organizations' | 'offices' | 'assets' | 'non-network-assets' | 'scan-reports' | 'roles'
+  | 'organizations'
+  | 'offices'
+  | 'assets'
+  | 'non-network-assets'
+  | 'scan-reports'
+  | 'roles'
+  | 'job-runs'
+  | 'inventory-snapshots'
 export type Action = 'create' | 'read' | 'update' | 'delete'
 
 // Matriz estática — decisión explícita (documentation/01-erd-core.md nota 9): el sistema no
 // tiene hoy suficientes funcionalidades como para justificar overrides dinámicos por
 // organización guardados en DB. Cero lectura a base para decidir un permiso.
 //
-// Fase de navegación de solo lectura: todos los roles solo tienen 'read'. La diferencia
-// entre roles hoy es el SCOPE (qué filas ven, ver access/rbac/orgScopedAccess.ts), no las
-// acciones permitidas — cuando se habilite escritura, org_admin/platform_admin ganan
-// 'update'/'create' acá.
+// Cierre del módulo de Inventario: 'assets' gana 'update' para org_admin/office_manager (edición
+// de campos de negocio — los técnicos siguen bloqueados por technicalFieldAccess a nivel de
+// campo, ver collections/Assets/index.ts). 'create'/'delete' de 'assets' quedan fuera de la
+// matriz a propósito: un Asset nunca se crea/borra a mano (solo la ingesta, con overrideAccess).
 const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
   platform_admin: {
     organizations: ['read'],
@@ -19,13 +26,17 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     'non-network-assets': ['read'],
     'scan-reports': ['read'],
     roles: ['read'],
+    'job-runs': ['read'],
+    'inventory-snapshots': ['create', 'read'],
   },
   org_admin: {
     organizations: ['read'],
     offices: ['read'],
-    assets: ['read'],
+    assets: ['read', 'update'],
     'non-network-assets': ['create', 'read', 'update', 'delete'],
     'scan-reports': ['read'],
+    'job-runs': ['read'],
+    'inventory-snapshots': ['create', 'read'],
   },
   org_viewer: {
     organizations: ['read'],
@@ -33,13 +44,15 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     assets: ['read'],
     'non-network-assets': ['read'],
     'scan-reports': ['read'],
+    'inventory-snapshots': ['read'],
   },
   office_manager: {
     organizations: ['read'],
     offices: ['read'],
-    assets: ['read'],
+    assets: ['read', 'update'],
     'non-network-assets': ['create', 'read', 'update'],
     'scan-reports': ['read'],
+    'inventory-snapshots': ['read'],
   },
 }
 

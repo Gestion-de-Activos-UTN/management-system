@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   assertOfficeInScope,
   computeNextReviewAt,
+  computeReviewStatus,
   MissingOfficeError,
   OfficeOutOfScopeError,
   resolveReviewIntervalDays,
@@ -87,4 +88,22 @@ test('next_review_at: no muta la fecha recibida', () => {
   const now = new Date('2026-01-01T00:00:00.000Z')
   computeNextReviewAt({ default_days: 30 }, 'other', now)
   assert.equal(now.toISOString(), '2026-01-01T00:00:00.000Z')
+})
+
+test('review_status: sin next_review_at es ok, no overdue', () => {
+  assert.equal(computeReviewStatus(null, new Date('2026-01-01T00:00:00.000Z')), 'ok')
+})
+
+test('review_status: fecha futura es ok', () => {
+  assert.equal(
+    computeReviewStatus('2026-02-01T00:00:00.000Z', new Date('2026-01-01T00:00:00.000Z')),
+    'ok'
+  )
+})
+
+test('review_status: fecha pasada es overdue', () => {
+  assert.equal(
+    computeReviewStatus('2025-12-01T00:00:00.000Z', new Date('2026-01-01T00:00:00.000Z')),
+    'overdue'
+  )
 })

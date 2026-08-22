@@ -1,15 +1,16 @@
 import type { CollectionConfig } from 'payload'
 import { orgScopedAccess } from '../../access/rbac/orgScopedAccess'
+import { validateOwnerTenant } from './hooks/validateOwnerTenant'
+import { rejectManualOfflineStatus } from './hooks/rejectManualOfflineStatus'
 
 const technicalFieldAccess = {
   // Bloque técnico: solo lo escribe el upsert de ingesta (domain/inventories/ingestScanReport.ts), nunca un humano.
   update: () => false,
 }
 
-// TODO(rbac-feature): bloque de negocio (alias..status) necesita access real de edición manual
-// una vez exista TenantContext/RBAC — por ahora también () => false, nadie escribe vía API todavía.
-// `owner` (FK→Users, documentation/05-inventory-architecture.md §5.1) se agrega cuando la collection Users exista —
-// referenciar un slug de collection inexistente rompe payload.config.ts al build.
+// Bloque de negocio (alias..status): edición manual habilitada (cierre del módulo de Inventario,
+// access/rbac/permissions.ts — org_admin/office_manager ganan 'update' sobre 'assets'). `create`/
+// `delete` de la colección siguen () => false: un Asset nunca se crea/borra a mano.
 export const Assets: CollectionConfig = {
   slug: 'assets',
   admin: {
@@ -18,8 +19,11 @@ export const Assets: CollectionConfig = {
   access: {
     create: () => false,
     read: orgScopedAccess('assets', 'read'),
-    update: () => false,
+    update: orgScopedAccess('assets', 'update'),
     delete: () => false,
+  },
+  hooks: {
+    beforeChange: [validateOwnerTenant, rejectManualOfflineStatus],
   },
   fields: [
     {
@@ -82,14 +86,39 @@ export const Assets: CollectionConfig = {
       ],
     },
     // Bloque de negocio — nunca sobrescrito por el upsert de ingesta, solo en creación o edición manual.
-    { name: 'alias', type: 'text' },
-    { name: 'criticality', type: 'text' },
-    { name: 'location', type: 'text' },
+    // maxLength es la única validación de longitud que realmente corre: el PATCH manual pega
+    // directo al REST genérico de Payload (modules/assets/service.ts), nunca pasa por el Zod de
+    // modules/assets/schema.ts (que solo se usa como tipo TS del lado del cliente) — sin esto,
+    // cualquiera con permiso de update sobre `assets` podía mandar un string sin límite alguno.
+    { name: 'alias', type: 'text', maxLength: 120 },
+    {
+      name: 'criticality',
+      type: 'select',
+      options: ['low', 'medium', 'high', 'critical'],
+    },
+    {
+      name: 'owner',
+      type: 'relationship',
+      relationTo: 'users',
+      // Pertenencia a la organización del Asset validada en hooks/validateOwnerTenant.ts —
+      // el filtro de fila (RBAC) no alcanza para validar el *valor* de una FK a otra colección.
+    },
+    { name: 'location', type: 'text', maxLength: 200 },
     {
       name: 'status',
       type: 'select',
-      options: ['activo', 'retirado', 'offline'],
-      defaultValue: 'activo',
+      options: ['active', 'retired', 'offline'],
+      defaultValue: 'active',
+    },
+    {
+      // "NEW" badge en la tabla de Inventario hasta que un usuario entra al detalle del asset
+      // (markAssetViewed(), disparado desde AssetDetailView). `null` = nunca visto. Nunca se
+      // incluye en el `data` de ingestScanReport.ts/agingSweep.ts (ver esos archivos) — un
+      // upsert de Payload solo escribe los campos presentes en `data`, así que un re-scan de un
+      // asset ya conocido jamás toca ni resetea esta marca, sin necesitar ningún hook extra.
+      name: 'first_viewed_at',
+      type: 'date',
+      admin: { readOnly: true },
     },
   ],
 }

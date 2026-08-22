@@ -95,3 +95,43 @@
   box-shadow: var(--mantine-shadow-md);
   transform: none;
 }
+
+/* Thin, theme-aware scrollbar (thumb/track pulled from the same bone/dark
+   scale as the rest of the shell) instead of the OS default — applies
+   everywhere a scroll container appears (DataTable's ScrollContainer,
+   overflowing panels, etc.), not just one component. */
+[data-mantine-color-scheme='light'] {
+  scrollbar-color: var(--mantine-color-bone-4) transparent;
+}
+
+[data-mantine-color-scheme='dark'] {
+  scrollbar-color: var(--mantine-color-dark-3) transparent;
+}
+
+* {
+  scrollbar-width: thin;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--mantine-color-bone-4);
+  border-radius: var(--mantine-radius-default);
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+[data-mantine-color-scheme='dark'] ::-webkit-scrollbar-thumb {
+  background-color: var(--mantine-color-dark-3);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--mantine-color-pine-5);
+}

@@ -2,6 +2,7 @@ import type { CollectionBeforeChangeHook, PayloadRequest } from 'payload'
 import { getTenantContext } from '@/access/tenant/resolveTenantContext'
 import { assertOfficeInScope, computeNextReviewAt, type ReviewPolicy } from '../invariants'
 import { relationId } from '@/lib/relationId'
+import { assertOwnerBelongsToOrganization } from '@/access/tenant/assertOwnerBelongsToOrganization'
 
 async function findOrganizationOfOffice(req: PayloadRequest, officeId: string): Promise<string> {
   const office = await req.payload.findByID({
@@ -17,7 +18,7 @@ async function findOrganizationOfOffice(req: PayloadRequest, officeId: string): 
 // OrganizationSettings tiene los 4 access en false — se lee solo con overrideAccess desde acá.
 // Leer la política NO requiere abrirle acceso público a esa colección; eso recién hará falta
 // cuando exista una UI para editarla (hoy solo la escribe domain/organizations/createOrgWithAdmin.ts).
-async function findReviewPolicy(
+export async function findReviewPolicy(
   req: PayloadRequest,
   organizationId: string
 ): Promise<ReviewPolicy | null> {
@@ -57,6 +58,13 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
   assertOfficeInScope(officeId, ctx.officeIds, ctx.isPlatformAdmin && !ctx.organizationId)
 
   const organizationId = await findOrganizationOfOffice(req, officeId as string)
+
+  // RF-51a: owner obligatorio — validado igual que assertOfficeInScope valida `office`, pero acá
+  // necesita I/O (membership real), así que no puede vivir como invariante pura en invariants.ts.
+  const ownerId = data?.owner ? relationId(data.owner) : originalDoc?.owner ? relationId(originalDoc.owner) : null
+  if (ownerId) {
+    await assertOwnerBelongsToOrganization(req, ownerId, organizationId)
+  }
 
   const category = (data?.asset_category ?? originalDoc?.asset_category ?? null) as string | null
   const hasExplicitReviewDate = Boolean(data?.next_review_at ?? originalDoc?.next_review_at)

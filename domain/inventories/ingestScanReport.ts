@@ -8,14 +8,15 @@ export interface IngestResult {
   rejectedAssets: Array<{ asset_id: string; error: string }>
 }
 
-const REQUIRED_ASSET_FIELDS: Array<keyof AssetPayload> = [
-  'asset_id',
-  'ip',
-  'mac',
-  'vendor',
-  'hostname',
-  'scan_time',
-]
+// SOLO lo que doc 05 §5.1 marca "Técnicos obligatorios" para un Asset (agent_id/office_id
+// vienen de `auth`, no del payload). `mac`/`vendor`/`hostname` son "Técnicos opcionales" a
+// propósito — el scanner (models.py::Asset) los tipa como `str` simple, nunca `Optional`, y
+// manda `""` cuando nmap no puede resolverlos (cualquier host fuera del segmento L2 del agente:
+// notebooks/celulares por WiFi en otro subnet, sin entrada ARP visible). Exigirlos acá — como
+// hacía esta lista hasta ahora — descartaba en silencio exactamente esos hosts, que es el caso
+// más común de "activo real pero con dato técnico incompleto" que doc 05 ("Qué no asumir")
+// dice explícitamente que hay que tolerar, no rechazar.
+const REQUIRED_ASSET_FIELDS: Array<keyof AssetPayload> = ['asset_id', 'ip', 'scan_time']
 
 function findMissingFields(asset: AssetPayload): string[] {
   return REQUIRED_ASSET_FIELDS.filter((field) => !asset[field]) as string[]
@@ -28,9 +29,12 @@ function sanitizeTechnicalBlock(asset: AssetPayload) {
   return {
     asset_id: asset.asset_id,
     ip: asset.ip,
-    mac: asset.mac,
-    vendor: asset.vendor,
-    hostname: asset.hostname,
+    // El scanner manda "" cuando no pudo resolverlos (ver nota arriba) — se normaliza a `null`
+    // acá, no en el scanner, para que Assets guarde exactamente lo que su propio contrato
+    // documenta (`mac: string | null`, doc 05 §5.1), no un string vacío disfrazado de dato.
+    mac: asset.mac || null,
+    vendor: asset.vendor || null,
+    hostname: asset.hostname || null,
     // Payload tipa el group field como opcional (undefined), no nullable — el wire protocol
     // sí manda `null` cuando nmap no detecta OS (models.py::Asset.os: Optional[...]).
     os: asset.os ?? undefined,
@@ -71,7 +75,7 @@ export async function ingestScanReport(
 
     if (existingDoc) {
       // Bloque de negocio (alias/criticality/location/status) nunca se toca acá, salvo
-      // 'retirado' → sticky (doc05§5.1): un scan nuevo no revive un activo dado de baja.
+      // 'retired' → sticky (doc05§5.1): un scan nuevo no revive un activo dado de baja.
       await payload.update({
         collection: 'assets',
         id: existingDoc.id,
@@ -81,7 +85,7 @@ export async function ingestScanReport(
           agent: auth.agentId,
           office: auth.officeId,
           organization: auth.organizationId,
-          ...(existingDoc.status === 'retirado' ? {} : { status: 'activo' }),
+          ...(existingDoc.status === 'retired' ? {} : { status: 'active' }),
         },
       })
     } else {
@@ -93,7 +97,7 @@ export async function ingestScanReport(
           agent: auth.agentId,
           office: auth.officeId,
           organization: auth.organizationId,
-          status: 'activo',
+          status: 'active',
         },
       })
     }

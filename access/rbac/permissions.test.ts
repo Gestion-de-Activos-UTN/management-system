@@ -49,9 +49,23 @@ test('non-network-assets: org_viewer y platform_admin solo leen', () => {
   }
 })
 
-test('assets (descubiertos por el escáner) sigue siendo solo-lectura para todos', () => {
-  for (const role of ['org_admin', 'office_manager', 'org_viewer', 'platform_admin'] as const) {
+// Cierre del módulo de Inventario: el bloque de negocio de un Asset (alias/criticality/owner/
+// location/status) ya es editable por org_admin/office_manager — el bloque técnico sigue
+// bloqueado, pero eso lo hace technicalFieldAccess a nivel de campo (collections/Assets/index.ts),
+// no esta matriz. `create`/`delete` siguen fuera de la matriz para todos los roles: un Asset
+// nunca se crea/borra a mano, solo lo hace la ingesta con overrideAccess.
+test('assets: org_admin y office_manager pueden editar el bloque de negocio', () => {
+  for (const role of ['org_admin', 'office_manager'] as const) {
+    assert.equal(canDo(role, 'assets', 'update', 'org-1'), true, role)
     assert.equal(canDo(role, 'assets', 'create', 'org-1'), false, role)
+    assert.equal(canDo(role, 'assets', 'delete', 'org-1'), false, role)
+  }
+})
+
+test('assets: org_viewer y platform_admin siguen en solo-lectura', () => {
+  for (const role of ['org_viewer', 'platform_admin'] as const) {
+    assert.equal(canDo(role, 'assets', 'read', 'org-1'), true, role)
     assert.equal(canDo(role, 'assets', 'update', 'org-1'), false, role)
+    assert.equal(canDo(role, 'assets', 'create', 'org-1'), false, role)
   }
 })

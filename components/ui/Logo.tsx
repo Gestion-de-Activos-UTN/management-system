@@ -5,13 +5,26 @@
 // original 0 0 162 217 canvas (27/19 left/right, 28/20 top/bottom margins).
 // Cropped to that box + 4px padding so the rendered icon is actually centered
 // in its own box — otherwise every flex/grid centering against it looks off.
-const LOGO_VIEWBOX = '23 24 124 177';
+const LOGO_VIEWBOX = '23 24 124 177'
 
 export function Logo({ height = 28, color }: { height?: number; color?: string }) {
   return (
-    <svg height={height} width={(height * 124) / 177} viewBox={LOGO_VIEWBOX} xmlns="http://www.w3.org/2000/svg">
+    <svg
+      height={height}
+      width={(height * 124) / 177}
+      viewBox={LOGO_VIEWBOX}
+      xmlns="http://www.w3.org/2000/svg"
+      style={{ transform: 'translateY(-9%)' }}
+    >
       <defs>
-        <linearGradient id="siam-logo-gradient" gradientUnits="userSpaceOnUse" x1="30" y1="190" x2="140" y2="30">
+        <linearGradient
+          id="siam-logo-gradient"
+          gradientUnits="userSpaceOnUse"
+          x1="30"
+          y1="190"
+          x2="140"
+          y2="30"
+        >
           <stop offset="0%" stopColor="#23443e" />
           <stop offset="48%" stopColor="#3d7266" />
           <stop offset="100%" stopColor="#92b6ab" />
@@ -26,5 +39,5 @@ export function Logo({ height = 28, color }: { height?: number; color?: string }
         <path d="M 134.0,143.0 L 125.0,136.0 L 119.0,133.0 L 89.0,166.0 L 82.0,160.0 L 76.0,189.0 L 104.0,183.0 L 105.0,182.0 L 99.0,176.0 L 131.0,147.0 Z" />
       </g>
     </svg>
-  );
+  )
 }

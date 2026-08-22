@@ -35,6 +35,11 @@ services:
       - NODE_ENV=development
       - RBAC_SOURCE=db
       - LOCAL_STORAGE_PATH=/tmp/uploads
+      # Dev only — token fijo para el agente demo 'agent-001' (scripts/seed-agent.ts), así
+      # scanner-prototype/run_agent.sh puede apuntar acá sin copiar nada de los logs. Nunca un
+      # secreto real: cambiar/quitar esta línea no rompe nada, seed-agent.ts cae de vuelta a un
+      # token random (mostrado una vez en el log) si no está seteada.
+      - DEMO_AGENT_API_KEY=siam-dev-demo-key-2026
     depends_on:
       postgres:
         condition: service_healthy
