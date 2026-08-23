@@ -25,7 +25,7 @@ function findMissingFields(asset: AssetPayload): string[] {
 // Saneo: el Zod schema es .passthrough() a propósito (permisivo-en-lectura), pero acá se
 // extrae EXPLÍCITAMENTE solo el bloque técnico conocido — nada del payload original (con
 // eventuales campos extra) llega directo a `payload.create`/`update`.
-function sanitizeTechnicalBlock(asset: AssetPayload) {
+function sanitizeTechnicalBlock(asset: AssetPayload, report: ScanReportPayload) {
   return {
     asset_id: asset.asset_id,
     ip: asset.ip,
@@ -40,6 +40,8 @@ function sanitizeTechnicalBlock(asset: AssetPayload) {
     os: asset.os ?? undefined,
     services: asset.services,
     last_seen: asset.scan_time,
+    gateway_ip: report.gateway_ip,
+    gateway_mac: report.gateway_mac,
   }
 }
 
@@ -63,7 +65,7 @@ export async function ingestScanReport(
       continue
     }
 
-    const technical = sanitizeTechnicalBlock(asset)
+    const technical = sanitizeTechnicalBlock(asset, report)
     const existing = await payload.find({
       collection: 'assets',
       where: { asset_id: { equals: technical.asset_id } },

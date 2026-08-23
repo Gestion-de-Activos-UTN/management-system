@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: payload
       POSTGRES_DB: payloadcms
     ports:
-      - '5432:5432'
+      - '5433:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +22,7 @@ services:
       dockerfile: localdev.dockerfile
     container_name: siam-app
     ports:
-      - '3000:3000'
+      - '3001:3000'
     env_file:
       # Opcional: management-system/.env.local no es necesario para levantar el stack local —
       # todo lo que Postgres/Payload necesitan ya está hardcodeado abajo en `environment:`.

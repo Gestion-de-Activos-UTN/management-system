@@ -20,6 +20,11 @@ export const scanReportsColumns: ColumnDef<ScanReport, unknown>[] = [
     cell: ({ row }) => (row.original.scan_start ? formatDateTime(row.original.scan_start) : '—'),
   },
   { accessorKey: 'network', header: 'Network' },
+  {
+    accessorKey: 'gateway_ip',
+    header: 'Gateway',
+    cell: ({ row }) => row.original.gateway_ip ?? '—',
+  },
   { accessorKey: 'hosts_up', header: 'Hosts detected' },
   {
     id: 'processed',

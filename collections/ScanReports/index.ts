@@ -57,6 +57,16 @@ export const ScanReports: CollectionConfig = {
       type: 'number',
     },
     {
+      // Resuelto por el agente (tabla de ruteo/ARP), no un guess — todo asset de este
+      // reporte está, por construcción del scan, detrás de este gateway (contracts/scan-report.schema.ts).
+      name: 'gateway_ip',
+      type: 'text',
+    },
+    {
+      name: 'gateway_mac',
+      type: 'text',
+    },
+    {
       name: 'raw_payload',
       type: 'json',
     },
