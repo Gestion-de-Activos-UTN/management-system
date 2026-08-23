@@ -12,7 +12,7 @@ export const JobRun: CollectionConfig = {
   },
   access: {
     create: () => false, // solo lo escribe domain/inventories/agingSweep.ts vía overrideAccess
-    read: canDoAccess('job-runs', 'read'), // catálogo operativo, no scoped por organización — lo ve staff/org_admin
+    read: canDoAccess('job-runs', 'read'), // catálogo operativo, no scoped por organización — solo platform_admin
     update: () => false,
     delete: () => false,
   },

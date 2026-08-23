@@ -67,9 +67,11 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
   }
 
   const category = (data?.asset_category ?? originalDoc?.asset_category ?? null) as string | null
-  const hasExplicitReviewDate = Boolean(data?.next_review_at ?? originalDoc?.next_review_at)
+  const hasExplicitReviewDate = 'next_review_at' in (data ?? {})
+    ? Boolean(data?.next_review_at)
+    : Boolean(originalDoc?.next_review_at)
   const nextReviewAt = hasExplicitReviewDate
-    ? (data?.next_review_at ?? originalDoc?.next_review_at)
+    ? data?.next_review_at
     : computeNextReviewAt(await findReviewPolicy(req, organizationId), category, new Date())
 
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {id, office, organization,

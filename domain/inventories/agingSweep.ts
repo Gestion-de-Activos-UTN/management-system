@@ -1,4 +1,4 @@
-import type { Payload } from 'payload'
+import type { Payload, Where } from 'payload'
 
 // Sin AppSettings singleton todavía (mismo gap que risk_score_policy) — este es el default de
 // plataforma cuando una organización no tiene override en OrganizationSettings.offline_after_hours.
@@ -38,17 +38,27 @@ async function sweepActiveAssets(payload: Payload, now: number): Promise<AgingSw
   const offlineAfterHoursByOrg = new Map<string, number>()
   const organizationsSeen = new Set<string>()
   let transitioned = 0
-  let page = 1
+  let cursor: string | null = null
 
   for (;;) {
+    // Cursor on `id`, not offset/page — an offset would skip assets: rows flipping to
+    // 'offline' inside this loop shrink the `status: active` filter, so a page-based offset
+    // silently drops whatever shifted behind the cursor between requests.
+    const where: Where = { status: { equals: 'active' } }
+    if (cursor !== null) where.id = { greater_than: cursor }
+
     const result = await payload.find({
       collection: 'assets',
-      where: { status: { equals: 'active' } },
+      where,
+      sort: 'id',
       overrideAccess: true,
       depth: 0,
       limit: 200,
-      page,
+      pagination: false,
     })
+
+    if (!result.docs.length) break
+    cursor = result.docs[result.docs.length - 1].id
 
     for (const asset of result.docs) {
       const organizationId = String(asset.organization)
@@ -72,8 +82,7 @@ async function sweepActiveAssets(payload: Payload, now: number): Promise<AgingSw
       transitioned += 1
     }
 
-    if (!result.hasNextPage) break
-    page += 1
+    if (result.docs.length < 200) break
   }
 
   return { assets_transitioned: transitioned, organizations_processed: organizationsSeen.size }

@@ -29,6 +29,7 @@ export const NonNetworkAssets: CollectionConfig = {
       name: 'alias',
       type: 'text',
       required: true,
+      maxLength: 120,
     },
     {
       // Enum fijo en código (no catálogo en DB): la matriz RBAC ya es estática por la misma razón
@@ -57,7 +58,7 @@ export const NonNetworkAssets: CollectionConfig = {
       relationTo: 'users',
       required: true, // RF-51a
     },
-    { name: 'location', type: 'text' },
+    { name: 'location', type: 'text', maxLength: 200 },
     {
       name: 'status',
       type: 'select',

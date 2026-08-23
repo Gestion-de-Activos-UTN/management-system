@@ -35,7 +35,6 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     assets: ['read', 'update'],
     'non-network-assets': ['create', 'read', 'update', 'delete'],
     'scan-reports': ['read'],
-    'job-runs': ['read'],
     'inventory-snapshots': ['create', 'read'],
   },
   org_viewer: {

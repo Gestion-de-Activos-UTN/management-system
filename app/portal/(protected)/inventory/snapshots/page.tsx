@@ -10,6 +10,8 @@ import { useUiStore } from '@/lib/ui-store';
 import { useSnapshotsList } from '@/modules/inventory-snapshots/hooks/use-snapshots';
 import { useGenerateSnapshot } from '@/modules/inventory-snapshots/hooks/use-generate-snapshot';
 import { inventorySnapshotsColumns } from '@/modules/inventory-snapshots/inventory-snapshots.columns';
+import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context';
+import { canDo } from '@/access/rbac/permissions';
 
 const ALL = '';
 
@@ -25,6 +27,13 @@ export default function InventorySnapshotsPage() {
   const selectedOfficeId = useUiStore((s) => s.selectedOfficeId);
   const { data, isPending } = useSnapshotsList(asOrganization);
   const generateSnapshot = useGenerateSnapshot();
+  const tenantContext = useTenantContext(asOrganization);
+  const canGenerate = canDo(
+    tenantContext.data?.role,
+    'inventory-snapshots',
+    'create',
+    tenantContext.data?.organizationId ?? null,
+  );
 
   const [generatedBy, setGeneratedBy] = useState<string>(ALL);
 
@@ -41,14 +50,18 @@ export default function InventorySnapshotsPage() {
           description="Immutable snapshots of the inventory, with the risk score at that point in time."
         />
         <Tooltip
-          label="Select an office in the top bar to generate a snapshot"
-          disabled={!!selectedOfficeId}
+          label={
+            !canGenerate
+              ? "You don't have permission to generate snapshots"
+              : 'Select an office in the top bar to generate a snapshot'
+          }
+          disabled={!!selectedOfficeId && canGenerate}
         >
           <Button
             leftSection={<Camera size={16} strokeWidth={1.5} />}
-            disabled={!selectedOfficeId}
+            disabled={!selectedOfficeId || !canGenerate}
             loading={generateSnapshot.isPending}
-            onClick={() => selectedOfficeId && generateSnapshot.mutate(selectedOfficeId)}
+            onClick={() => selectedOfficeId && canGenerate && generateSnapshot.mutate(selectedOfficeId)}
           >
             Generate snapshot
           </Button>

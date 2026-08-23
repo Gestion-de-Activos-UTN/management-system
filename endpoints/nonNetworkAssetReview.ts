@@ -39,6 +39,8 @@ export const nonNetworkAssetReviewEndpoint: Endpoint = {
     const policy = await findReviewPolicy(req, relationId(existing.organization))
     const nextReviewAt = computeNextReviewAt(policy, existing.asset_category ?? null, new Date())
 
+    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {id, last_reviewed_at, next_review_at}, previous hash for this organization_id)
+    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
     const updated = await req.payload.update({
       collection: 'non-network-assets',
       id,
