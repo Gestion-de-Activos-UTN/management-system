@@ -294,6 +294,8 @@ export function AssetDetailView({
           <TechnicalRow label="MAC" value={asset.mac} />
           <TechnicalRow label="Vendor" value={asset.vendor} />
           <TechnicalRow label="Operating system" value={asset.os?.name} />
+          <TechnicalRow label="Gateway IP" value={asset.gateway_ip} />
+          <TechnicalRow label="Gateway MAC" value={asset.gateway_mac} />
           <ServicesRow services={asset.services} />
           <TechnicalRow
             label="Last seen"

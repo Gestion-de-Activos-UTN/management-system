@@ -24,7 +24,7 @@ Andamiaje inicial, basado en la arquitectura de SafeLink (multi-tenant, RBAC, ri
    docker compose up
    ```
 
-   La app queda en `http://localhost:3000`, Postgres en `localhost:5432` (user/pass/db: `payload`). El contenedor `app` ya corre `pnpm seed:navigation && pnpm seed:agent && pnpm dev` solo — sin migraciones: el deploy de este proyecto recrea imagen y DB desde cero, así que Payload sincroniza el schema directo contra Postgres en cada arranque (dev-only, requiere `NODE_ENV=development`).
+   La app queda en `http://localhost:3001`, Postgres en `localhost:5433` (user/pass/db: `payload`). El contenedor `app` ya corre `pnpm seed:navigation && pnpm seed:agent && pnpm dev` solo — sin migraciones: el deploy de este proyecto recrea imagen y DB desde cero, así que Payload sincroniza el schema directo contra Postgres en cada arranque (dev-only, requiere `NODE_ENV=development`).
 
 3. Bajar el stack cuando termines:
 
@@ -43,7 +43,7 @@ Ver [COMMANDS.md](./COMMANDS.md) para el resto de los comandos (tests, lint, see
 docker compose logs app | grep -A3 "Credenciales de navegación"
 ```
 
-Un único login (`http://localhost:3000/login`) para los dos portales — prueba `admins` y, si falla, `users`; el que responda decide a dónde redirige:
+Un único login (`http://localhost:3001/login`) para los dos portales — prueba `admins` y, si falla, `users`; el que responda decide a dónde redirige:
 
 | Rol | Portal | Ve "Administración" |
 |---|---|---|
@@ -65,7 +65,7 @@ docker compose logs app | grep "API key"
 Con el token (fijo o del log), ejemplo real de ingesta:
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/reports \
+curl -X POST http://localhost:3001/api/v1/reports \
   -H "Authorization: Bearer <token-del-seed>" \
   -H "X-Agent-ID: agent-001" \
   -H "Content-Type: application/json" \
@@ -93,7 +93,7 @@ configurable por organización. **Sin scheduler cableado todavía** (decisión e
 la infra de deploy real) — se dispara a mano contra un endpoint interno con token de servicio:
 
 ```bash
-curl -X POST http://localhost:3000/api/v1/internal/jobs/aging-sweep \
+curl -X POST http://localhost:3001/api/v1/internal/jobs/aging-sweep \
   -H "Authorization: Bearer <INTERNAL_JOBS_TOKEN>"
 ```
 

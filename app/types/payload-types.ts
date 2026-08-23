@@ -282,6 +282,8 @@ export interface Asset {
   organization?: (string | null) | Organization;
   ip?: string | null;
   last_seen?: string | null;
+  gateway_ip?: string | null;
+  gateway_mac?: string | null;
   mac?: string | null;
   vendor?: string | null;
   hostname?: string | null;
@@ -418,6 +420,8 @@ export interface ScanReport {
   scan_start?: string | null;
   scan_end?: string | null;
   hosts_up?: number | null;
+  gateway_ip?: string | null;
+  gateway_mac?: string | null;
   raw_payload?:
     | {
         [k: string]: unknown;
@@ -703,6 +707,8 @@ export interface AssetsSelect<T extends boolean = true> {
   organization?: T;
   ip?: T;
   last_seen?: T;
+  gateway_ip?: T;
+  gateway_mac?: T;
   mac?: T;
   vendor?: T;
   hostname?: T;
@@ -769,6 +775,8 @@ export interface ScanReportsSelect<T extends boolean = true> {
   scan_start?: T;
   scan_end?: T;
   hosts_up?: T;
+  gateway_ip?: T;
+  gateway_mac?: T;
   raw_payload?: T;
   status?: T;
   processed_at?: T;

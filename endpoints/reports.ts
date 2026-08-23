@@ -76,6 +76,8 @@ export const reportsEndpoint: Endpoint = {
           scan_start: body.scan_start,
           scan_end: body.scan_end,
           hosts_up: body.hosts_up,
+          gateway_ip: body.gateway_ip,
+          gateway_mac: body.gateway_mac,
           raw_payload: body,
           status: 'received',
         },

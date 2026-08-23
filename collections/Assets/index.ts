@@ -57,6 +57,8 @@ export const Assets: CollectionConfig = {
     },
     { name: 'ip', type: 'text', access: technicalFieldAccess },
     { name: 'last_seen', type: 'date', access: technicalFieldAccess },
+    { name: 'gateway_ip', type: 'text', access: technicalFieldAccess },
+    { name: 'gateway_mac', type: 'text', access: technicalFieldAccess },
     { name: 'mac', type: 'text', access: technicalFieldAccess },
     { name: 'vendor', type: 'text', access: technicalFieldAccess },
     { name: 'hostname', type: 'text', access: technicalFieldAccess },

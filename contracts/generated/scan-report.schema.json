@@ -139,6 +139,47 @@
         ],
         "additionalProperties": {}
       }
+    },
+    "scan_mode": {
+      "default": "full",
+      "type": "string",
+      "enum": [
+        "full",
+        "degraded"
+      ]
+    },
+    "scan_mode_reason": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "gateway_ip": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "gateway_mac": {
+      "default": null,
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
     }
   },
   "required": [
@@ -148,7 +189,11 @@
     "scan_start",
     "scan_end",
     "hosts_up",
-    "assets"
+    "assets",
+    "scan_mode",
+    "scan_mode_reason",
+    "gateway_ip",
+    "gateway_mac"
   ],
   "additionalProperties": {}
 }
