@@ -96,6 +96,49 @@ test('POST /v1/reports crea assets y es idempotente por report_id', async () => 
   assert.equal(assetsAfterRetry.docs.length, 1, 'no debe duplicar el asset en el reintento')
 })
 
+test('POST /v1/reports NO rechaza un host sin mac/vendor/hostname resueltos', async () => {
+  // Caso real: nmap manda "" (no null) para mac/vendor/hostname cuando el host está fuera del
+  // segmento L2 del agente (notebooks/celulares por WiFi en otro subnet) — doc 05 §5.1 los marca
+  // "Técnicos opcionales" a propósito. Antes de este fix, ingestScanReport.ts los exigía y
+  // descartaba en silencio exactamente estos hosts (regresión real reportada por el usuario:
+  // "solo veo dos activos" contra la plataforma vs. muchos más en el JSON local sin filtrar).
+  const payload = await getPayload({ config })
+  const { apiKey } = await seedAgent(payload)
+  const body = reportPayload({
+    assets: [
+      {
+        asset_id: `a-${Math.random().toString(36).slice(2)}`,
+        agent_id: 'agent-001',
+        ip: '192.168.0.42',
+        mac: '',
+        vendor: '',
+        hostname: '',
+        os: null,
+        services: [],
+        scan_time: '2026-07-24T23:51:45.039267+00:00',
+      },
+    ],
+  })
+
+  const res = await reportsEndpoint.handler(
+    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' }, body),
+  )
+  assert.equal(res.status, 200)
+  const resJson = await res.json()
+  assert.equal(resJson.processed, 1)
+  assert.deepEqual(resJson.rejected, [])
+
+  const asset = await payload.find({
+    collection: 'assets',
+    where: { asset_id: { equals: body.assets[0].asset_id } },
+    overrideAccess: true,
+  })
+  assert.equal(asset.docs.length, 1)
+  assert.equal(asset.docs[0].mac, null)
+  assert.equal(asset.docs[0].vendor, null)
+  assert.equal(asset.docs[0].hostname, null)
+})
+
 test('POST /v1/reports rechaza token inválido', async () => {
   const payload = await getPayload({ config })
   await seedAgent(payload)

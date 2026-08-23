@@ -37,7 +37,7 @@ Ver [COMMANDS.md](./COMMANDS.md) para el resto de los comandos (tests, lint, see
 
 ## Login del frontend (Admin Portal / Portal de Organización)
 
-`docker compose up` corre `pnpm seed:navigation` en el arranque (además de `seed:agent`), que siembra los 3 `Roles` base y un usuario de demo por rol — email/password fijos a propósito (seed de navegación, no producción), idempotente (si `Org Demo Navegación` ya existe, no recrea nada):
+`docker compose up` corre `pnpm seed:navigation` en el arranque (además de `seed:agent`), que siembra los 4 `Roles` base y un usuario de demo por rol — email/password fijos a propósito (seed de navegación, no producción), idempotente (si `Org Demo Navegación` ya existe, no recrea nada):
 
 ```bash
 docker compose logs app | grep -A3 "Credenciales de navegación"
@@ -56,13 +56,13 @@ Un único login (`http://localhost:3000/login`) para los dos portales — prueba
 
 El canal HTTP real (no el mock) ya está andando: `POST /api/v1/reports`, `POST /api/v1/heartbeat`, `GET /api/v1/vendor`, servidos por Payload vía el catch-all de Next en [app/(payload)/api/[...slug]/route.ts](<app/(payload)/api/[...slug]/route.ts>) — sin ese archivo, cualquier request a `/api/*` cae en el 404 de Next, Payload nunca la recibe.
 
-Auth por token único por Agent (no por oficina): `docker compose up` corre `pnpm seed:agent` en el arranque, que crea (si no existe) una Organization/Office/Agent demo (`agent-001`) e imprime el token en texto plano una sola vez:
+Auth por token único por Agent (no por oficina): `docker compose up` corre `pnpm seed:agent` en el arranque, que crea (si no existe) una Organization/Office/Agent demo (`agent-001`). El `docker-compose.yml` incluido setea `DEMO_AGENT_API_KEY` con un token fijo de desarrollo (nunca un secreto real) — con eso, `scanner-prototype/run_agent.sh` apunta directo a este stack sin copiar nada de los logs. Sin esa env var, `seed:agent` genera un token random e imprime el texto plano una sola vez:
 
 ```bash
 docker compose logs app | grep "API key"
 ```
 
-Con ese token, ejemplo real de ingesta:
+Con el token (fijo o del log), ejemplo real de ingesta:
 
 ```bash
 curl -X POST http://localhost:3000/api/v1/reports \
@@ -73,6 +73,32 @@ curl -X POST http://localhost:3000/api/v1/reports \
 ```
 
 Contrato compartido con `scanner-prototype` (Zod → JSON Schema → Pydantic): ver [COMMANDS.md](./COMMANDS.md#contratos-scanner-platform).
+
+## Inventario
+
+En el portal de organización (`/portal/inventory`, roles `org_admin`/`office_manager`/`org_viewer`):
+
+- **Network** — `Assets` descubiertos por el escáner. Bloque técnico (ip/mac/os/services) siempre
+  de solo lectura; `org_admin`/`office_manager` pueden editar el bloque de negocio (alias,
+  criticality, owner, location, status) desde el detalle de cada activo.
+- **Other Assets** — `NonNetworkAssets` cargados a mano (licencias, backups, antivirus/EDR,
+  activos en la nube). Incluye workflow de revisión (`next_review_at`/`review_status`, badge
+  "Review Overdue") con confirmación vía `PATCH /v1/non-network-assets/:id/review`.
+- **Snapshot History** (sub-sección de Inventory en el sidebar) — fotografías inmutables del
+  inventario con el risk score del momento (`InventorySnapshots`), generadas a mano desde la UI
+  (`POST /v1/inventory-snapshots/generate`, requiere una oficina seleccionada en la barra superior).
+
+**Job de aging (RF-37/38)** — pasa `Assets` de `active` a `offline` según `last_seen` vs. un umbral
+configurable por organización. **Sin scheduler cableado todavía** (decisión explícita, pendiente de
+la infra de deploy real) — se dispara a mano contra un endpoint interno con token de servicio:
+
+```bash
+curl -X POST http://localhost:3000/api/v1/internal/jobs/aging-sweep \
+  -H "Authorization: Bearer <INTERNAL_JOBS_TOKEN>"
+```
+
+`INTERNAL_JOBS_TOKEN` no viene seteada en `docker-compose.yml` por default — agregarla ahí para
+poder probar este endpoint localmente.
 
 ## Estructura
 

@@ -6,6 +6,7 @@ import {
   AgentAuthError,
 } from '../access/middleware/resolveAgentAuth'
 import { ingestScanReport } from '../domain/inventories/ingestScanReport'
+import { maybeCreateAutoSnapshot } from '../domain/inventories/autoSnapshot'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
@@ -79,6 +80,16 @@ export const reportsEndpoint: Endpoint = {
           status: 'received',
         },
       })
+    }
+
+    // Antes de aplicar el reporte, no después — el snapshot debe reflejar el estado previo a
+    // este scan, no el que el scan está a punto de escribir. No bloquea el ingest si falla
+    // (ver catch): tomar un snapshot es secundario al trabajo principal del endpoint.
+    try {
+      await maybeCreateAutoSnapshot(req.payload, auth.officeId, auth.organizationId)
+    } catch {
+      // ponytail: sin logging estructurado en el repo todavía — un snapshot perdido no debe
+      // tumbar la ingesta real. Revisar si esto se vuelve frecuente en prod.
     }
 
     const result = await ingestScanReport(req.payload, body, auth)

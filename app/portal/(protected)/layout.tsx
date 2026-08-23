@@ -4,7 +4,7 @@ import { Suspense, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, Center, Group, Loader, Stack, Text } from '@mantine/core';
-import { ArrowLeft, LayoutDashboard, Gauge, Boxes, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, LayoutDashboard, Gauge, Boxes, History, ScanLine, ShieldCheck } from 'lucide-react';
 import { DashboardShell } from '@/components/layout/DashboardShell';
 import { SidebarProfile } from '@/components/layout/SidebarProfile';
 import type { SidebarItem } from '@/components/layout/Sidebar';
@@ -85,6 +85,18 @@ function PortalProtectedLayoutInner({ children }: { children: React.ReactNode })
       label: 'Inventory',
       href: `/portal/inventory${suffix}`,
       icon: <Boxes size={18} strokeWidth={1.5} />,
+      children: [
+        {
+          label: 'Snapshot History',
+          href: `/portal/inventory/snapshots${suffix}`,
+          icon: <History size={16} strokeWidth={1.5} />,
+        },
+        {
+          label: 'Scan Reports',
+          href: `/portal/inventory/scan-reports${suffix}`,
+          icon: <ScanLine size={16} strokeWidth={1.5} />,
+        },
+      ],
     },
     ...(isOrgAdmin
       ? [

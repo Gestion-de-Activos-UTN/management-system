@@ -71,3 +71,13 @@ export function computeNextReviewAt(
   next.setUTCDate(next.getUTCDate() + days)
   return next.toISOString()
 }
+
+export type ReviewStatus = 'ok' | 'overdue'
+
+// Virtual, no persistido — mismo patrón que Agents.status (afterRead, comparación de fecha).
+// Sin `next_review_at` (política no configurada y usuario no cargó fecha) no hay nada que
+// esté "vencido" todavía — 'ok' es el default seguro, no 'overdue'.
+export function computeReviewStatus(nextReviewAt: string | null, now: Date): ReviewStatus {
+  if (!nextReviewAt) return 'ok'
+  return new Date(nextReviewAt).getTime() < now.getTime() ? 'overdue' : 'ok'
+}

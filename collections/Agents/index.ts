@@ -145,7 +145,12 @@ export const Agents: CollectionConfig = {
     beforeChange: [
       ({ data, operation, req }) => {
         if (operation !== 'create') return data
-        const plainApiKey = generateApiKey()
+        // `seedApiKey` es un canal de dev-seed únicamente (scripts/seed-agent.ts, vía
+        // payload.create({ context: { seedApiKey } })) — permite un token determinístico para
+        // desarrollo local en vez de uno random que haya que copiar de los logs cada vez que se
+        // recrea el container. Nunca llega acá desde una request HTTP real (Agents.create es
+        // () => false para todo lo que no sea overrideAccess).
+        const plainApiKey = (req.context.seedApiKey as string | undefined) || generateApiKey()
         req.context.plainApiKey = plainApiKey
         return {
           ...data,

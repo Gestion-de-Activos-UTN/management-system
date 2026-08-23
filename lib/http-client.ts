@@ -81,4 +81,6 @@ export const httpClient = {
   get: <T>(path: string, params?: Record<string, string | undefined>) =>
     request<T>('GET', path, { params }),
   post: <T>(path: string, body?: unknown) => request<T>('POST', path, { body }),
+  patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, { body }),
+  delete: <T>(path: string) => request<T>('DELETE', path),
 };

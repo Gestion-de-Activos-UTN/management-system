@@ -80,6 +80,8 @@ export interface Config {
     admins: Admin;
     users: User;
     'organization-memberships': OrganizationMembership;
+    'job-runs': JobRun;
+    'inventory-snapshots': InventorySnapshot;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -99,6 +101,8 @@ export interface Config {
     admins: AdminsSelect<false> | AdminsSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
     'organization-memberships': OrganizationMembershipsSelect<false> | OrganizationMembershipsSelect<true>;
+    'job-runs': JobRunsSelect<false> | JobRunsSelect<true>;
+    'inventory-snapshots': InventorySnapshotsSelect<false> | InventorySnapshotsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -195,6 +199,9 @@ export interface OrganizationSetting {
     | number
     | boolean
     | null;
+  offline_after_hours?: number | null;
+  snapshot_before_each_scan?: boolean | null;
+  snapshot_interval_days?: number | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -297,40 +304,11 @@ export interface Asset {
       }[]
     | null;
   alias?: string | null;
-  criticality?: string | null;
+  criticality?: ('low' | 'medium' | 'high' | 'critical') | null;
+  owner?: (string | null) | User;
   location?: string | null;
-  status?: ('activo' | 'retirado' | 'offline') | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * Activos no descubribles por el escáner de red (antivirus/EDR, licencias, cloud, backups). Distinto de `Assets`, que es para activos network-discoverable (ver documentation/10-data-flow-and-adrs.md, ADR-001). Todo el registro lo carga un humano: no hay bloque técnico escrito por máquina.
- *
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "non-network-assets".
- */
-export interface NonNetworkAsset {
-  id: string;
-  alias: string;
-  asset_category: 'antivirus_edr' | 'software_license' | 'cloud_asset' | 'backup' | 'other';
-  criticality: 'baja' | 'media' | 'alta' | 'critica';
-  owner: string | User;
-  location?: string | null;
-  status?: ('activo' | 'retirado') | null;
-  next_review_at?: string | null;
-  details?:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
-  related_assets?: (string | Asset)[] | null;
-  office: string | Office;
-  organization: string | Organization;
-  last_updated_at?: string | null;
+  status?: ('active' | 'retired' | 'offline') | null;
+  first_viewed_at?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -396,6 +374,37 @@ export interface Role {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "non-network-assets".
+ */
+export interface NonNetworkAsset {
+  id: string;
+  alias: string;
+  asset_category: 'antivirus_edr' | 'software_license' | 'cloud_asset' | 'backup' | 'other';
+  criticality: 'low' | 'medium' | 'high' | 'critical';
+  owner: string | User;
+  location?: string | null;
+  status?: ('active' | 'retired') | null;
+  next_review_at?: string | null;
+  last_reviewed_at?: string | null;
+  review_status?: string | null;
+  details?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  related_assets?: (string | Asset)[] | null;
+  office: string | Office;
+  organization: string | Organization;
+  last_updated_at?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "scan-reports".
  */
 export interface ScanReport {
@@ -450,6 +459,64 @@ export interface Admin {
     | null;
   password?: string | null;
   collection: 'admins';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "job-runs".
+ */
+export interface JobRun {
+  id: string;
+  job_type: 'aging_sweep';
+  started_at: string;
+  finished_at?: string | null;
+  status: 'running' | 'success' | 'failed';
+  summary?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  error?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "inventory-snapshots".
+ */
+export interface InventorySnapshot {
+  id: string;
+  organization: string | Organization;
+  office: string | Office;
+  taken_at: string;
+  generated_by: 'manual' | 'scheduled' | 'pre_audit';
+  triggered_by_user?: (string | null) | User;
+  risk_score: {
+    global: number;
+    policy_snapshot?:
+      | {
+          [k: string]: unknown;
+        }
+      | unknown[]
+      | string
+      | number
+      | boolean
+      | null;
+  };
+  assets_dump:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -522,6 +589,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'organization-memberships';
         value: string | OrganizationMembership;
+      } | null)
+    | ({
+        relationTo: 'job-runs';
+        value: string | JobRun;
+      } | null)
+    | ({
+        relationTo: 'inventory-snapshots';
+        value: string | InventorySnapshot;
       } | null);
   globalSlug?: string | null;
   user:
@@ -653,8 +728,10 @@ export interface AssetsSelect<T extends boolean = true> {
       };
   alias?: T;
   criticality?: T;
+  owner?: T;
   location?: T;
   status?: T;
+  first_viewed_at?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -670,6 +747,8 @@ export interface NonNetworkAssetsSelect<T extends boolean = true> {
   location?: T;
   status?: T;
   next_review_at?: T;
+  last_reviewed_at?: T;
+  review_status?: T;
   details?: T;
   related_assets?: T;
   office?: T;
@@ -719,6 +798,9 @@ export interface OrganizationSettingsSelect<T extends boolean = true> {
   industry?: T;
   risk_score_policy?: T;
   review_policy?: T;
+  offline_after_hours?: T;
+  snapshot_before_each_scan?: T;
+  snapshot_interval_days?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -795,6 +877,40 @@ export interface OrganizationMembershipsSelect<T extends boolean = true> {
   role?: T;
   status?: T;
   is_active?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "job-runs_select".
+ */
+export interface JobRunsSelect<T extends boolean = true> {
+  job_type?: T;
+  started_at?: T;
+  finished_at?: T;
+  status?: T;
+  summary?: T;
+  error?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "inventory-snapshots_select".
+ */
+export interface InventorySnapshotsSelect<T extends boolean = true> {
+  organization?: T;
+  office?: T;
+  taken_at?: T;
+  generated_by?: T;
+  triggered_by_user?: T;
+  risk_score?:
+    | T
+    | {
+        global?: T;
+        policy_snapshot?: T;
+      };
+  assets_dump?: T;
   updatedAt?: T;
   createdAt?: T;
 }
