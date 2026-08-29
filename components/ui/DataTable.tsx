@@ -26,6 +26,7 @@ export function DataTable<T>({
   manualSorting = false,
   sorting: controlledSorting,
   onSortingChange,
+  minWidth = 640,
   maxHeight = 'calc(100vh - 320px)',
 }: {
   columns: ColumnDef<T, unknown>[];
@@ -35,6 +36,8 @@ export function DataTable<T>({
   manualSorting?: boolean;
   sorting?: SortingState;
   onSortingChange?: (sorting: SortingState) => void;
+  /** Minimum table width before horizontal scrolling kicks in. */
+  minWidth?: number;
   /** Caps vertical overflow inside the table's own scroll container instead of the page body. */
   maxHeight?: number | string;
 }) {
@@ -72,7 +75,7 @@ export function DataTable<T>({
   }
 
   return (
-    <Table.ScrollContainer minWidth={480} mah={maxHeight} style={{ overflowY: 'auto' }}>
+    <Table.ScrollContainer minWidth={minWidth} mah={maxHeight} style={{ overflowY: 'auto' }}>
       <Table highlightOnHover verticalSpacing="sm">
         <Table.Thead>
           {table.getHeaderGroups().map((headerGroup) => (

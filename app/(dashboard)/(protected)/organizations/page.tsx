@@ -19,6 +19,7 @@ export default function OrganizationsPage() {
         data={data ?? []}
         isLoading={isPending}
         emptyLabel="No organizations"
+        minWidth={720}
       />
     </Stack>
   );

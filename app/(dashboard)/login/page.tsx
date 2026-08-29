@@ -66,8 +66,8 @@ export default function LoginPage() {
       >
         <Box
           pos="absolute"
-          top="50%"
-          left="47%"
+          top="53%"
+          left="50%"
           style={{ transform: 'translate(-50%, -50%)', opacity: 0.04, pointerEvents: 'none' }}
         >
           <Logo height={1300} color="var(--mantine-color-pine-7)" />
@@ -77,14 +77,15 @@ export default function LoginPage() {
           shadow="md"
           radius="md"
           padding="xl"
-          w={360}
+          w="100%"
+          maw={420}
           className="login-card"
           pos="relative"
         >
           <form onSubmit={handleSubmit}>
             <Stack gap="md">
               <Stack gap={0}>
-                <Group gap="xs" hiddenFrom="sm">
+                <Group gap="xs" hiddenFrom="sm" justify="center" w="100%">
                   <Logo height={24} />
                   <Title order={3}>SIAM</Title>
                 </Group>

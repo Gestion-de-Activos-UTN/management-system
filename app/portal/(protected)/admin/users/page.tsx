@@ -30,7 +30,7 @@ export default function AdminUsersPage() {
   return (
     <Stack gap="md">
       <PageHeader title="Users" description="Members of your organization." />
-      <DataTable columns={columns} data={members ?? []} isLoading={isPending} />
+      <DataTable columns={columns} data={members ?? []} isLoading={isPending} minWidth={760} />
     </Stack>
   );
 }

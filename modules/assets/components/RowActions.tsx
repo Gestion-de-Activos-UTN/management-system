@@ -12,9 +12,15 @@ export function RowActions({ asset }: { asset: Asset }) {
   const identify = useIdentifyAsset();
 
   return (
-    <Group gap={4} wrap="nowrap">
+    <Group gap={6} wrap="wrap" justify="center">
       <Tooltip label="View details">
-        <ActionIcon component={Link} href={`/portal/inventory/${asset.id}`} variant="light" size="md">
+        <ActionIcon
+          component={Link}
+          href={`/portal/inventory/${asset.id}`}
+          variant="light"
+          size="md"
+          aria-label="View details"
+        >
           <Eye size={16} strokeWidth={1.5} />
         </ActionIcon>
       </Tooltip>
@@ -24,6 +30,7 @@ export function RowActions({ asset }: { asset: Asset }) {
           color="pine"
           size="md"
           loading={identify.isPending}
+          aria-label={asset.identified ? 'Mark as not identified' : 'Identify'}
           onClick={() => identify.mutate({ id: asset.id, identified: !asset.identified })}
         >
           <BadgeCheck size={16} strokeWidth={1.5} />

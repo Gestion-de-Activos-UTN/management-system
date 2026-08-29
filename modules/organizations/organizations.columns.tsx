@@ -17,6 +17,7 @@ export const organizationsColumns: ColumnDef<Organization, unknown>[] = [
         href={`/portal/dashboard?asOrganization=${row.original.id}`}
         size="xs"
         variant="light"
+        w={{ base: '100%', sm: 'auto' }}
       >
         Visit
       </Button>

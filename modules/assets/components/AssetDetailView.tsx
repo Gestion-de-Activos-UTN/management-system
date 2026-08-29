@@ -87,11 +87,20 @@ function IdentificationHelpCard({ asset }: { asset: Asset }) {
 
 function TechnicalRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
-    <Group justify="space-between" wrap="nowrap">
+    <Group justify="space-between" align="flex-start" wrap="wrap" gap="xs">
       <Text size="sm" c="dimmed">
         {label}
       </Text>
-      <TechnicalText>{value || '—'}</TechnicalText>
+      <TechnicalText
+        style={{
+          flex: '1 1 220px',
+          minWidth: 0,
+          textAlign: 'right',
+          overflowWrap: 'anywhere',
+        }}
+      >
+        {value || '—'}
+      </TechnicalText>
     </Group>
   )
 }
@@ -140,7 +149,7 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
 
   if (list.length === 0) {
     return (
-      <Group justify="space-between" wrap="nowrap">
+      <Group justify="space-between" wrap="wrap" gap="xs">
         <Text size="sm" c="dimmed">
           Services
         </Text>
@@ -159,11 +168,11 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
       {/* align="center": con "flex-start" el label "Services" quedaba desalineado contra la
           altura real de los badges (que traen su propio padding vertical) en el caso común de
           una sola línea de chips — center los alinea por su punto medio en vez de por el tope. */}
-      <Group justify="space-between" wrap="nowrap" align="center">
+      <Group justify="space-between" wrap="wrap" align="center" gap="xs">
         <Text size="sm" c="dimmed">
           Services
         </Text>
-        <Group gap={6} justify="flex-end" wrap="wrap" align="center" maw="70%">
+        <Group gap={6} justify="flex-end" wrap="wrap" align="center" maw={{ base: '100%', sm: '70%' }}>
           {visible.map((service, i) => (
             <Tooltip key={service.id ?? i} label={serviceDescription(service)}>
               {/* variant="outline" + color="pine": "light" gray quedaba casi sin contraste
@@ -212,28 +221,30 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
         size="lg"
         centered
       >
-        <Table>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Port</Table.Th>
-              <Table.Th>Protocol</Table.Th>
-              <Table.Th>Service</Table.Th>
-              <Table.Th>Version</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {list.map((service, i) => (
-              <Table.Tr key={service.id ?? i}>
-                <Table.Td>
-                  <TechnicalText>{service.port ?? '—'}</TechnicalText>
-                </Table.Td>
-                <Table.Td>{service.protocol ? service.protocol.toUpperCase() : '—'}</Table.Td>
-                <Table.Td>{serviceDescription(service)}</Table.Td>
-                <Table.Td>{service.version || '—'}</Table.Td>
+        <Table.ScrollContainer minWidth={560}>
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Port</Table.Th>
+                <Table.Th>Protocol</Table.Th>
+                <Table.Th>Service</Table.Th>
+                <Table.Th>Version</Table.Th>
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {list.map((service, i) => (
+                <Table.Tr key={service.id ?? i}>
+                  <Table.Td>
+                    <TechnicalText>{service.port ?? '—'}</TechnicalText>
+                  </Table.Td>
+                  <Table.Td>{service.protocol ? service.protocol.toUpperCase() : '—'}</Table.Td>
+                  <Table.Td>{serviceDescription(service)}</Table.Td>
+                  <Table.Td>{service.version || '—'}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       </Modal>
     </>
   )
@@ -285,7 +296,7 @@ export function AssetDetailView({
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between" align="flex-end">
+      <Group justify="space-between" align="flex-end" wrap="wrap">
         <PageHeader
           title={asset.hostname || asset.alias || asset.ip || asset.asset_id}
           description="Read-only technical block (discovered by the scanner) plus editable business fields."
@@ -296,6 +307,7 @@ export function AssetDetailView({
           leftSection={<BadgeCheck size={16} strokeWidth={1.5} />}
           loading={identify.isPending}
           onClick={() => identify.mutate({ id: asset.id, identified: !asset.identified })}
+          w={{ base: '100%', sm: 'auto' }}
         >
           {asset.identified ? 'Mark as not identified' : 'Identify'}
         </Button>
@@ -428,7 +440,12 @@ export function AssetDetailView({
             />
           </SimpleGrid>
           <Group justify="flex-end">
-            <Button type="submit" loading={updateAsset.isPending} disabled={!isDirty}>
+            <Button
+              type="submit"
+              loading={updateAsset.isPending}
+              disabled={!isDirty}
+              w={{ base: '100%', sm: 'auto' }}
+            >
               Save changes
             </Button>
           </Group>

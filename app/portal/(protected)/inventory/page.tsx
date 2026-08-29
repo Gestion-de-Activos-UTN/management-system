@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Divider, Group, Modal, Select, Stack, Tabs, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Divider, Group, Modal, Select, SimpleGrid, Stack, Tabs, Text, TextInput } from '@mantine/core';
 import { History, Plus, RefreshCw, Search } from 'lucide-react';
 import { DataTable } from '@/components/ui/DataTable';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -126,17 +126,21 @@ export default function InventoryPage() {
 
   return (
     <Stack gap="md">
-      <Group justify="space-between" align="flex-end">
-        <PageHeader title="Inventory" description="Assets discovered across your offices, and manually tracked assets." />
-        <Button
-          component={Link}
-          href={`/portal/inventory/snapshots${asOrganization ? `?asOrganization=${asOrganization}` : ''}`}
-          variant="light"
-          leftSection={<History size={16} strokeWidth={1.5} />}
-        >
-          Snapshot History
-        </Button>
-      </Group>
+      <PageHeader
+        title="Inventory"
+        description="Assets discovered across your offices, and manually tracked assets."
+        rightSection={
+          <Button
+            component={Link}
+            href={`/portal/inventory/snapshots${asOrganization ? `?asOrganization=${asOrganization}` : ''}`}
+            variant="light"
+            leftSection={<History size={16} strokeWidth={1.5} />}
+            w={{ base: '100%', sm: 'auto' }}
+          >
+            Snapshot History
+          </Button>
+        }
+      />
 
       {hasNewResult && (
         // No auto-refetch: el poll (useNewScanResultBanner) solo mira si hay un scan-report
@@ -144,7 +148,7 @@ export default function InventoryPage() {
         // por su cuenta. Si el usuario está a mitad del form de "New asset" (Modal de abajo),
         // ese refetch solo pasa cuando clickea "Refresh", nunca por detrás sin avisar.
         <Alert color="pine" variant="light">
-          <Group justify="space-between" wrap="nowrap">
+          <Group justify="space-between" align="center" wrap="wrap">
             <Text size="sm">New scan result received — the list below may be out of date.</Text>
             <Button
               size="xs"
@@ -165,32 +169,32 @@ export default function InventoryPage() {
       <Tabs defaultValue="network">
         <Tabs.List>
           <Tabs.Tab value="network">Network</Tabs.Tab>
-          <Tabs.Tab value="non-network">Other Assets</Tabs.Tab>
-        </Tabs.List>
+        <Tabs.Tab value="non-network">Other Assets</Tabs.Tab>
+      </Tabs.List>
 
-        <Tabs.Panel value="network" pt="md">
-          <Stack gap="sm">
-            <Group gap="sm">
+      <Tabs.Panel value="network" pt="md">
+        <Stack gap="sm">
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm">
               <TextInput
                 placeholder="Search alias, hostname, IP..."
                 leftSection={<Search size={16} strokeWidth={1.5} />}
                 value={assetSearch}
                 onChange={(e) => setAssetSearch(e.currentTarget.value)}
-                w={260}
+                w="100%"
               />
               <Select
                 placeholder="Criticality"
                 data={[{ value: ALL, label: 'All criticalities' }, ...CRITICALITY_OPTIONS]}
                 value={assetCriticality}
                 onChange={(v) => setAssetCriticality(v ?? ALL)}
-                w={180}
+                w="100%"
               />
               <Select
                 placeholder="Status"
                 data={[{ value: ALL, label: 'All statuses' }, ...ASSET_STATUS_OPTIONS]}
                 value={assetStatus}
                 onChange={(v) => setAssetStatus(v ?? ALL)}
-                w={160}
+                w="100%"
               />
               <Select
                 placeholder="Identified"
@@ -201,14 +205,15 @@ export default function InventoryPage() {
                 ]}
                 value={assetIdentified}
                 onChange={(v) => setAssetIdentified(v ?? ALL)}
-                w={160}
+                w="100%"
               />
-            </Group>
+            </SimpleGrid>
             <DataTable
               columns={assetsColumns}
               data={activeAssets}
               isLoading={assetsPending}
               emptyLabel="No assets match these filters"
+              minWidth={980}
             />
             {inactiveAssets.length > 0 && (
               <>
@@ -219,6 +224,7 @@ export default function InventoryPage() {
                   columns={assetsColumns}
                   data={inactiveAssets}
                   emptyLabel="No retired or offline assets"
+                  minWidth={980}
                 />
               </>
             )}
@@ -227,28 +233,28 @@ export default function InventoryPage() {
 
         <Tabs.Panel value="non-network" pt="md">
           <Stack gap="sm">
-            <Group justify="space-between" wrap="wrap">
-              <Group gap="sm">
+            <Group justify="space-between" align="flex-end" wrap="wrap">
+              <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm" style={{ flex: 1 }}>
                 <TextInput
                   placeholder="Search alias..."
                   leftSection={<Search size={16} strokeWidth={1.5} />}
                   value={nnaSearch}
                   onChange={(e) => setNnaSearch(e.currentTarget.value)}
-                  w={220}
+                  w="100%"
                 />
                 <Select
                   placeholder="Category"
                   data={[{ value: ALL, label: 'All categories' }, ...ASSET_CATEGORY_OPTIONS]}
                   value={nnaCategory}
                   onChange={(v) => setNnaCategory(v ?? ALL)}
-                  w={180}
+                  w="100%"
                 />
                 <Select
                   placeholder="Criticality"
                   data={[{ value: ALL, label: 'All criticalities' }, ...CRITICALITY_OPTIONS]}
                   value={nnaCriticality}
                   onChange={(v) => setNnaCriticality(v ?? ALL)}
-                  w={180}
+                  w="100%"
                 />
                 <Select
                   placeholder="Review"
@@ -259,10 +265,14 @@ export default function InventoryPage() {
                   ]}
                   value={nnaReviewStatus}
                   onChange={(v) => setNnaReviewStatus(v ?? ALL)}
-                  w={180}
+                  w="100%"
                 />
-              </Group>
-              <Button leftSection={<Plus size={16} strokeWidth={1.5} />} onClick={() => setEditingAsset(null)}>
+              </SimpleGrid>
+              <Button
+                leftSection={<Plus size={16} strokeWidth={1.5} />}
+                onClick={() => setEditingAsset(null)}
+                w={{ base: '100%', sm: 'auto' }}
+              >
                 New asset
               </Button>
             </Group>
@@ -271,6 +281,7 @@ export default function InventoryPage() {
               data={activeNonNetworkAssets}
               isLoading={nonNetworkAssetsPending}
               emptyLabel="No manually tracked assets match these filters"
+              minWidth={880}
             />
             {inactiveNonNetworkAssets.length > 0 && (
               <>
@@ -279,6 +290,7 @@ export default function InventoryPage() {
                   columns={nonNetworkAssetsColumns}
                   data={inactiveNonNetworkAssets}
                   emptyLabel="No retired assets"
+                  minWidth={880}
                 />
               </>
             )}

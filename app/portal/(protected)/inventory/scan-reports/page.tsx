@@ -22,6 +22,7 @@ export default function ScanReportsPage() {
         data={data ?? []}
         isLoading={isPending}
         emptyLabel="No scan reports yet"
+        minWidth={760}
       />
     </Stack>
   );

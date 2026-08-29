@@ -13,6 +13,7 @@ export function BackButton({ href, label = 'Back' }: { href: string; label?: str
       variant="subtle"
       size="sm"
       leftSection={<ArrowLeft size={16} strokeWidth={1.5} />}
+      w={{ base: '100%', sm: 'auto' }}
     >
       {label}
     </Button>

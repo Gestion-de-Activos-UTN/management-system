@@ -177,7 +177,7 @@ export function NonNetworkAssetForm({
           />
         </SimpleGrid>
         <Group justify="flex-end">
-          <Button type="submit" loading={save.isPending}>
+          <Button type="submit" loading={save.isPending} w={{ base: '100%', sm: 'auto' }}>
             {asset ? 'Save changes' : 'Create asset'}
           </Button>
         </Group>

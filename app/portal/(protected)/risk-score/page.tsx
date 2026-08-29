@@ -39,7 +39,7 @@ export default function RiskScorePage() {
         {isPending ? (
           <Skeleton height={120} circle />
         ) : latestSnapshot ? (
-          <Group>
+          <Group align="flex-start" wrap="wrap">
             <RingProgress
               size={120}
               thickness={12}
@@ -58,7 +58,7 @@ export default function RiskScorePage() {
           <Text c="dimmed">No snapshot has been generated yet for this office/organization.</Text>
         )}
       </Card>
-      <DataTable columns={columns} data={FAKE_ROWS} isLoading={isPending} />
+      <DataTable columns={columns} data={FAKE_ROWS} isLoading={isPending} minWidth={640} />
     </Stack>
   );
 }

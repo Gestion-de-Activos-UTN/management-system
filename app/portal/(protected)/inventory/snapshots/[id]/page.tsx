@@ -98,7 +98,7 @@ export default function SnapshotDetailPage() {
       />
 
       <Card withBorder padding="lg">
-        <Group>
+        <Group align="flex-start" wrap="wrap">
           <RingProgress
             size={120}
             thickness={12}
@@ -122,11 +122,21 @@ export default function SnapshotDetailPage() {
         </Tabs.List>
 
         <Tabs.Panel value="network" pt="md">
-          <DataTable columns={networkColumns} data={networkAssets} emptyLabel="No network assets in this snapshot" />
+          <DataTable
+            columns={networkColumns}
+            data={networkAssets}
+            emptyLabel="No network assets in this snapshot"
+            minWidth={720}
+          />
         </Tabs.Panel>
 
         <Tabs.Panel value="non-network" pt="md">
-          <DataTable columns={nonNetworkColumns} data={nonNetworkAssets} emptyLabel="No manually tracked assets in this snapshot" />
+          <DataTable
+            columns={nonNetworkColumns}
+            data={nonNetworkAssets}
+            emptyLabel="No manually tracked assets in this snapshot"
+            minWidth={680}
+          />
         </Tabs.Panel>
       </Tabs>
     </Stack>

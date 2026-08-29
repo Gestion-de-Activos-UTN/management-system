@@ -63,7 +63,7 @@ export function OfficeSelector() {
       data={options}
       value={selectedOfficeId ?? ALL_OFFICES}
       onChange={(value) => setSelectedOfficeId(value === ALL_OFFICES ? null : value)}
-      w={200}
+      w={{ base: 138, sm: 200 }}
       size="sm"
     />
   );

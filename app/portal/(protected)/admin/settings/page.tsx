@@ -32,7 +32,7 @@ export default function AdminSettingsPage() {
   return (
     <Stack gap="md">
       <PageHeader title="Settings" description="Inventory settings for your organization." />
-      <Card withBorder padding="lg">
+      <Card withBorder padding="lg" w="100%">
         {isPending || !settings ? (
           <Stack gap="sm">
             <Skeleton height={36} />
@@ -151,11 +151,18 @@ function SettingsForm({
         <Text size="xs" c="dimmed">
           These apply to every office in this organization.
         </Text>
-        <Group justify="flex-end">
-          <Button type="button" variant="subtle" disabled={alreadyAtDefaults} loading={saving} onClick={restoreDefaults}>
+        <Group justify="flex-end" wrap="wrap">
+          <Button
+            type="button"
+            variant="subtle"
+            disabled={alreadyAtDefaults}
+            loading={saving}
+            onClick={restoreDefaults}
+            w={{ base: '100%', sm: 'auto' }}
+          >
             Restore defaults
           </Button>
-          <Button type="submit" loading={saving}>
+          <Button type="submit" loading={saving} w={{ base: '100%', sm: 'auto' }}>
             Save changes
           </Button>
         </Group>

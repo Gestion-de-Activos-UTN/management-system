@@ -26,9 +26,9 @@ export default function PortalDashboardPage() {
             {loading ? (
               <Skeleton height={48} />
             ) : (
-              <Group gap="sm">
+              <Group gap="sm" wrap="wrap" align="flex-start">
                 <metric.icon size={20} strokeWidth={1.5} />
-                <Stack gap={0}>
+                <Stack gap={0} style={{ minWidth: 0, flex: 1 }}>
                   <Text size="xl" fw={700}>
                     {metric.value}
                   </Text>
