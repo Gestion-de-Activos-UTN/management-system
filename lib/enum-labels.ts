@@ -46,3 +46,18 @@ export const ASSET_CATEGORY_OPTIONS = Object.entries(ASSET_CATEGORY_LABEL).map((
   value,
   label,
 }));
+
+export const REVIEW_INTERVAL_LABEL: Record<string, string> = {
+  never: 'Never expires',
+  '1d': 'Every day',
+  '3d': 'Every 3 days',
+  '1w': 'Every week',
+  '1m': 'Every month',
+  '6m': 'Every 6 months',
+  '1y': 'Every year',
+};
+
+export const REVIEW_INTERVAL_OPTIONS = Object.entries(REVIEW_INTERVAL_LABEL).map(([value, label]) => ({
+  value,
+  label,
+}));

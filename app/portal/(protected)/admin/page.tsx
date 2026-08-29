@@ -19,7 +19,7 @@ export default function PortalAdminHub() {
   return (
     <Stack gap="md">
       <PageHeader title="Administration" description="Manage your organization's users, offices and settings." />
-      <SimpleGrid cols={{ base: 1, sm: 3 }}>
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
         {HUB_ITEMS.map((item) => (
           <Card
             key={item.href}
@@ -27,8 +27,9 @@ export default function PortalAdminHub() {
             href={`${item.href}${suffix}`}
             withBorder
             padding="lg"
+            h="100%"
           >
-            <Stack gap={4}>
+            <Stack gap={6} h="100%">
               <item.icon size={20} strokeWidth={1.5} />
               <Text fw={600}>{item.label}</Text>
               <Text size="sm" c="dimmed">

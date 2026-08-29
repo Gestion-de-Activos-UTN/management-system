@@ -1,11 +1,12 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
-import { Card, Center, Group, Loader, SimpleGrid, Stack, Tabs, Text } from '@mantine/core';
+import { Card, Center, Loader, SimpleGrid, Stack, Tabs, Text } from '@mantine/core';
 import { Network, Radar, CircleCheck, CircleX } from 'lucide-react';
 import { DataTable } from '@/components/ui/DataTable';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { BackButton } from '@/components/ui/BackButton';
 import { TechnicalText } from '@/components/ui/TechnicalText';
 import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge';
 import { formatDateTime } from '@/lib/format-date';
@@ -42,9 +43,13 @@ function StatCard({ icon, value, label }: { icon: React.ReactNode; value: React.
     <Card withBorder padding="lg">
       <Stack gap="sm">
         {icon}
-        <Stack gap={0}>
-          <Text size="xl" fw={700}>{value}</Text>
-          <Text size="sm" c="dimmed">{label}</Text>
+        <Stack gap={0} style={{ minWidth: 0 }}>
+          <Text size="xl" fw={700}>
+            {value}
+          </Text>
+          <Text size="sm" c="dimmed">
+            {label}
+          </Text>
         </Stack>
       </Stack>
     </Card>
@@ -53,6 +58,8 @@ function StatCard({ icon, value, label }: { icon: React.ReactNode; value: React.
 
 export default function ScanReportDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const asOrganization = useSearchParams().get('asOrganization') ?? undefined;
+  const backHref = `/portal/inventory/scan-reports${asOrganization ? `?asOrganization=${asOrganization}` : ''}`;
   const { data: report, isPending } = useScanReport(id);
 
   if (isPending) {
@@ -78,15 +85,15 @@ export default function ScanReportDetailPage() {
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between" align="flex-start">
-        <PageHeader
-          title={`Scan Report — ${report.scan_start ? formatDateTime(report.scan_start) : report.id}`}
-          description={`Sent by agent ${relationId(report.agent)}${report.scan_end ? ` · finished ${formatDateTime(report.scan_end)}` : ''}.`}
-        />
-        <StatusBadge tone={STATUS_TONE[status] ?? 'neutral'} label={status} />
-      </Group>
+      <BackButton href={backHref} label="Back to Scan Reports" />
 
-      <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
+      <PageHeader
+        title={`Scan Report — ${report.scan_start ? formatDateTime(report.scan_start) : report.id}`}
+        description={`Sent by agent ${relationId(report.agent)}${report.scan_end ? ` · finished ${formatDateTime(report.scan_end)}` : ''}.`}
+        rightSection={<StatusBadge tone={STATUS_TONE[status] ?? 'neutral'} label={status} />}
+      />
+
+      <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} spacing="md">
         <StatCard icon={<Network size={20} strokeWidth={1.5} />} value={report.network ?? '—'} label="Network" />
         <StatCard icon={<Radar size={20} strokeWidth={1.5} />} value={report.hosts_up ?? total} label="Hosts detected" />
         <StatCard icon={<CircleCheck size={20} strokeWidth={1.5} />} value={`${accepted.length} / ${total}`} label="Accepted" />
@@ -100,11 +107,21 @@ export default function ScanReportDetailPage() {
         </Tabs.List>
 
         <Tabs.Panel value="accepted" pt="md">
-          <DataTable columns={acceptedColumns} data={accepted} emptyLabel="Nothing was accepted in this report" />
+          <DataTable
+            columns={acceptedColumns}
+            data={accepted}
+            emptyLabel="Nothing was accepted in this report"
+            minWidth={720}
+          />
         </Tabs.Panel>
 
         <Tabs.Panel value="rejected" pt="md">
-          <DataTable columns={rejectedColumns} data={rejected} emptyLabel="Nothing was rejected in this report" />
+          <DataTable
+            columns={rejectedColumns}
+            data={rejected}
+            emptyLabel="Nothing was rejected in this report"
+            minWidth={520}
+          />
         </Tabs.Panel>
       </Tabs>
     </Stack>

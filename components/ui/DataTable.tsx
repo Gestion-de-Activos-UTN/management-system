@@ -26,6 +26,7 @@ export function DataTable<T>({
   manualSorting = false,
   sorting: controlledSorting,
   onSortingChange,
+  minWidth = 640,
   maxHeight = 'calc(100vh - 320px)',
 }: {
   columns: ColumnDef<T, unknown>[];
@@ -35,6 +36,8 @@ export function DataTable<T>({
   manualSorting?: boolean;
   sorting?: SortingState;
   onSortingChange?: (sorting: SortingState) => void;
+  /** Minimum table width before horizontal scrolling kicks in. */
+  minWidth?: number;
   /** Caps vertical overflow inside the table's own scroll container instead of the page body. */
   maxHeight?: number | string;
 }) {
@@ -72,7 +75,7 @@ export function DataTable<T>({
   }
 
   return (
-    <Table.ScrollContainer minWidth={480} mah={maxHeight} style={{ overflowY: 'auto' }}>
+    <Table.ScrollContainer minWidth={minWidth} mah={maxHeight} style={{ overflowY: 'auto' }}>
       <Table highlightOnHover verticalSpacing="sm">
         <Table.Thead>
           {table.getHeaderGroups().map((headerGroup) => (
@@ -80,6 +83,8 @@ export function DataTable<T>({
               {headerGroup.headers.map((header) => {
                 const canSort = header.column.getCanSort();
                 const sortDir = header.column.getIsSorted();
+                const isCentered =
+                  (header.column.columnDef.meta as { align?: 'center' } | undefined)?.align === 'center';
                 return (
                   <Table.Th
                     key={header.id}
@@ -99,7 +104,11 @@ export function DataTable<T>({
                         : {}),
                     }}
                   >
-                    <Group gap={4} wrap="nowrap">
+                    {/* justify="center" cuando la celda también centra (meta.align) — si no, el
+                        label+ícono de orden queda pegado a la izquierda mientras el badge de la
+                        fila se centra en todo el ancho de la columna, y quedan desalineados entre
+                        sí aunque cada uno esté "bien" resuelto por separado. */}
+                    <Group gap={4} wrap="nowrap" justify={isCentered ? 'center' : 'flex-start'} w="100%">
                       {header.isPlaceholder
                         ? null
                         : flexRender(
@@ -123,21 +132,36 @@ export function DataTable<T>({
         <Table.Tbody>
           {table.getRowModel().rows.map((row) => (
             <Table.Tr key={row.id}>
-              {row.getVisibleCells().map((cell) => (
-                <Table.Td
-                  key={cell.id}
-                  style={
-                    cell.column.columnDef.size !== undefined
-                      // maxWidth + overflow: a sized <td> in an auto-layout <table> still grows
-                      // to fit nowrap/long content unless the cell itself clips — width alone
-                      // (as used for unsized columns) isn't enough for truncated cells.
-                      ? { width: cell.column.getSize(), maxWidth: cell.column.getSize(), overflow: 'hidden' }
-                      : undefined
-                  }
-                >
-                  {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                </Table.Td>
-              ))}
+              {row.getVisibleCells().map((cell) => {
+                const isCentered =
+                  (cell.column.columnDef.meta as { align?: 'center' } | undefined)?.align === 'center';
+                return (
+                  <Table.Td
+                    key={cell.id}
+                    style={
+                      cell.column.columnDef.size !== undefined
+                        // maxWidth + overflow: a sized <td> in an auto-layout <table> still grows
+                        // to fit nowrap/long content unless the cell itself clips — width alone
+                        // (as used for unsized columns) isn't enough for truncated cells.
+                        ? { width: cell.column.getSize(), maxWidth: cell.column.getSize(), overflow: 'hidden' }
+                        : undefined
+                    }
+                  >
+                    {isCentered ? (
+                      // flex, no textAlign: el contenido típico acá (StatusBadge) es
+                      // display:'block' con su propio width — textAlign solo centra contenido
+                      // inline, así que no lo mueve. flex centra sin importar el display del
+                      // hijo, y además no depende de que la columna se haya estirado más allá
+                      // del contenido (table-layout:auto no garantiza eso).
+                      <div style={{ display: 'flex', justifyContent: 'center' }}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </div>
+                    ) : (
+                      flexRender(cell.column.columnDef.cell, cell.getContext())
+                    )}
+                  </Table.Td>
+                );
+              })}
             </Table.Tr>
           ))}
         </Table.Tbody>

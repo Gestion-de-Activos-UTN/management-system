@@ -69,6 +69,13 @@ export const theme = createTheme({
   colors: { bone, pine },
   primaryColor: 'pine',
   primaryShade: { light: 6, dark: 4 },
+  breakpoints: {
+    xs: '30em',
+    sm: '48em',
+    md: '64em',
+    lg: '75em',
+    xl: '90em',
+  },
   // One radius everywhere — cards, buttons, inputs, nav, badges. Two different
   // rounding amounts (a pill badge next to a barely-rounded button) read as a
   // mismatch, not a hierarchy, so there's a single consistent 'md' (8px).

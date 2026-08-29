@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -28,6 +29,8 @@ import type { Asset } from '@/app/types/payload-types'
 import { AssetBusinessFieldsSchema, type AssetBusinessFields } from '../schema'
 import { useUpdateAsset } from '../hooks/use-update-asset'
 import { useMarkAssetViewed } from '../hooks/use-mark-asset-viewed'
+import { useIdentifyAsset } from '../hooks/use-identify-asset'
+import { BadgeCheck } from 'lucide-react'
 import {
   DEVICE_CATEGORY_HELP,
   DEVICE_CATEGORY_LABEL,
@@ -84,11 +87,20 @@ function IdentificationHelpCard({ asset }: { asset: Asset }) {
 
 function TechnicalRow({ label, value }: { label: string; value: string | null | undefined }) {
   return (
-    <Group justify="space-between" wrap="nowrap">
+    <Group justify="space-between" align="flex-start" wrap="wrap" gap="xs">
       <Text size="sm" c="dimmed">
         {label}
       </Text>
-      <TechnicalText>{value || '—'}</TechnicalText>
+      <TechnicalText
+        style={{
+          flex: '1 1 220px',
+          minWidth: 0,
+          textAlign: 'right',
+          overflowWrap: 'anywhere',
+        }}
+      >
+        {value || '—'}
+      </TechnicalText>
     </Group>
   )
 }
@@ -115,7 +127,7 @@ function serviceChipLabel(service: Service): string {
 // corrige puntual en vez de un toUpperCase() global, que rompía el casing ya prolijo del resto
 // (product strings como "GoAhead WebServer" o los labels de SERVICE_NAME_LABEL de arriba).
 function fixKnownCasing(text: string): string {
-  return text.replace(/nginx/gi, 'NGINX');
+  return text.replace(/nginx/gi, 'NGINX')
 }
 
 function serviceDescription(service: Service): string {
@@ -137,7 +149,7 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
 
   if (list.length === 0) {
     return (
-      <Group justify="space-between" wrap="nowrap">
+      <Group justify="space-between" wrap="wrap" gap="xs">
         <Text size="sm" c="dimmed">
           Services
         </Text>
@@ -156,11 +168,11 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
       {/* align="center": con "flex-start" el label "Services" quedaba desalineado contra la
           altura real de los badges (que traen su propio padding vertical) en el caso común de
           una sola línea de chips — center los alinea por su punto medio en vez de por el tope. */}
-      <Group justify="space-between" wrap="nowrap" align="center">
+      <Group justify="space-between" wrap="wrap" align="center" gap="xs">
         <Text size="sm" c="dimmed">
           Services
         </Text>
-        <Group gap={6} justify="flex-end" wrap="wrap" align="center" maw="70%">
+        <Group gap={6} justify="flex-end" wrap="wrap" align="center" maw={{ base: '100%', sm: '70%' }}>
           {visible.map((service, i) => (
             <Tooltip key={service.id ?? i} label={serviceDescription(service)}>
               {/* variant="outline" + color="pine": "light" gray quedaba casi sin contraste
@@ -209,28 +221,30 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
         size="lg"
         centered
       >
-        <Table>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Port</Table.Th>
-              <Table.Th>Protocol</Table.Th>
-              <Table.Th>Service</Table.Th>
-              <Table.Th>Version</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {list.map((service, i) => (
-              <Table.Tr key={service.id ?? i}>
-                <Table.Td>
-                  <TechnicalText>{service.port ?? '—'}</TechnicalText>
-                </Table.Td>
-                <Table.Td>{service.protocol ? service.protocol.toUpperCase() : '—'}</Table.Td>
-                <Table.Td>{serviceDescription(service)}</Table.Td>
-                <Table.Td>{service.version || '—'}</Table.Td>
+        <Table.ScrollContainer minWidth={560}>
+          <Table>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Port</Table.Th>
+                <Table.Th>Protocol</Table.Th>
+                <Table.Th>Service</Table.Th>
+                <Table.Th>Version</Table.Th>
               </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
+            </Table.Thead>
+            <Table.Tbody>
+              {list.map((service, i) => (
+                <Table.Tr key={service.id ?? i}>
+                  <Table.Td>
+                    <TechnicalText>{service.port ?? '—'}</TechnicalText>
+                  </Table.Td>
+                  <Table.Td>{service.protocol ? service.protocol.toUpperCase() : '—'}</Table.Td>
+                  <Table.Td>{serviceDescription(service)}</Table.Td>
+                  <Table.Td>{service.version || '—'}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
       </Modal>
     </>
   )
@@ -249,6 +263,7 @@ export function AssetDetailView({
   const { data: members } = useOrgMembers(asOrganization)
   const updateAsset = useUpdateAsset(asset.id)
   const markViewed = useMarkAssetViewed(asset.id)
+  const identify = useIdentifyAsset()
 
   // Ref, no un simple `if` en el render: evita reintentar en cada re-render mientras la mutation
   // está en vuelo (React StrictMode/HMR puede montar el efecto dos veces en dev) — el guard real
@@ -281,10 +296,22 @@ export function AssetDetailView({
 
   return (
     <Stack gap="lg">
-      <PageHeader
-        title={asset.hostname || asset.alias || asset.ip || asset.asset_id}
-        description="Read-only technical block (discovered by the scanner) plus editable business fields."
-      />
+      <Group justify="space-between" align="flex-end" wrap="wrap">
+        <PageHeader
+          title={asset.hostname || asset.alias || asset.ip || asset.asset_id}
+          description="Read-only technical block (discovered by the scanner) plus editable business fields."
+        />
+        <Button
+          variant={asset.identified ? 'light' : 'filled'}
+          color="pine"
+          leftSection={<BadgeCheck size={16} strokeWidth={1.5} />}
+          loading={identify.isPending}
+          onClick={() => identify.mutate({ id: asset.id, identified: !asset.identified })}
+          w={{ base: '100%', sm: 'auto' }}
+        >
+          {asset.identified ? 'Mark as not identified' : 'Identify'}
+        </Button>
+      </Group>
 
       <Card withBorder padding="lg">
         <Stack gap="xs">
@@ -308,6 +335,13 @@ export function AssetDetailView({
 
       <Divider label="Business data" />
 
+      {!asset.identified && (
+        <Alert color="yellow" variant="light">
+          This asset hasn&apos;t been identified yet. Confirm it as identified to edit its business
+          fields.
+        </Alert>
+      )}
+
       {/* noValidate: same reason as modules/non-network-assets/components/NonNetworkAssetForm.tsx
           — native browser validation on a required <input> stops at the first invalid field
           and never lets RHF+Zod show every field's error at once. Applied here too even though
@@ -322,6 +356,7 @@ export function AssetDetailView({
                 <TextInput
                   label="Alias"
                   maxLength={120}
+                  disabled={!asset.identified}
                   // El slice es la barrera real: `maxLength` nativo ya bloquea el tipeo pero no
                   // un paste que lo supere en algunos navegadores/versiones — sin esto, un paste
                   // largo se guardaría completo en el estado de RHF aunque el input se vea corto.
@@ -338,6 +373,7 @@ export function AssetDetailView({
                 <Select
                   label="Criticality"
                   data={CRITICALITY_OPTIONS}
+                  disabled={!asset.identified}
                   value={field.value ?? null}
                   onChange={field.onChange}
                   clearable
@@ -356,6 +392,7 @@ export function AssetDetailView({
                     value: m.id,
                     label: `${m.name} (${m.email})`,
                   }))}
+                  disabled={!asset.identified}
                   value={field.value ?? null}
                   onChange={field.onChange}
                   searchable
@@ -371,6 +408,7 @@ export function AssetDetailView({
                 <TextInput
                   label="Location"
                   maxLength={200}
+                  disabled={!asset.identified}
                   value={field.value ?? ''}
                   onChange={e => field.onChange(e.currentTarget.value.slice(0, 200))}
                   error={errors.location?.message}
@@ -402,7 +440,12 @@ export function AssetDetailView({
             />
           </SimpleGrid>
           <Group justify="flex-end">
-            <Button type="submit" loading={updateAsset.isPending} disabled={!isDirty}>
+            <Button
+              type="submit"
+              loading={updateAsset.isPending}
+              disabled={!isDirty}
+              w={{ base: '100%', sm: 'auto' }}
+            >
               Save changes
             </Button>
           </Group>

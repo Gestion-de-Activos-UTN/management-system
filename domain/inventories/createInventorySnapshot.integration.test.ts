@@ -69,6 +69,7 @@ async function seedOfficeWithAssets(payload: Payload) {
       office: office.id,
       organization: organization.id,
       status: 'active',
+      review_interval: 'never',
     },
   })
 

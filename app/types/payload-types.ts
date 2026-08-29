@@ -190,15 +190,6 @@ export interface OrganizationSetting {
     | number
     | boolean
     | null;
-  review_policy?:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
   offline_after_hours?: number | null;
   snapshot_before_each_scan?: boolean | null;
   snapshot_interval_days?: number | null;
@@ -305,6 +296,7 @@ export interface Asset {
         id?: string | null;
       }[]
     | null;
+  identified?: boolean | null;
   alias?: string | null;
   criticality?: ('low' | 'medium' | 'high' | 'critical') | null;
   owner?: (string | null) | User;
@@ -386,18 +378,11 @@ export interface NonNetworkAsset {
   owner: string | User;
   location?: string | null;
   status?: ('active' | 'retired') | null;
+  review_interval: 'never' | '1d' | '3d' | '1w' | '1m' | '6m' | '1y';
   next_review_at?: string | null;
   last_reviewed_at?: string | null;
   review_status?: string | null;
-  details?:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
+  can_review?: boolean | null;
   related_assets?: (string | Asset)[] | null;
   office: string | Office;
   organization: string | Organization;
@@ -732,6 +717,7 @@ export interface AssetsSelect<T extends boolean = true> {
         cpe?: T;
         id?: T;
       };
+  identified?: T;
   alias?: T;
   criticality?: T;
   owner?: T;
@@ -752,10 +738,11 @@ export interface NonNetworkAssetsSelect<T extends boolean = true> {
   owner?: T;
   location?: T;
   status?: T;
+  review_interval?: T;
   next_review_at?: T;
   last_reviewed_at?: T;
   review_status?: T;
-  details?: T;
+  can_review?: T;
   related_assets?: T;
   office?: T;
   organization?: T;
@@ -805,7 +792,6 @@ export interface OrganizationSettingsSelect<T extends boolean = true> {
   organization?: T;
   industry?: T;
   risk_score_policy?: T;
-  review_policy?: T;
   offline_after_hours?: T;
   snapshot_before_each_scan?: T;
   snapshot_interval_days?: T;

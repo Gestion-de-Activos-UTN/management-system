@@ -60,6 +60,9 @@ export async function createInventorySnapshot(payload: Payload, officeId: string
   // numerador) sin ningún fundamento real, no es "menos riesgo" solo por cargar más licencias a
   // mano. Corresponde resolverlo cuando exista el algoritmo real (RF-30, fuera de alcance hoy),
   // no forzarlo acá con la heurística placeholder.
+  // TODO(risk-engine): cuando el risk score real (RF-30) tenga granularidad por-asset, excluir
+  // de networkAssetsDump/el cálculo los assets con identified === false — un activo detectado
+  // pero no confirmado por un humano no debería pesar en el score todavía.
   const riskScoreGlobal = computeRiskScore(networkAssetsDump)
 
   const snapshot = await payload.create({

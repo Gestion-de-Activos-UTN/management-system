@@ -10,7 +10,7 @@ export default function AccountPage() {
   return (
     <Stack gap="md">
       <PageHeader title="Account settings" />
-      <Card withBorder padding="lg" maw={420}>
+      <Card withBorder padding="lg" w="100%" maw={420}>
         <Stack gap="sm">
           <TextInput label="Role" value={tenantContext?.role ?? ''} readOnly />
           <Text size="xs" c="dimmed">

@@ -31,7 +31,15 @@ function isActivePath(pathname: string, href: string): boolean {
 // toggle lives on its own ActionIcon (stopPropagation + preventDefault so it never bubbles
 // into the parent Link's navigation), and the children render in a plain, manually-controlled
 // <Collapse> instead of NavLink's own children prop.
-function SidebarNavItem({ item, pathname }: { item: SidebarItem; pathname: string }) {
+function SidebarNavItem({
+  item,
+  pathname,
+  onNavigate,
+}: {
+  item: SidebarItem
+  pathname: string
+  onNavigate?: () => void
+}) {
   const childActive = item.children?.some(child => isActivePath(pathname, child.href)) ?? false
   // A child's own href is a more specific prefix of the parent's — without excluding
   // childActive here, both light up filled at once on a child route (e.g. Inventory AND
@@ -56,9 +64,10 @@ function SidebarNavItem({ item, pathname }: { item: SidebarItem; pathname: strin
           hasChildren ? (
             <ActionIcon
               component="span"
-              variant="transparent"
+              variant="subtle"
               color="gray"
               size="sm"
+              aria-label={opened ? 'Collapse section' : 'Expand section'}
               onClick={event => {
                 event.preventDefault()
                 event.stopPropagation()
@@ -71,7 +80,8 @@ function SidebarNavItem({ item, pathname }: { item: SidebarItem; pathname: strin
         }
         active={active}
         variant="filled"
-        py={10}
+        py={12}
+        onClick={onNavigate}
         style={childActive ? { borderLeft: '3px solid var(--mantine-color-pine-6)' } : undefined}
         styles={{ label: { fontWeight: active ? 600 : 500 } }}
       />
@@ -98,6 +108,8 @@ function SidebarNavItem({ item, pathname }: { item: SidebarItem; pathname: strin
                   }
                   active={childIsActive}
                   variant="filled"
+                  py={10}
+                  onClick={onNavigate}
                   styles={{ label: { fontWeight: childIsActive ? 600 : 500 } }}
                 />
               )
@@ -114,13 +126,19 @@ function SidebarNavItem({ item, pathname }: { item: SidebarItem; pathname: strin
  * knowledge of which modules exist (components/ui-layout stays
  * dependency-free of modules/*, SYSTEM_PROMPT.md #3).
  */
-export function Sidebar({ items }: { items: SidebarItem[] }) {
+export function Sidebar({
+  items,
+  onNavigate,
+}: {
+  items: SidebarItem[]
+  onNavigate?: () => void
+}) {
   const pathname = usePathname()
 
   return (
     <Stack gap={6} p="md">
       {items.map(item => (
-        <SidebarNavItem key={item.href} item={item} pathname={pathname} />
+        <SidebarNavItem key={item.href} item={item} pathname={pathname} onNavigate={onNavigate} />
       ))}
     </Stack>
   )

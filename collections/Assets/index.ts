@@ -2,6 +2,7 @@ import type { CollectionConfig } from 'payload'
 import { orgScopedAccess } from '../../access/rbac/orgScopedAccess'
 import { validateOwnerTenant } from './hooks/validateOwnerTenant'
 import { rejectManualOfflineStatus } from './hooks/rejectManualOfflineStatus'
+import { rejectBusinessEditsBeforeIdentified } from './hooks/rejectBusinessEditsBeforeIdentified'
 
 const technicalFieldAccess = {
   // Bloque técnico: solo lo escribe el upsert de ingesta (domain/inventories/ingestScanReport.ts), nunca un humano.
@@ -23,7 +24,7 @@ export const Assets: CollectionConfig = {
     delete: () => false,
   },
   hooks: {
-    beforeChange: [validateOwnerTenant, rejectManualOfflineStatus],
+    beforeChange: [validateOwnerTenant, rejectManualOfflineStatus, rejectBusinessEditsBeforeIdentified],
   },
   fields: [
     {
@@ -92,6 +93,16 @@ export const Assets: CollectionConfig = {
     // directo al REST genérico de Payload (modules/assets/service.ts), nunca pasa por el Zod de
     // modules/assets/schema.ts (que solo se usa como tipo TS del lado del cliente) — sin esto,
     // cualquiera con permiso de update sobre `assets` podía mandar un string sin límite alguno.
+    {
+      // Confirmación humana de que el activo detectado es real. Mientras es false, alias/
+      // location/criticality/owner quedan bloqueados server-side (rejectBusinessEditsBeforeIdentified.ts)
+      // — no tiene sentido asignarle metadatos de negocio a algo que nadie confirmó todavía.
+      // Acción directa y bidireccional para org_admin/office_manager este sprint (sin flujo de
+      // aprobación) vía endpoints/assetIdentify.ts.
+      name: 'identified',
+      type: 'checkbox',
+      defaultValue: false,
+    },
     { name: 'alias', type: 'text', maxLength: 120 },
     {
       name: 'criticality',

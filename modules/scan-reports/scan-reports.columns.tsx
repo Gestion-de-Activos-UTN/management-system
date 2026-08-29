@@ -43,6 +43,7 @@ export const scanReportsColumns: ColumnDef<ScanReport, unknown>[] = [
   {
     accessorKey: 'status',
     header: 'Status',
+    meta: { align: 'center' },
     cell: ({ row }) => {
       const status = row.original.status ?? 'received';
       return <StatusBadge tone={STATUS_TONE[status] ?? 'neutral'} label={status} />;

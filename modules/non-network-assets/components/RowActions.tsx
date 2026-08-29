@@ -11,19 +11,22 @@ export function RowActions({ asset, onEdit }: { asset: NonNetworkAsset; onEdit: 
   const markReviewed = useMarkReviewed();
 
   return (
-    <Group gap={4} wrap="nowrap">
+    <Group gap={6} wrap="wrap" justify="center">
       <Tooltip label="Edit">
-        <ActionIcon variant="light" size="md" onClick={() => onEdit(asset)}>
+        <ActionIcon variant="light" size="md" aria-label="Edit" onClick={() => onEdit(asset)}>
           <Pencil size={16} strokeWidth={1.5} />
         </ActionIcon>
       </Tooltip>
-      <Tooltip label="Mark reviewed">
+      <Tooltip label={asset.can_review ? 'Mark reviewed' : 'Review opens closer to the due date'}>
         <ActionIcon
+          component="span"
           variant="light"
           color="pine"
           size="md"
           loading={markReviewed.isPending}
-          onClick={() => markReviewed.mutate(asset.id)}
+          disabled={!asset.can_review}
+          aria-label={asset.can_review ? 'Mark reviewed' : 'Review opens closer to the due date'}
+          onClick={() => asset.can_review && markReviewed.mutate(asset.id)}
         >
           <CheckCheck size={16} strokeWidth={1.5} />
         </ActionIcon>

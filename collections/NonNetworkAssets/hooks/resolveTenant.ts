@@ -1,6 +1,6 @@
 import type { CollectionBeforeChangeHook, PayloadRequest } from 'payload'
 import { getTenantContext } from '@/access/tenant/resolveTenantContext'
-import { assertOfficeInScope, computeNextReviewAt, type ReviewPolicy } from '../invariants'
+import { assertOfficeInScope, computeNextReviewAt, type ReviewInterval } from '../invariants'
 import { relationId } from '@/lib/relationId'
 import { assertOwnerBelongsToOrganization } from '@/access/tenant/assertOwnerBelongsToOrganization'
 
@@ -13,26 +13,6 @@ async function findOrganizationOfOffice(req: PayloadRequest, officeId: string): 
     depth: 0,
   })
   return relationId(office.organization)
-}
-
-// OrganizationSettings tiene los 4 access en false — se lee solo con overrideAccess desde acá.
-// Leer la política NO requiere abrirle acceso público a esa colección; eso recién hará falta
-// cuando exista una UI para editarla (hoy solo la escribe domain/organizations/createOrgWithAdmin.ts).
-export async function findReviewPolicy(
-  req: PayloadRequest,
-  organizationId: string
-): Promise<ReviewPolicy | null> {
-  const result = await req.payload.find({
-    collection: 'organization-settings',
-    where: { organization: { equals: organizationId } },
-    overrideAccess: true,
-    req,
-    depth: 0,
-    limit: 1,
-  })
-  const settings = result.docs[0]
-  if (!settings?.review_policy) return null
-  return settings.review_policy as ReviewPolicy
 }
 
 // A diferencia de Assets (que resuelve office/organization en domain/inventories/ingestScanReport.ts,
@@ -66,13 +46,14 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
     await assertOwnerBelongsToOrganization(req, ownerId, organizationId)
   }
 
-  const category = (data?.asset_category ?? originalDoc?.asset_category ?? null) as string | null
-  const hasExplicitReviewDate = 'next_review_at' in (data ?? {})
-    ? Boolean(data?.next_review_at)
-    : Boolean(originalDoc?.next_review_at)
-  const nextReviewAt = hasExplicitReviewDate
-    ? data?.next_review_at
-    : computeNextReviewAt(await findReviewPolicy(req, organizationId), category, new Date())
+  // next_review_at se deriva de review_interval: en creación siempre se calcula; en edición
+  // solo se recalcula (desde `now`, reiniciando la cuenta) si el intervalo cambió — así una
+  // edición de alias/criticality que no toca el intervalo no resetea la cuenta atrás de más.
+  const interval = (data?.review_interval ?? originalDoc?.review_interval ?? 'never') as ReviewInterval
+  const intervalChanged = 'review_interval' in (data ?? {}) && data?.review_interval !== originalDoc?.review_interval
+  const nextReviewAt = !originalDoc || intervalChanged
+    ? computeNextReviewAt(interval, new Date())
+    : originalDoc.next_review_at
 
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {id, office, organization,
   // asset_category, criticality, owner, status}, previous hash for this organization_id)

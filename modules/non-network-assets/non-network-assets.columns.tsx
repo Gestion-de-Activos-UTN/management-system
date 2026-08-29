@@ -51,6 +51,11 @@ export function getNonNetworkAssetsColumns(
     {
       accessorKey: 'review_status',
       header: 'Review',
+      // Sin `size` explícito, la columna se angosta al ancho del contenido y el align:'center'
+      // de DataTable no tiene espacio de sobra donde centrar — mismo motivo por el que las demás
+      // columnas de badge (assets.columns.tsx) sí necesitan su propio size.
+      size: 140,
+      meta: { align: 'center' },
       cell: ({ row }) => <ReviewStatusBadge reviewStatus={row.original.review_status} />,
     },
     {

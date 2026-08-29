@@ -14,7 +14,13 @@ export default function AdminOfficesPage() {
   return (
     <Stack gap="md">
       <PageHeader title="Offices" description="Offices in your organization." />
-      <DataTable columns={officesColumns} data={data ?? []} isLoading={isPending} emptyLabel="No offices" />
+      <DataTable
+        columns={officesColumns}
+        data={data ?? []}
+        isLoading={isPending}
+        emptyLabel="No offices"
+        minWidth={760}
+      />
     </Stack>
   );
 }

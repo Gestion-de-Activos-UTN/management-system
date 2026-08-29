@@ -1,11 +1,10 @@
-import Link from 'next/link'
 import type { ColumnDef } from '@tanstack/react-table'
-import { ActionIcon, Badge, Group, Text, Tooltip } from '@mantine/core'
-import { Eye } from 'lucide-react'
+import { Badge, Group, Text, Tooltip } from '@mantine/core'
 import type { Asset } from '@/app/types/payload-types'
 import { TechnicalText } from '@/components/ui/TechnicalText'
 import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
 import { ASSET_STATUS_LABEL, CRITICALITY_LABEL } from '@/lib/enum-labels'
+import { RowActions } from './components/RowActions'
 
 const STATUS_TONE: Record<string, StatusTone> = {
   active: 'success',
@@ -108,6 +107,7 @@ export function getAssetsColumns(
       accessorKey: 'status',
       header: 'Status',
       size: 120,
+      meta: { align: 'center' },
       cell: ({ row }) => {
         const status = row.original.status ?? 'active'
         return (
@@ -128,21 +128,22 @@ export function getAssetsColumns(
       },
     },
     {
+      accessorKey: 'identified',
+      header: 'Identified',
+      size: 130,
+      meta: { align: 'center' },
+      cell: ({ row }) =>
+        row.original.identified ? (
+          <StatusBadge tone="success" label="Identified" />
+        ) : (
+          <StatusBadge tone="warning" label="Not identified" />
+        ),
+    },
+    {
       id: 'actions',
       header: '',
-      size: 48,
-      cell: ({ row }) => (
-        <Tooltip label="View details">
-          <ActionIcon
-            component={Link}
-            href={`/portal/inventory/${row.original.id}`}
-            variant="light"
-            size="md"
-          >
-            <Eye size={16} strokeWidth={1.5} />
-          </ActionIcon>
-        </Tooltip>
-      ),
+      size: 84,
+      cell: ({ row }) => <RowActions asset={row.original} />,
     },
   ]
 }

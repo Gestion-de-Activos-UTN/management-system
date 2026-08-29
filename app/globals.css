@@ -1,5 +1,14 @@
 @import 'tailwindcss';
 
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  overflow-x: clip;
+}
+
 /*
  * Mantine owns components (buttons, tables, forms, layout shells).
  * Tailwind is for utility spacing/one-off layout only — never a

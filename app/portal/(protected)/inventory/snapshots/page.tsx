@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Button, Group, Select, Stack, Tooltip } from '@mantine/core';
+import { Button, Group, Select, SimpleGrid, Stack, Tooltip } from '@mantine/core';
 import { Camera } from 'lucide-react';
 import { DataTable } from '@/components/ui/DataTable';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -44,43 +44,45 @@ export default function InventorySnapshotsPage() {
 
   return (
     <Stack gap="md">
-      <Group justify="space-between" align="flex-end">
-        <PageHeader
-          title="Snapshot History"
-          description="Immutable snapshots of the inventory, with the risk score at that point in time."
-        />
-        <Tooltip
-          label={
-            !canGenerate
-              ? "You don't have permission to generate snapshots"
-              : 'Select an office in the top bar to generate a snapshot'
-          }
-          disabled={!!selectedOfficeId && canGenerate}
-        >
-          <Button
-            leftSection={<Camera size={16} strokeWidth={1.5} />}
-            disabled={!selectedOfficeId || !canGenerate}
-            loading={generateSnapshot.isPending}
-            onClick={() => selectedOfficeId && canGenerate && generateSnapshot.mutate(selectedOfficeId)}
+      <PageHeader
+        title="Snapshot History"
+        description="Immutable snapshots of the inventory, with the risk score at that point in time."
+        rightSection={
+          <Tooltip
+            label={
+              !canGenerate
+                ? "You don't have permission to generate snapshots"
+                : 'Select an office in the top bar to generate a snapshot'
+            }
+            disabled={!!selectedOfficeId && canGenerate}
           >
-            Generate snapshot
-          </Button>
-        </Tooltip>
-      </Group>
-      <Group gap="sm">
+            <Button
+              leftSection={<Camera size={16} strokeWidth={1.5} />}
+              disabled={!selectedOfficeId || !canGenerate}
+              loading={generateSnapshot.isPending}
+              onClick={() => selectedOfficeId && canGenerate && generateSnapshot.mutate(selectedOfficeId)}
+              w={{ base: '100%', sm: 'auto' }}
+            >
+              Generate snapshot
+            </Button>
+          </Tooltip>
+        }
+      />
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm">
         <Select
           placeholder="Source"
           data={GENERATED_BY_OPTIONS}
           value={generatedBy}
           onChange={(v) => setGeneratedBy(v ?? ALL)}
-          w={180}
+          w="100%"
         />
-      </Group>
+      </SimpleGrid>
       <DataTable
         columns={inventorySnapshotsColumns}
         data={filteredSnapshots}
         isLoading={isPending}
         emptyLabel="No snapshots match this filter"
+        minWidth={760}
       />
     </Stack>
   );

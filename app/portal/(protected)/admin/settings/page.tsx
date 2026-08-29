@@ -2,12 +2,28 @@
 
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Button, Card, Checkbox, Divider, Group, NumberInput, Skeleton, Stack, Text } from '@mantine/core'
+import { Button, Card, Checkbox, Divider, Group, Select, Skeleton, Stack, Text } from '@mantine/core'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useOrganizationSettings } from '@/modules/organization-settings/hooks/use-organization-settings'
 import { useSaveOrganizationSettings } from '@/modules/organization-settings/hooks/use-save-organization-settings'
 import { OrganizationSettingsFormSchema } from '@/modules/organization-settings/schema'
 import type { OrganizationSettingsFormValues } from '@/modules/organization-settings/service'
+
+const OFFLINE_AFTER_HOURS_OPTIONS = [
+  { value: '24', label: '1 day (24h)' },
+  { value: '48', label: '2 days (48h)' },
+  { value: '72', label: '3 days (72h) — platform default' },
+  { value: '96', label: '4 days (96h)' },
+  { value: '168', label: '7 days (168h)' },
+]
+
+const SNAPSHOT_INTERVAL_DAYS_OPTIONS = [
+  { value: '1', label: '1 day' },
+  { value: '3', label: '3 days' },
+  { value: '7', label: '7 days — platform default' },
+  { value: '14', label: '14 days' },
+  { value: '30', label: '30 days' },
+]
 
 export default function AdminSettingsPage() {
   const { data: settings, isPending } = useOrganizationSettings()
@@ -16,7 +32,7 @@ export default function AdminSettingsPage() {
   return (
     <Stack gap="md">
       <PageHeader title="Settings" description="Inventory settings for your organization." />
-      <Card withBorder padding="lg">
+      <Card withBorder padding="lg" w="100%">
         {isPending || !settings ? (
           <Stack gap="sm">
             <Skeleton height={36} />
@@ -74,13 +90,13 @@ function SettingsForm({
           control={control}
           render={({ field }) => (
             <Stack gap={4}>
-              <NumberInput
-                label="Offline threshold (hours)"
+              <Select
+                label="Offline threshold"
                 description="An active asset not seen in a scan for this long is marked offline."
-                min={1}
-                step={1}
-                value={field.value ?? ''}
-                onChange={v => field.onChange(typeof v === 'number' ? v : null)}
+                placeholder="Platform default"
+                data={OFFLINE_AFTER_HOURS_OPTIONS}
+                value={field.value != null ? String(field.value) : null}
+                onChange={v => field.onChange(v ? Number(v) : null)}
                 error={errors.offline_after_hours?.message}
               />
               {field.value == null && (
@@ -114,14 +130,14 @@ function SettingsForm({
           control={control}
           render={({ field }) => (
             <Stack gap={4}>
-              <NumberInput
-                label="Snapshot interval (days)"
-                description="Minimum days between automatic snapshots."
-                min={1}
-                step={1}
+              <Select
+                label="Snapshot interval"
+                description="Minimum time between automatic snapshots."
+                placeholder="Platform default"
+                data={SNAPSHOT_INTERVAL_DAYS_OPTIONS}
                 disabled={beforeEachScan}
-                value={field.value ?? ''}
-                onChange={v => field.onChange(typeof v === 'number' ? v : null)}
+                value={field.value != null ? String(field.value) : null}
+                onChange={v => field.onChange(v ? Number(v) : null)}
                 error={errors.snapshot_interval_days?.message}
               />
               {field.value == null && !beforeEachScan && (
@@ -135,11 +151,18 @@ function SettingsForm({
         <Text size="xs" c="dimmed">
           These apply to every office in this organization.
         </Text>
-        <Group justify="flex-end">
-          <Button type="button" variant="subtle" disabled={alreadyAtDefaults} loading={saving} onClick={restoreDefaults}>
+        <Group justify="flex-end" wrap="wrap">
+          <Button
+            type="button"
+            variant="subtle"
+            disabled={alreadyAtDefaults}
+            loading={saving}
+            onClick={restoreDefaults}
+            w={{ base: '100%', sm: 'auto' }}
+          >
             Restore defaults
           </Button>
-          <Button type="submit" loading={saving}>
+          <Button type="submit" loading={saving} w={{ base: '100%', sm: 'auto' }}>
             Save changes
           </Button>
         </Group>
