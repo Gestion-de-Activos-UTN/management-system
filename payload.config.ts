@@ -22,6 +22,7 @@ import { heartbeatEndpoint } from './endpoints/heartbeat'
 import { vendorEndpoint } from './endpoints/vendor'
 import { sessionEndpoint } from './endpoints/session'
 import { nonNetworkAssetReviewEndpoint } from './endpoints/nonNetworkAssetReview'
+import { assetIdentifyEndpoint } from './endpoints/assetIdentify'
 import { agingSweepEndpoint } from './endpoints/internalJobs'
 import { generateInventorySnapshotEndpoint } from './endpoints/inventorySnapshots'
 import { orgMembersEndpoint } from './endpoints/orgMembers'
@@ -74,6 +75,7 @@ export default buildConfig({
     vendorEndpoint,
     sessionEndpoint,
     nonNetworkAssetReviewEndpoint,
+    assetIdentifyEndpoint,
     agingSweepEndpoint,
     generateInventorySnapshotEndpoint,
     orgMembersEndpoint,

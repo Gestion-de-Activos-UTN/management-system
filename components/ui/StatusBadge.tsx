@@ -1,4 +1,4 @@
-import { Badge } from '@mantine/core';
+import { Badge } from '@mantine/core'
 
 const TONE_COLOR = {
   success: 'green',
@@ -6,9 +6,9 @@ const TONE_COLOR = {
   danger: 'red',
   info: 'pine',
   neutral: 'bone',
-} as const;
+} as const
 
-export type StatusTone = keyof typeof TONE_COLOR;
+export type StatusTone = keyof typeof TONE_COLOR
 
 /**
  * Generic tone → color badge, zero domain knowledge (SYSTEM_PROMPT.md #3).
@@ -20,12 +20,17 @@ export type StatusTone = keyof typeof TONE_COLOR;
  * "light" reads too close-in-hue between tones (e.g. green vs yellow) in
  * dark mode; a solid, autoContrast-text fill stays legible in both schemes.
  */
-export function StatusBadge({
-  tone,
-  label,
-}: {
-  tone: StatusTone;
-  label: string;
-}) {
-  return <Badge color={TONE_COLOR[tone]}>{label}</Badge>;
+export function StatusBadge({ tone, label }: { tone: StatusTone; label: string }) {
+  return (
+    <Badge
+      color={TONE_COLOR[tone]}
+      style={{
+        display: 'block',
+        width: 'fit-content',
+        margin: '0 auto',
+      }}
+    >
+      {label}
+    </Badge>
+  )
 }

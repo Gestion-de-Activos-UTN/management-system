@@ -17,13 +17,15 @@ export function RowActions({ asset, onEdit }: { asset: NonNetworkAsset; onEdit: 
           <Pencil size={16} strokeWidth={1.5} />
         </ActionIcon>
       </Tooltip>
-      <Tooltip label="Mark reviewed">
+      <Tooltip label={asset.can_review ? 'Mark reviewed' : 'Review opens closer to the due date'}>
         <ActionIcon
+          component="span"
           variant="light"
           color="pine"
           size="md"
           loading={markReviewed.isPending}
-          onClick={() => markReviewed.mutate(asset.id)}
+          disabled={!asset.can_review}
+          onClick={() => asset.can_review && markReviewed.mutate(asset.id)}
         >
           <CheckCheck size={16} strokeWidth={1.5} />
         </ActionIcon>

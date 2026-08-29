@@ -1,11 +1,12 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import type { ColumnDef } from '@tanstack/react-table';
 import { Card, Center, Group, Loader, SimpleGrid, Stack, Tabs, Text } from '@mantine/core';
 import { Network, Radar, CircleCheck, CircleX } from 'lucide-react';
 import { DataTable } from '@/components/ui/DataTable';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { BackButton } from '@/components/ui/BackButton';
 import { TechnicalText } from '@/components/ui/TechnicalText';
 import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge';
 import { formatDateTime } from '@/lib/format-date';
@@ -53,6 +54,8 @@ function StatCard({ icon, value, label }: { icon: React.ReactNode; value: React.
 
 export default function ScanReportDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const asOrganization = useSearchParams().get('asOrganization') ?? undefined;
+  const backHref = `/portal/inventory/scan-reports${asOrganization ? `?asOrganization=${asOrganization}` : ''}`;
   const { data: report, isPending } = useScanReport(id);
 
   if (isPending) {
@@ -78,6 +81,8 @@ export default function ScanReportDetailPage() {
 
   return (
     <Stack gap="lg">
+      <BackButton href={backHref} label="Back to Scan Reports" />
+
       <Group justify="space-between" align="flex-start">
         <PageHeader
           title={`Scan Report — ${report.scan_start ? formatDateTime(report.scan_start) : report.id}`}

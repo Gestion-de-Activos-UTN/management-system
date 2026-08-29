@@ -1,10 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Group, Modal, Select, Stack, Tabs, Text, TextInput } from '@mantine/core';
+import { Alert, Button, Divider, Group, Modal, Select, Stack, Tabs, Text, TextInput } from '@mantine/core';
 import { History, Plus, RefreshCw, Search } from 'lucide-react';
 import { DataTable } from '@/components/ui/DataTable';
 import { PageHeader } from '@/components/ui/PageHeader';
@@ -26,6 +26,38 @@ function matchesSearch(haystacks: Array<string | null | undefined>, query: strin
   return haystacks.some((h) => h?.toLowerCase().includes(needle));
 }
 
+// Congela en qué "bucket" (activo / inactivo) cae cada fila la primera vez que la vemos, y la
+// mantiene ahí aunque su status real cambie por una edición (que sí invalida y refetchea la
+// query al toque). Solo se reasigna con un remount real del componente (recargar la página) —
+// evita que una fila desaparezca de la vista de golpe apenas alguien la retira/pone offline.
+function useFrozenBucket<T extends { id: string }>(
+  items: T[] | undefined,
+  isActive: (item: T) => boolean,
+): Map<string, boolean> {
+  const frozen = useRef(new Map<string, boolean>());
+  if (items) {
+    for (const item of items) {
+      const id = String(item.id);
+      if (!frozen.current.has(id)) {
+        frozen.current.set(id, isActive(item));
+      }
+    }
+  }
+  return frozen.current;
+}
+
+function partitionByFrozenBucket<T extends { id: string }>(
+  items: T[],
+  bucket: Map<string, boolean>,
+): { active: T[]; inactive: T[] } {
+  const active: T[] = [];
+  const inactive: T[] = [];
+  for (const item of items) {
+    (bucket.get(String(item.id)) ?? true ? active : inactive).push(item);
+  }
+  return { active, inactive };
+}
+
 export default function InventoryPage() {
   const asOrganization = useSearchParams().get('asOrganization') ?? undefined;
   const { data: assets, isPending: assetsPending } = useAssetsList(asOrganization);
@@ -45,20 +77,31 @@ export default function InventoryPage() {
   const [assetSearch, setAssetSearch] = useState('');
   const [assetCriticality, setAssetCriticality] = useState<string>(ALL);
   const [assetStatus, setAssetStatus] = useState<string>(ALL);
+  const [assetIdentified, setAssetIdentified] = useState<string>(ALL);
+
+  const assetBucket = useFrozenBucket(assets, (a) => (a.status ?? 'active') === 'active');
 
   const filteredAssets = useMemo(() => {
     return (assets ?? []).filter(
       (a: Asset) =>
         matchesSearch([a.alias, a.hostname, a.ip], assetSearch) &&
         (assetCriticality === ALL || a.criticality === assetCriticality) &&
-        (assetStatus === ALL || (a.status ?? 'active') === assetStatus),
+        (assetStatus === ALL || (a.status ?? 'active') === assetStatus) &&
+        (assetIdentified === ALL || String(Boolean(a.identified)) === assetIdentified),
     );
-  }, [assets, assetSearch, assetCriticality, assetStatus]);
+  }, [assets, assetSearch, assetCriticality, assetStatus, assetIdentified]);
+
+  const { active: activeAssets, inactive: inactiveAssets } = useMemo(
+    () => partitionByFrozenBucket(filteredAssets, assetBucket),
+    [filteredAssets, assetBucket],
+  );
 
   const [nnaSearch, setNnaSearch] = useState('');
   const [nnaCategory, setNnaCategory] = useState<string>(ALL);
   const [nnaCriticality, setNnaCriticality] = useState<string>(ALL);
   const [nnaReviewStatus, setNnaReviewStatus] = useState<string>(ALL);
+
+  const nnaBucket = useFrozenBucket(nonNetworkAssets, (a) => (a.status ?? 'active') === 'active');
 
   const filteredNonNetworkAssets = useMemo(() => {
     return (nonNetworkAssets ?? []).filter(
@@ -69,6 +112,11 @@ export default function InventoryPage() {
         (nnaReviewStatus === ALL || a.review_status === nnaReviewStatus),
     );
   }, [nonNetworkAssets, nnaSearch, nnaCategory, nnaCriticality, nnaReviewStatus]);
+
+  const { active: activeNonNetworkAssets, inactive: inactiveNonNetworkAssets } = useMemo(
+    () => partitionByFrozenBucket(filteredNonNetworkAssets, nnaBucket),
+    [filteredNonNetworkAssets, nnaBucket],
+  );
 
   const assetsColumns = useMemo(() => getAssetsColumns(ownerNameById), [ownerNameById]);
   const nonNetworkAssetsColumns = useMemo(
@@ -144,13 +192,36 @@ export default function InventoryPage() {
                 onChange={(v) => setAssetStatus(v ?? ALL)}
                 w={160}
               />
+              <Select
+                placeholder="Identified"
+                data={[
+                  { value: ALL, label: 'All' },
+                  { value: 'true', label: 'Identified' },
+                  { value: 'false', label: 'Not identified' },
+                ]}
+                value={assetIdentified}
+                onChange={(v) => setAssetIdentified(v ?? ALL)}
+                w={160}
+              />
             </Group>
             <DataTable
               columns={assetsColumns}
-              data={filteredAssets}
+              data={activeAssets}
               isLoading={assetsPending}
               emptyLabel="No assets match these filters"
             />
+            {inactiveAssets.length > 0 && (
+              <>
+                {/* Fila congelada al momento en que se detectó (ver useFrozenBucket) — un asset
+                    retirado/offline no salta acá solo, hace falta recargar la página. */}
+                <Divider label="Retired & Offline" labelPosition="left" mt="md" />
+                <DataTable
+                  columns={assetsColumns}
+                  data={inactiveAssets}
+                  emptyLabel="No retired or offline assets"
+                />
+              </>
+            )}
           </Stack>
         </Tabs.Panel>
 
@@ -197,10 +268,20 @@ export default function InventoryPage() {
             </Group>
             <DataTable
               columns={nonNetworkAssetsColumns}
-              data={filteredNonNetworkAssets}
+              data={activeNonNetworkAssets}
               isLoading={nonNetworkAssetsPending}
               emptyLabel="No manually tracked assets match these filters"
             />
+            {inactiveNonNetworkAssets.length > 0 && (
+              <>
+                <Divider label="Retired" labelPosition="left" mt="md" />
+                <DataTable
+                  columns={nonNetworkAssetsColumns}
+                  data={inactiveNonNetworkAssets}
+                  emptyLabel="No retired assets"
+                />
+              </>
+            )}
           </Stack>
         </Tabs.Panel>
       </Tabs>
@@ -210,6 +291,7 @@ export default function InventoryPage() {
         onClose={() => setEditingAsset(undefined)}
         title={editingAsset ? 'Edit asset' : 'New asset'}
         size="lg"
+        centered
       >
         <NonNetworkAssetForm
           asset={editingAsset ?? undefined}

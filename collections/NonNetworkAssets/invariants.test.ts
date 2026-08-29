@@ -2,11 +2,11 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   assertOfficeInScope,
+  canReviewNow,
   computeNextReviewAt,
   computeReviewStatus,
   MissingOfficeError,
   OfficeOutOfScopeError,
-  resolveReviewIntervalDays,
 } from './invariants'
 
 test('office-scope: permite una office dentro del alcance del usuario', () => {
@@ -46,48 +46,61 @@ test('office-scope: office ajena es 403, office faltante es 400', () => {
   )
 })
 
-test('intervalo: by_category gana sobre default_days', () => {
-  const policy = { default_days: 90, by_category: { backup: 30 } }
-  assert.equal(resolveReviewIntervalDays(policy, 'backup'), 30)
+test('next_review_at: never no vence', () => {
+  assert.equal(computeNextReviewAt('never', new Date('2026-01-01T00:00:00.000Z')), null)
 })
 
-test('intervalo: cae en default_days si la categoría no está en la política', () => {
-  const policy = { default_days: 90, by_category: { backup: 30 } }
-  assert.equal(resolveReviewIntervalDays(policy, 'cloud_asset'), 90)
-})
-
-test('intervalo: sin política no hay default', () => {
-  assert.equal(resolveReviewIntervalDays(null, 'backup'), null)
-})
-
-test('intervalo: ignora valores no positivos', () => {
-  assert.equal(resolveReviewIntervalDays({ default_days: 0 }, 'backup'), null)
-  assert.equal(
-    resolveReviewIntervalDays({ default_days: 90, by_category: { backup: -1 } }, 'backup'),
-    90
-  )
-})
-
-test('next_review_at: suma los días de la categoría sobre la fecha dada', () => {
+test('next_review_at: 1w suma 7 días', () => {
   const now = new Date('2026-01-01T00:00:00.000Z')
-  const result = computeNextReviewAt({ by_category: { backup: 30 } }, 'backup', now)
-  assert.equal(result, '2026-01-31T00:00:00.000Z')
+  assert.equal(computeNextReviewAt('1w', now), '2026-01-08T00:00:00.000Z')
 })
 
-test('next_review_at: cruza el fin de año sin romper', () => {
+test('next_review_at: 1m suma 30 días (mes calendario aproximado)', () => {
   const now = new Date('2026-12-20T00:00:00.000Z')
-  const result = computeNextReviewAt({ default_days: 30 }, 'other', now)
-  assert.equal(result, '2027-01-19T00:00:00.000Z')
-})
-
-test('next_review_at: sin política devuelve null (lo carga el usuario)', () => {
-  assert.equal(computeNextReviewAt(null, 'backup', new Date('2026-01-01T00:00:00.000Z')), null)
+  assert.equal(computeNextReviewAt('1m', now), '2027-01-19T00:00:00.000Z')
 })
 
 test('next_review_at: no muta la fecha recibida', () => {
   const now = new Date('2026-01-01T00:00:00.000Z')
-  computeNextReviewAt({ default_days: 30 }, 'other', now)
+  computeNextReviewAt('1m', now)
   assert.equal(now.toISOString(), '2026-01-01T00:00:00.000Z')
+})
+
+test('can_review: never nunca habilita', () => {
+  assert.equal(canReviewNow('2026-01-08T00:00:00.000Z', 'never', new Date('2026-01-01T00:00:00.000Z')), false)
+})
+
+test('can_review: sin next_review_at no habilita', () => {
+  assert.equal(canReviewNow(null, '1w', new Date('2026-01-01T00:00:00.000Z')), false)
+})
+
+test('can_review: vencido siempre habilita', () => {
+  assert.equal(canReviewNow('2025-12-01T00:00:00.000Z', '1w', new Date('2026-01-01T00:00:00.000Z')), true)
+})
+
+test('can_review: 1d/3d habilitan 12hs antes', () => {
+  const dueAt = '2026-01-10T00:00:00.000Z'
+  assert.equal(canReviewNow(dueAt, '1d', new Date('2026-01-09T11:00:00.000Z')), false)
+  assert.equal(canReviewNow(dueAt, '1d', new Date('2026-01-09T13:00:00.000Z')), true)
+})
+
+test('can_review: 1w habilita 1 día antes', () => {
+  const dueAt = '2026-01-10T00:00:00.000Z'
+  assert.equal(canReviewNow(dueAt, '1w', new Date('2026-01-08T00:00:00.000Z')), false)
+  assert.equal(canReviewNow(dueAt, '1w', new Date('2026-01-09T00:00:00.000Z')), true)
+})
+
+test('can_review: 1m habilita 5 días antes', () => {
+  const dueAt = '2026-02-01T00:00:00.000Z'
+  assert.equal(canReviewNow(dueAt, '1m', new Date('2026-01-26T00:00:00.000Z')), false)
+  assert.equal(canReviewNow(dueAt, '1m', new Date('2026-01-27T00:00:00.000Z')), true)
+})
+
+test('can_review: 6m/1y habilitan 10 días antes', () => {
+  const dueAt = '2026-06-01T00:00:00.000Z'
+  assert.equal(canReviewNow(dueAt, '6m', new Date('2026-05-21T00:00:00.000Z')), false)
+  assert.equal(canReviewNow(dueAt, '6m', new Date('2026-05-22T00:00:00.000Z')), true)
+  assert.equal(canReviewNow(dueAt, '1y', new Date('2026-05-22T00:00:00.000Z')), true)
 })
 
 test('review_status: sin next_review_at es ok, no overdue', () => {

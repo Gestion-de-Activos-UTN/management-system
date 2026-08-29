@@ -1,10 +1,11 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import { Card, Center, Group, Loader, RingProgress, Stack, Tabs, Text } from '@mantine/core';
 import type { ColumnDef } from '@tanstack/react-table';
 import { DataTable } from '@/components/ui/DataTable';
 import { PageHeader } from '@/components/ui/PageHeader';
+import { BackButton } from '@/components/ui/BackButton';
 import { TechnicalText } from '@/components/ui/TechnicalText';
 import { useSnapshot } from '@/modules/inventory-snapshots/hooks/use-snapshot';
 import { formatDateTime } from '@/lib/format-date';
@@ -63,6 +64,8 @@ function dumpArray<T>(value: unknown): T[] {
 
 export default function SnapshotDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const asOrganization = useSearchParams().get('asOrganization') ?? undefined;
+  const backHref = `/portal/inventory/snapshots${asOrganization ? `?asOrganization=${asOrganization}` : ''}`;
   const { data: snapshot, isPending } = useSnapshot(id);
 
   if (isPending) {
@@ -87,6 +90,8 @@ export default function SnapshotDetailPage() {
 
   return (
     <Stack gap="lg">
+      <BackButton href={backHref} label="Back to Snapshot History" />
+
       <PageHeader
         title={`Snapshot — ${formatDateTime(snapshot.taken_at)}`}
         description="Immutable snapshot — each asset's status reflects that point in time, not its current state."

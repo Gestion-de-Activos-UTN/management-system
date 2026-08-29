@@ -19,14 +19,6 @@ export class MissingOfficeError extends APIError {
   }
 }
 
-// Política de revisión a nivel organización (OrganizationSettings.review_policy, json libre).
-// `by_category` gana sobre `default_days`; ambos opcionales — sin política, no hay default y
-// la fecha queda en manos del usuario (override por-asset).
-export interface ReviewPolicy {
-  default_days?: number
-  by_category?: Record<string, number>
-}
-
 export function assertOfficeInScope(
   officeId: string | null,
   allowedOfficeIds: string[],
@@ -47,29 +39,51 @@ export function assertOfficeInScope(
   }
 }
 
-export function resolveReviewIntervalDays(
-  policy: ReviewPolicy | null,
-  category: string | null
-): number | null {
-  if (!policy) return null
-  const byCategory = category ? policy.by_category?.[category] : undefined
-  if (typeof byCategory === 'number' && byCategory > 0) return byCategory
-  if (typeof policy.default_days === 'number' && policy.default_days > 0) return policy.default_days
-  return null
+export type ReviewInterval = 'never' | '1d' | '3d' | '1w' | '1m' | '6m' | '1y'
+
+// Horas, no días: 1d/3d necesitan precisión de horas para expresar la ventana de habilitación
+// de 12hs (ver EARLY_WINDOW_HOURS) sin perderla redondeando a un entero de días.
+const INTERVAL_HOURS: Record<Exclude<ReviewInterval, 'never'>, number> = {
+  '1d': 24,
+  '3d': 72,
+  '1w': 24 * 7,
+  '1m': 24 * 30,
+  '6m': 24 * 182,
+  '1y': 24 * 365,
 }
 
-// Default derivado de la política de la organización. Solo se usa cuando el usuario NO mandó
-// `next_review_at` — el override por-asset siempre gana (decisión: política como default, no como techo).
-export function computeNextReviewAt(
-  policy: ReviewPolicy | null,
-  category: string | null,
-  now: Date
-): string | null {
-  const days = resolveReviewIntervalDays(policy, category)
-  if (days === null) return null
+// `next_review_at` siempre se deriva de `review_interval` — no hay más override manual de fecha
+// (ver collections/NonNetworkAssets/hooks/resolveTenant.ts).
+export function computeNextReviewAt(interval: ReviewInterval, now: Date): string | null {
+  if (interval === 'never') return null
   const next = new Date(now.getTime())
-  next.setUTCDate(next.getUTCDate() + days)
+  next.setUTCHours(next.getUTCHours() + INTERVAL_HOURS[interval])
   return next.toISOString()
+}
+
+// Cuántas horas antes del vencimiento se habilita el botón "Mark reviewed" — tabla fija acordada
+// con el usuario (intervalos cortos abren su ventana el mismo día, los largos con más antelación).
+const EARLY_WINDOW_HOURS: Record<Exclude<ReviewInterval, 'never'>, number> = {
+  '1d': 12,
+  '3d': 12,
+  '1w': 24,
+  '1m': 24 * 5,
+  '6m': 24 * 10,
+  '1y': 24 * 10,
+}
+
+// 'never' no tiene nada que revisar. Vencido siempre habilita (la intención de la ventana
+// anticipada es evitar LLEGAR a vencido, no bloquear la renovación de algo ya vencido).
+export function canReviewNow(
+  nextReviewAt: string | null,
+  interval: ReviewInterval,
+  now: Date
+): boolean {
+  if (interval === 'never' || !nextReviewAt) return false
+  const dueAt = new Date(nextReviewAt).getTime()
+  if (dueAt < now.getTime()) return true
+  const windowStart = dueAt - EARLY_WINDOW_HOURS[interval] * 60 * 60 * 1000
+  return now.getTime() >= windowStart
 }
 
 export type ReviewStatus = 'ok' | 'overdue'

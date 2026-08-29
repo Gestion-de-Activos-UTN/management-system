@@ -56,9 +56,10 @@ function SidebarNavItem({ item, pathname }: { item: SidebarItem; pathname: strin
           hasChildren ? (
             <ActionIcon
               component="span"
-              variant="transparent"
+              variant="subtle"
               color="gray"
               size="sm"
+              aria-label={opened ? 'Collapse section' : 'Expand section'}
               onClick={event => {
                 event.preventDefault()
                 event.stopPropagation()

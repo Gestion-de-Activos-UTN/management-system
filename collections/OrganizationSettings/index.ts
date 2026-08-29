@@ -33,12 +33,6 @@ export const OrganizationSettings: CollectionConfig = {
       type: 'json',
     },
     {
-      // Default de NonNetworkAssets.next_review_at, aplicado en su beforeChange cuando el usuario
-      // no manda fecha (el override por-asset siempre gana).
-      name: 'review_policy',
-      type: 'json',
-    },
-    {
       // Umbral del job de aging (domain/inventories/agingSweep.ts) — cuánto tiempo sin aparecer en
       // un scan antes de pasar un Asset de 'active' a 'offline'. Sin override, cae a
       // DEFAULT_OFFLINE_AFTER_HOURS (constante en código); no hay AppSettings singleton todavía

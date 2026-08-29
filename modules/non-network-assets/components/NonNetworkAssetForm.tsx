@@ -2,10 +2,15 @@
 
 import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Button, Group, JsonInput, Select, SimpleGrid, Stack, TextInput } from '@mantine/core';
+import { Button, Group, Select, SimpleGrid, Stack, TextInput } from '@mantine/core';
 import { useOfficesList } from '@/modules/offices/hooks/use-offices';
 import { useOrgMembers } from '@/modules/users/hooks/use-org-members';
-import { ASSET_CATEGORY_OPTIONS, CRITICALITY_OPTIONS, NON_NETWORK_ASSET_STATUS_OPTIONS } from '@/lib/enum-labels';
+import {
+  ASSET_CATEGORY_OPTIONS,
+  CRITICALITY_OPTIONS,
+  NON_NETWORK_ASSET_STATUS_OPTIONS,
+  REVIEW_INTERVAL_OPTIONS,
+} from '@/lib/enum-labels';
 import type { NonNetworkAsset } from '@/app/types/payload-types';
 import { NonNetworkAssetSchema, type NonNetworkAssetFormValues } from '../schema';
 import { useSaveNonNetworkAsset } from '../hooks/use-save-non-network-asset';
@@ -38,8 +43,7 @@ export function NonNetworkAssetForm({
       location: asset?.location ?? '',
       status: asset?.status ?? 'active',
       office: relationIdOf(asset?.office as string | { id: string } | null | undefined),
-      next_review_at: asset?.next_review_at ?? null,
-      details: asset?.details ? JSON.stringify(asset.details, null, 2) : '{}',
+      review_interval: asset?.review_interval ?? 'never',
     },
   });
 
@@ -146,6 +150,10 @@ export function NonNetworkAssetForm({
             render={({ field }) => (
               <Select
                 label="Status"
+                // Espacio invisible: reserva la misma altura de línea que la description de
+                // "Review recurrence" (su vecino en la misma fila del grid) para que ambos
+                // Select queden alineados en vez de que este quede más arriba por no tener una.
+                description=" "
                 data={NON_NETWORK_ASSET_STATUS_OPTIONS}
                 value={field.value}
                 onChange={(v) => field.onChange(v ?? 'active')}
@@ -154,42 +162,20 @@ export function NonNetworkAssetForm({
             )}
           />
           <Controller
-            name="next_review_at"
+            name="review_interval"
             control={control}
             render={({ field }) => (
-              // Native date input, not @mantine/dates (not an installed dependency, ponytail:
-              // add it only if a real calendar-picker need shows up). Without an
-              // OrganizationSettings.review_policy configured for the organization — there's no
-              // UI to set one yet — this is the ONLY way next_review_at ever gets a value.
-              <TextInput
-                type="date"
-                label="Next review (optional override)"
-                value={field.value ? field.value.slice(0, 10) : ''}
-                onChange={(e) =>
-                  field.onChange(e.currentTarget.value ? new Date(e.currentTarget.value).toISOString() : null)
-                }
-                error={errors.next_review_at?.message}
+              <Select
+                label="Review recurrence"
+                description="How often this asset needs to be reconfirmed"
+                data={REVIEW_INTERVAL_OPTIONS}
+                value={field.value}
+                onChange={(v) => field.onChange(v ?? 'never')}
+                error={errors.review_interval?.message}
               />
             )}
           />
         </SimpleGrid>
-        <Controller
-          name="details"
-          control={control}
-          render={({ field }) => (
-            <JsonInput
-              label="Details (free-form JSON per category)"
-              description={`${field.value.length}/5000 characters`}
-              autosize
-              minRows={4}
-              value={field.value}
-              onChange={(value) => field.onChange(value.slice(0, 5000))}
-              formatOnBlur
-              validationError="Invalid JSON"
-              error={errors.details?.message}
-            />
-          )}
-        />
         <Group justify="flex-end">
           <Button type="submit" loading={save.isPending}>
             {asset ? 'Save changes' : 'Create asset'}

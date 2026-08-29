@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -28,6 +29,8 @@ import type { Asset } from '@/app/types/payload-types'
 import { AssetBusinessFieldsSchema, type AssetBusinessFields } from '../schema'
 import { useUpdateAsset } from '../hooks/use-update-asset'
 import { useMarkAssetViewed } from '../hooks/use-mark-asset-viewed'
+import { useIdentifyAsset } from '../hooks/use-identify-asset'
+import { BadgeCheck } from 'lucide-react'
 import {
   DEVICE_CATEGORY_HELP,
   DEVICE_CATEGORY_LABEL,
@@ -115,7 +118,7 @@ function serviceChipLabel(service: Service): string {
 // corrige puntual en vez de un toUpperCase() global, que rompía el casing ya prolijo del resto
 // (product strings como "GoAhead WebServer" o los labels de SERVICE_NAME_LABEL de arriba).
 function fixKnownCasing(text: string): string {
-  return text.replace(/nginx/gi, 'NGINX');
+  return text.replace(/nginx/gi, 'NGINX')
 }
 
 function serviceDescription(service: Service): string {
@@ -249,6 +252,7 @@ export function AssetDetailView({
   const { data: members } = useOrgMembers(asOrganization)
   const updateAsset = useUpdateAsset(asset.id)
   const markViewed = useMarkAssetViewed(asset.id)
+  const identify = useIdentifyAsset()
 
   // Ref, no un simple `if` en el render: evita reintentar en cada re-render mientras la mutation
   // está en vuelo (React StrictMode/HMR puede montar el efecto dos veces en dev) — el guard real
@@ -281,10 +285,21 @@ export function AssetDetailView({
 
   return (
     <Stack gap="lg">
-      <PageHeader
-        title={asset.hostname || asset.alias || asset.ip || asset.asset_id}
-        description="Read-only technical block (discovered by the scanner) plus editable business fields."
-      />
+      <Group justify="space-between" align="flex-end">
+        <PageHeader
+          title={asset.hostname || asset.alias || asset.ip || asset.asset_id}
+          description="Read-only technical block (discovered by the scanner) plus editable business fields."
+        />
+        <Button
+          variant={asset.identified ? 'light' : 'filled'}
+          color="pine"
+          leftSection={<BadgeCheck size={16} strokeWidth={1.5} />}
+          loading={identify.isPending}
+          onClick={() => identify.mutate({ id: asset.id, identified: !asset.identified })}
+        >
+          {asset.identified ? 'Mark as not identified' : 'Identify'}
+        </Button>
+      </Group>
 
       <Card withBorder padding="lg">
         <Stack gap="xs">
@@ -308,6 +323,13 @@ export function AssetDetailView({
 
       <Divider label="Business data" />
 
+      {!asset.identified && (
+        <Alert color="yellow" variant="light">
+          This asset hasn&apos;t been identified yet. Confirm it as identified to edit its business
+          fields.
+        </Alert>
+      )}
+
       {/* noValidate: same reason as modules/non-network-assets/components/NonNetworkAssetForm.tsx
           — native browser validation on a required <input> stops at the first invalid field
           and never lets RHF+Zod show every field's error at once. Applied here too even though
@@ -322,6 +344,7 @@ export function AssetDetailView({
                 <TextInput
                   label="Alias"
                   maxLength={120}
+                  disabled={!asset.identified}
                   // El slice es la barrera real: `maxLength` nativo ya bloquea el tipeo pero no
                   // un paste que lo supere en algunos navegadores/versiones — sin esto, un paste
                   // largo se guardaría completo en el estado de RHF aunque el input se vea corto.
@@ -338,6 +361,7 @@ export function AssetDetailView({
                 <Select
                   label="Criticality"
                   data={CRITICALITY_OPTIONS}
+                  disabled={!asset.identified}
                   value={field.value ?? null}
                   onChange={field.onChange}
                   clearable
@@ -356,6 +380,7 @@ export function AssetDetailView({
                     value: m.id,
                     label: `${m.name} (${m.email})`,
                   }))}
+                  disabled={!asset.identified}
                   value={field.value ?? null}
                   onChange={field.onChange}
                   searchable
@@ -371,6 +396,7 @@ export function AssetDetailView({
                 <TextInput
                   label="Location"
                   maxLength={200}
+                  disabled={!asset.identified}
                   value={field.value ?? ''}
                   onChange={e => field.onChange(e.currentTarget.value.slice(0, 200))}
                   error={errors.location?.message}

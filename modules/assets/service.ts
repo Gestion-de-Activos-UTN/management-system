@@ -26,3 +26,10 @@ export function updateAsset(id: string, data: Partial<AssetBusinessFields>) {
 export function markAssetViewed(id: string) {
   return httpClient.patch<Asset>(`/api/assets/${id}`, { first_viewed_at: new Date().toISOString() });
 }
+
+// Endpoint dedicado (no el PATCH genérico de arriba): togglea identified sin tocar el resto de
+// los campos, y es el único camino legítimo para pasar identified de false a true (ver
+// collections/Assets/hooks/rejectBusinessEditsBeforeIdentified.ts).
+export function identifyAsset(id: string, identified: boolean) {
+  return httpClient.patch<Asset>(`/api/v1/assets/${id}/identify`, { identified });
+}

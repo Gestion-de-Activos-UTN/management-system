@@ -1,7 +1,7 @@
 import type { CollectionConfig } from 'payload'
 import { orgScopedAccess, canDoAccess } from '@/access/rbac/orgScopedAccess'
 import { resolveTenantAndReview } from './hooks/resolveTenant'
-import { computeReviewStatus } from './invariants'
+import { computeReviewStatus, canReviewNow, type ReviewInterval } from './invariants'
 
 const resolvedFieldAccess = {
   create: () => false,
@@ -66,11 +66,29 @@ export const NonNetworkAssets: CollectionConfig = {
       defaultValue: 'active',
     },
     {
-      // Override por-asset de la política de revisión de la organización
-      // (OrganizationSettings.review_policy). Si viene vacío en create, el hook lo deriva de esa
-      // política; si la organización no tiene política, queda null y lo carga el usuario.
+      // Cada cuánto hay que reconfirmar este activo. 'never' = no vence. Reemplaza el viejo
+      // override manual de next_review_at — ahora la fecha siempre se DERIVA de este intervalo
+      // (ver collections/NonNetworkAssets/hooks/resolveTenant.ts), nunca se tipea a mano.
+      name: 'review_interval',
+      type: 'select',
+      required: true,
+      defaultValue: 'never',
+      options: [
+        { label: 'Never expires', value: 'never' },
+        { label: 'Every day', value: '1d' },
+        { label: 'Every 3 days', value: '3d' },
+        { label: 'Every week', value: '1w' },
+        { label: 'Every month', value: '1m' },
+        { label: 'Every 6 months', value: '6m' },
+        { label: 'Every year', value: '1y' },
+      ],
+    },
+    {
+      // Derivado de review_interval por el beforeChange — nunca un input manual.
       name: 'next_review_at',
       type: 'date',
+      admin: { readOnly: true },
+      access: resolvedFieldAccess,
     },
     {
       // Stampeado solo por el endpoint de confirmación de revisión (endpoints/nonNetworkAssetReview.ts),
@@ -95,24 +113,28 @@ export const NonNetworkAssets: CollectionConfig = {
         ],
       },
     },
+    {
+      // Virtual — habilita el botón "Mark reviewed" en la ventana de antelación acordada (ver
+      // EARLY_WINDOW_HOURS en invariants.ts), o siempre si ya está vencido.
+      name: 'can_review',
+      type: 'checkbox',
+      virtual: true,
+      admin: { readOnly: true },
+      hooks: {
+        afterRead: [
+          ({ siblingData }) =>
+            canReviewNow(
+              siblingData.next_review_at ?? null,
+              (siblingData.review_interval ?? 'never') as ReviewInterval,
+              new Date()
+            ),
+        ],
+      },
+    },
     // NOTIFY: this event should trigger a Notification Bell entry for {owner} when a review comes due
     // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively
     // TODO: RF-53 (Task automática al owner al vencer la revisión) requiere el patrón Tasks/TaskTemplates
     // (RF-28), hoy sin implementar (colección stub vacía) — no se construye acá, es un módulo aparte.
-    {
-      // Campos propios de cada categoría (nº de licencia, vencimiento, proveedor cloud, retención
-      // de backup) sin columnas por categoría.
-      name: 'details',
-      type: 'json',
-      // `type: 'json'` no tiene `maxLength` (eso es solo de `text`) — un `validate` es la única
-      // forma de acotarlo. Igual que alias/location: el PATCH/POST manual pega directo al REST
-      // genérico de Payload, así que el Zod de modules/non-network-assets/schema.ts (que solo se
-      // usa como tipo TS del lado del cliente) no alcanza como enforcement real.
-      validate: (value: unknown) => {
-        const size = JSON.stringify(value ?? {}).length;
-        return size <= 5000 || `Details is too large (${size}/5000 characters)`;
-      },
-    },
     {
       // Relación opcional N:M pensada para risk score (ej. licencia de Windows Server ↔ el servidor
       // que la usa) — no todo NonNetworkAsset tiene un Asset asociado (ej. backup de un SaaS que no
