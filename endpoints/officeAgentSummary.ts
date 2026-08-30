@@ -1,17 +1,10 @@
 import type { Endpoint } from 'payload'
 import { getTenantContext } from '../access/tenant/resolveTenantContext'
 import { relationId } from '../lib/relationId'
-
-const HEARTBEAT_INTERVAL_SECONDS = 300
-const OFFLINE_THRESHOLD_SECONDS = HEARTBEAT_INTERVAL_SECONDS * 2
+import { isOnline } from '../lib/agentStatus'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
-}
-
-function isOnline(lastHeartbeatAt: string | null | undefined): boolean {
-  if (!lastHeartbeatAt) return false
-  return (Date.now() - new Date(lastHeartbeatAt).getTime()) / 1000 <= OFFLINE_THRESHOLD_SECONDS
 }
 
 export interface OfficeAgentSummary {

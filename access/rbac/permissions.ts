@@ -33,7 +33,7 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
   },
   org_admin: {
     organizations: ['read'],
-    offices: ['create', 'read', 'update'],
+    offices: ['read'],
     agents: ['create', 'read'],
     assets: ['read', 'update'],
     'non-network-assets': ['create', 'read', 'update', 'delete'],

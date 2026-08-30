@@ -1,8 +1,6 @@
 import type { Endpoint, Where } from 'payload'
 import { getTenantContext } from '../access/tenant/resolveTenantContext'
-
-const HEARTBEAT_INTERVAL_SECONDS = 300
-const OFFLINE_THRESHOLD_SECONDS = HEARTBEAT_INTERVAL_SECONDS * 2
+import { isOnline } from '../lib/agentStatus'
 
 export interface DashboardMetrics {
   total_assets: number
@@ -13,11 +11,6 @@ export interface DashboardMetrics {
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
-}
-
-function isOnline(lastHeartbeatAt: string | null | undefined): boolean {
-  if (!lastHeartbeatAt) return false
-  return (Date.now() - new Date(lastHeartbeatAt).getTime()) / 1000 <= OFFLINE_THRESHOLD_SECONDS
 }
 
 function requestedOfficeId(req: Parameters<Endpoint['handler']>[0]): string | null {

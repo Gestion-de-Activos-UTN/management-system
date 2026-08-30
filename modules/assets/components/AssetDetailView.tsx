@@ -286,11 +286,12 @@ export function AssetDetailView({
   }, [asset.id, asset.first_viewed_at])
 
   // Guard separado del de arriba: "Changed" no es sticky (a diferencia de "New"), así que este
-  // efecto se rearma cada vez que un re-scan lo vuelve a prender, no solo la primera vez.
-  const hasTriedMarkChangesViewed = useRef(false)
+  // efecto se rearma cada vez que un re-scan lo vuelve a prender, no solo la primera vez —
+  // por eso el guard trackea el valor puntual ya procesado, no un boolean "ya intentado".
+  const lastMarkedChangedAt = useRef<string | null>(null)
   useEffect(() => {
-    if (asset.technical_changed_at != null && !hasTriedMarkChangesViewed.current) {
-      hasTriedMarkChangesViewed.current = true
+    if (asset.technical_changed_at != null && lastMarkedChangedAt.current !== asset.technical_changed_at) {
+      lastMarkedChangedAt.current = asset.technical_changed_at
       markChangesViewed.mutate()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

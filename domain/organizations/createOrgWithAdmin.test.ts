@@ -5,6 +5,7 @@ import { createOrgWithAdmin } from './createOrgWithAdmin'
 
 function makePayload(overrides: { roleDocs?: unknown[] } = {}) {
   const calls: string[] = []
+  const creates: { collection: string; data: Record<string, unknown> }[] = []
   let nextId = 1
   const transactions: { id: string; committed: boolean; rolledBack: boolean }[] = []
 
@@ -27,9 +28,18 @@ function makePayload(overrides: { roleDocs?: unknown[] } = {}) {
         if (tx) tx.rolledBack = true
       },
     },
-    async create({ collection, req }: { collection: string; req: PayloadRequest }) {
+    async create({
+      collection,
+      data,
+      req,
+    }: {
+      collection: string
+      data: Record<string, unknown>
+      req: PayloadRequest
+    }) {
       calls.push(`create:${collection}`)
       assert.ok(req.transactionID, `create:${collection} debe correr dentro de una transacción`)
+      creates.push({ collection, data })
       return { id: `${collection}-${nextId++}` }
     },
     async update({ collection, req }: { collection: string; req: PayloadRequest }) {
@@ -44,7 +54,7 @@ function makePayload(overrides: { roleDocs?: unknown[] } = {}) {
     },
   } as unknown as Payload
 
-  return { payload, calls, transactions }
+  return { payload, calls, creates, transactions }
 }
 
 const INPUT = {
@@ -56,9 +66,14 @@ const INPUT = {
 }
 
 test('orden de creación sigue doc 04: organization -> settings+subscription -> link -> office -> role -> user -> membership', async () => {
-  const { payload, calls, transactions } = makePayload()
+  const { payload, calls, creates, transactions } = makePayload()
 
   await createOrgWithAdmin(payload, INPUT)
+
+  const subscription = creates.find((c) => c.collection === 'subscriptions')
+  assert.equal(subscription?.data.level, 'basic')
+  assert.equal(typeof subscription?.data.max_offices, 'number')
+  assert.ok(subscription?.data.user_limits && typeof subscription.data.user_limits === 'object')
 
   assert.deepEqual(calls, [
     'beginTransaction',

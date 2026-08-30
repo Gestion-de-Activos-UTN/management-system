@@ -221,7 +221,7 @@ export default function InventoryPage() {
               <Select
                 placeholder="Identified"
                 data={[
-                  { value: ALL, label: 'All' },
+                  { value: ALL, label: 'All identification statuses' },
                   { value: 'true', label: 'Identified' },
                   { value: 'false', label: 'Not identified' },
                 ]}
