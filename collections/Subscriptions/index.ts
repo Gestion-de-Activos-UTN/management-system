@@ -1,5 +1,7 @@
 import type { CollectionConfig } from 'payload'
 
+import { SUBSCRIPTION_LIMITS } from '../../domain/subscriptions/limits'
+
 // Sin lectura ni escritura externa esta fase — solo lo escribe
 // domain/organizations/createOrgWithAdmin.ts vía overrideAccess.
 export const Subscriptions: CollectionConfig = {
@@ -26,11 +28,15 @@ export const Subscriptions: CollectionConfig = {
       name: 'level',
       type: 'select',
       required: true,
-      options: ['basic', 'premium', 'custom'],
+      options: Object.keys(SUBSCRIPTION_LIMITS),
     },
     {
-      name: 'max_users',
-      type: 'number',
+      name: 'user_limits',
+      type: 'json',
+      required: true,
+      admin: {
+        description: 'Topes por rol: org_admin, office_manager y org_viewer.',
+      },
     },
     {
       name: 'max_offices',

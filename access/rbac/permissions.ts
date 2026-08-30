@@ -2,6 +2,7 @@ export type RoleSlug = 'platform_admin' | 'org_admin' | 'org_viewer' | 'office_m
 export type CollectionSlug =
   | 'organizations'
   | 'offices'
+  | 'agents'
   | 'assets'
   | 'non-network-assets'
   | 'scan-reports'
@@ -22,6 +23,7 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
   platform_admin: {
     organizations: ['read'],
     offices: ['read'],
+    agents: ['create', 'read'],
     assets: ['read'],
     'non-network-assets': ['read'],
     'scan-reports': ['read'],
@@ -32,6 +34,7 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
   org_admin: {
     organizations: ['read'],
     offices: ['read'],
+    agents: ['create', 'read'],
     assets: ['read', 'update'],
     'non-network-assets': ['create', 'read', 'update', 'delete'],
     'scan-reports': ['read'],

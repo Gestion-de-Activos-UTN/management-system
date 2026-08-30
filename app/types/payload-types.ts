@@ -203,8 +203,19 @@ export interface OrganizationSetting {
 export interface Subscription {
   id: string;
   organization: string | Organization;
-  level: 'basic' | 'premium' | 'custom';
-  max_users?: number | null;
+  level: 'basic' | 'premium';
+  /**
+   * Topes por rol: org_admin, office_manager y org_viewer.
+   */
+  user_limits:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   max_offices?: number | null;
   /**
    * Mapa plano feature_key -> boolean, ver domain/subscriptions/features.ts
@@ -303,6 +314,7 @@ export interface Asset {
   location?: string | null;
   status?: ('active' | 'retired' | 'offline') | null;
   first_viewed_at?: string | null;
+  technical_changed_at?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -724,6 +736,7 @@ export interface AssetsSelect<T extends boolean = true> {
   location?: T;
   status?: T;
   first_viewed_at?: T;
+  technical_changed_at?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -805,7 +818,7 @@ export interface OrganizationSettingsSelect<T extends boolean = true> {
 export interface SubscriptionsSelect<T extends boolean = true> {
   organization?: T;
   level?: T;
-  max_users?: T;
+  user_limits?: T;
   max_offices?: T;
   features?: T;
   updatedAt?: T;

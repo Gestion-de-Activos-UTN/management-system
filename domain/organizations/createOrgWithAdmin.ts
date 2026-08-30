@@ -1,5 +1,6 @@
 import type { Payload, PayloadRequest } from 'payload'
 import { defaultFeatures } from '../subscriptions/features'
+import { getSubscriptionLimits } from '../subscriptions/limits'
 
 export interface CreateOrgWithAdminInput {
   organizationName: string
@@ -23,7 +24,7 @@ export interface CreateOrgWithAdminInput {
 export async function createOrgWithAdmin(
   payload: Payload,
   input: CreateOrgWithAdminInput,
-  externalReq?: PayloadRequest,
+  externalReq?: PayloadRequest
 ) {
   const ownsTransaction = !externalReq?.transactionID
   const transactionID = externalReq?.transactionID ?? (await payload.db.beginTransaction())
@@ -32,6 +33,8 @@ export async function createOrgWithAdmin(
     : ({ transactionID } as PayloadRequest)
 
   try {
+    const subscriptionLimits = getSubscriptionLimits('basic')
+
     // AUDIT: this action must emit an AuditLogs entry (chain_hash over {name, is_active}, previous hash for this organization_id)
     // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
     const organization = await payload.create({
@@ -54,7 +57,13 @@ export async function createOrgWithAdmin(
         collection: 'subscriptions',
         overrideAccess: true,
         req,
-        data: { organization: organization.id, level: 'custom', features: defaultFeatures() },
+        data: {
+          organization: organization.id,
+          level: 'basic',
+          max_offices: subscriptionLimits.max_offices,
+          user_limits: subscriptionLimits.user_limits,
+          features: defaultFeatures(),
+        },
       }),
     ])
 

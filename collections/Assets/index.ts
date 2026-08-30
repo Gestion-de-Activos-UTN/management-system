@@ -133,6 +133,16 @@ export const Assets: CollectionConfig = {
       type: 'date',
       admin: { readOnly: true },
     },
+    {
+      // "CHANGED" badge en la tabla de Inventario — distinto de "New" (first_viewed_at): un
+      // activo YA visto cuya última ingesta modificó su bloque técnico (ingestScanReport.ts,
+      // hasTechnicalChanged). `null` = sin cambios pendientes de revisar. Se apaga al volver a
+      // entrar al detalle (AssetDetailView), igual que first_viewed_at, pero acá SÍ se vuelve a
+      // setear en cada re-scan que introduzca un cambio real (no es sticky).
+      name: 'technical_changed_at',
+      type: 'date',
+      admin: { readOnly: true },
+    },
   ],
 }
 

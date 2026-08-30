@@ -7,9 +7,9 @@ import { Users, MapPin, Settings } from 'lucide-react';
 import { PageHeader } from '@/components/ui/PageHeader';
 
 const HUB_ITEMS = [
-  { label: 'Users', href: '/portal/admin/users', icon: Users, description: 'Members of your organization' },
-  { label: 'Offices', href: '/portal/admin/offices', icon: MapPin, description: 'Offices in your organization' },
-  { label: 'Settings', href: '/portal/admin/settings', icon: Settings, description: 'Organization-level settings' },
+  { label: 'Users', href: '/portal/administration/users', icon: Users, description: 'Members of your organization' },
+  { label: 'Offices', href: '/portal/administration/offices', icon: MapPin, description: 'Offices in your organization' },
+  { label: 'Settings', href: '/portal/administration/settings', icon: Settings, description: 'Organization-level settings' },
 ];
 
 export default function PortalAdminHub() {

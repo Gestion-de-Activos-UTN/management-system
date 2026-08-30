@@ -12,7 +12,6 @@
     "lint": "next lint",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,scss,md}\"",
     "prepare": "husky",
-    "seed:agent": "cross-env NODE_OPTIONS=--no-deprecation node --import tsx scripts/seed-agent.ts",
     "seed:navigation": "cross-env NODE_OPTIONS=--no-deprecation node --import tsx scripts/seed-navigation.ts",
     "generate:contracts": "node --import tsx scripts/generate-contracts.ts",
     "spell-check": "cspell \"**/*\" --config cspell.json --exclude \".git/**\" --exclude \"node_modules/**\" --exclude \".next/**\""
@@ -32,6 +31,7 @@
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
+    "jszip": "^3.10.1",
     "lucide-react": "^0.400.0",
     "next": "~15.4.0",
     "payload": "^3.0.0",

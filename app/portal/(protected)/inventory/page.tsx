@@ -1,29 +1,46 @@
-'use client';
+'use client'
 
-import { useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
-import { Alert, Button, Divider, Group, Modal, Select, SimpleGrid, Stack, Tabs, Text, TextInput } from '@mantine/core';
-import { History, Plus, RefreshCw, Search } from 'lucide-react';
-import { DataTable } from '@/components/ui/DataTable';
-import { PageHeader } from '@/components/ui/PageHeader';
-import { useAssetsList } from '@/modules/assets/hooks/use-assets';
-import { getAssetsColumns } from '@/modules/assets/assets.columns';
-import { useNonNetworkAssetsList } from '@/modules/non-network-assets/hooks/use-non-network-assets';
-import { getNonNetworkAssetsColumns } from '@/modules/non-network-assets/non-network-assets.columns';
-import { NonNetworkAssetForm } from '@/modules/non-network-assets/components/NonNetworkAssetForm';
-import { useOrgMembers } from '@/modules/users/hooks/use-org-members';
-import { useNewScanResultBanner } from '@/modules/scan-reports/hooks/use-new-scan-result-banner';
-import { ASSET_CATEGORY_OPTIONS, ASSET_STATUS_OPTIONS, CRITICALITY_OPTIONS } from '@/lib/enum-labels';
-import type { Asset, NonNetworkAsset } from '@/app/types/payload-types';
+import { useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
+import { useUiStore } from '@/lib/ui-store'
+import {
+  Alert,
+  Button,
+  Divider,
+  Group,
+  Modal,
+  Select,
+  SimpleGrid,
+  Stack,
+  Tabs,
+  Text,
+  TextInput,
+} from '@mantine/core'
+import { History, Plus, RefreshCw, Search } from 'lucide-react'
+import { DataTable } from '@/components/ui/DataTable'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { useAssetsList } from '@/modules/assets/hooks/use-assets'
+import { getAssetsColumns } from '@/modules/assets/assets.columns'
+import { useNonNetworkAssetsList } from '@/modules/non-network-assets/hooks/use-non-network-assets'
+import { getNonNetworkAssetsColumns } from '@/modules/non-network-assets/non-network-assets.columns'
+import { NonNetworkAssetForm } from '@/modules/non-network-assets/components/NonNetworkAssetForm'
+import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
+import { useNewScanResultBanner } from '@/modules/scan-reports/hooks/use-new-scan-result-banner'
+import {
+  ASSET_CATEGORY_OPTIONS,
+  ASSET_STATUS_OPTIONS,
+  CRITICALITY_OPTIONS,
+} from '@/lib/enum-labels'
+import type { Asset, NonNetworkAsset } from '@/app/types/payload-types'
 
-const ALL = '';
+const ALL = ''
 
 function matchesSearch(haystacks: Array<string | null | undefined>, query: string): boolean {
-  if (!query.trim()) return true;
-  const needle = query.trim().toLowerCase();
-  return haystacks.some((h) => h?.toLowerCase().includes(needle));
+  if (!query.trim()) return true
+  const needle = query.trim().toLowerCase()
+  return haystacks.some(h => h?.toLowerCase().includes(needle))
 }
 
 // Congela en qué "bucket" (activo / inactivo) cae cada fila la primera vez que la vemos, y la
@@ -32,54 +49,56 @@ function matchesSearch(haystacks: Array<string | null | undefined>, query: strin
 // evita que una fila desaparezca de la vista de golpe apenas alguien la retira/pone offline.
 function useFrozenBucket<T extends { id: string }>(
   items: T[] | undefined,
-  isActive: (item: T) => boolean,
+  isActive: (item: T) => boolean
 ): Map<string, boolean> {
-  const frozen = useRef(new Map<string, boolean>());
+  const frozen = useRef(new Map<string, boolean>())
   if (items) {
     for (const item of items) {
-      const id = String(item.id);
+      const id = String(item.id)
       if (!frozen.current.has(id)) {
-        frozen.current.set(id, isActive(item));
+        frozen.current.set(id, isActive(item))
       }
     }
   }
-  return frozen.current;
+  return frozen.current
 }
 
 function partitionByFrozenBucket<T extends { id: string }>(
   items: T[],
-  bucket: Map<string, boolean>,
+  bucket: Map<string, boolean>
 ): { active: T[]; inactive: T[] } {
-  const active: T[] = [];
-  const inactive: T[] = [];
+  const active: T[] = []
+  const inactive: T[] = []
   for (const item of items) {
-    (bucket.get(String(item.id)) ?? true ? active : inactive).push(item);
+    ;((bucket.get(String(item.id)) ?? true) ? active : inactive).push(item)
   }
-  return { active, inactive };
+  return { active, inactive }
 }
 
 export default function InventoryPage() {
-  const asOrganization = useSearchParams().get('asOrganization') ?? undefined;
-  const { data: assets, isPending: assetsPending } = useAssetsList(asOrganization);
-  const { data: nonNetworkAssets, isPending: nonNetworkAssetsPending } = useNonNetworkAssetsList(asOrganization);
-  const { data: members } = useOrgMembers(asOrganization);
-  const { hasNewResult, acknowledge } = useNewScanResultBanner(asOrganization);
-  const queryClient = useQueryClient();
+  const asOrganization = useSearchParams().get('asOrganization') ?? undefined
+  const { data: assets, isPending: assetsPending } = useAssetsList(asOrganization)
+  const { data: nonNetworkAssets, isPending: nonNetworkAssetsPending } =
+    useNonNetworkAssetsList(asOrganization)
+  const { data: members } = useOrgMembers(asOrganization)
+  const { hasNewResult, acknowledge } = useNewScanResultBanner(asOrganization)
+  const queryClient = useQueryClient()
+  const selectedOfficeId = useUiStore(state => state.selectedOfficeId)
 
   const ownerNameById = useMemo(
-    () => Object.fromEntries((members ?? []).map((m) => [m.id, m.name])),
-    [members],
-  );
+    () => Object.fromEntries((members ?? []).map(m => [m.id, m.name])),
+    [members]
+  )
 
   // undefined = modal closed, null = modal open in "create" mode, object = "edit" mode.
-  const [editingAsset, setEditingAsset] = useState<NonNetworkAsset | null | undefined>(undefined);
+  const [editingAsset, setEditingAsset] = useState<NonNetworkAsset | null | undefined>(undefined)
 
-  const [assetSearch, setAssetSearch] = useState('');
-  const [assetCriticality, setAssetCriticality] = useState<string>(ALL);
-  const [assetStatus, setAssetStatus] = useState<string>(ALL);
-  const [assetIdentified, setAssetIdentified] = useState<string>(ALL);
+  const [assetSearch, setAssetSearch] = useState('')
+  const [assetCriticality, setAssetCriticality] = useState<string>(ALL)
+  const [assetStatus, setAssetStatus] = useState<string>(ALL)
+  const [assetIdentified, setAssetIdentified] = useState<string>(ALL)
 
-  const assetBucket = useFrozenBucket(assets, (a) => (a.status ?? 'active') === 'active');
+  const assetBucket = useFrozenBucket(assets, a => (a.status ?? 'active') === 'active')
 
   const filteredAssets = useMemo(() => {
     return (assets ?? []).filter(
@@ -87,21 +106,21 @@ export default function InventoryPage() {
         matchesSearch([a.alias, a.hostname, a.ip], assetSearch) &&
         (assetCriticality === ALL || a.criticality === assetCriticality) &&
         (assetStatus === ALL || (a.status ?? 'active') === assetStatus) &&
-        (assetIdentified === ALL || String(Boolean(a.identified)) === assetIdentified),
-    );
-  }, [assets, assetSearch, assetCriticality, assetStatus, assetIdentified]);
+        (assetIdentified === ALL || String(Boolean(a.identified)) === assetIdentified)
+    )
+  }, [assets, assetSearch, assetCriticality, assetStatus, assetIdentified])
 
   const { active: activeAssets, inactive: inactiveAssets } = useMemo(
     () => partitionByFrozenBucket(filteredAssets, assetBucket),
-    [filteredAssets, assetBucket],
-  );
+    [filteredAssets, assetBucket]
+  )
 
-  const [nnaSearch, setNnaSearch] = useState('');
-  const [nnaCategory, setNnaCategory] = useState<string>(ALL);
-  const [nnaCriticality, setNnaCriticality] = useState<string>(ALL);
-  const [nnaReviewStatus, setNnaReviewStatus] = useState<string>(ALL);
+  const [nnaSearch, setNnaSearch] = useState('')
+  const [nnaCategory, setNnaCategory] = useState<string>(ALL)
+  const [nnaCriticality, setNnaCriticality] = useState<string>(ALL)
+  const [nnaReviewStatus, setNnaReviewStatus] = useState<string>(ALL)
 
-  const nnaBucket = useFrozenBucket(nonNetworkAssets, (a) => (a.status ?? 'active') === 'active');
+  const nnaBucket = useFrozenBucket(nonNetworkAssets, a => (a.status ?? 'active') === 'active')
 
   const filteredNonNetworkAssets = useMemo(() => {
     return (nonNetworkAssets ?? []).filter(
@@ -109,20 +128,23 @@ export default function InventoryPage() {
         matchesSearch([a.alias], nnaSearch) &&
         (nnaCategory === ALL || a.asset_category === nnaCategory) &&
         (nnaCriticality === ALL || a.criticality === nnaCriticality) &&
-        (nnaReviewStatus === ALL || a.review_status === nnaReviewStatus),
-    );
-  }, [nonNetworkAssets, nnaSearch, nnaCategory, nnaCriticality, nnaReviewStatus]);
+        (nnaReviewStatus === ALL || a.review_status === nnaReviewStatus)
+    )
+  }, [nonNetworkAssets, nnaSearch, nnaCategory, nnaCriticality, nnaReviewStatus])
 
   const { active: activeNonNetworkAssets, inactive: inactiveNonNetworkAssets } = useMemo(
     () => partitionByFrozenBucket(filteredNonNetworkAssets, nnaBucket),
-    [filteredNonNetworkAssets, nnaBucket],
-  );
+    [filteredNonNetworkAssets, nnaBucket]
+  )
 
-  const assetsColumns = useMemo(() => getAssetsColumns(ownerNameById), [ownerNameById]);
+  const assetsColumns = useMemo(
+    () => getAssetsColumns(ownerNameById, selectedOfficeId === null),
+    [ownerNameById, selectedOfficeId]
+  )
   const nonNetworkAssetsColumns = useMemo(
-    () => getNonNetworkAssetsColumns((asset) => setEditingAsset(asset), ownerNameById),
-    [ownerNameById],
-  );
+    () => getNonNetworkAssetsColumns(asset => setEditingAsset(asset), ownerNameById),
+    [ownerNameById]
+  )
 
   return (
     <Stack gap="md">
@@ -155,9 +177,9 @@ export default function InventoryPage() {
               variant="light"
               leftSection={<RefreshCw size={14} strokeWidth={1.5} />}
               onClick={() => {
-                queryClient.invalidateQueries({ queryKey: ['assets'] });
-                queryClient.invalidateQueries({ queryKey: ['non-network-assets'] });
-                acknowledge();
+                queryClient.invalidateQueries({ queryKey: ['assets'] })
+                queryClient.invalidateQueries({ queryKey: ['non-network-assets'] })
+                acknowledge()
               }}
             >
               Refresh
@@ -169,42 +191,42 @@ export default function InventoryPage() {
       <Tabs defaultValue="network">
         <Tabs.List>
           <Tabs.Tab value="network">Network</Tabs.Tab>
-        <Tabs.Tab value="non-network">Other Assets</Tabs.Tab>
-      </Tabs.List>
+          <Tabs.Tab value="non-network">Other Assets</Tabs.Tab>
+        </Tabs.List>
 
-      <Tabs.Panel value="network" pt="md">
-        <Stack gap="sm">
+        <Tabs.Panel value="network" pt="md">
+          <Stack gap="sm">
             <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm">
               <TextInput
                 placeholder="Search alias, hostname, IP..."
                 leftSection={<Search size={16} strokeWidth={1.5} />}
                 value={assetSearch}
-                onChange={(e) => setAssetSearch(e.currentTarget.value)}
+                onChange={e => setAssetSearch(e.currentTarget.value)}
                 w="100%"
               />
               <Select
                 placeholder="Criticality"
                 data={[{ value: ALL, label: 'All criticalities' }, ...CRITICALITY_OPTIONS]}
                 value={assetCriticality}
-                onChange={(v) => setAssetCriticality(v ?? ALL)}
+                onChange={v => setAssetCriticality(v ?? ALL)}
                 w="100%"
               />
               <Select
                 placeholder="Status"
                 data={[{ value: ALL, label: 'All statuses' }, ...ASSET_STATUS_OPTIONS]}
                 value={assetStatus}
-                onChange={(v) => setAssetStatus(v ?? ALL)}
+                onChange={v => setAssetStatus(v ?? ALL)}
                 w="100%"
               />
               <Select
                 placeholder="Identified"
                 data={[
-                  { value: ALL, label: 'All' },
+                  { value: ALL, label: 'All identification statuses' },
                   { value: 'true', label: 'Identified' },
                   { value: 'false', label: 'Not identified' },
                 ]}
                 value={assetIdentified}
-                onChange={(v) => setAssetIdentified(v ?? ALL)}
+                onChange={v => setAssetIdentified(v ?? ALL)}
                 w="100%"
               />
             </SimpleGrid>
@@ -239,21 +261,21 @@ export default function InventoryPage() {
                   placeholder="Search alias..."
                   leftSection={<Search size={16} strokeWidth={1.5} />}
                   value={nnaSearch}
-                  onChange={(e) => setNnaSearch(e.currentTarget.value)}
+                  onChange={e => setNnaSearch(e.currentTarget.value)}
                   w="100%"
                 />
                 <Select
                   placeholder="Category"
                   data={[{ value: ALL, label: 'All categories' }, ...ASSET_CATEGORY_OPTIONS]}
                   value={nnaCategory}
-                  onChange={(v) => setNnaCategory(v ?? ALL)}
+                  onChange={v => setNnaCategory(v ?? ALL)}
                   w="100%"
                 />
                 <Select
                   placeholder="Criticality"
                   data={[{ value: ALL, label: 'All criticalities' }, ...CRITICALITY_OPTIONS]}
                   value={nnaCriticality}
-                  onChange={(v) => setNnaCriticality(v ?? ALL)}
+                  onChange={v => setNnaCriticality(v ?? ALL)}
                   w="100%"
                 />
                 <Select
@@ -264,7 +286,7 @@ export default function InventoryPage() {
                     { value: 'overdue', label: 'Review overdue' },
                   ]}
                   value={nnaReviewStatus}
-                  onChange={(v) => setNnaReviewStatus(v ?? ALL)}
+                  onChange={v => setNnaReviewStatus(v ?? ALL)}
                   w="100%"
                 />
               </SimpleGrid>
@@ -312,5 +334,5 @@ export default function InventoryPage() {
         />
       </Modal>
     </Stack>
-  );
+  )
 }

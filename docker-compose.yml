@@ -22,7 +22,7 @@ services:
       dockerfile: localdev.dockerfile
     container_name: siam-app
     ports:
-      - '3001:3000'
+      - '3001:3001'
     env_file:
       # Opcional: management-system/.env.local no es necesario para levantar el stack local —
       # todo lo que Postgres/Payload necesitan ya está hardcodeado abajo en `environment:`.
@@ -35,11 +35,13 @@ services:
       - NODE_ENV=development
       - RBAC_SOURCE=db
       - LOCAL_STORAGE_PATH=/tmp/uploads
-      # Dev only — token fijo para el agente demo 'agent-001' (scripts/seed-agent.ts), así
-      # scanner-prototype/run_agent.sh puede apuntar acá sin copiar nada de los logs. Nunca un
-      # secreto real: cambiar/quitar esta línea no rompe nada, seed-agent.ts cae de vuelta a un
-      # token random (mostrado una vez en el log) si no está seteada.
-      - DEMO_AGENT_API_KEY=siam-dev-demo-key-2026
+      # `next dev` lee PORT y escucha ahí directo — sin esto escuchaba en 3000 adentro del
+      # contenedor mientras el host solo tenía mapeado 3001, y el log de Next ("Local:
+      # http://localhost:3000") no coincidía con la URL real a la que había que entrar.
+      - PORT=3001
+      # buildAgentPackage.ts arma el .zip del agente leyendo esta carpeta (default '../scanner-prototype'
+      # relativo a cwd), que sin este mount no existe adentro del container.
+      - SCANNER_SOURCE_ROOT=/scanner-prototype
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,14 +50,14 @@ services:
       - /app/node_modules
       - /app/.next
       - uploads_data:/app/uploads
+      - ../scanner-prototype:/scanner-prototype:ro
     # Sin migraciones: el deploy de este proyecto recrea la imagen/DB desde cero cada vez, no
     # las necesita. Payload sincroniza el schema solo con NODE_ENV=development (pushDevSchema).
-    # DEV ONLY — no copiar a un compose de producción sin sacar `pnpm seed:navigation`/`seed:agent`:
+    # DEV ONLY — no copiar a un compose de producción sin sacar `pnpm seed:navigation`:
     # `seed:navigation` crea los 4 Roles base + la única organización demo (Org/Office/Settings/
     # Subscription) + un admin/org_admin/org_viewer/office_manager de demo con credenciales fijas;
-    # `seed:agent` corre después y reutiliza esa misma Office (no crea una segunda organización) —
-    # nada de esto es algo que quieras cerca de un cliente real.
-    command: sh -c "pnpm seed:navigation && pnpm seed:agent && pnpm run dev"
+    # El agente solo se vincula desde Administration > Offices > Install scanner.
+    command: sh -c "pnpm seed:navigation && pnpm run dev"
 
 volumes:
   postgres_data:

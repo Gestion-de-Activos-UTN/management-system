@@ -63,7 +63,16 @@ export function Breadcrumbs({ items }: { items: Crumb[] }) {
             {crumb.label}
           </Text>
         ) : (
-          <Anchor key={crumb.href} component={Link} href={crumb.href} size="sm" c="dimmed">
+          <Anchor
+            key={crumb.href}
+            component={Link}
+            href={crumb.href}
+            size="sm"
+            c="pine"
+            fw={500}
+            underline="hover"
+            style={{ cursor: 'pointer' }}
+          >
             {crumb.label}
           </Anchor>
         ),
