@@ -24,7 +24,7 @@ Andamiaje inicial, basado en la arquitectura de SafeLink (multi-tenant, RBAC, ri
    docker compose up
    ```
 
-   La app queda en `http://localhost:3001`, Postgres en `localhost:5433` (user/pass/db: `payload`). El contenedor `app` ya corre `pnpm seed:navigation && pnpm seed:agent && pnpm dev` solo — sin migraciones: el deploy de este proyecto recrea imagen y DB desde cero, así que Payload sincroniza el schema directo contra Postgres en cada arranque (dev-only, requiere `NODE_ENV=development`).
+La app queda en `http://localhost:3001`, Postgres en `localhost:5433` (user/pass/db: `payload`). El contenedor `app` ya corre `pnpm seed:navigation && pnpm dev` solo — sin migraciones: el deploy de este proyecto recrea imagen y DB desde cero, así que Payload sincroniza el schema directo contra Postgres en cada arranque (dev-only, requiere `NODE_ENV=development`).
 
 3. Bajar el stack cuando termines:
 
@@ -37,7 +37,7 @@ Ver [COMMANDS.md](./COMMANDS.md) para el resto de los comandos (tests, lint, see
 
 ## Login del frontend (Admin Portal / Portal de Organización)
 
-`docker compose up` corre `pnpm seed:navigation` en el arranque (además de `seed:agent`), que siembra los 4 `Roles` base y un usuario de demo por rol — email/password fijos a propósito (seed de navegación, no producción), idempotente (si `Org Demo Navegación` ya existe, no recrea nada):
+`docker compose up` corre `pnpm seed:navigation` en el arranque, que siembra los 4 `Roles` base y un usuario de demo por rol — email/password fijos a propósito (seed de navegación, no producción), idempotente:
 
 ```bash
 docker compose logs app | grep -A3 "Credenciales de navegación"
@@ -45,31 +45,31 @@ docker compose logs app | grep -A3 "Credenciales de navegación"
 
 Un único login (`http://localhost:3001/login`) para los dos portales — prueba `admins` y, si falla, `users`; el que responda decide a dónde redirige:
 
-| Rol | Portal | Ve "Administración" |
-|---|---|---|
-| `platform_admin` | Platform Admin (`/`) | — |
-| `org_admin` | Organización (`/portal`) | Sí |
-| `org_viewer` | Organización (`/portal`) | No |
-| `office_manager` | Organización (`/portal`) | No |
+| Rol              | Portal                   | Ve "Administración" |
+| ---------------- | ------------------------ | ------------------- |
+| `platform_admin` | Platform Admin (`/`)     | —                   |
+| `org_admin`      | Organización (`/portal`) | Sí                  |
+| `org_viewer`     | Organización (`/portal`) | No                  |
+| `office_manager` | Organización (`/portal`) | No                  |
 
 ## Ingesta Scanner ↔ Platform
 
 El canal HTTP real (no el mock) ya está andando: `POST /api/v1/reports`, `POST /api/v1/heartbeat`, `GET /api/v1/vendor`, servidos por Payload vía el catch-all de Next en [app/(payload)/api/[...slug]/route.ts](<app/(payload)/api/[...slug]/route.ts>) — sin ese archivo, cualquier request a `/api/*` cae en el 404 de Next, Payload nunca la recibe.
 
-Auth por token único por Agent (no por oficina): `docker compose up` corre `pnpm seed:agent` en el arranque, que crea (si no existe) una Organization/Office/Agent demo (`agent-001`). El `docker-compose.yml` incluido setea `DEMO_AGENT_API_KEY` con un token fijo de desarrollo (nunca un secreto real) — con eso, `scanner-prototype/run_agent.sh` apunta directo a este stack sin copiar nada de los logs. Sin esa env var, `seed:agent` genera un token random e imprime el texto plano una sola vez:
+Auth por token único por Agent (no por oficina): un agente solo se crea al seleccionar una oficina en `Administration > Offices > Install scanner`. El endpoint genera el token, lo guarda hasheado y descarga el paquete preconfigurado. El seed demo no crea agentes automáticamente.
 
 ```bash
 docker compose logs app | grep "API key"
 ```
 
-Con el token (fijo o del log), ejemplo real de ingesta:
+Ejemplo de ingesta manual para diagnóstico usando un agente ya aprovisionado:
 
 ```bash
 curl -X POST http://localhost:3001/api/v1/reports \
   -H "Authorization: Bearer <token-del-seed>" \
-  -H "X-Agent-ID: agent-001" \
+  -H "X-Agent-ID: <agent-id-del-zip>" \
   -H "Content-Type: application/json" \
-  -d '{"report_id":"test-1","agent_id":"agent-001","network":"192.168.0.0/24","scan_start":"2026-01-01T00:00:00Z","scan_end":"2026-01-01T00:01:00Z","hosts_up":1,"assets":[{"asset_id":"a-1","agent_id":"agent-001","ip":"192.168.0.1","mac":"AA:BB:CC:DD:EE:FF","vendor":"","hostname":"","os":null,"services":[],"scan_time":"2026-01-01T00:01:00Z"}]}'
+  -d '{"report_id":"test-1","agent_id":"<agent-id-del-zip>","network":"192.168.0.0/24","scan_start":"2026-01-01T00:00:00Z","scan_end":"2026-01-01T00:01:00Z","hosts_up":1,"assets":[]}'
 ```
 
 Contrato compartido con `scanner-prototype` (Zod → JSON Schema → Pydantic): ver [COMMANDS.md](./COMMANDS.md#contratos-scanner-platform).

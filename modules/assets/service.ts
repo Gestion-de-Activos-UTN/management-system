@@ -27,6 +27,12 @@ export function markAssetViewed(id: string) {
   return httpClient.patch<Asset>(`/api/assets/${id}`, { first_viewed_at: new Date().toISOString() });
 }
 
+// Apaga el badge "CHANGED" (no sticky, a diferencia de first_viewed_at: un re-scan futuro con
+// cambios reales lo vuelve a prender — ver collections/Assets/index.ts).
+export function markAssetChangesViewed(id: string) {
+  return httpClient.patch<Asset>(`/api/assets/${id}`, { technical_changed_at: null });
+}
+
 // Endpoint dedicado (no el PATCH genérico de arriba): togglea identified sin tocar el resto de
 // los campos, y es el único camino legítimo para pasar identified de false a true (ver
 // collections/Assets/hooks/rejectBusinessEditsBeforeIdentified.ts).

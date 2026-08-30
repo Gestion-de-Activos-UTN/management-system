@@ -1,5 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { Badge, Group, Text, Tooltip } from '@mantine/core'
+import { Badge, Group, Tooltip } from '@mantine/core'
 import type { Asset } from '@/app/types/payload-types'
 import { TechnicalText } from '@/components/ui/TechnicalText'
 import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
@@ -20,56 +20,43 @@ function truncateChars(value: string, max: number): string {
   return value.length > max ? `${value.slice(0, max)}…` : value
 }
 
-// Texto de negocio (no técnico/identificador) truncado por ancho de columna con el mismo
-// mecanismo visual que TechnicalText.truncate, pero sin forzar monoespaciado — un alias/location
-// escrito por un humano no es un hostname.
-function TruncatedText({ children }: { children: string }) {
-  return (
-    <Tooltip label={children}>
-      <Text
-        size="sm"
-        style={{
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          minWidth: 0,
-          maxWidth: '100%',
-        }}
-      >
-        {children}
-      </Text>
-    </Tooltip>
-  )
-}
-
 // Users.read is () => false by design (see modules/users/service.ts) — a plain `depth=1` list
 // request can't populate `owner` past its raw id (Payload's own access check on the related
 // collection blocks it, falling back to the id string). Resolve the display name from the
 // already-fetched org-members list instead of depending on relationship population.
 export function getAssetsColumns(
-  ownerNameById: Record<string, string>
+  ownerNameById: Record<string, string>,
+  showOffice: boolean
 ): ColumnDef<Asset, unknown>[] {
   return [
     {
       accessorKey: 'alias',
       header: 'Alias',
       size: 200,
-      // El badge "New" vive DENTRO de la celda de Alias en vez de en su propia columna — así
-      // cuando desaparece (AssetDetailView marca first_viewed_at al entrar al detalle; un re-scan
-      // de ingesta jamás toca ese campo) el alias pasa a ocupar todo el ancho en vez de dejar una
-      // columna vacía al lado.
+      // Los badges "New"/"Changed" viven DENTRO de la celda de Alias en vez de en su propia
+      // columna — así cuando desaparecen (AssetDetailView marca first_viewed_at/limpia
+      // technical_changed_at al entrar al detalle) el alias pasa a ocupar todo el ancho en vez de
+      // dejar una columna vacía al lado. Mutuamente excluyentes: "Changed" solo aplica a un asset
+      // ya visto (ingestScanReport.ts no lo marca si first_viewed_at es null), así que nunca se
+      // muestran los dos juntos.
       cell: ({ row }) => {
         const alias = row.original.alias ?? ''
         const isOverflowing = alias.length > ALIAS_TRUNCATE_AT
         const label = <span>{truncateChars(alias, ALIAS_TRUNCATE_AT)}</span>
         return (
           <Group gap="xs" wrap="nowrap">
-            {row.original.first_viewed_at == null && (
+            {row.original.first_viewed_at == null ? (
               // flexShrink: 0 — sin esto el Group (flex row) encoge el badge junto con todo lo demás
               // cuando falta espacio, y Mantine trunca su label con ellipsis interno ("New" → "N..").
               <Badge size="sm" color="pine" variant="filled" style={{ flexShrink: 0 }}>
                 New
               </Badge>
+            ) : (
+              row.original.technical_changed_at != null && (
+                <Badge size="sm" color="orange" variant="filled" style={{ flexShrink: 0 }}>
+                  Changed
+                </Badge>
+              )
             )}
             {isOverflowing ? <Tooltip label={alias}>{label}</Tooltip> : label}
           </Group>
@@ -96,13 +83,22 @@ export function getAssetsColumns(
       cell: ({ row }) =>
         row.original.criticality ? CRITICALITY_LABEL[row.original.criticality] : '—',
     },
-    {
-      accessorKey: 'location',
-      header: 'Location',
-      size: 180,
-      cell: ({ row }) =>
-        row.original.location && <TruncatedText>{row.original.location}</TruncatedText>,
-    },
+    showOffice
+      ? {
+          accessorKey: 'office',
+          header: 'Office',
+          size: 180,
+          cell: ({ row }) => {
+            const office = row.original.office
+            return typeof office === 'object' && office ? office.name : '—'
+          },
+        }
+      : {
+          accessorKey: 'location',
+          header: 'Location',
+          size: 180,
+          cell: ({ row }) => row.original.location || '—',
+        },
     {
       accessorKey: 'status',
       header: 'Status',

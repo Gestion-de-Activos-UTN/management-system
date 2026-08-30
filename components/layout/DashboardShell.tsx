@@ -7,6 +7,13 @@ import { Sidebar, type SidebarItem } from './Sidebar';
 import { Breadcrumbs, buildBreadcrumbs } from './Breadcrumbs';
 import { TopBar } from './TopBar';
 
+function shouldHideBreadcrumbs(pathname: string): boolean {
+  return (
+    /^\/portal\/inventory\/[^/]+$/.test(pathname) &&
+    !/^\/portal\/inventory\/(snapshots|scan-reports)\/[^/]+$/.test(pathname)
+  );
+}
+
 export function DashboardShell({
   navItems,
   topBarRight,
@@ -22,6 +29,7 @@ export function DashboardShell({
 }) {
   const pathname = usePathname();
   const breadcrumbs = buildBreadcrumbs(navItems, homeHref, pathname);
+  const showBreadcrumbs = !shouldHideBreadcrumbs(pathname);
   const [mobileNavOpened, setMobileNavOpened] = useState(false);
 
   useEffect(() => {
@@ -54,7 +62,7 @@ export function DashboardShell({
       </AppShell.Navbar>
       <AppShell.Main>
         <Container fluid px={{ base: 0, sm: 'sm', lg: 'md' }}>
-          <Breadcrumbs items={breadcrumbs} />
+          {showBreadcrumbs && <Breadcrumbs items={breadcrumbs} />}
           {children}
         </Container>
       </AppShell.Main>

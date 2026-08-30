@@ -102,7 +102,7 @@ function PortalProtectedLayoutInner({ children }: { children: React.ReactNode })
       ? [
           {
             label: 'Administration',
-            href: `/portal/admin${suffix}`,
+            href: `/portal/administration${suffix}`,
             icon: <ShieldCheck size={18} strokeWidth={1.5} />,
           },
         ]

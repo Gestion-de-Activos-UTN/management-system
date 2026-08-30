@@ -29,6 +29,7 @@ import type { Asset } from '@/app/types/payload-types'
 import { AssetBusinessFieldsSchema, type AssetBusinessFields } from '../schema'
 import { useUpdateAsset } from '../hooks/use-update-asset'
 import { useMarkAssetViewed } from '../hooks/use-mark-asset-viewed'
+import { useMarkAssetChangesViewed } from '../hooks/use-mark-asset-changes-viewed'
 import { useIdentifyAsset } from '../hooks/use-identify-asset'
 import { BadgeCheck } from 'lucide-react'
 import {
@@ -172,7 +173,13 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
         <Text size="sm" c="dimmed">
           Services
         </Text>
-        <Group gap={6} justify="flex-end" wrap="wrap" align="center" maw={{ base: '100%', sm: '70%' }}>
+        <Group
+          gap={6}
+          justify="flex-end"
+          wrap="wrap"
+          align="center"
+          maw={{ base: '100%', sm: '70%' }}
+        >
           {visible.map((service, i) => (
             <Tooltip key={service.id ?? i} label={serviceDescription(service)}>
               {/* variant="outline" + color="pine": "light" gray quedaba casi sin contraste
@@ -263,6 +270,7 @@ export function AssetDetailView({
   const { data: members } = useOrgMembers(asOrganization)
   const updateAsset = useUpdateAsset(asset.id)
   const markViewed = useMarkAssetViewed(asset.id)
+  const markChangesViewed = useMarkAssetChangesViewed(asset.id)
   const identify = useIdentifyAsset()
 
   // Ref, no un simple `if` en el render: evita reintentar en cada re-render mientras la mutation
@@ -276,6 +284,17 @@ export function AssetDetailView({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [asset.id, asset.first_viewed_at])
+
+  // Guard separado del de arriba: "Changed" no es sticky (a diferencia de "New"), así que este
+  // efecto se rearma cada vez que un re-scan lo vuelve a prender, no solo la primera vez.
+  const hasTriedMarkChangesViewed = useRef(false)
+  useEffect(() => {
+    if (asset.technical_changed_at != null && !hasTriedMarkChangesViewed.current) {
+      hasTriedMarkChangesViewed.current = true
+      markChangesViewed.mutate()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asset.id, asset.technical_changed_at])
 
   const {
     control,
@@ -309,7 +328,7 @@ export function AssetDetailView({
           onClick={() => identify.mutate({ id: asset.id, identified: !asset.identified })}
           w={{ base: '100%', sm: 'auto' }}
         >
-          {asset.identified ? 'Mark as not identified' : 'Identify'}
+          {asset.identified ? 'Mark as not identified' : 'Mark as identified'}
         </Button>
       </Group>
 

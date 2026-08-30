@@ -26,7 +26,13 @@ import { assetIdentifyEndpoint } from './endpoints/assetIdentify'
 import { agingSweepEndpoint } from './endpoints/internalJobs'
 import { generateInventorySnapshotEndpoint } from './endpoints/inventorySnapshots'
 import { orgMembersEndpoint } from './endpoints/orgMembers'
-import { organizationSettingsGetEndpoint, organizationSettingsUpdateEndpoint } from './endpoints/organizationSettings'
+import {
+  organizationSettingsGetEndpoint,
+  organizationSettingsUpdateEndpoint,
+} from './endpoints/organizationSettings'
+import { agentProvisioningEndpoint } from './endpoints/agentProvisioning'
+import { officeAgentSummaryEndpoint } from './endpoints/officeAgentSummary'
+import { dashboardMetricsEndpoint } from './endpoints/dashboardMetrics'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -81,6 +87,9 @@ export default buildConfig({
     orgMembersEndpoint,
     organizationSettingsGetEndpoint,
     organizationSettingsUpdateEndpoint,
+    agentProvisioningEndpoint,
+    officeAgentSummaryEndpoint,
+    dashboardMetricsEndpoint,
   ],
   typescript: {
     outputFile: path.resolve(dirname, 'app/types/payload-types.ts'),

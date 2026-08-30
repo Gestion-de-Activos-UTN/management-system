@@ -1,7 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { notFound, useSearchParams } from 'next/navigation';
 import { Button, Center, Loader, Stack, Text } from '@mantine/core';
 import { useTenantContext, isEffectiveOrgAdmin } from '@/modules/auth/hooks/use-tenant-context';
 
@@ -9,23 +8,15 @@ import { useTenantContext, isEffectiveOrgAdmin } from '@/modules/auth/hooks/use-
 // (no server-side session to check before the Auth0 migration) — see that file's comment for
 // the full note.
 export default function PortalAdminLayout({ children }: { children: React.ReactNode }) {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const asOrganization = searchParams.get('asOrganization') ?? undefined;
-  const suffix = asOrganization ? `?asOrganization=${asOrganization}` : '';
   const tenantContext = useTenantContext(asOrganization);
   const isOrgAdmin = isEffectiveOrgAdmin(tenantContext.data);
 
-  useEffect(() => {
-    if (tenantContext.data && !isOrgAdmin) {
-      router.replace(`/portal/dashboard${suffix}`);
-    }
-  }, [tenantContext.data, isOrgAdmin, router, suffix]);
-
   // Same failure mode as portal/(protected)/layout.tsx: without this, a failed fetch leaves
-  // tenantContext.data undefined -> isOrgAdmin false -> the effect above bounces the user
-  // out of /portal/admin even though they may well be an org_admin, just with a stale/errored
-  // tenant-context fetch.
+  // tenantContext.data undefined -> isOrgAdmin false -> the check below 404s the user out of
+  // /portal/administration even though they may well be an org_admin, just with a
+  // stale/errored tenant-context fetch.
   if (tenantContext.isError) {
     return (
       <Center h="60vh">
@@ -39,12 +30,20 @@ export default function PortalAdminLayout({ children }: { children: React.ReactN
     );
   }
 
-  if (tenantContext.isPending || !isOrgAdmin) {
+  if (tenantContext.isPending) {
     return (
       <Center h="60vh">
         <Loader />
       </Center>
     );
+  }
+
+  // Renders the global not-found boundary instead of bouncing to /portal/dashboard: a redirect
+  // there would confirm to anyone poking at the URL that /portal/administration exists but is
+  // gated, leaking which routes are permission-walled. A 404 looks identical to a route that
+  // was never there at all.
+  if (!isOrgAdmin) {
+    notFound();
   }
 
   return <>{children}</>;

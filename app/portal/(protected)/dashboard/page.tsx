@@ -1,30 +1,43 @@
-'use client';
+'use client'
 
-import { Card, Group, SimpleGrid, Skeleton, Stack, Text } from '@mantine/core';
-import { Boxes, ShieldAlert, MapPin, ScanLine } from 'lucide-react';
-import { PageHeader } from '@/components/ui/PageHeader';
-import { useFakeLoading } from '@/lib/use-fake-loading';
-
-// ponytail: static placeholder metrics — wire to a real aggregation endpoint once the
-// dashboard backend ships.
-const FAKE_METRICS = [
-  { label: 'Total assets', value: '128', icon: Boxes },
-  { label: 'Open risks', value: '7', icon: ShieldAlert },
-  { label: 'Active offices', value: '3', icon: MapPin },
-  { label: 'Last scan', value: '2h ago', icon: ScanLine },
-];
+import { Card, Group, SimpleGrid, Skeleton, Stack, Text } from '@mantine/core'
+import { Boxes, MapPin, RadioTower, ScanLine } from 'lucide-react'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { useSearchParams } from 'next/navigation'
+import { useDashboardMetrics } from '@/modules/dashboard/hooks/use-dashboard-metrics'
+import { formatDateTime } from '@/lib/format-date'
 
 export default function PortalDashboardPage() {
-  const loading = useFakeLoading(500);
+  const asOrganization = useSearchParams().get('asOrganization') ?? undefined
+  const { data, isPending, isError } = useDashboardMetrics(asOrganization)
+
+  const metrics = [
+    { label: 'Total assets', value: data ? String(data.total_assets) : '—', icon: Boxes },
+    { label: 'Active offices', value: data ? String(data.active_offices) : '—', icon: MapPin },
+    {
+      label: 'Online scanners',
+      value: data ? String(data.online_scanners) : '—',
+      icon: RadioTower,
+    },
+    {
+      label: 'Last scan',
+      value: data?.last_scan_at ? formatDateTime(data.last_scan_at) : 'No scans yet',
+      icon: ScanLine,
+    },
+  ]
 
   return (
     <Stack gap="md">
       <PageHeader title="Dashboard" description="Your organization at a glance." />
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
-        {FAKE_METRICS.map((metric) => (
+        {metrics.map(metric => (
           <Card key={metric.label} withBorder padding="lg">
-            {loading ? (
+            {isPending ? (
               <Skeleton height={48} />
+            ) : isError ? (
+              <Text c="red" size="sm">
+                Could not load metric
+              </Text>
             ) : (
               <Group gap="sm" wrap="wrap" align="flex-start">
                 <metric.icon size={20} strokeWidth={1.5} />
@@ -42,5 +55,5 @@ export default function PortalDashboardPage() {
         ))}
       </SimpleGrid>
     </Stack>
-  );
+  )
 }
