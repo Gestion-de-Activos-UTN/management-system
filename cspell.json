@@ -13,7 +13,13 @@
     "cspell",
     "lucide",
     "clsx",
-    "corepack"
+    "corepack",
+    "Npcap",
+    "venv",
+    "winget",
+    "NoProfile",
+    "LASTEXITCODE",
+    "PSScriptRoot"
   ],
   "ignorePaths": ["node_modules/**", ".next/**", "migrations/**"]
 }

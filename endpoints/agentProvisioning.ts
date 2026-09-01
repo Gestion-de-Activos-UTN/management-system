@@ -4,7 +4,7 @@ import { canDo } from '../access/rbac/permissions'
 import { getTenantContext } from '../access/tenant/resolveTenantContext'
 import { assertOrganizationMatches } from '../access/tenant/assertOrganizationMatches'
 import { relationId } from '../lib/relationId'
-import { buildAgentPackage } from '../domain/agents/buildAgentPackage'
+import { buildAgentPackage, isAgentPlatform } from '../domain/agents/buildAgentPackage'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
@@ -23,6 +23,11 @@ export const agentProvisioningEndpoint: Endpoint = {
     const body = await req.json!().catch(() => ({}))
     const officeId = typeof body?.office_id === 'string' ? body.office_id : ''
     if (!officeId) return json({ error: 'office_id es requerido' }, 400)
+
+    // Opcional a propósito: un cliente anterior al soporte Windows no manda el campo y sigue
+    // recibiendo el paquete POSIX.
+    const platform = body?.platform ?? 'posix'
+    if (!isAgentPlatform(platform)) return json({ error: 'platform_invalid' }, 400)
 
     const unrestricted = ctx.isPlatformAdmin && !ctx.organizationId
     const office = await req.payload
@@ -47,6 +52,7 @@ export const agentProvisioningEndpoint: Endpoint = {
       platformToken,
       platformUrl,
       heartbeatUrl,
+      platform,
     })
 
     // AUDIT: this action must emit an AuditLogs entry (chain_hash over {agent, office, organization}, previous hash for this organization_id)
@@ -69,7 +75,7 @@ export const agentProvisioningEndpoint: Endpoint = {
       status: 201,
       headers: {
         'Content-Type': 'application/zip',
-        'Content-Disposition': `attachment; filename="${agentId}.zip"`,
+        'Content-Disposition': `attachment; filename="${agentId}-${platform}.zip"`,
         'Cache-Control': 'no-store',
       },
     })
