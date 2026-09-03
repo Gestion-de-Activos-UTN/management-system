@@ -1,11 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import fs from 'node:fs/promises'
-import os from 'node:os'
-import path from 'node:path'
+import JSZip from 'jszip'
 import { getPayload } from 'payload'
 import type { Payload, PayloadRequest } from 'payload'
 import config from '../payload.config'
+import { withScannerFixture } from '../domain/agents/scanner-source-fixture'
 import { agentProvisioningEndpoint } from './agentProvisioning'
 
 // Mismo enfoque que assetIdentify.integration.test.ts (Local API real + PayloadRequest mínimo).
@@ -22,22 +21,11 @@ function fakeRequest(
   } as unknown as PayloadRequest
 }
 
-// buildAgentPackage() lee el fuente del scanner desde SCANNER_SOURCE_ROOT (domain/agents/buildAgentPackage.ts) —
-// se apunta a un fixture mínimo generado en tmp para no depender del repo hermano scanner-prototype.
-async function withScannerFixture<T>(run: () => Promise<T>): Promise<T> {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'siam-scanner-fixture-'))
-  await fs.mkdir(path.join(root, 'src', 'siam_agent'), { recursive: true })
-  await fs.writeFile(path.join(root, 'src', 'siam_agent', 'agent.py'), '# fixture\n')
-  await fs.writeFile(path.join(root, 'requirements.txt'), '')
-  const previous = process.env.SCANNER_SOURCE_ROOT
-  process.env.SCANNER_SOURCE_ROOT = root
-  try {
-    return await run()
-  } finally {
-    if (previous == null) delete process.env.SCANNER_SOURCE_ROOT
-    else process.env.SCANNER_SOURCE_ROOT = previous
-    await fs.rm(root, { recursive: true, force: true })
-  }
+async function zipEntries(res: Response) {
+  const zip = await JSZip.loadAsync(await res.arrayBuffer())
+  return Object.values(zip.files)
+    .filter(entry => !entry.dir)
+    .map(entry => entry.name)
 }
 
 async function seedTenant(payload: Payload, roleSlug: 'org_admin' | 'org_viewer') {
@@ -158,5 +146,48 @@ test('POST /v1/agents/provision: 201 happy path crea el agent y devuelve el .zip
     })
     assert.equal(agents.docs.length, 1)
     assert.equal(agents.docs[0].is_active, true)
+
+    // Sin `platform` en el body (cliente anterior al soporte Windows) el paquete sigue siendo POSIX.
+    const entries = await zipEntries(res)
+    assert.equal(entries.includes('start-agent.sh'), true)
+    assert.equal(entries.includes('start-agent.ps1'), false)
   })
+})
+
+test('POST /v1/agents/provision: platform=windows devuelve el paquete con los launchers de Windows', async () => {
+  await withScannerFixture(async () => {
+    const payload = await getPayload({ config })
+    const { office, user } = await seedTenant(payload, 'org_admin')
+
+    const res = await agentProvisioningEndpoint.handler(
+      fakeRequest(payload, {
+        user: { id: String(user.id), collection: 'users' },
+        body: { office_id: String(office.id), platform: 'windows' },
+      }),
+    )
+    assert.equal(res.status, 201)
+    assert.match(
+      res.headers.get('Content-Disposition') ?? '',
+      /attachment; filename="agent-[0-9a-f-]+-windows\.zip"/,
+    )
+
+    const entries = await zipEntries(res)
+    assert.equal(entries.includes('start-agent.ps1'), true)
+    assert.equal(entries.includes('start-agent.cmd'), true)
+    assert.equal(entries.includes('start-agent.sh'), false)
+  })
+})
+
+test('POST /v1/agents/provision: 400 con un platform desconocido', async () => {
+  const payload = await getPayload({ config })
+  const { office, user } = await seedTenant(payload, 'org_admin')
+
+  const res = await agentProvisioningEndpoint.handler(
+    fakeRequest(payload, {
+      user: { id: String(user.id), collection: 'users' },
+      body: { office_id: String(office.id), platform: 'solaris' },
+    }),
+  )
+  assert.equal(res.status, 400)
+  assert.equal((await res.json()).error, 'platform_invalid')
 })
