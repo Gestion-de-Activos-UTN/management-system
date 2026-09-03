@@ -14,6 +14,7 @@ import {
   Modal,
   Select,
   SimpleGrid,
+  Spoiler,
   Stack,
   Table,
   Text,
@@ -31,7 +32,7 @@ import { useUpdateAsset } from '../hooks/use-update-asset'
 import { useMarkAssetViewed } from '../hooks/use-mark-asset-viewed'
 import { useMarkAssetChangesViewed } from '../hooks/use-mark-asset-changes-viewed'
 import { useIdentifyAsset } from '../hooks/use-identify-asset'
-import { BadgeCheck } from 'lucide-react'
+import { BadgeCheck, Lock } from 'lucide-react'
 import {
   DEVICE_CATEGORY_HELP,
   DEVICE_CATEGORY_LABEL,
@@ -107,6 +108,48 @@ function TechnicalRow({ label, value }: { label: string; value: string | null | 
 }
 
 type Service = NonNullable<Asset['services']>[number]
+type OsCandidate = NonNullable<Asset['os_candidates']>[number]
+
+// Escala simple 0-10 (nmap "conf") -> semáforo de contraste ya usado en el resto de la UI
+// (criticality/status badges): no hay ningún badge de confianza reusable en el repo (ver
+// análisis previo), así que este es chico y local a esta vista.
+function confidenceColor(confidence: number | null | undefined): string {
+  if (confidence == null) return 'gray'
+  if (confidence >= 7) return 'green'
+  if (confidence >= 4) return 'yellow'
+  return 'red'
+}
+
+function scriptsText(scripts: unknown): string | null {
+  if (!scripts || typeof scripts !== 'object') return null
+  const entries = Object.entries(scripts as Record<string, string>)
+  if (entries.length === 0) return null
+  return entries.map(([id, output]) => `${id}:\n${output}`).join('\n\n')
+}
+
+// Solo cuando hay más de un candidato — con uno solo es el mismo dato que ya muestra la fila
+// "Operating system" de arriba, repetirlo no aporta nada.
+function OsCandidatesRow({ candidates }: { candidates: Asset['os_candidates'] }) {
+  const list = candidates ?? []
+  if (list.length < 2) return null
+
+  return (
+    <Group justify="space-between" align="flex-start" wrap="wrap" gap="xs">
+      <Text size="sm" c="dimmed">
+        OS candidates
+      </Text>
+      <List size="sm" spacing={2} style={{ flex: '1 1 220px', textAlign: 'right' }} listStyleType="none">
+        {list.map((candidate: OsCandidate, i: number) => (
+          <List.Item key={candidate.id ?? i}>
+            <TechnicalText>
+              {candidate.name || 'Unknown'} ({candidate.accuracy ?? 0}%)
+            </TechnicalText>
+          </List.Item>
+        ))}
+      </List>
+    </Group>
+  )
+}
 
 // nmap devuelve nombres de servicio en jerga cruda ("dhcpc"/"domain") — mapeo chico solo para
 // lo que aparece en la práctica; lo desconocido cae al nombre crudo, no rompe nada.
@@ -228,7 +271,7 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
         size="lg"
         centered
       >
-        <Table.ScrollContainer minWidth={560}>
+        <Table.ScrollContainer minWidth={860}>
           <Table>
             <Table.Thead>
               <Table.Tr>
@@ -236,19 +279,51 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
                 <Table.Th>Protocol</Table.Th>
                 <Table.Th>Service</Table.Th>
                 <Table.Th>Version</Table.Th>
+                <Table.Th>Detection</Table.Th>
+                <Table.Th>Confidence</Table.Th>
+                <Table.Th>Scripts</Table.Th>
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {list.map((service, i) => (
-                <Table.Tr key={service.id ?? i}>
-                  <Table.Td>
-                    <TechnicalText>{service.port ?? '—'}</TechnicalText>
-                  </Table.Td>
-                  <Table.Td>{service.protocol ? service.protocol.toUpperCase() : '—'}</Table.Td>
-                  <Table.Td>{serviceDescription(service)}</Table.Td>
-                  <Table.Td>{service.version || '—'}</Table.Td>
-                </Table.Tr>
-              ))}
+              {list.map((service, i) => {
+                const scripts = scriptsText(service.scripts)
+                return (
+                  <Table.Tr key={service.id ?? i}>
+                    <Table.Td>
+                      <TechnicalText>{service.port ?? '—'}</TechnicalText>
+                    </Table.Td>
+                    <Table.Td>{service.protocol ? service.protocol.toUpperCase() : '—'}</Table.Td>
+                    <Table.Td>{serviceDescription(service)}</Table.Td>
+                    <Table.Td>{service.version || '—'}</Table.Td>
+                    <Table.Td>
+                      <Group gap={4} wrap="nowrap">
+                        <Badge variant={service.detection_method === 'probed' ? 'filled' : 'outline'} color="pine" size="sm">
+                          {service.detection_method || 'table'}
+                        </Badge>
+                        {service.tunnel === 'ssl' && (
+                          <Tooltip label="Runs over an encrypted (SSL/TLS) tunnel">
+                            <Lock size={14} strokeWidth={1.5} />
+                          </Tooltip>
+                        )}
+                      </Group>
+                    </Table.Td>
+                    <Table.Td>
+                      <Badge variant="light" color={confidenceColor(service.confidence)} size="sm">
+                        {service.confidence ?? 0}/10
+                      </Badge>
+                    </Table.Td>
+                    <Table.Td>
+                      {scripts ? (
+                        <Spoiler maxHeight={0} showLabel="View" hideLabel="Hide">
+                          <TechnicalText style={{ whiteSpace: 'pre-wrap' }}>{scripts}</TechnicalText>
+                        </Spoiler>
+                      ) : (
+                        '—'
+                      )}
+                    </Table.Td>
+                  </Table.Tr>
+                )
+              })}
             </Table.Tbody>
           </Table>
         </Table.ScrollContainer>
@@ -300,7 +375,7 @@ export function AssetDetailView({
   const {
     control,
     handleSubmit,
-    formState: { isDirty, errors },
+    formState: { isDirty, dirtyFields, errors },
   } = useForm<AssetBusinessFields>({
     resolver: zodResolver(AssetBusinessFieldsSchema),
     defaultValues: {
@@ -312,7 +387,17 @@ export function AssetDetailView({
     },
   })
 
-  const onSubmit = handleSubmit(data => updateAsset.mutate(data))
+  // Solo los campos que el usuario tocó, nunca el objeto completo: `defaultValues` se fija una
+  // sola vez al montar y no se resincroniza si `asset` cambia después (ej. un re-scan que llega
+  // mientras la página está abierta) — mandar todo el formulario reenviaría un `status` (u otro
+  // campo de negocio) desactualizado y pisaría en silencio un cambio hecho por otro lado (bug
+  // reportado: un asset retirado volvía a "active" al guardar un edit no relacionado).
+  const onSubmit = handleSubmit(data => {
+    const dirtyKeys = Object.keys(dirtyFields) as Array<keyof AssetBusinessFields>
+    if (dirtyKeys.length === 0) return
+    const changed = Object.fromEntries(dirtyKeys.map(key => [key, data[key]])) as Partial<AssetBusinessFields>
+    updateAsset.mutate(changed)
+  })
 
   return (
     <Stack gap="lg">
@@ -340,10 +425,38 @@ export function AssetDetailView({
           <TechnicalRow label="Hostname" value={asset.hostname} />
           <TechnicalRow label="MAC" value={asset.mac} />
           <TechnicalRow label="Vendor" value={asset.vendor} />
-          <TechnicalRow label="Operating system" value={asset.os?.name} />
+          <TechnicalRow
+            label="Operating system"
+            value={
+              asset.os_status === 'indeterminate'
+                ? 'Indeterminate'
+                : asset.os?.name
+                  ? `${asset.os.name}${asset.os.accuracy != null ? ` (${asset.os.accuracy}%)` : ''}`
+                  : null
+            }
+          />
+          <OsCandidatesRow candidates={asset.os_candidates} />
+          <TechnicalRow label="Discovery reason" value={asset.state_reason} />
           <TechnicalRow label="Gateway IP" value={asset.gateway_ip} />
           <TechnicalRow label="Gateway MAC" value={asset.gateway_mac} />
           <ServicesRow services={asset.services} />
+          {scriptsText(asset.host_scripts) && (
+            <Group justify="space-between" align="flex-start" wrap="wrap" gap="xs">
+              <Text size="sm" c="dimmed">
+                Host scripts
+              </Text>
+              <Spoiler
+                maxHeight={0}
+                showLabel="View"
+                hideLabel="Hide"
+                style={{ flex: '1 1 220px', textAlign: 'right' }}
+              >
+                <TechnicalText style={{ whiteSpace: 'pre-wrap' }}>
+                  {scriptsText(asset.host_scripts)}
+                </TechnicalText>
+              </Spoiler>
+            </Group>
+          )}
           <TechnicalRow
             label="Last seen"
             value={asset.last_seen ? formatDateTime(asset.last_seen) : null}

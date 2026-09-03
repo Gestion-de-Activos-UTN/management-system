@@ -63,12 +63,27 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "osfamily": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "osgen": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "vendor": {
+                    "default": "",
+                    "type": "string"
                   }
                 },
                 "required": [
                   "name",
                   "accuracy",
-                  "cpe"
+                  "cpe",
+                  "osfamily",
+                  "osgen",
+                  "vendor"
                 ],
                 "additionalProperties": false
               },
@@ -107,6 +122,34 @@
                 },
                 "cpe": {
                   "type": "string"
+                },
+                "reason": {
+                  "default": "",
+                  "type": "string"
+                },
+                "detection_method": {
+                  "default": "table",
+                  "type": "string"
+                },
+                "confidence": {
+                  "default": 0,
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 10
+                },
+                "tunnel": {
+                  "default": "",
+                  "type": "string"
+                },
+                "scripts": {
+                  "default": {},
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "string"
+                  }
                 }
               },
               "required": [
@@ -117,13 +160,76 @@
                 "product",
                 "version",
                 "extra_info",
-                "cpe"
+                "cpe",
+                "reason",
+                "detection_method",
+                "confidence",
+                "tunnel",
+                "scripts"
               ],
               "additionalProperties": false
             }
           },
           "scan_time": {
             "type": "string"
+          },
+          "os_candidates": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "accuracy": {
+                  "type": "integer",
+                  "minimum": -9007199254740991,
+                  "maximum": 9007199254740991
+                },
+                "cpe": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "osfamily": {
+                  "default": "",
+                  "type": "string"
+                },
+                "osgen": {
+                  "default": "",
+                  "type": "string"
+                },
+                "vendor": {
+                  "default": "",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "accuracy",
+                "cpe",
+                "osfamily",
+                "osgen",
+                "vendor"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "state_reason": {
+            "default": "",
+            "type": "string"
+          },
+          "host_scripts": {
+            "default": {},
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         },
         "required": [
@@ -135,7 +241,10 @@
           "hostname",
           "os",
           "services",
-          "scan_time"
+          "scan_time",
+          "os_candidates",
+          "state_reason",
+          "host_scripts"
         ],
         "additionalProperties": {}
       }

@@ -56,11 +56,13 @@ export const Assets: CollectionConfig = {
       admin: { readOnly: true },
       access: technicalFieldAccess,
     },
-    { name: 'ip', type: 'text', access: technicalFieldAccess },
+    // index: true en ip/mac — domain/inventories/ingestScanReport.ts::findExistingAsset busca
+    // por estos dos campos (acotado a `agent`) en cada ingesta, ya no por `asset_id`.
+    { name: 'ip', type: 'text', index: true, access: technicalFieldAccess },
     { name: 'last_seen', type: 'date', access: technicalFieldAccess },
     { name: 'gateway_ip', type: 'text', access: technicalFieldAccess },
     { name: 'gateway_mac', type: 'text', access: technicalFieldAccess },
-    { name: 'mac', type: 'text', access: technicalFieldAccess },
+    { name: 'mac', type: 'text', index: true, access: technicalFieldAccess },
     { name: 'vendor', type: 'text', access: technicalFieldAccess },
     { name: 'hostname', type: 'text', access: technicalFieldAccess },
     {
@@ -71,7 +73,47 @@ export const Assets: CollectionConfig = {
         { name: 'name', type: 'text' },
         { name: 'accuracy', type: 'number' },
         { name: 'cpe', type: 'text', hasMany: true },
+        { name: 'osfamily', type: 'text' },
+        { name: 'osgen', type: 'text' },
+        { name: 'vendor', type: 'text' },
       ],
+    },
+    {
+      // Hasta 3 candidatos de osmatch (scanner-prototype models.py::Asset.os_candidates), orden
+      // descendente por accuracy — os_candidates[0] es el mismo dato que `os`. Campo raíz (no
+      // anida en `os`), así que necesita su propio access: technicalFieldAccess explícito.
+      name: 'os_candidates',
+      type: 'array',
+      access: technicalFieldAccess,
+      fields: [
+        { name: 'name', type: 'text' },
+        { name: 'accuracy', type: 'number' },
+        { name: 'cpe', type: 'text', hasMany: true },
+        { name: 'osfamily', type: 'text' },
+        { name: 'osgen', type: 'text' },
+        { name: 'vendor', type: 'text' },
+      ],
+    },
+    {
+      // Regla de negocio de la plataforma (nunca del agente, ver domain/inventories/ingestScanReport.ts):
+      // 'identified' si os_candidates[0].accuracy >= 85, si no 'indeterminate'.
+      name: 'os_status',
+      type: 'select',
+      options: ['identified', 'indeterminate'],
+      admin: { readOnly: true },
+      access: technicalFieldAccess,
+    },
+    {
+      // Motivo de host discovery de nmap (arp-response, echo-reply...), no solo el estado "up".
+      name: 'state_reason',
+      type: 'text',
+      access: technicalFieldAccess,
+    },
+    {
+      // Salida de scripts NSE a nivel host (ej. smb-os-discovery): id de script -> output crudo.
+      name: 'host_scripts',
+      type: 'json',
+      access: technicalFieldAccess,
     },
     {
       name: 'services',
@@ -86,6 +128,12 @@ export const Assets: CollectionConfig = {
         { name: 'version', type: 'text' },
         { name: 'extra_info', type: 'text' },
         { name: 'cpe', type: 'text' },
+        { name: 'reason', type: 'text' },
+        { name: 'detection_method', type: 'text' },
+        { name: 'confidence', type: 'number', min: 0, max: 10 },
+        { name: 'tunnel', type: 'text' },
+        // Salida de scripts NSE (-sC) para este puerto: id de script -> output crudo.
+        { name: 'scripts', type: 'json' },
       ],
     },
     // Bloque de negocio — nunca sobrescrito por el upsert de ingesta, solo en creación o edición manual.

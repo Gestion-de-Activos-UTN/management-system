@@ -19,6 +19,28 @@ function makeAsset(overrides: Partial<AssetPayload> = {}): AssetPayload {
     os: null,
     services: [],
     scan_time: '2026-01-01T00:00:00.000Z',
+    os_candidates: [],
+    state_reason: '',
+    host_scripts: {},
+    ...overrides,
+  }
+}
+
+function makeService(overrides: Partial<AssetPayload['services'][number]> = {}): AssetPayload['services'][number] {
+  return {
+    port: 80,
+    protocol: 'tcp',
+    state: 'open',
+    name: 'http',
+    product: '',
+    version: '',
+    extra_info: '',
+    cpe: '',
+    reason: '',
+    detection_method: 'table',
+    confidence: 0,
+    tunnel: '',
+    scripts: {},
     ...overrides,
   }
 }
@@ -59,6 +81,123 @@ function makePayload(existingDoc: Record<string, unknown> | null) {
   } as unknown as Payload
   return { payload, updates, creates }
 }
+
+// Fake más realista para los tests de reconciliación de identidad: filtra por mac/ip como lo
+// hace findExistingAsset (ingestScanReport.ts) — a diferencia de makePayload() de arriba, que
+// ignora `where` a propósito porque esos tests solo verifican merge/diff asumiendo que "encontrar
+// el existingDoc correcto" ya pasó.
+function makePayloadWithDocs(docs: Array<Record<string, unknown>>) {
+  const updates: Array<{ id: unknown; data: Record<string, unknown> }> = []
+  const creates: Record<string, unknown>[] = []
+  const payload = {
+    async find({ where }: { where: Record<string, { equals?: unknown }> }) {
+      const macEquals = where.mac?.equals
+      const ipEquals = where.ip?.equals
+      const match = docs.find((doc) => {
+        if (macEquals !== undefined && doc.mac !== macEquals) return false
+        if (ipEquals !== undefined && doc.ip !== ipEquals) return false
+        return true
+      })
+      return { docs: match ? [match] : [] }
+    },
+    async update({ id, data }: { id: unknown; data: Record<string, unknown> }) {
+      updates.push({ id, data })
+      const doc = docs.find((d) => d.id === id)
+      if (doc) Object.assign(doc, data)
+      return { id }
+    },
+    async create({ data }: { data: Record<string, unknown> }) {
+      const doc = { id: `new-${creates.length}`, ...data }
+      creates.push(data)
+      docs.push(doc)
+      return doc
+    },
+  } as unknown as Payload
+  return { payload, updates, creates }
+}
+
+test('reconciliación degradado→full: mismo dispositivo por ip, no duplica ni pisa datos de negocio', async () => {
+  const existingDoc = {
+    id: 'existing-1',
+    first_viewed_at: '2025-01-01T00:00:00.000Z',
+    mac: null,
+    ip: '10.0.0.5',
+    vendor: null,
+    hostname: null,
+    os: null,
+    os_candidates: [],
+    services: [],
+    gateway_ip: null,
+    gateway_mac: null,
+    status: 'active',
+    alias: 'Notebook de Gervasio',
+    owner: 'user-1',
+    identified: true,
+    criticality: 'medium',
+  }
+  const { payload, updates, creates } = makePayloadWithDocs([existingDoc])
+
+  await ingestScanReport(payload, makeReport([makeAsset({ ip: '10.0.0.5', mac: 'AA:BB:CC:DD:EE:01' })]), AUTH)
+
+  assert.equal(creates.length, 0)
+  assert.equal(updates.length, 1)
+  assert.equal(updates[0].id, 'existing-1')
+  assert.equal(updates[0].data.mac, 'AA:BB:CC:DD:EE:01')
+  assert.equal('alias' in updates[0].data, false)
+  assert.equal('owner' in updates[0].data, false)
+  assert.equal('identified' in updates[0].data, false)
+  assert.equal('criticality' in updates[0].data, false)
+})
+
+test('reconciliación full→degradado: dispositivo ya con mac matchea por ip directo, sin duplicar', async () => {
+  const existingDoc = {
+    id: 'existing-1',
+    first_viewed_at: '2025-01-01T00:00:00.000Z',
+    mac: 'AA:BB:CC:DD:EE:01',
+    ip: '10.0.0.5',
+    vendor: null,
+    hostname: null,
+    os: null,
+    os_candidates: [],
+    services: [],
+    gateway_ip: null,
+    gateway_mac: null,
+    status: 'active',
+  }
+  const { payload, updates, creates } = makePayloadWithDocs([existingDoc])
+
+  await ingestScanReport(payload, makeReport([makeAsset({ ip: '10.0.0.5', mac: '' })]), AUTH)
+
+  assert.equal(creates.length, 0)
+  assert.equal(updates.length, 1)
+  assert.equal(updates[0].id, 'existing-1')
+  assert.equal(updates[0].data.mac, 'AA:BB:CC:DD:EE:01') // not-null-wins conserva la mac ya conocida
+})
+
+test('ip reasignada por DHCP a un dispositivo con otra mac: no reconcilia, crea uno nuevo', async () => {
+  const existingDoc = {
+    id: 'existing-1',
+    first_viewed_at: '2025-01-01T00:00:00.000Z',
+    mac: 'AA:BB:CC:DD:EE:01',
+    ip: '10.0.0.5',
+    vendor: null,
+    hostname: null,
+    os: null,
+    os_candidates: [],
+    services: [],
+    gateway_ip: null,
+    gateway_mac: null,
+    status: 'active',
+    alias: 'Impresora de la oficina',
+  }
+  const { payload, updates, creates } = makePayloadWithDocs([existingDoc])
+
+  await ingestScanReport(payload, makeReport([makeAsset({ ip: '10.0.0.5', mac: 'FF:FF:FF:FF:FF:FF' })]), AUTH)
+
+  assert.equal(updates.length, 0)
+  assert.equal(creates.length, 1)
+  assert.equal(creates[0].mac, 'FF:FF:FF:FF:FF:FF')
+})
 
 test('not-null-wins: un scan degraded (mac/vendor/hostname vacíos) no borra el valor ya conocido', async () => {
   const existingDoc = {
@@ -132,6 +271,106 @@ test('hasTechnicalChanged: marca technical_changed_at solo si el activo ya fue v
   const { payload: unchangedPayload, updates: unchangedUpdates } = makePayload(seenDoc)
   await ingestScanReport(unchangedPayload, makeReport([makeAsset({ ip: '10.0.0.1' })]), AUTH)
   assert.equal('technical_changed_at' in unchangedUpdates[0], false)
+})
+
+test('hasTechnicalChanged ignora el id que Payload auto-agrega a cada fila de services', async () => {
+  const service = makeService({ product: 'nginx', version: '1.25' })
+  const seenDoc = {
+    id: 'existing-1',
+    first_viewed_at: '2025-01-01T00:00:00.000Z',
+    mac: null,
+    vendor: null,
+    hostname: null,
+    os: null,
+    ip: '10.0.0.1',
+    // Tal como lo devuelve Payload de verdad: cada fila trae un id que el payload del agente no tiene.
+    services: [{ ...service, id: 'row-generated-by-payload' }],
+    gateway_ip: null,
+    gateway_mac: null,
+    status: 'active',
+  }
+  const { payload, updates } = makePayload(seenDoc)
+
+  await ingestScanReport(payload, makeReport([makeAsset({ services: [service] })]), AUTH)
+
+  assert.equal('technical_changed_at' in updates[0], false)
+})
+
+test('os_status: indeterminate si el candidato principal no llega al 85%', async () => {
+  const { payload, creates } = makePayload(null)
+
+  await ingestScanReport(
+    payload,
+    makeReport([makeAsset({ os_candidates: [{ name: 'Linux', accuracy: 60, cpe: [], osfamily: 'Linux', osgen: '', vendor: '' }] })]),
+    AUTH,
+  )
+
+  assert.equal(creates[0].os_status, 'indeterminate')
+})
+
+test('os_status: identified cuando el candidato principal supera el umbral (create)', async () => {
+  const { payload, creates } = makePayload(null)
+
+  await ingestScanReport(
+    payload,
+    makeReport([makeAsset({ os_candidates: [{ name: 'Linux', accuracy: 95, cpe: [], osfamily: 'Linux', osgen: '', vendor: '' }] })]),
+    AUTH,
+  )
+
+  assert.equal(creates[0].os_status, 'identified')
+})
+
+test('os_candidates viaja con la misma política identidad que os: un scan sin osmatch no borra candidatos previos', async () => {
+  const existingDoc = {
+    id: 'existing-1',
+    first_viewed_at: '2025-01-01T00:00:00.000Z',
+    mac: null,
+    vendor: null,
+    hostname: null,
+    os: { name: 'Linux', accuracy: 95, cpe: [] },
+    os_candidates: [{ id: 'row-1', name: 'Linux', accuracy: 95, cpe: [], osfamily: 'Linux', osgen: '', vendor: '' }],
+    ip: '10.0.0.1',
+    services: [],
+    gateway_ip: null,
+    gateway_mac: null,
+    status: 'active',
+  }
+  const { payload, updates } = makePayload(existingDoc)
+
+  await ingestScanReport(payload, makeReport([makeAsset({ os_candidates: [] })]), AUTH)
+
+  assert.deepEqual(updates[0].os_candidates, existingDoc.os_candidates)
+  assert.equal(updates[0].os_status, 'identified')
+})
+
+test('state_reason y host_scripts se sobreescriben siempre pero no cuentan como "Changed"', async () => {
+  const existingDoc = {
+    id: 'existing-1',
+    first_viewed_at: '2025-01-01T00:00:00.000Z',
+    mac: null,
+    vendor: null,
+    hostname: null,
+    os: null,
+    os_candidates: [],
+    state_reason: 'arp-response',
+    host_scripts: { 'smb-os-discovery': 'OS: Linux' },
+    ip: '10.0.0.1',
+    services: [],
+    gateway_ip: null,
+    gateway_mac: null,
+    status: 'active',
+  }
+  const { payload, updates } = makePayload(existingDoc)
+
+  await ingestScanReport(
+    payload,
+    makeReport([makeAsset({ state_reason: 'echo-reply', host_scripts: {} })]),
+    AUTH,
+  )
+
+  assert.equal(updates[0].state_reason, 'echo-reply')
+  assert.deepEqual(updates[0].host_scripts, {})
+  assert.equal('technical_changed_at' in updates[0], false)
 })
 
 test('retired es sticky: un scan nuevo no revive un activo dado de baja', async () => {

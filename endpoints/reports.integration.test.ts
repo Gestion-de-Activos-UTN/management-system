@@ -96,6 +96,82 @@ test('POST /v1/reports crea assets y es idempotente por report_id', async () => 
   assert.equal(assetsAfterRetry.docs.length, 1, 'no debe duplicar el asset en el reintento')
 })
 
+test('POST /v1/reports reconcilia un scan degradado seguido de uno full: mismo doc, sin perder alias/owner/status', async () => {
+  // Reproduce el bug real (visto en datos de dev): scan sin sudo -> asset_id sale de la IP (mac
+  // vacía). Un humano identifica el activo y le pone alias/status. Scan siguiente CON sudo ->
+  // mac se resuelve -> asset_id hash distinto -> antes de este fix, ingestScanReport.ts no lo
+  // encontraba por asset_id y creaba un documento nuevo, huérfano de esos datos de negocio.
+  const payload = await getPayload({ config })
+  const { apiKey } = await seedAgent(payload)
+  const degradedAssetId = `a-degraded-${Math.random().toString(36).slice(2)}`
+  const fullAssetId = `a-full-${Math.random().toString(36).slice(2)}`
+
+  const degradedBody = reportPayload({
+    scan_mode: 'degraded',
+    assets: [
+      {
+        asset_id: degradedAssetId,
+        agent_id: 'agent-001',
+        ip: '192.168.0.77',
+        mac: '',
+        vendor: '',
+        hostname: '',
+        os: null,
+        services: [],
+        scan_time: '2026-07-24T23:51:45.039267+00:00',
+      },
+    ],
+  })
+  await reportsEndpoint.handler(
+    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' }, degradedBody),
+  )
+
+  const created = await payload.find({
+    collection: 'assets',
+    where: { ip: { equals: '192.168.0.77' } },
+    overrideAccess: true,
+  })
+  assert.equal(created.docs.length, 1)
+  await payload.update({
+    collection: 'assets',
+    id: created.docs[0].id,
+    overrideAccess: true,
+    data: { alias: 'Notebook de Gervasio', identified: true, status: 'retired' },
+  })
+
+  const fullBody = reportPayload({
+    scan_mode: 'full',
+    assets: [
+      {
+        asset_id: fullAssetId,
+        agent_id: 'agent-001',
+        ip: '192.168.0.77',
+        mac: 'AA:BB:CC:DD:EE:77',
+        vendor: 'Acme',
+        hostname: 'gervasio-nb',
+        os: null,
+        services: [],
+        scan_time: '2026-07-24T23:55:00.000000+00:00',
+      },
+    ],
+  })
+  await reportsEndpoint.handler(
+    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' }, fullBody),
+  )
+
+  const afterFull = await payload.find({
+    collection: 'assets',
+    where: { ip: { equals: '192.168.0.77' } },
+    overrideAccess: true,
+  })
+  assert.equal(afterFull.docs.length, 1, 'no debe duplicar el asset al resolverse la mac')
+  assert.equal(afterFull.docs[0].id, created.docs[0].id, 'debe ser el mismo documento')
+  assert.equal(afterFull.docs[0].mac, 'AA:BB:CC:DD:EE:77')
+  assert.equal(afterFull.docs[0].alias, 'Notebook de Gervasio')
+  assert.equal(afterFull.docs[0].identified, true)
+  assert.equal(afterFull.docs[0].status, 'retired', 'retired es sticky, un scan nuevo no lo revive')
+})
+
 test('POST /v1/reports NO rechaza un host sin mac/vendor/hostname resueltos', async () => {
   // Caso real: nmap manda "" (no null) para mac/vendor/hostname cuando el host está fuera del
   // segmento L2 del agente (notebooks/celulares por WiFi en otro subnet) — doc 05 §5.1 los marca

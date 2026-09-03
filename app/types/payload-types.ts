@@ -293,7 +293,32 @@ export interface Asset {
     name?: string | null;
     accuracy?: number | null;
     cpe?: string[] | null;
+    osfamily?: string | null;
+    osgen?: string | null;
+    vendor?: string | null;
   };
+  os_candidates?:
+    | {
+        name?: string | null;
+        accuracy?: number | null;
+        cpe?: string[] | null;
+        osfamily?: string | null;
+        osgen?: string | null;
+        vendor?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  os_status?: ('identified' | 'indeterminate') | null;
+  state_reason?: string | null;
+  host_scripts?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   services?:
     | {
         port?: number | null;
@@ -304,6 +329,19 @@ export interface Asset {
         version?: string | null;
         extra_info?: string | null;
         cpe?: string | null;
+        reason?: string | null;
+        detection_method?: string | null;
+        confidence?: number | null;
+        tunnel?: string | null;
+        scripts?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
         id?: string | null;
       }[]
     | null;
@@ -715,7 +753,24 @@ export interface AssetsSelect<T extends boolean = true> {
         name?: T;
         accuracy?: T;
         cpe?: T;
+        osfamily?: T;
+        osgen?: T;
+        vendor?: T;
       };
+  os_candidates?:
+    | T
+    | {
+        name?: T;
+        accuracy?: T;
+        cpe?: T;
+        osfamily?: T;
+        osgen?: T;
+        vendor?: T;
+        id?: T;
+      };
+  os_status?: T;
+  state_reason?: T;
+  host_scripts?: T;
   services?:
     | T
     | {
@@ -727,6 +782,11 @@ export interface AssetsSelect<T extends boolean = true> {
         version?: T;
         extra_info?: T;
         cpe?: T;
+        reason?: T;
+        detection_method?: T;
+        confidence?: T;
+        tunnel?: T;
+        scripts?: T;
         id?: T;
       };
   identified?: T;
