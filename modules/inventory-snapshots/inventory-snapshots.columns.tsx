@@ -1,15 +1,15 @@
-import Link from 'next/link';
-import type { ColumnDef } from '@tanstack/react-table';
-import { ActionIcon, Tooltip } from '@mantine/core';
-import { Eye } from 'lucide-react';
-import type { InventorySnapshot } from '@/app/types/payload-types';
-import { formatDateTime } from '@/lib/format-date';
+import Link from 'next/link'
+import type { ColumnDef } from '@tanstack/react-table'
+import { ActionIcon, Tooltip } from '@mantine/core'
+import { Eye } from 'lucide-react'
+import type { InventorySnapshot } from '@/app/types/payload-types'
+import { formatDateTime } from '@/lib/format-date'
 
 const GENERATED_BY_LABEL: Record<string, string> = {
   manual: 'Manual',
   scheduled: 'Scheduled',
   pre_audit: 'Pre-audit',
-};
+}
 
 export const inventorySnapshotsColumns: ColumnDef<InventorySnapshot, unknown>[] = [
   {
@@ -33,10 +33,15 @@ export const inventorySnapshotsColumns: ColumnDef<InventorySnapshot, unknown>[] 
     size: 48,
     cell: ({ row }) => (
       <Tooltip label="View snapshot">
-        <ActionIcon component={Link} href={`/portal/inventory/snapshots/${row.original.id}`} variant="light" size="md">
+        <ActionIcon
+          component={Link}
+          href={`/portal/inventory/snapshots/${row.original.id}`}
+          variant="light"
+          size="md"
+        >
           <Eye size={16} strokeWidth={1.5} />
         </ActionIcon>
       </Tooltip>
     ),
   },
-];
+]

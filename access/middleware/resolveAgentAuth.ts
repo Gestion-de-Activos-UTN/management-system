@@ -31,13 +31,12 @@ export interface AgentAuthDeps {
 }
 
 const API_KEY_PREFIX_LENGTH = 8
-const MAX_FAILED_ATTEMPTS = 5
 
 // Resuelve identidad del canal Scanner↔Platform (token estático por Agent), análogo pero DISTINTO
 // del TenantResolver de usuarios humanos (Auth0), ver documentation/02-core-interfaces.md.
 export async function resolveAgentAuth(
   headers: AgentAuthHeaders,
-  deps: AgentAuthDeps,
+  deps: AgentAuthDeps
 ): Promise<AgentAuthResult> {
   const token = headers.authorization?.replace(/^Bearer\s+/i, '').trim()
   if (!token) throw new AgentAuthError('missing bearer token')
@@ -48,9 +47,6 @@ export async function resolveAgentAuth(
 
   const isValid = await bcrypt.compare(token, agent.apiKeyHash)
   if (!isValid) {
-    // El umbral se aplica acá (recordFailedAttempt pone is_active=false al llegar a
-    // MAX_FAILED_ATTEMPTS) — este intento sigue siendo "invalid token", el que revela
-    // que quedó revocado es el siguiente request, vía el chequeo de is_active debajo.
     await deps.recordFailedAttempt(agent.id, agent.failedAttempts + 1)
     throw new AgentAuthError('invalid token')
   }
@@ -97,10 +93,8 @@ export function createPayloadAgentAuthDeps(payload: Payload): AgentAuthDeps {
         collection: 'agents',
         id: agentId,
         overrideAccess: true,
-        data: {
-          failedAttempts,
-          ...(failedAttempts >= MAX_FAILED_ATTEMPTS ? { is_active: false } : {}),
-        },
+        // Registrar el abuso sin permitir que un tercero revoque el agente provocando errores.
+        data: { failedAttempts },
       })
     },
     async resetAttempts(agentId) {

@@ -3,11 +3,13 @@ import { relationId } from '@/lib/relationId'
 import { computeRiskScore } from './computeRiskScore'
 
 export type SnapshotTrigger =
-  | { type: 'manual'; userId: string }
-  | { type: 'scheduled' }
-  | { type: 'pre_audit' }
+  { type: 'manual'; userId: string } | { type: 'scheduled' } | { type: 'pre_audit' }
 
-export async function createInventorySnapshot(payload: Payload, officeId: string, triggeredBy: SnapshotTrigger) {
+export async function createInventorySnapshot(
+  payload: Payload,
+  officeId: string,
+  triggeredBy: SnapshotTrigger
+) {
   const office = await payload.findByID({
     collection: 'offices',
     id: officeId,
@@ -60,10 +62,10 @@ export async function createInventorySnapshot(payload: Payload, officeId: string
   // numerador) sin ningún fundamento real, no es "menos riesgo" solo por cargar más licencias a
   // mano. Corresponde resolverlo cuando exista el algoritmo real (RF-30, fuera de alcance hoy),
   // no forzarlo acá con la heurística placeholder.
-  // TODO(risk-engine): cuando el risk score real (RF-30) tenga granularidad por-asset, excluir
-  // de networkAssetsDump/el cálculo los assets con identified === false — un activo detectado
-  // pero no confirmado por un humano no debería pesar en el score todavía.
-  const riskScoreGlobal = computeRiskScore(networkAssetsDump)
+  // Un activo detectado pero no confirmado por un humano (identified === false) no debería pesar
+  // en el score: incluye tanto los nunca identificados como los que se des-identificaron después
+  // (ver endpoints/assetUnidentify.ts) — su criticality/owner quedan guardados pero no cuentan acá.
+  const riskScoreGlobal = computeRiskScore(networkAssetsDump.filter(a => a.identified))
 
   const snapshot = await payload.create({
     collection: 'inventory-snapshots',

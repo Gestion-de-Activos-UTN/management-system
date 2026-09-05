@@ -54,7 +54,7 @@ export const OrganizationSettings: CollectionConfig = {
       name: 'snapshot_interval_days',
       type: 'number',
       admin: {
-        condition: (data) => !data?.snapshot_before_each_scan,
+        condition: data => !data?.snapshot_before_each_scan,
       },
     },
   ],

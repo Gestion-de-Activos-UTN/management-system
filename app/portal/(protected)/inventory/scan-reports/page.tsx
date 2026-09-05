@@ -1,15 +1,15 @@
-'use client';
+'use client'
 
-import { useSearchParams } from 'next/navigation';
-import { Stack } from '@mantine/core';
-import { DataTable } from '@/components/ui/DataTable';
-import { PageHeader } from '@/components/ui/PageHeader';
-import { useScanReportsList } from '@/modules/scan-reports/hooks/use-scan-reports';
-import { scanReportsColumns } from '@/modules/scan-reports/scan-reports.columns';
+import { useSearchParams } from 'next/navigation'
+import { Stack } from '@mantine/core'
+import { DataTable } from '@/components/ui/DataTable'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { useScanReportsList } from '@/modules/scan-reports/hooks/use-scan-reports'
+import { scanReportsColumns } from '@/modules/scan-reports/scan-reports.columns'
 
 export default function ScanReportsPage() {
-  const asOrganization = useSearchParams().get('asOrganization') ?? undefined;
-  const { data, isPending } = useScanReportsList(asOrganization);
+  const asOrganization = useSearchParams().get('asOrganization') ?? undefined
+  const { data, isPending } = useScanReportsList(asOrganization)
 
   return (
     <Stack gap="md">
@@ -25,5 +25,5 @@ export default function ScanReportsPage() {
         minWidth={760}
       />
     </Stack>
-  );
+  )
 }

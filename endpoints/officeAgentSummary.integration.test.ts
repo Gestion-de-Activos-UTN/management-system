@@ -20,6 +20,16 @@ async function seedTenant(payload: Payload) {
     data: { name: `Org ${Math.random()}` },
     overrideAccess: true,
   })
+  await payload.create({
+    collection: 'subscriptions',
+    data: {
+      organization: organization.id,
+      level: 'basic',
+      max_active_agents: 3,
+      user_limits: { org_admin: 1, office_manager: 2, org_viewer: 4 },
+    },
+    overrideAccess: true,
+  })
   const office = await payload.create({
     collection: 'offices',
     data: { organization: organization.id, name: 'Oficina Test', is_active: true },
@@ -45,12 +55,22 @@ async function seedTenant(payload: Payload) {
     existingRole.docs[0] ??
     (await payload.create({
       collection: 'roles',
-      data: { slug: 'org_admin', name: 'org_admin', rank: 2, scope: 'organization', is_platform_role: false },
+      data: {
+        slug: 'org_admin',
+        name: 'org_admin',
+        rank: 2,
+        scope: 'organization',
+        is_platform_role: false,
+      },
       overrideAccess: true,
     }))
   const user = await payload.create({
     collection: 'users',
-    data: { name: 'Test User', email: `u-${Math.random().toString(36).slice(2)}@test.local`, password: 'x'.repeat(12) },
+    data: {
+      name: 'Test User',
+      email: `u-${Math.random().toString(36).slice(2)}@test.local`,
+      password: 'x'.repeat(12),
+    },
     overrideAccess: true,
   })
   await payload.create({
@@ -79,7 +99,7 @@ test('GET /v1/offices/agent-summary: 200 resume agentes solo de las offices en a
   const { office, user } = await seedTenant(payload)
 
   const res = await officeAgentSummaryEndpoint.handler(
-    fakeRequest(payload, { user: { id: String(user.id), collection: 'users' } }),
+    fakeRequest(payload, { user: { id: String(user.id), collection: 'users' } })
   )
   assert.equal(res.status, 200)
   const body = await res.json()

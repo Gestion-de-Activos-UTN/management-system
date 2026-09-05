@@ -1,4 +1,4 @@
-// SIAM brand mark, from siam-logo.svg. Defaults to its own pine gradient
+// SIAM brand mark, from public/brand/siam-logo.svg. Defaults to its own pine gradient
 // (for light surfaces, e.g. the header); pass `color` for a flat fill —
 // the gradient's dark end has poor contrast on the dark pine login panel.
 // Actual artwork bounding box is x:[27,143] y:[28,197] — not centered in the

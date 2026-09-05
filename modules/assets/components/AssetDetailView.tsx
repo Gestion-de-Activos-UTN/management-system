@@ -29,10 +29,11 @@ import { formatDateTime } from '@/lib/format-date'
 import type { Asset } from '@/app/types/payload-types'
 import { AssetBusinessFieldsSchema, type AssetBusinessFields } from '../schema'
 import { useUpdateAsset } from '../hooks/use-update-asset'
+import { useUnidentifyAsset } from '../hooks/use-unidentify-asset'
 import { useMarkAssetViewed } from '../hooks/use-mark-asset-viewed'
 import { useMarkAssetChangesViewed } from '../hooks/use-mark-asset-changes-viewed'
-import { useIdentifyAsset } from '../hooks/use-identify-asset'
-import { BadgeCheck, Lock } from 'lucide-react'
+import { BadgeCheck, Lock, Undo2 } from 'lucide-react'
+import { AssetIdentificationModal } from './AssetIdentificationModal'
 import {
   DEVICE_CATEGORY_HELP,
   DEVICE_CATEGORY_LABEL,
@@ -138,7 +139,12 @@ function OsCandidatesRow({ candidates }: { candidates: Asset['os_candidates'] })
       <Text size="sm" c="dimmed">
         OS candidates
       </Text>
-      <List size="sm" spacing={2} style={{ flex: '1 1 220px', textAlign: 'right' }} listStyleType="none">
+      <List
+        size="sm"
+        spacing={2}
+        style={{ flex: '1 1 220px', textAlign: 'right' }}
+        listStyleType="none"
+      >
         {list.map((candidate: OsCandidate, i: number) => (
           <List.Item key={candidate.id ?? i}>
             <TechnicalText>
@@ -297,7 +303,11 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
                     <Table.Td>{service.version || '—'}</Table.Td>
                     <Table.Td>
                       <Group gap={4} wrap="nowrap">
-                        <Badge variant={service.detection_method === 'probed' ? 'filled' : 'outline'} color="pine" size="sm">
+                        <Badge
+                          variant={service.detection_method === 'probed' ? 'filled' : 'outline'}
+                          color="pine"
+                          size="sm"
+                        >
                           {service.detection_method || 'table'}
                         </Badge>
                         {service.tunnel === 'ssl' && (
@@ -315,7 +325,9 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
                     <Table.Td>
                       {scripts ? (
                         <Spoiler maxHeight={0} showLabel="View" hideLabel="Hide">
-                          <TechnicalText style={{ whiteSpace: 'pre-wrap' }}>{scripts}</TechnicalText>
+                          <TechnicalText style={{ whiteSpace: 'pre-wrap' }}>
+                            {scripts}
+                          </TechnicalText>
                         </Spoiler>
                       ) : (
                         '—'
@@ -344,9 +356,11 @@ export function AssetDetailView({
 }) {
   const { data: members } = useOrgMembers(asOrganization)
   const updateAsset = useUpdateAsset(asset.id)
+  const unidentifyAsset = useUnidentifyAsset()
   const markViewed = useMarkAssetViewed(asset.id)
   const markChangesViewed = useMarkAssetChangesViewed(asset.id)
-  const identify = useIdentifyAsset()
+  const [identificationOpen, setIdentificationOpen] = useState(false)
+  const [unidentifyConfirmOpen, setUnidentifyConfirmOpen] = useState(false)
 
   // Ref, no un simple `if` en el render: evita reintentar en cada re-render mientras la mutation
   // está en vuelo (React StrictMode/HMR puede montar el efecto dos veces en dev) — el guard real
@@ -365,7 +379,10 @@ export function AssetDetailView({
   // por eso el guard trackea el valor puntual ya procesado, no un boolean "ya intentado".
   const lastMarkedChangedAt = useRef<string | null>(null)
   useEffect(() => {
-    if (asset.technical_changed_at != null && lastMarkedChangedAt.current !== asset.technical_changed_at) {
+    if (
+      asset.technical_changed_at != null &&
+      lastMarkedChangedAt.current !== asset.technical_changed_at
+    ) {
       lastMarkedChangedAt.current = asset.technical_changed_at
       markChangesViewed.mutate()
     }
@@ -375,6 +392,7 @@ export function AssetDetailView({
   const {
     control,
     handleSubmit,
+    reset,
     formState: { isDirty, dirtyFields, errors },
   } = useForm<AssetBusinessFields>({
     resolver: zodResolver(AssetBusinessFieldsSchema),
@@ -387,15 +405,32 @@ export function AssetDetailView({
     },
   })
 
-  // Solo los campos que el usuario tocó, nunca el objeto completo: `defaultValues` se fija una
-  // sola vez al montar y no se resincroniza si `asset` cambia después (ej. un re-scan que llega
-  // mientras la página está abierta) — mandar todo el formulario reenviaría un `status` (u otro
-  // campo de negocio) desactualizado y pisaría en silencio un cambio hecho por otro lado (bug
-  // reportado: un asset retirado volvía a "active" al guardar un edit no relacionado).
+  // `defaultValues` se fija una sola vez al montar y no se resincroniza sola si `asset` cambia
+  // después (ej. el modal de identificación guarda, o llega un re-scan mientras la página está
+  // abierta). Resincronizamos a mano, pero solo cuando el usuario no tiene ediciones sin guardar
+  // (`!isDirty`) para no pisar un cambio en progreso.
+  useEffect(() => {
+    if (isDirty) return
+    reset({
+      alias: asset.alias ?? null,
+      criticality: asset.criticality ?? null,
+      owner: typeof asset.owner === 'string' ? asset.owner : (asset.owner?.id ?? null),
+      location: asset.location ?? null,
+      status: asset.status ?? 'active',
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [asset.alias, asset.criticality, asset.owner, asset.location, asset.status])
+
+  // Solo los campos que el usuario tocó, nunca el objeto completo: mandar todo el formulario
+  // reenviaría un `status` (u otro campo de negocio) desactualizado y pisaría en silencio un
+  // cambio hecho por otro lado (bug reportado: un asset retirado volvía a "active" al guardar
+  // un edit no relacionado).
   const onSubmit = handleSubmit(data => {
     const dirtyKeys = Object.keys(dirtyFields) as Array<keyof AssetBusinessFields>
     if (dirtyKeys.length === 0) return
-    const changed = Object.fromEntries(dirtyKeys.map(key => [key, data[key]])) as Partial<AssetBusinessFields>
+    const changed = Object.fromEntries(
+      dirtyKeys.map(key => [key, data[key]])
+    ) as Partial<AssetBusinessFields>
     updateAsset.mutate(changed)
   })
 
@@ -406,17 +441,68 @@ export function AssetDetailView({
           title={asset.hostname || asset.alias || asset.ip || asset.asset_id}
           description="Read-only technical block (discovered by the scanner) plus editable business fields."
         />
-        <Button
-          variant={asset.identified ? 'light' : 'filled'}
-          color="pine"
-          leftSection={<BadgeCheck size={16} strokeWidth={1.5} />}
-          loading={identify.isPending}
-          onClick={() => identify.mutate({ id: asset.id, identified: !asset.identified })}
-          w={{ base: '100%', sm: 'auto' }}
-        >
-          {asset.identified ? 'Mark as not identified' : 'Mark as identified'}
-        </Button>
+        {asset.identification_status !== 'confirmed' && (
+          <Button
+            variant="filled"
+            color="pine"
+            leftSection={<BadgeCheck size={16} strokeWidth={1.5} />}
+            onClick={() => setIdentificationOpen(true)}
+            w={{ base: '100%', sm: 'auto' }}
+          >
+            Identify asset
+          </Button>
+        )}
+        {asset.identification_status === 'confirmed' && (
+          <Button
+            variant="subtle"
+            color="red"
+            leftSection={<Undo2 size={16} strokeWidth={1.5} />}
+            onClick={() => setUnidentifyConfirmOpen(true)}
+            w={{ base: '100%', sm: 'auto' }}
+          >
+            Remove identification
+          </Button>
+        )}
       </Group>
+
+      <AssetIdentificationModal
+        asset={asset}
+        members={members ?? []}
+        opened={identificationOpen}
+        onClose={() => setIdentificationOpen(false)}
+      />
+
+      <Modal
+        opened={unidentifyConfirmOpen}
+        onClose={() => setUnidentifyConfirmOpen(false)}
+        title="Remove identification"
+        centered
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            This asset will go back to &quot;not identified&quot;. Owner, criticality, alias and
+            location stay saved (so they prepopulate if you identify it again), but they will stop
+            counting in risk calculations until then.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setUnidentifyConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              color="red"
+              loading={unidentifyAsset.isPending}
+              onClick={() =>
+                unidentifyAsset.mutate(
+                  { id: asset.id },
+                  { onSuccess: () => setUnidentifyConfirmOpen(false) }
+                )
+              }
+            >
+              Remove identification
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
 
       <Card withBorder padding="lg">
         <Stack gap="xs">
@@ -468,7 +554,7 @@ export function AssetDetailView({
 
       <Divider label="Business data" />
 
-      {!asset.identified && (
+      {asset.identification_status !== 'confirmed' && (
         <Alert color="yellow" variant="light">
           This asset hasn&apos;t been identified yet. Confirm it as identified to edit its business
           fields.
@@ -489,7 +575,7 @@ export function AssetDetailView({
                 <TextInput
                   label="Alias"
                   maxLength={120}
-                  disabled={!asset.identified}
+                  disabled={asset.identification_status !== 'confirmed'}
                   // El slice es la barrera real: `maxLength` nativo ya bloquea el tipeo pero no
                   // un paste que lo supere en algunos navegadores/versiones — sin esto, un paste
                   // largo se guardaría completo en el estado de RHF aunque el input se vea corto.
@@ -506,7 +592,7 @@ export function AssetDetailView({
                 <Select
                   label="Criticality"
                   data={CRITICALITY_OPTIONS}
-                  disabled={!asset.identified}
+                  disabled={asset.identification_status !== 'confirmed'}
                   value={field.value ?? null}
                   onChange={field.onChange}
                   clearable
@@ -523,9 +609,9 @@ export function AssetDetailView({
                   placeholder="Unassigned"
                   data={(members ?? []).map(m => ({
                     value: m.id,
-                    label: `${m.name} (${m.email})`,
+                    label: m.name || m.email,
                   }))}
-                  disabled={!asset.identified}
+                  disabled={asset.identification_status !== 'confirmed'}
                   value={field.value ?? null}
                   onChange={field.onChange}
                   searchable
@@ -541,7 +627,7 @@ export function AssetDetailView({
                 <TextInput
                   label="Location"
                   maxLength={200}
-                  disabled={!asset.identified}
+                  disabled={asset.identification_status !== 'confirmed'}
                   value={field.value ?? ''}
                   onChange={e => field.onChange(e.currentTarget.value.slice(0, 200))}
                   error={errors.location?.message}

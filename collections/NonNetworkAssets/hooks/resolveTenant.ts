@@ -41,7 +41,11 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
 
   // RF-51a: owner obligatorio — validado igual que assertOfficeInScope valida `office`, pero acá
   // necesita I/O (membership real), así que no puede vivir como invariante pura en invariants.ts.
-  const ownerId = data?.owner ? relationId(data.owner) : originalDoc?.owner ? relationId(originalDoc.owner) : null
+  const ownerId = data?.owner
+    ? relationId(data.owner)
+    : originalDoc?.owner
+      ? relationId(originalDoc.owner)
+      : null
   if (ownerId) {
     await assertOwnerBelongsToOrganization(req, ownerId, organizationId)
   }
@@ -49,11 +53,15 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
   // next_review_at se deriva de review_interval: en creación siempre se calcula; en edición
   // solo se recalcula (desde `now`, reiniciando la cuenta) si el intervalo cambió — así una
   // edición de alias/criticality que no toca el intervalo no resetea la cuenta atrás de más.
-  const interval = (data?.review_interval ?? originalDoc?.review_interval ?? 'never') as ReviewInterval
-  const intervalChanged = 'review_interval' in (data ?? {}) && data?.review_interval !== originalDoc?.review_interval
-  const nextReviewAt = !originalDoc || intervalChanged
-    ? computeNextReviewAt(interval, new Date())
-    : originalDoc.next_review_at
+  const interval = (data?.review_interval ??
+    originalDoc?.review_interval ??
+    'never') as ReviewInterval
+  const intervalChanged =
+    'review_interval' in (data ?? {}) && data?.review_interval !== originalDoc?.review_interval
+  const nextReviewAt =
+    !originalDoc || intervalChanged
+      ? computeNextReviewAt(interval, new Date())
+      : originalDoc.next_review_at
 
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {id, office, organization,
   // asset_category, criticality, owner, status}, previous hash for this organization_id)

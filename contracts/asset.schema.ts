@@ -33,6 +33,9 @@ export const OperatingSystemSchema = z.object({
   osfamily: z.string().default(''),
   osgen: z.string().default(''),
   vendor: z.string().default(''),
+  // Clasificación cruda de osclass.type informada por Nmap. Default mantiene compatibilidad
+  // con agentes anteriores que todavía no envían el campo.
+  device_type: z.string().default(''),
 })
 
 // Mapeo 1:1 contra models.py::Asset. .passthrough() = permisivo-en-lectura (doc 08.2):

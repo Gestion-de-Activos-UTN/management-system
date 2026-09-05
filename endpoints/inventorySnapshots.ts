@@ -16,7 +16,7 @@ function json(body: unknown, status = 200) {
 export const generateInventorySnapshotEndpoint: Endpoint = {
   path: '/v1/inventory-snapshots/generate',
   method: 'post',
-  handler: async (req) => {
+  handler: async req => {
     const ctx = await getTenantContext(req)
     if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
     if (!canDo(ctx.role, 'inventory-snapshots', 'create', ctx.organizationId)) {

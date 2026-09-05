@@ -23,6 +23,7 @@ import { vendorEndpoint } from './endpoints/vendor'
 import { sessionEndpoint } from './endpoints/session'
 import { nonNetworkAssetReviewEndpoint } from './endpoints/nonNetworkAssetReview'
 import { assetIdentifyEndpoint } from './endpoints/assetIdentify'
+import { assetUnidentifyEndpoint } from './endpoints/assetUnidentify'
 import { agingSweepEndpoint } from './endpoints/internalJobs'
 import { generateInventorySnapshotEndpoint } from './endpoints/inventorySnapshots'
 import { orgMembersEndpoint } from './endpoints/orgMembers'
@@ -33,6 +34,7 @@ import {
 import { agentProvisioningEndpoint } from './endpoints/agentProvisioning'
 import { officeAgentSummaryEndpoint } from './endpoints/officeAgentSummary'
 import { dashboardMetricsEndpoint } from './endpoints/dashboardMetrics'
+import { agentRevokeEndpoint } from './endpoints/agentRevoke'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -82,6 +84,7 @@ export default buildConfig({
     sessionEndpoint,
     nonNetworkAssetReviewEndpoint,
     assetIdentifyEndpoint,
+    assetUnidentifyEndpoint,
     agingSweepEndpoint,
     generateInventorySnapshotEndpoint,
     orgMembersEndpoint,
@@ -90,6 +93,7 @@ export default buildConfig({
     agentProvisioningEndpoint,
     officeAgentSummaryEndpoint,
     dashboardMetricsEndpoint,
+    agentRevokeEndpoint,
   ],
   typescript: {
     outputFile: path.resolve(dirname, 'app/types/payload-types.ts'),

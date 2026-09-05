@@ -24,14 +24,17 @@ function isAuthorized(req: { headers: Headers }): boolean {
 export const agingSweepEndpoint: Endpoint = {
   path: '/v1/internal/jobs/aging-sweep',
   method: 'post',
-  handler: async (req) => {
+  handler: async req => {
     if (!isAuthorized(req)) return json({ error: 'unauthorized' }, 401)
 
     try {
       const summary = await agingSweep(req.payload)
       return json({ status: 'ok', summary })
     } catch (err) {
-      return json({ status: 'error', message: err instanceof Error ? err.message : String(err) }, 500)
+      return json(
+        { status: 'error', message: err instanceof Error ? err.message : String(err) },
+        500
+      )
     }
   },
 }

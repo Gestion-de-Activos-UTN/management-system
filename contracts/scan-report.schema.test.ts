@@ -70,7 +70,7 @@ test('un reporte viejo sin scan_mode/scan_mode_reason default a full/null', () =
 
 test('acepta scan_mode degraded con su razón', () => {
   const parsed = ScanReportPayloadSchema.parse(
-    buildReport({ scan_mode: 'degraded', scan_mode_reason: 'sin permisos root para raw sockets' }),
+    buildReport({ scan_mode: 'degraded', scan_mode_reason: 'sin permisos root para raw sockets' })
   )
   assert.equal(parsed.scan_mode, 'degraded')
   assert.equal(parsed.scan_mode_reason, 'sin permisos root para raw sockets')
@@ -84,7 +84,7 @@ test('un reporte viejo sin gateway_ip/gateway_mac default a null', () => {
 
 test('acepta gateway_ip/gateway_mac cuando el agente pudo resolverlos', () => {
   const parsed = ScanReportPayloadSchema.parse(
-    buildReport({ gateway_ip: '192.168.0.1', gateway_mac: 'AA:BB:CC:DD:EE:FF' }),
+    buildReport({ gateway_ip: '192.168.0.1', gateway_mac: 'AA:BB:CC:DD:EE:FF' })
   )
   assert.equal(parsed.gateway_ip, '192.168.0.1')
   assert.equal(parsed.gateway_mac, 'AA:BB:CC:DD:EE:FF')

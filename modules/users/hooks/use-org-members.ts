@@ -1,8 +1,8 @@
-'use client';
+'use client'
 
-import { useListQuery } from '@/lib/use-list-query';
-import { listOrgMembers } from '../service';
+import { useListQuery } from '@/lib/use-list-query'
+import { listOrgMembers } from '../service'
 
 export function useOrgMembers(asOrganization?: string) {
-  return useListQuery('org-members', () => listOrgMembers({ asOrganization }), [asOrganization]);
+  return useListQuery('org-members', () => listOrgMembers({ asOrganization }), [asOrganization])
 }

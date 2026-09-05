@@ -2,8 +2,8 @@ import type { ColumnDef } from '@tanstack/react-table'
 import type { Office } from '@/app/types/payload-types'
 import { activeStatusColumn } from '@/components/ui/activeStatusColumn'
 import { TechnicalText } from '@/components/ui/TechnicalText'
-import { ActionIcon, Badge, Tooltip } from '@mantine/core'
-import { Download } from 'lucide-react'
+import { Badge, Button, Tooltip } from '@mantine/core'
+import { Download, Settings2 } from 'lucide-react'
 import { getOfficeScannerStatus, type OfficeAgentSummary } from '@/endpoints/officeAgentSummary'
 
 function organizationLabel(office: Office) {
@@ -90,18 +90,29 @@ export function getOfficesColumns(
     {
       id: 'actions',
       header: '',
-      size: 64,
-      cell: ({ row }) => (
-        <Tooltip label="Install scanner">
-          <ActionIcon
-            variant="light"
-            aria-label={`Install scanner for ${row.original.name}`}
+      size: 120,
+      meta: { align: 'center' },
+      cell: ({ row }) => {
+        const summary = summaryByOffice.get(String(row.original.id))
+        const hasAgents = (summary?.total ?? 0) > 0
+        return (
+          <Button
+            size="xs"
+            variant="subtle"
+            leftSection={
+              hasAgents ? (
+                <Settings2 size={15} strokeWidth={1.5} />
+              ) : (
+                <Download size={15} strokeWidth={1.5} />
+              )
+            }
+            aria-label={`${hasAgents ? 'Manage scanners' : 'Install scanner'} for ${row.original.name}`}
             onClick={() => onProvision(row.original)}
           >
-            <Download size={16} strokeWidth={1.5} />
-          </ActionIcon>
-        </Tooltip>
-      ),
+            {hasAgents ? 'Manage' : 'Install'}
+          </Button>
+        )
+      },
     },
   ]
 }

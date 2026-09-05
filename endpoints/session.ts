@@ -13,7 +13,7 @@ function json(body: unknown, status = 200) {
 export const sessionEndpoint: Endpoint = {
   path: '/v1/session',
   method: 'get',
-  handler: async (req) => {
+  handler: async req => {
     const ctx = await getTenantContext(req)
     if (!ctx) return json({ error: 'unauthenticated' }, 401)
     return json(ctx)

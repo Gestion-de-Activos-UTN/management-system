@@ -1,4 +1,8 @@
-import type { CollectionBeforeChangeHook, CollectionBeforeDeleteHook, PayloadRequest } from 'payload'
+import type {
+  CollectionBeforeChangeHook,
+  CollectionBeforeDeleteHook,
+  PayloadRequest,
+} from 'payload'
 import { assertNoRankEscalation, assertNotLastActiveOrgAdmin, isProtectedRole } from '../invariants'
 import { relationId } from '@/lib/relationId'
 
@@ -24,7 +28,7 @@ async function countOtherActiveOrgAdmins(
   req: PayloadRequest,
   organizationId: string,
   excludeMembershipId: string,
-  orgAdminRoleId: string,
+  orgAdminRoleId: string
 ): Promise<number> {
   const result = await req.payload.find({
     collection: 'organization-memberships',
@@ -67,7 +71,7 @@ async function enforceLastActiveOrgAdminInvariant(
   req: PayloadRequest,
   organizationId: string,
   membershipId: string,
-  roleId: string,
+  roleId: string
 ): Promise<void> {
   const role = await req.payload.findByID({
     collection: 'roles',
@@ -78,7 +82,12 @@ async function enforceLastActiveOrgAdminInvariant(
   })
   if (!isProtectedRole(role.slug)) return
 
-  const countAfter = await countOtherActiveOrgAdmins(req, organizationId, membershipId, String(role.id))
+  const countAfter = await countOtherActiveOrgAdmins(
+    req,
+    organizationId,
+    membershipId,
+    String(role.id)
+  )
   assertNotLastActiveOrgAdmin(countAfter)
 }
 
@@ -96,7 +105,7 @@ export const blockLastActiveOrgAdminOnUpdate: CollectionBeforeChangeHook = async
     req,
     relationId(originalDoc.organization),
     String(originalDoc.id),
-    relationId(originalDoc.role),
+    relationId(originalDoc.role)
   )
   return data
 }
@@ -112,5 +121,10 @@ export const blockLastActiveOrgAdminOnDelete: CollectionBeforeDeleteHook = async
   })
   if (!doc.is_active) return
 
-  await enforceLastActiveOrgAdminInvariant(req, relationId(doc.organization), String(doc.id), relationId(doc.role))
+  await enforceLastActiveOrgAdminInvariant(
+    req,
+    relationId(doc.organization),
+    String(doc.id),
+    relationId(doc.role)
+  )
 }

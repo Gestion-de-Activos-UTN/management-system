@@ -2,7 +2,17 @@
 
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Button, Card, Checkbox, Divider, Group, Select, Skeleton, Stack, Text } from '@mantine/core'
+import {
+  Button,
+  Card,
+  Checkbox,
+  Divider,
+  Group,
+  Select,
+  Skeleton,
+  Stack,
+  Text,
+} from '@mantine/core'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useOrganizationSettings } from '@/modules/organization-settings/hooks/use-organization-settings'
 import { useSaveOrganizationSettings } from '@/modules/organization-settings/hooks/use-save-organization-settings'
@@ -64,7 +74,14 @@ function SettingsForm({
   onSave: (values: OrganizationSettingsFormValues) => void
   saving: boolean
 }) {
-  const { control, handleSubmit, watch, setValue, getValues, formState: { errors } } = useForm<OrganizationSettingsFormValues>({
+  const {
+    control,
+    handleSubmit,
+    watch,
+    setValue,
+    getValues,
+    formState: { errors },
+  } = useForm<OrganizationSettingsFormValues>({
     resolver: zodResolver(OrganizationSettingsFormSchema),
     defaultValues: initial,
   })

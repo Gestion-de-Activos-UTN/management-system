@@ -5,8 +5,10 @@ import { z } from 'zod'
 export const HeartbeatPayloadSchema = z
   .object({
     agent_id: z.string(),
-    status: z.string(),
-    timestamp: z.string(),
+    // Agentes viejos podían mandar cualquier texto; los valores desconocidos se conservan como
+    // `unknown` en vez de romper el canal durante una actualización gradual.
+    status: z.enum(['idle', 'scanning', 'unknown']).catch('unknown'),
+    timestamp: z.iso.datetime({ offset: true }),
   })
   .passthrough()
 

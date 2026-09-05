@@ -19,12 +19,12 @@ function makePayload(overrides: { roleDocs?: unknown[] } = {}) {
       },
       async commitTransaction(id: string) {
         calls.push('commitTransaction')
-        const tx = transactions.find((t) => t.id === id)
+        const tx = transactions.find(t => t.id === id)
         if (tx) tx.committed = true
       },
       async rollbackTransaction(id: string) {
         calls.push('rollbackTransaction')
-        const tx = transactions.find((t) => t.id === id)
+        const tx = transactions.find(t => t.id === id)
         if (tx) tx.rolledBack = true
       },
     },
@@ -70,7 +70,7 @@ test('orden de creación sigue doc 04: organization -> settings+subscription -> 
 
   await createOrgWithAdmin(payload, INPUT)
 
-  const subscription = creates.find((c) => c.collection === 'subscriptions')
+  const subscription = creates.find(c => c.collection === 'subscriptions')
   assert.equal(subscription?.data.level, 'basic')
   assert.equal(typeof subscription?.data.max_offices, 'number')
   assert.ok(subscription?.data.user_limits && typeof subscription.data.user_limits === 'object')

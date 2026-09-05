@@ -26,7 +26,9 @@ function makeAsset(overrides: Partial<AssetPayload> = {}): AssetPayload {
   }
 }
 
-function makeService(overrides: Partial<AssetPayload['services'][number]> = {}): AssetPayload['services'][number] {
+function makeService(
+  overrides: Partial<AssetPayload['services'][number]> = {}
+): AssetPayload['services'][number] {
   return {
     port: 80,
     protocol: 'tcp',
@@ -45,7 +47,10 @@ function makeService(overrides: Partial<AssetPayload['services'][number]> = {}):
   }
 }
 
-function makeReport(assets: AssetPayload[], overrides: Partial<ScanReportPayload> = {}): ScanReportPayload {
+function makeReport(
+  assets: AssetPayload[],
+  overrides: Partial<ScanReportPayload> = {}
+): ScanReportPayload {
   return {
     report_id: 'r-1',
     agent_id: AUTH.agentId,
@@ -93,7 +98,7 @@ function makePayloadWithDocs(docs: Array<Record<string, unknown>>) {
     async find({ where }: { where: Record<string, { equals?: unknown }> }) {
       const macEquals = where.mac?.equals
       const ipEquals = where.ip?.equals
-      const match = docs.find((doc) => {
+      const match = docs.find(doc => {
         if (macEquals !== undefined && doc.mac !== macEquals) return false
         if (ipEquals !== undefined && doc.ip !== ipEquals) return false
         return true
@@ -102,7 +107,7 @@ function makePayloadWithDocs(docs: Array<Record<string, unknown>>) {
     },
     async update({ id, data }: { id: unknown; data: Record<string, unknown> }) {
       updates.push({ id, data })
-      const doc = docs.find((d) => d.id === id)
+      const doc = docs.find(d => d.id === id)
       if (doc) Object.assign(doc, data)
       return { id }
     },
@@ -137,7 +142,11 @@ test('reconciliación degradado→full: mismo dispositivo por ip, no duplica ni 
   }
   const { payload, updates, creates } = makePayloadWithDocs([existingDoc])
 
-  await ingestScanReport(payload, makeReport([makeAsset({ ip: '10.0.0.5', mac: 'AA:BB:CC:DD:EE:01' })]), AUTH)
+  await ingestScanReport(
+    payload,
+    makeReport([makeAsset({ ip: '10.0.0.5', mac: 'AA:BB:CC:DD:EE:01' })]),
+    AUTH
+  )
 
   assert.equal(creates.length, 0)
   assert.equal(updates.length, 1)
@@ -192,7 +201,11 @@ test('ip reasignada por DHCP a un dispositivo con otra mac: no reconcilia, crea 
   }
   const { payload, updates, creates } = makePayloadWithDocs([existingDoc])
 
-  await ingestScanReport(payload, makeReport([makeAsset({ ip: '10.0.0.5', mac: 'FF:FF:FF:FF:FF:FF' })]), AUTH)
+  await ingestScanReport(
+    payload,
+    makeReport([makeAsset({ ip: '10.0.0.5', mac: 'FF:FF:FF:FF:FF:FF' })]),
+    AUTH
+  )
 
   assert.equal(updates.length, 0)
   assert.equal(creates.length, 1)
@@ -215,7 +228,11 @@ test('not-null-wins: un scan degraded (mac/vendor/hostname vacíos) no borra el 
   }
   const { payload, updates } = makePayload(existingDoc)
 
-  await ingestScanReport(payload, makeReport([makeAsset({ mac: '', vendor: '', hostname: '' })]), AUTH)
+  await ingestScanReport(
+    payload,
+    makeReport([makeAsset({ mac: '', vendor: '', hostname: '' })]),
+    AUTH
+  )
 
   assert.equal(updates.length, 1)
   assert.equal(updates[0].mac, 'AA:BB:CC:DD:EE:FF')
@@ -232,7 +249,18 @@ test('dinámico (ip/services): siempre se sobreescribe aunque venga "menos lleno
     hostname: null,
     os: null,
     ip: '10.0.0.1',
-    services: [{ port: 80, protocol: 'tcp', state: 'open', name: 'http', product: '', version: '', extra_info: '', cpe: '' }],
+    services: [
+      {
+        port: 80,
+        protocol: 'tcp',
+        state: 'open',
+        name: 'http',
+        product: '',
+        version: '',
+        extra_info: '',
+        cpe: '',
+      },
+    ],
     gateway_ip: null,
     gateway_mac: null,
     status: 'active',
@@ -301,8 +329,22 @@ test('os_status: indeterminate si el candidato principal no llega al 85%', async
 
   await ingestScanReport(
     payload,
-    makeReport([makeAsset({ os_candidates: [{ name: 'Linux', accuracy: 60, cpe: [], osfamily: 'Linux', osgen: '', vendor: '' }] })]),
-    AUTH,
+    makeReport([
+      makeAsset({
+        os_candidates: [
+          {
+            name: 'Linux',
+            accuracy: 60,
+            cpe: [],
+            osfamily: 'Linux',
+            osgen: '',
+            vendor: '',
+            device_type: '',
+          },
+        ],
+      }),
+    ]),
+    AUTH
   )
 
   assert.equal(creates[0].os_status, 'indeterminate')
@@ -313,8 +355,22 @@ test('os_status: identified cuando el candidato principal supera el umbral (crea
 
   await ingestScanReport(
     payload,
-    makeReport([makeAsset({ os_candidates: [{ name: 'Linux', accuracy: 95, cpe: [], osfamily: 'Linux', osgen: '', vendor: '' }] })]),
-    AUTH,
+    makeReport([
+      makeAsset({
+        os_candidates: [
+          {
+            name: 'Linux',
+            accuracy: 95,
+            cpe: [],
+            osfamily: 'Linux',
+            osgen: '',
+            vendor: '',
+            device_type: '',
+          },
+        ],
+      }),
+    ]),
+    AUTH
   )
 
   assert.equal(creates[0].os_status, 'identified')
@@ -328,7 +384,17 @@ test('os_candidates viaja con la misma política identidad que os: un scan sin o
     vendor: null,
     hostname: null,
     os: { name: 'Linux', accuracy: 95, cpe: [] },
-    os_candidates: [{ id: 'row-1', name: 'Linux', accuracy: 95, cpe: [], osfamily: 'Linux', osgen: '', vendor: '' }],
+    os_candidates: [
+      {
+        id: 'row-1',
+        name: 'Linux',
+        accuracy: 95,
+        cpe: [],
+        osfamily: 'Linux',
+        osgen: '',
+        vendor: '',
+      },
+    ],
     ip: '10.0.0.1',
     services: [],
     gateway_ip: null,
@@ -365,7 +431,7 @@ test('state_reason y host_scripts se sobreescriben siempre pero no cuentan como 
   await ingestScanReport(
     payload,
     makeReport([makeAsset({ state_reason: 'echo-reply', host_scripts: {} })]),
-    AUTH,
+    AUTH
   )
 
   assert.equal(updates[0].state_reason, 'echo-reply')

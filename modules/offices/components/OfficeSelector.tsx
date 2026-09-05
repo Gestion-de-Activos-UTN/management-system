@@ -1,13 +1,13 @@
-'use client';
+'use client'
 
-import { useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { Select, Skeleton } from '@mantine/core';
-import { useUiStore } from '@/lib/ui-store';
-import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context';
-import { useOfficesList } from '../hooks/use-offices';
+import { useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { Select, Skeleton } from '@mantine/core'
+import { useUiStore } from '@/lib/ui-store'
+import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
+import { useOfficesList } from '../hooks/use-offices'
 
-const ALL_OFFICES = '__all__';
+const ALL_OFFICES = '__all__'
 
 /**
  * Cross-cutting office filter, not a nav destination — lives in the TopBar (see
@@ -19,52 +19,52 @@ const ALL_OFFICES = '__all__';
  * switched ?asOrganization=), the default is re-applied instead of keeping the stale id.
  */
 export function OfficeSelector() {
-  const asOrganization = useSearchParams().get('asOrganization') ?? undefined;
-  const { data: tenantContext, isPending: tenantContextPending } = useTenantContext(asOrganization);
-  const { data: offices, isPending: officesPending } = useOfficesList(asOrganization);
-  const selectedOfficeId = useUiStore((s) => s.selectedOfficeId);
-  const setSelectedOfficeId = useUiStore((s) => s.setSelectedOfficeId);
-  const officeIds = tenantContext?.officeIds ?? [];
+  const asOrganization = useSearchParams().get('asOrganization') ?? undefined
+  const { data: tenantContext, isPending: tenantContextPending } = useTenantContext(asOrganization)
+  const { data: offices, isPending: officesPending } = useOfficesList(asOrganization)
+  const selectedOfficeId = useUiStore(s => s.selectedOfficeId)
+  const setSelectedOfficeId = useUiStore(s => s.setSelectedOfficeId)
+  const officeIds = tenantContext?.officeIds ?? []
 
   useEffect(() => {
-    if (tenantContextPending) return; // officeIds is [] while loading, not "this org has zero offices"
+    if (tenantContextPending) return // officeIds is [] while loading, not "this org has zero offices"
     // selectedOfficeId is persisted across sessions/orgs (lib/ui-store.ts) — if it no longer
     // belongs to the current org's offices (e.g. platform_admin switched ?asOrganization=),
     // re-apply the default instead of keeping a stale/foreign office id selected.
     if (selectedOfficeId !== null && !officeIds.includes(selectedOfficeId)) {
-      setSelectedOfficeId(officeIds.length === 1 ? officeIds[0] : null);
-      return;
+      setSelectedOfficeId(officeIds.length === 1 ? officeIds[0] : null)
+      return
     }
     if (selectedOfficeId === null && officeIds.length === 1) {
-      setSelectedOfficeId(officeIds[0]);
+      setSelectedOfficeId(officeIds[0])
     }
-  }, [tenantContextPending, selectedOfficeId, officeIds, setSelectedOfficeId]);
+  }, [tenantContextPending, selectedOfficeId, officeIds, setSelectedOfficeId])
 
   // Fixed-size skeleton instead of `null` while the offices list is still in flight —
   // the parent layout already blocks on tenant-context before mounting this at all, but
   // this query is separate and would otherwise pop the selector in a beat late, shifting
   // the whole TopBar's width.
   if (officesPending) {
-    return <Skeleton height={34} width={200} radius="sm" />;
+    return <Skeleton height={34} width={200} radius="sm" />
   }
 
   const options = [
     ...(officeIds.length > 1 ? [{ value: ALL_OFFICES, label: 'All Offices' }] : []),
     ...(offices ?? [])
-      .filter((office) => officeIds.includes(String(office.id)))
-      .map((office) => ({ value: String(office.id), label: office.name })),
-  ];
+      .filter(office => officeIds.includes(String(office.id)))
+      .map(office => ({ value: String(office.id), label: office.name })),
+  ]
 
-  if (options.length === 0) return null;
+  if (options.length === 0) return null
 
   return (
     <Select
       placeholder="Office"
       data={options}
       value={selectedOfficeId ?? ALL_OFFICES}
-      onChange={(value) => setSelectedOfficeId(value === ALL_OFFICES ? null : value)}
+      onChange={value => setSelectedOfficeId(value === ALL_OFFICES ? null : value)}
       w={{ base: 138, sm: 200 }}
       size="sm"
     />
-  );
+  )
 }

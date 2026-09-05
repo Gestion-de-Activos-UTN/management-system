@@ -3,10 +3,8 @@
 import { useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { useQueryClient } from '@tanstack/react-query'
 import { useUiStore } from '@/lib/ui-store'
 import {
-  Alert,
   Button,
   Divider,
   Group,
@@ -15,10 +13,9 @@ import {
   SimpleGrid,
   Stack,
   Tabs,
-  Text,
   TextInput,
 } from '@mantine/core'
-import { History, Plus, RefreshCw, Search } from 'lucide-react'
+import { History, Plus, Search } from 'lucide-react'
 import { DataTable } from '@/components/ui/DataTable'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useAssetsList } from '@/modules/assets/hooks/use-assets'
@@ -27,7 +24,6 @@ import { useNonNetworkAssetsList } from '@/modules/non-network-assets/hooks/use-
 import { getNonNetworkAssetsColumns } from '@/modules/non-network-assets/non-network-assets.columns'
 import { NonNetworkAssetForm } from '@/modules/non-network-assets/components/NonNetworkAssetForm'
 import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
-import { useNewScanResultBanner } from '@/modules/scan-reports/hooks/use-new-scan-result-banner'
 import {
   ASSET_CATEGORY_OPTIONS,
   ASSET_STATUS_OPTIONS,
@@ -81,8 +77,6 @@ export default function InventoryPage() {
   const { data: nonNetworkAssets, isPending: nonNetworkAssetsPending } =
     useNonNetworkAssetsList(asOrganization)
   const { data: members } = useOrgMembers(asOrganization)
-  const { hasNewResult, acknowledge } = useNewScanResultBanner(asOrganization)
-  const queryClient = useQueryClient()
   const selectedOfficeId = useUiStore(state => state.selectedOfficeId)
 
   const ownerNameById = useMemo(
@@ -164,34 +158,10 @@ export default function InventoryPage() {
         }
       />
 
-      {hasNewResult && (
-        // No auto-refetch: el poll (useNewScanResultBanner) solo mira si hay un scan-report
-        // "processed" más nuevo que el visto — nunca invalida ['assets']/['non-network-assets']
-        // por su cuenta. Si el usuario está a mitad del form de "New asset" (Modal de abajo),
-        // ese refetch solo pasa cuando clickea "Refresh", nunca por detrás sin avisar.
-        <Alert color="pine" variant="light">
-          <Group justify="space-between" align="center" wrap="wrap">
-            <Text size="sm">New scan result received — the list below may be out of date.</Text>
-            <Button
-              size="xs"
-              variant="light"
-              leftSection={<RefreshCw size={14} strokeWidth={1.5} />}
-              onClick={() => {
-                queryClient.invalidateQueries({ queryKey: ['assets'] })
-                queryClient.invalidateQueries({ queryKey: ['non-network-assets'] })
-                acknowledge()
-              }}
-            >
-              Refresh
-            </Button>
-          </Group>
-        </Alert>
-      )}
-
       <Tabs defaultValue="network">
         <Tabs.List>
           <Tabs.Tab value="network">Network</Tabs.Tab>
-          <Tabs.Tab value="non-network">Other Assets</Tabs.Tab>
+          <Tabs.Tab value="non-network">Manual assets</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="network" pt="md">
@@ -266,6 +236,8 @@ export default function InventoryPage() {
                 />
                 <Select
                   placeholder="Category"
+                  searchable
+                  nothingFoundMessage="No category found"
                   data={[{ value: ALL, label: 'All categories' }, ...ASSET_CATEGORY_OPTIONS]}
                   value={nnaCategory}
                   onChange={v => setNnaCategory(v ?? ALL)}

@@ -67,7 +67,10 @@ test('next_review_at: no muta la fecha recibida', () => {
 })
 
 test('can_review: never nunca habilita', () => {
-  assert.equal(canReviewNow('2026-01-08T00:00:00.000Z', 'never', new Date('2026-01-01T00:00:00.000Z')), false)
+  assert.equal(
+    canReviewNow('2026-01-08T00:00:00.000Z', 'never', new Date('2026-01-01T00:00:00.000Z')),
+    false
+  )
 })
 
 test('can_review: sin next_review_at no habilita', () => {
@@ -75,7 +78,10 @@ test('can_review: sin next_review_at no habilita', () => {
 })
 
 test('can_review: vencido siempre habilita', () => {
-  assert.equal(canReviewNow('2025-12-01T00:00:00.000Z', '1w', new Date('2026-01-01T00:00:00.000Z')), true)
+  assert.equal(
+    canReviewNow('2025-12-01T00:00:00.000Z', '1w', new Date('2026-01-01T00:00:00.000Z')),
+    true
+  )
 })
 
 test('can_review: 1d/3d habilitan 12hs antes', () => {

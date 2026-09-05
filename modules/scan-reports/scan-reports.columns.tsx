@@ -1,17 +1,17 @@
-import Link from 'next/link';
-import type { ColumnDef } from '@tanstack/react-table';
-import { ActionIcon, Tooltip } from '@mantine/core';
-import { Eye } from 'lucide-react';
-import type { ScanReport } from '@/app/types/payload-types';
-import { formatDateTime } from '@/lib/format-date';
-import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge';
-import { parseRejectedAssets, totalAssetsInReport } from './service';
+import Link from 'next/link'
+import type { ColumnDef } from '@tanstack/react-table'
+import { ActionIcon, Tooltip } from '@mantine/core'
+import { Eye } from 'lucide-react'
+import type { ScanReport } from '@/app/types/payload-types'
+import { formatDateTime } from '@/lib/format-date'
+import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
+import { parseRejectedAssets, totalAssetsInReport } from './service'
 
 const STATUS_TONE: Record<string, StatusTone> = {
   received: 'neutral',
   processed: 'success',
   failed: 'danger',
-};
+}
 
 export const scanReportsColumns: ColumnDef<ScanReport, unknown>[] = [
   {
@@ -30,9 +30,9 @@ export const scanReportsColumns: ColumnDef<ScanReport, unknown>[] = [
     id: 'processed',
     header: 'Processed',
     cell: ({ row }) => {
-      const total = totalAssetsInReport(row.original.raw_payload);
-      const rejected = parseRejectedAssets(row.original.error).length;
-      return `${total - rejected} / ${total}`;
+      const total = totalAssetsInReport(row.original.raw_payload)
+      const rejected = parseRejectedAssets(row.original.error).length
+      return `${total - rejected} / ${total}`
     },
   },
   {
@@ -45,8 +45,8 @@ export const scanReportsColumns: ColumnDef<ScanReport, unknown>[] = [
     header: 'Status',
     meta: { align: 'center' },
     cell: ({ row }) => {
-      const status = row.original.status ?? 'received';
-      return <StatusBadge tone={STATUS_TONE[status] ?? 'neutral'} label={status} />;
+      const status = row.original.status ?? 'received'
+      return <StatusBadge tone={STATUS_TONE[status] ?? 'neutral'} label={status} />
     },
   },
   {
@@ -55,10 +55,15 @@ export const scanReportsColumns: ColumnDef<ScanReport, unknown>[] = [
     size: 48,
     cell: ({ row }) => (
       <Tooltip label="View report">
-        <ActionIcon component={Link} href={`/portal/inventory/scan-reports/${row.original.id}`} variant="light" size="md">
+        <ActionIcon
+          component={Link}
+          href={`/portal/inventory/scan-reports/${row.original.id}`}
+          variant="light"
+          size="md"
+        >
           <Eye size={16} strokeWidth={1.5} />
         </ActionIcon>
       </Tooltip>
     ),
   },
-];
+]

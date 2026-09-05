@@ -19,7 +19,7 @@ function json(body: unknown, status = 200) {
 export const nonNetworkAssetReviewEndpoint: Endpoint = {
   path: '/v1/non-network-assets/:id/review',
   method: 'patch',
-  handler: async (req) => {
+  handler: async req => {
     const ctx = await getTenantContext(req)
     if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
     if (!canDo(ctx.role, 'non-network-assets', 'update', ctx.organizationId)) {

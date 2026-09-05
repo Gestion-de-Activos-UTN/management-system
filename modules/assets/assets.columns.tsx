@@ -124,13 +124,15 @@ export function getAssetsColumns(
       },
     },
     {
-      accessorKey: 'identified',
-      header: 'Identified',
+      accessorKey: 'identification_status',
+      header: 'Identification',
       size: 130,
       meta: { align: 'center' },
       cell: ({ row }) =>
-        row.original.identified ? (
+        row.original.identification_status === 'confirmed' ? (
           <StatusBadge tone="success" label="Identified" />
+        ) : row.original.identification_status === 'needs_review' ? (
+          <StatusBadge tone="warning" label="Needs review" />
         ) : (
           <StatusBadge tone="warning" label="Not identified" />
         ),

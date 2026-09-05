@@ -61,6 +61,7 @@ export async function createOrgWithAdmin(
           organization: organization.id,
           level: 'basic',
           max_offices: subscriptionLimits.max_offices,
+          max_active_agents: subscriptionLimits.max_active_agents,
           user_limits: subscriptionLimits.user_limits,
           features: defaultFeatures(),
         },

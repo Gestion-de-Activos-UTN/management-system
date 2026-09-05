@@ -2,6 +2,7 @@ import type { CollectionConfig } from 'payload'
 import { orgScopedAccess, canDoAccess } from '@/access/rbac/orgScopedAccess'
 import { resolveTenantAndReview } from './hooks/resolveTenant'
 import { computeReviewStatus, canReviewNow, type ReviewInterval } from './invariants'
+import { MANUAL_ASSET_CATEGORY_OPTIONS } from '../../domain/assets/asset-types'
 
 const resolvedFieldAccess = {
   create: () => false,
@@ -38,13 +39,7 @@ export const NonNetworkAssets: CollectionConfig = {
       name: 'asset_category',
       type: 'select',
       required: true,
-      options: [
-        { label: 'Antivirus / EDR', value: 'antivirus_edr' },
-        { label: 'Licencia de software', value: 'software_license' },
-        { label: 'Activo en la nube', value: 'cloud_asset' },
-        { label: 'Backup', value: 'backup' },
-        { label: 'Otro', value: 'other' },
-      ],
+      options: [...MANUAL_ASSET_CATEGORY_OPTIONS],
     },
     {
       name: 'criticality',

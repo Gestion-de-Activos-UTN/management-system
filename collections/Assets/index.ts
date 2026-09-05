@@ -3,6 +3,7 @@ import { orgScopedAccess } from '../../access/rbac/orgScopedAccess'
 import { validateOwnerTenant } from './hooks/validateOwnerTenant'
 import { rejectManualOfflineStatus } from './hooks/rejectManualOfflineStatus'
 import { rejectBusinessEditsBeforeIdentified } from './hooks/rejectBusinessEditsBeforeIdentified'
+import { SCANNED_ASSET_TYPE_OPTIONS } from '../../domain/assets/asset-types'
 
 const technicalFieldAccess = {
   // Bloque técnico: solo lo escribe el upsert de ingesta (domain/inventories/ingestScanReport.ts), nunca un humano.
@@ -24,7 +25,11 @@ export const Assets: CollectionConfig = {
     delete: () => false,
   },
   hooks: {
-    beforeChange: [validateOwnerTenant, rejectManualOfflineStatus, rejectBusinessEditsBeforeIdentified],
+    beforeChange: [
+      validateOwnerTenant,
+      rejectManualOfflineStatus,
+      rejectBusinessEditsBeforeIdentified,
+    ],
   },
   fields: [
     {
@@ -76,6 +81,7 @@ export const Assets: CollectionConfig = {
         { name: 'osfamily', type: 'text' },
         { name: 'osgen', type: 'text' },
         { name: 'vendor', type: 'text' },
+        { name: 'device_type', type: 'text' },
       ],
     },
     {
@@ -92,6 +98,7 @@ export const Assets: CollectionConfig = {
         { name: 'osfamily', type: 'text' },
         { name: 'osgen', type: 'text' },
         { name: 'vendor', type: 'text' },
+        { name: 'device_type', type: 'text' },
       ],
     },
     {
@@ -136,6 +143,35 @@ export const Assets: CollectionConfig = {
         { name: 'scripts', type: 'json' },
       ],
     },
+    {
+      name: 'inferred_type',
+      type: 'select',
+      options: [...SCANNED_ASSET_TYPE_OPTIONS, { value: 'unknown', label: 'Unknown' }],
+      defaultValue: 'unknown',
+      admin: { readOnly: true },
+      access: technicalFieldAccess,
+    },
+    {
+      name: 'inference_confidence',
+      type: 'select',
+      options: ['likely', 'possible', 'unknown'],
+      defaultValue: 'unknown',
+      admin: { readOnly: true },
+      access: technicalFieldAccess,
+    },
+    {
+      name: 'inference_signals',
+      type: 'json',
+      admin: { readOnly: true },
+      access: technicalFieldAccess,
+    },
+    {
+      name: 'inference_version',
+      type: 'number',
+      defaultValue: 1,
+      admin: { readOnly: true },
+      access: technicalFieldAccess,
+    },
     // Bloque de negocio — nunca sobrescrito por el upsert de ingesta, solo en creación o edición manual.
     // maxLength es la única validación de longitud que realmente corre: el PATCH manual pega
     // directo al REST genérico de Payload (modules/assets/service.ts), nunca pasa por el Zod de
@@ -150,6 +186,38 @@ export const Assets: CollectionConfig = {
       name: 'identified',
       type: 'checkbox',
       defaultValue: false,
+      admin: { hidden: true },
+    },
+    {
+      name: 'identification_status',
+      type: 'select',
+      options: ['pending', 'confirmed', 'needs_review'],
+      defaultValue: 'pending',
+      admin: { readOnly: true },
+    },
+    {
+      name: 'confirmed_type',
+      type: 'select',
+      options: [...SCANNED_ASSET_TYPE_OPTIONS],
+    },
+    {
+      name: 'authorization_status',
+      type: 'select',
+      options: ['pending', 'authorized', 'unauthorized'],
+      defaultValue: 'pending',
+    },
+    {
+      name: 'type_confirmed_by',
+      type: 'relationship',
+      relationTo: 'users',
+      admin: { readOnly: true },
+      access: technicalFieldAccess,
+    },
+    {
+      name: 'type_confirmed_at',
+      type: 'date',
+      admin: { readOnly: true },
+      access: technicalFieldAccess,
     },
     { name: 'alias', type: 'text', maxLength: 120 },
     {

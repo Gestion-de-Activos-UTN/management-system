@@ -1,7 +1,9 @@
-export const HEARTBEAT_INTERVAL_SECONDS = 300
-export const OFFLINE_THRESHOLD_SECONDS = HEARTBEAT_INTERVAL_SECONDS * 2
+import { isAgentOnline } from '../domain/agents/agent-state'
+
+// Compatibilidad para consumidores de UI/endpoints existentes. La regla autoritativa vive en
+// domain/agents/agent-state.ts para que colección, cuota y presentación no puedan divergir.
+export { HEARTBEAT_INTERVAL_SECONDS, OFFLINE_THRESHOLD_SECONDS } from '../domain/agents/agent-state'
 
 export function isOnline(lastHeartbeatAt: string | null | undefined): boolean {
-  if (!lastHeartbeatAt) return false
-  return (Date.now() - new Date(lastHeartbeatAt).getTime()) / 1000 <= OFFLINE_THRESHOLD_SECONDS
+  return isAgentOnline({ last_heartbeat_at: lastHeartbeatAt })
 }

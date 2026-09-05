@@ -13,7 +13,7 @@ function json(body: unknown, status = 200) {
 export const heartbeatEndpoint: Endpoint = {
   path: '/v1/heartbeat',
   method: 'post',
-  handler: async (req) => {
+  handler: async req => {
     const authDeps = createPayloadAgentAuthDeps(req.payload)
     let auth
     try {
@@ -36,11 +36,29 @@ export const heartbeatEndpoint: Endpoint = {
       return json({ error: 'agent_id mismatch' }, 401)
     }
 
+    const receivedAt = new Date().toISOString()
+    const existing = await req.payload.findByID({
+      collection: 'agents',
+      id: auth.agentId,
+      overrideAccess: true,
+      req,
+      depth: 0,
+    })
+
     await req.payload.update({
       collection: 'agents',
       id: auth.agentId,
       overrideAccess: true,
-      data: { last_heartbeat_at: body.timestamp },
+      req,
+      data: {
+        // La conectividad se decide con el reloj del servidor. El reloj local del cliente puede
+        // estar atrasado, adelantado o manipulado y queda solo como evidencia diagnóstica.
+        last_heartbeat_at: receivedAt,
+        last_agent_timestamp: body.timestamp,
+        runtime_status: body.status,
+        lifecycle_status: 'active',
+        ...(existing.first_heartbeat_at ? {} : { first_heartbeat_at: receivedAt }),
+      },
     })
     // Un heartbeat exitoso resetea el contador de fallos previos — no deben acumularse
     // fallos viejos y ya no representativos hasta bloquear al agente (ver resolveAgentAuth.ts).

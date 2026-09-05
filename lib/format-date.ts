@@ -3,9 +3,9 @@
 // ordering on a machine set to es-*. The UI text is English by policy; the same has to hold
 // for anything the runtime formats implicitly, not just literal strings we wrote ourselves.
 export function formatDateTime(value: string | Date): string {
-  return new Date(value).toLocaleString('en-US');
+  return new Date(value).toLocaleString('en-US')
 }
 
 export function formatDate(value: string | Date): string {
-  return new Date(value).toLocaleDateString('en-US');
+  return new Date(value).toLocaleDateString('en-US')
 }

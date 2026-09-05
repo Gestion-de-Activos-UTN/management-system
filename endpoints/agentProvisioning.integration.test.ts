@@ -10,7 +10,7 @@ import { agentProvisioningEndpoint } from './agentProvisioning'
 // Mismo enfoque que assetIdentify.integration.test.ts (Local API real + PayloadRequest mínimo).
 function fakeRequest(
   payload: Payload,
-  opts: { user?: { id: string; collection: 'users' }; body?: unknown },
+  opts: { user?: { id: string; collection: 'users' }; body?: unknown }
 ) {
   return {
     payload,
@@ -32,6 +32,24 @@ async function seedTenant(payload: Payload, roleSlug: 'org_admin' | 'org_viewer'
   const organization = await payload.create({
     collection: 'organizations',
     data: { name: `Org ${Math.random()}` },
+    overrideAccess: true,
+  })
+  const subscription = await payload.create({
+    collection: 'subscriptions',
+    data: {
+      organization: organization.id,
+      level: 'basic',
+      max_offices: 3,
+      max_active_agents: 3,
+      user_limits: { org_admin: 1, office_manager: 2, org_viewer: 4 },
+      features: { asset_inventory: true },
+    },
+    overrideAccess: true,
+  })
+  await payload.update({
+    collection: 'organizations',
+    id: organization.id,
+    data: { subscription: subscription.id },
     overrideAccess: true,
   })
   const office = await payload.create({
@@ -60,7 +78,11 @@ async function seedTenant(payload: Payload, roleSlug: 'org_admin' | 'org_viewer'
     }))
   const user = await payload.create({
     collection: 'users',
-    data: { name: 'Test User', email: `u-${Math.random().toString(36).slice(2)}@test.local`, password: 'x'.repeat(12) },
+    data: {
+      name: 'Test User',
+      email: `u-${Math.random().toString(36).slice(2)}@test.local`,
+      password: 'x'.repeat(12),
+    },
     overrideAccess: true,
   })
   await payload.create({
@@ -80,7 +102,9 @@ async function seedTenant(payload: Payload, roleSlug: 'org_admin' | 'org_viewer'
 
 test('POST /v1/agents/provision: 401 sin sesión', async () => {
   const payload = await getPayload({ config })
-  const res = await agentProvisioningEndpoint.handler(fakeRequest(payload, { body: { office_id: 'x' } }))
+  const res = await agentProvisioningEndpoint.handler(
+    fakeRequest(payload, { body: { office_id: 'x' } })
+  )
   assert.equal(res.status, 401)
 })
 
@@ -92,7 +116,7 @@ test('POST /v1/agents/provision: 403 sin permiso de create sobre agents (org_vie
     fakeRequest(payload, {
       user: { id: String(user.id), collection: 'users' },
       body: { office_id: String(office.id) },
-    }),
+    })
   )
   assert.equal(res.status, 403)
 })
@@ -117,10 +141,10 @@ test('POST /v1/agents/provision: rechaza (403 vía assertOrganizationMatches) un
         fakeRequest(payload, {
           user: { id: String(user.id), collection: 'users' },
           body: { office_id: String(otherOffice.id) },
-        }),
+        })
       )
     },
-    (e: unknown) => (e as { status?: number }).status === 403,
+    (e: unknown) => (e as { status?: number }).status === 403
   )
 })
 
@@ -133,7 +157,7 @@ test('POST /v1/agents/provision: 201 happy path crea el agent y devuelve el .zip
       fakeRequest(payload, {
         user: { id: String(user.id), collection: 'users' },
         body: { office_id: String(office.id) },
-      }),
+      })
     )
     assert.equal(res.status, 201)
     assert.equal(res.headers.get('Content-Type'), 'application/zip')
@@ -163,12 +187,12 @@ test('POST /v1/agents/provision: platform=windows devuelve el paquete con los la
       fakeRequest(payload, {
         user: { id: String(user.id), collection: 'users' },
         body: { office_id: String(office.id), platform: 'windows' },
-      }),
+      })
     )
     assert.equal(res.status, 201)
     assert.match(
       res.headers.get('Content-Disposition') ?? '',
-      /attachment; filename="agent-[0-9a-f-]+-windows\.zip"/,
+      /attachment; filename="agent-[0-9a-f-]+-windows\.zip"/
     )
 
     const entries = await zipEntries(res)
@@ -186,8 +210,33 @@ test('POST /v1/agents/provision: 400 con un platform desconocido', async () => {
     fakeRequest(payload, {
       user: { id: String(user.id), collection: 'users' },
       body: { office_id: String(office.id), platform: 'solaris' },
-    }),
+    })
   )
   assert.equal(res.status, 400)
   assert.equal((await res.json()).error, 'platform_invalid')
+})
+
+test('POST /v1/agents/provision: 409 cuando la organización agotó sus agentes', async () => {
+  const payload = await getPayload({ config })
+  const { organization, office, user } = await seedTenant(payload, 'org_admin')
+  const subscriptions = await payload.find({
+    collection: 'subscriptions',
+    where: { organization: { equals: organization.id } },
+    overrideAccess: true,
+    limit: 1,
+  })
+  await payload.update({
+    collection: 'subscriptions',
+    id: subscriptions.docs[0].id,
+    data: { max_active_agents: 0 },
+    overrideAccess: true,
+  })
+  const res = await agentProvisioningEndpoint.handler(
+    fakeRequest(payload, {
+      user: { id: String(user.id), collection: 'users' },
+      body: { office_id: String(office.id) },
+    })
+  )
+  assert.equal(res.status, 409)
+  assert.equal((await res.json()).error, 'agent_limit_reached')
 })

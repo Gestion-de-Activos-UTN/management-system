@@ -17,7 +17,7 @@ function json(body: unknown, status = 200) {
 export const reportsEndpoint: Endpoint = {
   path: '/v1/reports',
   method: 'post',
-  handler: async (req) => {
+  handler: async req => {
     const authDeps = createPayloadAgentAuthDeps(req.payload)
     let auth
     try {
@@ -26,7 +26,7 @@ export const reportsEndpoint: Endpoint = {
           authorization: req.headers.get('authorization'),
           'x-agent-id': req.headers.get('x-agent-id'),
         },
-        authDeps,
+        authDeps
       )
     } catch (err) {
       if (err instanceof AgentAuthError) return json({ error: err.message }, 401)

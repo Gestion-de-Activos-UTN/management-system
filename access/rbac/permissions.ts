@@ -23,7 +23,7 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
   platform_admin: {
     organizations: ['read'],
     offices: ['read'],
-    agents: ['create', 'read'],
+    agents: ['create', 'read', 'update'],
     assets: ['read'],
     'non-network-assets': ['read'],
     'scan-reports': ['read'],
@@ -34,7 +34,7 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
   org_admin: {
     organizations: ['read'],
     offices: ['read'],
-    agents: ['create', 'read'],
+    agents: ['create', 'read', 'update'],
     assets: ['read', 'update'],
     'non-network-assets': ['create', 'read', 'update', 'delete'],
     'scan-reports': ['read'],

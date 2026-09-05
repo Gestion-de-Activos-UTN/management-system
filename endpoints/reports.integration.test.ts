@@ -68,7 +68,7 @@ test('POST /v1/reports crea assets y es idempotente por report_id', async () => 
   const body = reportPayload()
 
   const first = await reportsEndpoint.handler(
-    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' }, body),
+    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' }, body)
   )
   assert.equal(first.status, 200)
   const firstJson = await first.json()
@@ -82,7 +82,7 @@ test('POST /v1/reports crea assets y es idempotente por report_id', async () => 
   assert.equal(asset.docs.length, 1)
 
   const second = await reportsEndpoint.handler(
-    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' }, body),
+    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' }, body)
   )
   assert.equal(second.status, 200)
   const secondJson = await second.json()
@@ -123,7 +123,11 @@ test('POST /v1/reports reconcilia un scan degradado seguido de uno full: mismo d
     ],
   })
   await reportsEndpoint.handler(
-    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' }, degradedBody),
+    fakeRequest(
+      payload,
+      { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' },
+      degradedBody
+    )
   )
 
   const created = await payload.find({
@@ -156,7 +160,7 @@ test('POST /v1/reports reconcilia un scan degradado seguido de uno full: mismo d
     ],
   })
   await reportsEndpoint.handler(
-    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' }, fullBody),
+    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' }, fullBody)
   )
 
   const afterFull = await payload.find({
@@ -197,7 +201,7 @@ test('POST /v1/reports NO rechaza un host sin mac/vendor/hostname resueltos', as
   })
 
   const res = await reportsEndpoint.handler(
-    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' }, body),
+    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' }, body)
   )
   assert.equal(res.status, 200)
   const resJson = await res.json()
@@ -220,7 +224,7 @@ test('POST /v1/reports rechaza token inválido', async () => {
   await seedAgent(payload)
 
   const res = await reportsEndpoint.handler(
-    fakeRequest(payload, { authorization: 'Bearer not-a-real-token' }, reportPayload()),
+    fakeRequest(payload, { authorization: 'Bearer not-a-real-token' }, reportPayload())
   )
   assert.equal(res.status, 401)
 })
