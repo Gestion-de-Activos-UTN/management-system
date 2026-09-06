@@ -12,12 +12,18 @@ function json(body: unknown, status = 200) {
   return Response.json(body, { status })
 }
 
+const MAX_REPORT_BYTES = 5 * 1024 * 1024
+const RAW_PAYLOAD_RETENTION_DAYS = 30
+
 // AUDIT: la ingesta de un ScanReport es una escritura sensible (crea/actualiza Assets de una organización).
 // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent una vez exista el write path de AuditLogs.
 export const reportsEndpoint: Endpoint = {
   path: '/v1/reports',
   method: 'post',
   handler: async req => {
+    const declaredLength = Number(req.headers.get('content-length') ?? 0)
+    if (declaredLength > MAX_REPORT_BYTES) return json({ error: 'payload too large' }, 413)
+
     const authDeps = createPayloadAgentAuthDeps(req.payload)
     let auth
     try {
@@ -37,6 +43,9 @@ export const reportsEndpoint: Endpoint = {
     await authDeps.resetAttempts(auth.agentId)
 
     const rawBody = await req.json!()
+    if (Buffer.byteLength(JSON.stringify(rawBody), 'utf8') > MAX_REPORT_BYTES) {
+      return json({ error: 'payload too large' }, 413)
+    }
     const parseResult = ScanReportPayloadSchema.safeParse(rawBody)
     if (!parseResult.success) {
       return json({ error: 'invalid payload', issues: parseResult.error.issues }, 400)
@@ -48,6 +57,9 @@ export const reportsEndpoint: Endpoint = {
     // inyectar datos a nombre de otro agente con un token que no es el suyo.
     if (body.agent_id !== auth.agentId) {
       return json({ error: 'agent_id mismatch' }, 401)
+    }
+    if (body.assets.some(asset => asset.agent_id !== body.agent_id)) {
+      return json({ error: 'asset agent_id mismatch' }, 400)
     }
 
     const existing = await req.payload.find({
@@ -76,9 +88,15 @@ export const reportsEndpoint: Endpoint = {
           scan_start: body.scan_start,
           scan_end: body.scan_end,
           hosts_up: body.hosts_up,
+          execution_status: body.execution_status,
+          report_coverage: body.report_coverage,
+          scanner_interfaces: body.scanner_interfaces,
           gateway_ip: body.gateway_ip,
           gateway_mac: body.gateway_mac,
           raw_payload: body,
+          raw_payload_expires_at: new Date(
+            Date.now() + RAW_PAYLOAD_RETENTION_DAYS * 24 * 60 * 60 * 1000
+          ).toISOString(),
           status: 'received',
         },
       })

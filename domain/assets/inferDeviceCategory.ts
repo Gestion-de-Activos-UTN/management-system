@@ -15,10 +15,26 @@ export interface DeviceInferenceInput {
   mac?: string | null
   gateway_ip?: string | null
   gateway_mac?: string | null
+  gateway_match_conflict?: boolean | null
   hostname?: string | null
   vendor?: string | null
   os?: { name?: string | null; accuracy?: number | null; device_type?: string | null } | null
-  services?: Array<{ port?: number | null; product?: string | null; name?: string | null }> | null
+  services?: Array<{
+    port?: number | null
+    product?: string | null
+    name?: string | null
+    state?: string | null
+  }> | null
+  is_scanner_host?: boolean | null
+  scanner_host_match?: 'ip' | 'mac' | 'both' | 'conflict' | 'none' | 'unknown' | null
+  mac_metadata?: { kind?: string | null } | null
+  names?: Array<{ value?: string | null; source?: string | null }> | null
+  asset_coverage?: {
+    port_scan?: 'complete' | 'partial' | 'not_attempted' | 'unknown' | null
+    service_detection?: 'complete' | 'partial' | 'not_attempted' | 'unknown' | null
+    os_detection?: 'complete' | 'partial' | 'not_attempted' | 'unknown' | null
+    name_resolution?: 'complete' | 'partial' | 'not_attempted' | 'unknown' | null
+  } | null
 }
 
 export interface DeviceInference {
@@ -160,7 +176,8 @@ export function inferDeviceCategory(asset: DeviceInferenceInput): DeviceInferenc
     signals[category] = [...(signals[category] ?? []), reason]
   }
 
-  const vendor = asset.vendor?.toLowerCase() ?? ''
+  const vendor =
+    asset.mac_metadata?.kind === 'locally_administered' ? '' : (asset.vendor?.toLowerCase() ?? '')
   const hostname = asset.hostname ?? ''
   const hostnameLower = hostname.toLowerCase()
   const osName = asset.os?.name ?? ''
@@ -169,17 +186,45 @@ export function inferDeviceCategory(asset: DeviceInferenceInput): DeviceInferenc
   // (nunca "no se escaneó") para cualquier Asset realmente ingresado — así que `[]` es una
   // observación confirmada. `services` ausente del todo (`servicesKnown` false) solo puede pasar
   // con datos sintéticos/incompletos, nunca con un Asset real; ahí no hay base para inferir nada.
-  const servicesKnown = asset.services != null
   const services = asset.services ?? []
-  const ports = services.map(s => s.port).filter((p): p is number => typeof p === 'number')
+  const openServices = services.filter(service => service.state === 'open')
+  const ports = openServices.map(s => s.port).filter((p): p is number => typeof p === 'number')
+  const portCoverageComplete = asset.asset_coverage?.port_scan === 'complete'
+  const allObservedPortsFiltered =
+    services.length > 0 &&
+    services.every(service => service.state === 'filtered' || service.state === 'open|filtered')
+
+  const matchesGateway = Boolean(
+    (asset.gateway_ip && asset.ip === asset.gateway_ip) ||
+    (asset.gateway_mac && asset.mac?.toLowerCase() === asset.gateway_mac.toLowerCase())
+  )
+  const matchesScanner = Boolean(
+    asset.is_scanner_host &&
+    asset.scanner_host_match !== 'conflict' &&
+    asset.scanner_host_match !== 'none' &&
+    asset.scanner_host_match !== 'unknown'
+  )
+
+  if (
+    asset.gateway_match_conflict ||
+    asset.scanner_host_match === 'conflict' ||
+    (matchesGateway && matchesScanner)
+  ) {
+    return {
+      category: null,
+      tier: 'unknown',
+      signals: ['conflicting direct identity evidence'],
+    }
+  }
 
   // El gateway resuelto desde la tabla de ruteo/ARP del agente es una señal directa y mucho más
   // fuerte que inferir un router por marca o por un puerto común.
-  if (
-    (asset.gateway_ip && asset.ip === asset.gateway_ip) ||
-    (asset.gateway_mac && asset.mac?.toLowerCase() === asset.gateway_mac.toLowerCase())
-  ) {
+  if (matchesGateway) {
     add('gateway', 6, 'matches the network gateway')
+  }
+
+  if (matchesScanner) {
+    add('workstation', 6, 'scanner runs on this host')
   }
 
   const matchVendorKeyword = (text: string) =>
@@ -208,12 +253,20 @@ export function inferDeviceCategory(asset: DeviceInferenceInput): DeviceInferenc
       )
   }
 
+  for (const name of asset.names ?? []) {
+    if (!name.value || name.value === hostname) continue
+    const sourceWeight = name.source === 'netbios' || name.source === 'mdns' ? 2 : 1
+    const hint = HOSTNAME_HINTS.find(candidate => candidate.pattern.test(name.value ?? ''))
+    if (hint) add(hint.category, sourceWeight, `${name.source ?? 'network'} name "${name.value}"`)
+  }
+
   // "Windows" (o cualquier match hacia workstation) con cero puertos confirmados es
   // contradictorio: una PC Windows real casi siempre expone algo (SMB 445/mDNS/NetBIOS). Nmap
   // puede fingerprint-ear un celular como "Windows" con accuracy=100 (el problema no es baja
   // confianza declarada, es que su base de firmas TCP/IP no cubre bien mobile) — así que ese
   // combo específico se pesa menos en vez de confiar ciegamente en el nombre del OS.
-  const workstationOsContradictsPorts = servicesKnown && ports.length === 0
+  const workstationOsContradictsPorts =
+    portCoverageComplete && !allObservedPortsFiltered && ports.length === 0
   if (osName) {
     for (const hint of OS_HINTS) {
       if (hint.pattern.test(osName)) {
@@ -239,7 +292,7 @@ export function inferDeviceCategory(asset: DeviceInferenceInput): DeviceInferenc
     }
   }
 
-  for (const service of services) {
+  for (const service of openServices) {
     const text = `${service.product ?? ''} ${service.name ?? ''}`.toLowerCase()
     if (!text.trim()) continue
     for (const hint of PRODUCT_HINTS) {
@@ -254,14 +307,15 @@ export function inferDeviceCategory(asset: DeviceInferenceInput): DeviceInferenc
   // real: un PC/servidor/gateway/impresora casi siempre expone algo (SMB/RDP/mDNS, DHCP/DNS,
   // SSH/HTTP, 9100/631); un celular o tablet casi nunca. Peso moderado (no "likely" por sí
   // solo) porque un firewall agresivo puede producir el mismo resultado en cualquier equipo.
-  if (servicesKnown && ports.length === 0) {
-    add('mobile', 2, 'no open ports (device is up but exposes nothing)')
+  if (portCoverageComplete && !allObservedPortsFiltered && ports.length === 0) {
+    add('mobile', 2, 'no open ports in the completed standard scan')
   }
 
   const ranked = (Object.entries(scores) as Array<[DeviceCategory, number]>).sort(
     (a, b) => b[1] - a[1]
   )
   const [topCategory, topScore] = ranked[0] ?? [null, 0]
+  const secondScore = ranked[1]?.[1] ?? 0
 
   if (!topCategory || topScore === 0) {
     return { category: null, tier: 'unknown', signals: [] }
@@ -269,7 +323,7 @@ export function inferDeviceCategory(asset: DeviceInferenceInput): DeviceInferenc
 
   return {
     category: topCategory,
-    tier: topScore >= 3 ? 'likely' : 'possible',
+    tier: topScore >= 3 && topScore - secondScore >= 2 ? 'likely' : 'possible',
     signals: signals[topCategory] ?? [],
   }
 }

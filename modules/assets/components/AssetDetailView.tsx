@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
@@ -19,6 +19,7 @@ import {
   Table,
   Text,
   TextInput,
+  ThemeIcon,
   Tooltip,
 } from '@mantine/core'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -27,12 +28,16 @@ import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
 import { CRITICALITY_OPTIONS, MANUAL_ASSET_STATUS_OPTIONS } from '@/lib/enum-labels'
 import { formatDateTime } from '@/lib/format-date'
 import type { Asset } from '@/app/types/payload-types'
-import { AssetBusinessFieldsSchema, type AssetBusinessFields } from '../schema'
+import {
+  AssetBusinessFieldsSchema,
+  type AssetBusinessFields,
+  UNKNOWN_IDENTIFICATION_VALUE,
+} from '../schema'
 import { useUpdateAsset } from '../hooks/use-update-asset'
 import { useUnidentifyAsset } from '../hooks/use-unidentify-asset'
 import { useMarkAssetViewed } from '../hooks/use-mark-asset-viewed'
 import { useMarkAssetChangesViewed } from '../hooks/use-mark-asset-changes-viewed'
-import { BadgeCheck, Lock, Undo2 } from 'lucide-react'
+import { BadgeCheck, Fingerprint, Lock, Network, ScanSearch, Undo2 } from 'lucide-react'
 import { AssetIdentificationModal } from './AssetIdentificationModal'
 import {
   DEVICE_CATEGORY_HELP,
@@ -88,23 +93,122 @@ function IdentificationHelpCard({ asset }: { asset: Asset }) {
   )
 }
 
-function TechnicalRow({ label, value }: { label: string; value: string | null | undefined }) {
+function TechnicalContentRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <Group justify="space-between" align="flex-start" wrap="wrap" gap="xs">
-      <Text size="sm" c="dimmed">
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(110px, 0.42fr) minmax(0, 1fr)',
+        alignItems: 'start',
+        gap: 'var(--mantine-spacing-sm)',
+      }}
+    >
+      <Text size="xs" c="dimmed" fw={500} pt={2}>
         {label}
       </Text>
-      <TechnicalText
-        style={{
-          flex: '1 1 220px',
-          minWidth: 0,
-          textAlign: 'right',
-          overflowWrap: 'anywhere',
-        }}
-      >
+      <div style={{ minWidth: 0 }}>{children}</div>
+    </div>
+  )
+}
+
+function TechnicalRow({ label, value }: { label: string; value: string | null | undefined }) {
+  return (
+    <TechnicalContentRow label={label}>
+      <TechnicalText style={{ textAlign: 'left', overflowWrap: 'anywhere' }}>
         {value || '—'}
       </TechnicalText>
-    </Group>
+    </TechnicalContentRow>
+  )
+}
+
+function TechnicalSection({
+  title,
+  description,
+  icon,
+  children,
+}: {
+  title: string
+  description: string
+  icon: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <Card withBorder padding="lg" radius="md">
+      <Stack gap="md">
+        <Group gap="sm" wrap="nowrap">
+          <ThemeIcon variant="light" color="pine" radius="md" size={38}>
+            {icon}
+          </ThemeIcon>
+          <div>
+            <Text fw={650}>{title}</Text>
+            <Text size="xs" c="dimmed">
+              {description}
+            </Text>
+          </div>
+        </Group>
+        <Divider />
+        <Stack gap="sm">{children}</Stack>
+      </Stack>
+    </Card>
+  )
+}
+
+const COVERAGE_LABELS = {
+  complete: 'Complete',
+  partial: 'Partial',
+  not_attempted: 'Not attempted',
+  unknown: 'Unknown',
+} as const
+
+function coverageColor(status: string | null | undefined): string {
+  if (status === 'complete') return 'green'
+  if (status === 'partial') return 'yellow'
+  return 'gray'
+}
+
+function CoverageRow({ coverage }: { coverage: Asset['asset_coverage'] }) {
+  const items = [
+    ['Ports', coverage?.port_scan],
+    ['Services', coverage?.service_detection],
+    ['Operating system', coverage?.os_detection],
+    ['Names', coverage?.name_resolution],
+  ] as const
+
+  return (
+    <TechnicalContentRow label="Scan coverage">
+      <Group gap={6} wrap="wrap">
+        {items.map(([label, status]) => (
+          <Badge key={label} variant="light" color={coverageColor(status)} size="sm" tt="none">
+            {label} · {COVERAGE_LABELS[status ?? 'unknown']}
+          </Badge>
+        ))}
+      </Group>
+    </TechnicalContentRow>
+  )
+}
+
+function ObservedNamesRow({ names }: { names: Asset['names'] }) {
+  return (
+    <TechnicalContentRow label="Observed names">
+      {(names ?? []).length > 0 ? (
+        <Group gap={6} wrap="wrap">
+          {(names ?? []).map((name, index) => (
+            <Badge
+              key={name.id ?? `${name.value}-${index}`}
+              variant="outline"
+              color="gray"
+              tt="none"
+            >
+              {name.value} · {name.source.toUpperCase()}
+            </Badge>
+          ))}
+        </Group>
+      ) : (
+        <Text size="sm" c="dimmed">
+          No names observed
+        </Text>
+      )}
+    </TechnicalContentRow>
   )
 }
 
@@ -170,7 +274,7 @@ const SERVICE_NAME_LABEL: Record<string, string> = {
 }
 
 function serviceChipLabel(service: Service): string {
-  return `${service.port ?? '?'}/${service.protocol ?? '?'}`
+  return `${service.port ?? '?'}/${service.protocol ?? '?'} · ${service.state ?? 'unknown'}`
 }
 
 // nmap reporta "nginx" en minúscula (no es un acrónimo con casing propio como DNS/NTP) — se
@@ -188,9 +292,8 @@ function serviceDescription(service: Service): string {
 
 const SERVICE_CHIPS_VISIBLE = 3
 
-// `services: []` es un dato confirmado, no una ausencia (ver inferDeviceCategory.ts) — por eso
-// se distingue explícitamente de "no hay puertos" en vez de mostrar el mismo "—" que un campo
-// que simplemente no se pudo resolver (mac/vendor/hostname). Chips compactos en vez de una lista
+// `services` contiene observaciones de Nmap, incluidas las ambiguas o filtradas; solo `open`
+// participa como señal positiva en la inferencia. Chips compactos en vez de una lista
 // vertical cruda — con 4+ servicios esa lista estiraba la fila mucho más que cualquier otra del
 // bloque técnico; el detalle completo vive en el modal, no en la fila.
 function ServicesRow({ services }: { services: Asset['services'] }) {
@@ -204,7 +307,7 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
           Services
         </Text>
         <Text size="sm" c="dimmed">
-          No open ports detected
+          No port observations
         </Text>
       </Group>
     )
@@ -273,7 +376,7 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
       <Modal
         opened={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={`Open services (${list.length})`}
+        title={`Observed ports (${list.length})`}
         size="lg"
         centered
       >
@@ -283,6 +386,7 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
               <Table.Tr>
                 <Table.Th>Port</Table.Th>
                 <Table.Th>Protocol</Table.Th>
+                <Table.Th>State</Table.Th>
                 <Table.Th>Service</Table.Th>
                 <Table.Th>Version</Table.Th>
                 <Table.Th>Detection</Table.Th>
@@ -299,6 +403,7 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
                       <TechnicalText>{service.port ?? '—'}</TechnicalText>
                     </Table.Td>
                     <Table.Td>{service.protocol ? service.protocol.toUpperCase() : '—'}</Table.Td>
+                    <Table.Td>{service.state ?? 'unknown'}</Table.Td>
                     <Table.Td>{serviceDescription(service)}</Table.Td>
                     <Table.Td>{service.version || '—'}</Table.Td>
                     <Table.Td>
@@ -504,51 +609,111 @@ export function AssetDetailView({
         </Stack>
       </Modal>
 
-      <Card withBorder padding="lg">
-        <Stack gap="xs">
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+        <TechnicalSection
+          title="Identity"
+          description="Identifiers and names observed on the network"
+          icon={<Fingerprint size={20} strokeWidth={1.7} />}
+        >
           <TechnicalRow label="Asset ID" value={asset.asset_id} />
-          <TechnicalRow label="IP" value={asset.ip} />
           <TechnicalRow label="Hostname" value={asset.hostname} />
-          <TechnicalRow label="MAC" value={asset.mac} />
+          <ObservedNamesRow names={asset.names} />
           <TechnicalRow label="Vendor" value={asset.vendor} />
-          <TechnicalRow
-            label="Operating system"
-            value={
-              asset.os_status === 'indeterminate'
-                ? 'Indeterminate'
-                : asset.os?.name
-                  ? `${asset.os.name}${asset.os.accuracy != null ? ` (${asset.os.accuracy}%)` : ''}`
-                  : null
-            }
-          />
-          <OsCandidatesRow candidates={asset.os_candidates} />
+          <TechnicalRow label="MAC type" value={asset.mac_metadata?.kind?.replaceAll('_', ' ')} />
+        </TechnicalSection>
+
+        <TechnicalSection
+          title="Network position"
+          description="Addressing, route context and scanner relationship"
+          icon={<Network size={20} strokeWidth={1.7} />}
+        >
+          <TechnicalRow label="IP address" value={asset.ip} />
+          <TechnicalRow label="MAC address" value={asset.mac} />
           <TechnicalRow label="Discovery reason" value={asset.state_reason} />
           <TechnicalRow label="Gateway IP" value={asset.gateway_ip} />
           <TechnicalRow label="Gateway MAC" value={asset.gateway_mac} />
-          <ServicesRow services={asset.services} />
-          {scriptsText(asset.host_scripts) && (
-            <Group justify="space-between" align="flex-start" wrap="wrap" gap="xs">
-              <Text size="sm" c="dimmed">
-                Host scripts
-              </Text>
-              <Spoiler
-                maxHeight={0}
-                showLabel="View"
-                hideLabel="Hide"
-                style={{ flex: '1 1 220px', textAlign: 'right' }}
-              >
-                <TechnicalText style={{ whiteSpace: 'pre-wrap' }}>
-                  {scriptsText(asset.host_scripts)}
-                </TechnicalText>
-              </Spoiler>
+          <TechnicalContentRow label="Scanner host">
+            <Badge
+              variant="light"
+              tt="none"
+              color={
+                asset.is_scanner_host
+                  ? 'pine'
+                  : asset.scanner_host_match === 'conflict'
+                    ? 'red'
+                    : 'gray'
+              }
+            >
+              {asset.is_scanner_host
+                ? `Detected · ${asset.scanner_host_match ?? 'unknown'}`
+                : asset.scanner_host_match === 'conflict'
+                  ? 'Conflicting evidence'
+                  : 'Not detected'}
+            </Badge>
+          </TechnicalContentRow>
+        </TechnicalSection>
+      </SimpleGrid>
+
+      <TechnicalSection
+        title="Scan observations"
+        description="What the latest scan could inspect and how complete the result is"
+        icon={<ScanSearch size={20} strokeWidth={1.7} />}
+      >
+        <TechnicalRow
+          label="Operating system"
+          value={
+            asset.os_status === 'indeterminate'
+              ? 'Indeterminate'
+              : asset.os?.name
+                ? `${asset.os.name}${asset.os.accuracy != null ? ` (${asset.os.accuracy}%)` : ''}`
+                : null
+          }
+        />
+        <OsCandidatesRow candidates={asset.os_candidates} />
+        <CoverageRow coverage={asset.asset_coverage} />
+        {(asset.scan_issues ?? []).length > 0 ? (
+          <Alert color="yellow" variant="light" title="Scan limitations">
+            <Group gap={6} wrap="wrap">
+              {(asset.scan_issues ?? []).map((issue, index) => (
+                <Badge
+                  key={issue.id ?? `${issue.stage}-${issue.code}-${index}`}
+                  color="yellow"
+                  tt="none"
+                >
+                  {issue.stage} · {issue.code.replaceAll('_', ' ')}
+                </Badge>
+              ))}
             </Group>
-          )}
-          <TechnicalRow
-            label="Last seen"
-            value={asset.last_seen ? formatDateTime(asset.last_seen) : null}
-          />
-        </Stack>
-      </Card>
+          </Alert>
+        ) : (
+          <Text size="sm" c="dimmed">
+            No scan limitations reported.
+          </Text>
+        )}
+        <Divider />
+        <ServicesRow services={asset.services} />
+        {scriptsText(asset.host_scripts) && (
+          <Group justify="space-between" align="flex-start" wrap="wrap" gap="xs">
+            <Text size="sm" c="dimmed">
+              Host scripts
+            </Text>
+            <Spoiler
+              maxHeight={0}
+              showLabel="View"
+              hideLabel="Hide"
+              style={{ flex: '1 1 220px', textAlign: 'right' }}
+            >
+              <TechnicalText style={{ whiteSpace: 'pre-wrap' }}>
+                {scriptsText(asset.host_scripts)}
+              </TechnicalText>
+            </Spoiler>
+          </Group>
+        )}
+        <TechnicalRow
+          label="Last seen"
+          value={asset.last_seen ? formatDateTime(asset.last_seen) : null}
+        />
+      </TechnicalSection>
 
       <IdentificationHelpCard asset={asset} />
 
@@ -591,11 +756,15 @@ export function AssetDetailView({
               render={({ field }) => (
                 <Select
                   label="Criticality"
-                  data={CRITICALITY_OPTIONS}
+                  data={[
+                    { value: UNKNOWN_IDENTIFICATION_VALUE, label: 'Not yet assessed' },
+                    ...CRITICALITY_OPTIONS,
+                  ]}
                   disabled={asset.identification_status !== 'confirmed'}
-                  value={field.value ?? null}
-                  onChange={field.onChange}
-                  clearable
+                  value={field.value ?? UNKNOWN_IDENTIFICATION_VALUE}
+                  onChange={value =>
+                    field.onChange(value === UNKNOWN_IDENTIFICATION_VALUE ? null : value)
+                  }
                   error={errors.criticality?.message}
                 />
               )}
@@ -606,16 +775,19 @@ export function AssetDetailView({
               render={({ field }) => (
                 <Select
                   label="Owner"
-                  placeholder="Unassigned"
-                  data={(members ?? []).map(m => ({
-                    value: m.id,
-                    label: m.name || m.email,
-                  }))}
+                  data={[
+                    { value: UNKNOWN_IDENTIFICATION_VALUE, label: 'Unassigned or unknown' },
+                    ...(members ?? []).map(m => ({
+                      value: m.id,
+                      label: m.name || m.email,
+                    })),
+                  ]}
                   disabled={asset.identification_status !== 'confirmed'}
-                  value={field.value ?? null}
-                  onChange={field.onChange}
+                  value={field.value ?? UNKNOWN_IDENTIFICATION_VALUE}
+                  onChange={value =>
+                    field.onChange(value === UNKNOWN_IDENTIFICATION_VALUE ? null : value)
+                  }
                   searchable
-                  clearable
                   error={errors.owner?.message}
                 />
               )}

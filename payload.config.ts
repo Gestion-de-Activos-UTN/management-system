@@ -24,7 +24,7 @@ import { sessionEndpoint } from './endpoints/session'
 import { nonNetworkAssetReviewEndpoint } from './endpoints/nonNetworkAssetReview'
 import { assetIdentifyEndpoint } from './endpoints/assetIdentify'
 import { assetUnidentifyEndpoint } from './endpoints/assetUnidentify'
-import { agingSweepEndpoint } from './endpoints/internalJobs'
+import { agingSweepEndpoint, expireRawScanPayloadsEndpoint } from './endpoints/internalJobs'
 import { generateInventorySnapshotEndpoint } from './endpoints/inventorySnapshots'
 import { orgMembersEndpoint } from './endpoints/orgMembers'
 import {
@@ -35,6 +35,7 @@ import { agentProvisioningEndpoint } from './endpoints/agentProvisioning'
 import { officeAgentSummaryEndpoint } from './endpoints/officeAgentSummary'
 import { dashboardMetricsEndpoint } from './endpoints/dashboardMetrics'
 import { agentRevokeEndpoint } from './endpoints/agentRevoke'
+import { expireRawScanPayloads } from './domain/inventories/expireRawScanPayloads'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -86,6 +87,7 @@ export default buildConfig({
     assetIdentifyEndpoint,
     assetUnidentifyEndpoint,
     agingSweepEndpoint,
+    expireRawScanPayloadsEndpoint,
     generateInventorySnapshotEndpoint,
     orgMembersEndpoint,
     organizationSettingsGetEndpoint,
@@ -95,6 +97,24 @@ export default buildConfig({
     dashboardMetricsEndpoint,
     agentRevokeEndpoint,
   ],
+  jobs: {
+    deleteJobOnComplete: true,
+    tasks: [
+      {
+        slug: 'expire-raw-scan-payloads',
+        label: 'Expire raw scan payloads',
+        inputSchema: [],
+        outputSchema: [{ name: 'expired', type: 'number', required: true }],
+        schedule: [{ cron: '0 15 3 * * *', queue: 'maintenance' }],
+        handler: async ({ req }) => ({
+          output: await expireRawScanPayloads(req.payload),
+        }),
+      },
+    ],
+    // Payload agenda y ejecuta localmente la tarea diaria dentro del proceso de la aplicación.
+    // No requiere cron administrado, workers ni servicios externos.
+    autoRun: [{ cron: '0 * * * * *', queue: 'maintenance', limit: 1 }],
+  },
   typescript: {
     outputFile: path.resolve(dirname, 'app/types/payload-types.ts'),
   },

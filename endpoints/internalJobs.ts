@@ -1,5 +1,6 @@
 import type { Endpoint } from 'payload'
 import { agingSweep } from '../domain/inventories/agingSweep'
+import { expireRawScanPayloads } from '../domain/inventories/expireRawScanPayloads'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
@@ -14,6 +15,24 @@ function isAuthorized(req: { headers: Headers }): boolean {
   if (!expected) return false
   const provided = req.headers.get('authorization')?.replace(/^Bearer\s+/i, '')
   return provided === expected
+}
+
+export const expireRawScanPayloadsEndpoint: Endpoint = {
+  path: '/v1/internal/jobs/expire-scan-payloads',
+  method: 'post',
+  handler: async req => {
+    if (!isAuthorized(req)) return json({ error: 'unauthorized' }, 401)
+
+    try {
+      const summary = await expireRawScanPayloads(req.payload)
+      return json({ status: 'ok', summary })
+    } catch (err) {
+      return json(
+        { status: 'error', message: err instanceof Error ? err.message : String(err) },
+        500
+      )
+    }
+  },
 }
 
 // ponytail: no hay scheduler cableado a este endpoint todavía (ni Vercel Cron, ni node-cron, ni

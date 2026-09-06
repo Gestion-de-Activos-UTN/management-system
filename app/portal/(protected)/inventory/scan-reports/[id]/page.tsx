@@ -102,7 +102,8 @@ export default function ScanReportDetailPage() {
     )
   }
 
-  const total = totalAssetsInReport(report.raw_payload)
+  const payloadArchived = !report.raw_payload
+  const total = payloadArchived ? (report.hosts_up ?? 0) : totalAssetsInReport(report.raw_payload)
   const rejected = parseRejectedAssets(report.error)
   const accepted = acceptedAssetsInReport(report.raw_payload, rejected)
   const status = report.status ?? 'received'
@@ -117,6 +118,14 @@ export default function ScanReportDetailPage() {
         rightSection={<StatusBadge tone={STATUS_TONE[status] ?? 'neutral'} label={status} />}
       />
 
+      <Text size="sm" c="dimmed">
+        Execution: {report.execution_status ?? 'unknown'} · Discovery coverage:{' '}
+        {typeof report.report_coverage === 'object' && report.report_coverage !== null
+          ? ((report.report_coverage as { discovery?: { status?: string } }).discovery?.status ??
+            'unknown')
+          : 'unknown'}
+      </Text>
+
       <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} spacing="md">
         <StatCard
           icon={<Network size={20} strokeWidth={1.5} />}
@@ -130,7 +139,7 @@ export default function ScanReportDetailPage() {
         />
         <StatCard
           icon={<CircleCheck size={20} strokeWidth={1.5} />}
-          value={`${accepted.length} / ${total}`}
+          value={payloadArchived ? 'Archived' : `${accepted.length} / ${total}`}
           label="Accepted"
         />
         <StatCard
@@ -147,6 +156,12 @@ export default function ScanReportDetailPage() {
         </Tabs.List>
 
         <Tabs.Panel value="accepted" pt="md">
+          {payloadArchived && (
+            <Text c="dimmed" mb="md">
+              The raw asset list expired according to the retention policy; report metadata and
+              coverage remain available.
+            </Text>
+          )}
           <DataTable
             columns={acceptedColumns}
             data={accepted}

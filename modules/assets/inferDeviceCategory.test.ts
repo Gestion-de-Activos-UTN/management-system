@@ -27,6 +27,7 @@ test('inferDeviceCategory: OS "Windows" con cero puertos confirmados (nmap finge
     hostname: 'S25-Ultra-de-Andrea.fibertel.com.ar',
     os: { name: 'Microsoft Windows 10 - 11' },
     services: [],
+    asset_coverage: { port_scan: 'complete' },
   })
   assert.equal(result.category, 'mobile')
 })
@@ -36,6 +37,7 @@ test('inferDeviceCategory: no hardcodea modelos de teléfono — un hostname con
     hostname: 'S26-Ultra-de-Bruno.fibertel.com.ar',
     os: { name: 'Microsoft Windows 10 - 11' },
     services: [],
+    asset_coverage: { port_scan: 'complete' },
   })
   assert.equal(result.category, 'mobile')
 })
@@ -43,7 +45,7 @@ test('inferDeviceCategory: no hardcodea modelos de teléfono — un hostname con
 test('inferDeviceCategory: OS "Windows" con servicios confirmados (SMB) SÍ es una PC real, no se penaliza', () => {
   const result = inferDeviceCategory({
     os: { name: 'Microsoft Windows 10 - 11' },
-    services: [{ port: 445 }],
+    services: [{ port: 445, state: 'open' }],
   })
   assert.equal(result.category, 'workstation')
   assert.equal(result.tier, 'likely')
@@ -77,12 +79,19 @@ test('inferDeviceCategory: hostname DESKTOP-* con OS Windows clasifica workstati
 })
 
 test('inferDeviceCategory: puerto DHCP server (67/68) clasifica gateway aunque no haya otra señal', () => {
-  const result = inferDeviceCategory({ services: [{ port: 67 }, { port: 68 }] })
+  const result = inferDeviceCategory({
+    services: [
+      { port: 67, state: 'open' },
+      { port: 68, state: 'open' },
+    ],
+  })
   assert.equal(result.category, 'gateway')
 })
 
 test('inferDeviceCategory: nginx solo (sin DHCP) no alcanza para "likely server" — señal débil por diseño', () => {
-  const result = inferDeviceCategory({ services: [{ port: 80, product: 'nginx 1.12.2' }] })
+  const result = inferDeviceCategory({
+    services: [{ port: 80, product: 'nginx 1.12.2', state: 'open' }],
+  })
   assert.equal(result.tier, 'possible')
   assert.equal(result.category, 'server')
 })
@@ -99,7 +108,44 @@ test('inferDeviceCategory: hostname corto/ambiguo ("gm") sin otra señal es unkn
 })
 
 test('inferDeviceCategory: puerto de impresora clasifica printer con tier likely', () => {
-  const result = inferDeviceCategory({ services: [{ port: 9100 }] })
+  const result = inferDeviceCategory({ services: [{ port: 9100, state: 'open' }] })
   assert.equal(result.category, 'printer')
   assert.equal(result.tier, 'likely')
+})
+
+test('inferDeviceCategory: no trata puertos filtered o closed como abiertos', () => {
+  const result = inferDeviceCategory({
+    services: [
+      { port: 9100, state: 'filtered' },
+      { port: 445, state: 'closed' },
+    ],
+    asset_coverage: { port_scan: 'partial' },
+  })
+  assert.equal(result.category, null)
+  assert.equal(result.tier, 'unknown')
+})
+
+test('inferDeviceCategory: ausencia de puertos solo pesa con cobertura completa', () => {
+  const partial = inferDeviceCategory({
+    services: [],
+    asset_coverage: { port_scan: 'partial' },
+  })
+  const complete = inferDeviceCategory({
+    services: [],
+    asset_coverage: { port_scan: 'complete' },
+  })
+  assert.equal(partial.category, null)
+  assert.equal(complete.category, 'mobile')
+})
+
+test('inferDeviceCategory: conflicto directo de gateway no clasifica por heurísticas', () => {
+  const result = inferDeviceCategory({
+    ip: '192.168.1.1',
+    gateway_ip: '192.168.1.1',
+    gateway_match_conflict: true,
+    hostname: 'router',
+  })
+  assert.equal(result.category, null)
+  assert.equal(result.tier, 'unknown')
+  assert.match(result.signals[0], /conflicting/)
 })

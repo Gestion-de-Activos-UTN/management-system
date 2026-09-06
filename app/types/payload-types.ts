@@ -83,6 +83,7 @@ export interface Config {
     'job-runs': JobRun;
     'inventory-snapshots': InventorySnapshot;
     'payload-kv': PayloadKv;
+    'payload-jobs': PayloadJob;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -104,6 +105,7 @@ export interface Config {
     'job-runs': JobRunsSelect<false> | JobRunsSelect<true>;
     'inventory-snapshots': InventorySnapshotsSelect<false> | InventorySnapshotsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
+    'payload-jobs': PayloadJobsSelect<false> | PayloadJobsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
@@ -112,15 +114,25 @@ export interface Config {
     defaultIDType: string;
   };
   fallbackLocale: null;
-  globals: {};
-  globalsSelect: {};
+  globals: {
+    'payload-jobs-stats': PayloadJobsStat;
+  };
+  globalsSelect: {
+    'payload-jobs-stats': PayloadJobsStatsSelect<false> | PayloadJobsStatsSelect<true>;
+  };
   locale: null;
   widgets: {
     collections: CollectionsWidget;
   };
   user: Admin | User;
   jobs: {
-    tasks: unknown;
+    tasks: {
+      'expire-raw-scan-payloads': TaskExpireRawScanPayloads;
+      inline: {
+        input: unknown;
+        output: unknown;
+      };
+    };
     workflows: unknown;
   };
 }
@@ -299,8 +311,53 @@ export interface Asset {
   gateway_ip?: string | null;
   gateway_mac?: string | null;
   mac?: string | null;
+  mac_metadata?: {
+    kind?:
+      ('globally_administered' | 'locally_administered' | 'multicast' | 'broadcast' | 'invalid' | 'unknown') | null;
+    vendor_resolution?: ('resolved' | 'not_found' | 'not_attempted' | 'unknown') | null;
+  };
   vendor?: string | null;
   hostname?: string | null;
+  names?:
+    | {
+        value: string;
+        source: 'nmap' | 'ptr' | 'mdns' | 'netbios' | 'ssdp';
+        id?: string | null;
+      }[]
+    | null;
+  is_scanner_host?: boolean | null;
+  scanner_host_match?: ('ip' | 'mac' | 'both' | 'conflict' | 'none' | 'unknown') | null;
+  asset_coverage?: {
+    port_scan?: ('complete' | 'partial' | 'not_attempted' | 'unknown') | null;
+    service_detection?: ('complete' | 'partial' | 'not_attempted' | 'unknown') | null;
+    os_detection?: ('complete' | 'partial' | 'not_attempted' | 'unknown') | null;
+    name_resolution?: ('complete' | 'partial' | 'not_attempted' | 'unknown') | null;
+  };
+  scan_issues?:
+    | {
+        stage: string;
+        code: string;
+        id?: string | null;
+      }[]
+    | null;
+  evidence_history?:
+    | {
+        kind?: ('mac' | 'vendor' | 'name' | 'device_class') | null;
+        value?: string | null;
+        source?: string | null;
+        first_seen_at?: string | null;
+        last_seen_at?: string | null;
+        seen_count?: number | null;
+        last_report_id?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  applied_report_ids?:
+    | {
+        report_id: string;
+        id?: string | null;
+      }[]
+    | null;
   os?: {
     name?: string | null;
     accuracy?: number | null;
@@ -505,6 +562,25 @@ export interface ScanReport {
   scan_start?: string | null;
   scan_end?: string | null;
   hosts_up?: number | null;
+  execution_status: 'completed' | 'partial' | 'failed';
+  report_coverage?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  scanner_interfaces?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   gateway_ip?: string | null;
   gateway_mac?: string | null;
   raw_payload?:
@@ -516,6 +592,7 @@ export interface ScanReport {
     | number
     | boolean
     | null;
+  raw_payload_expires_at?: string | null;
   status?: ('received' | 'processed' | 'failed') | null;
   processed_at?: string | null;
   error?: string | null;
@@ -623,6 +700,107 @@ export interface PayloadKv {
     | number
     | boolean
     | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs".
+ */
+export interface PayloadJob {
+  id: string;
+  /**
+   * Input data provided to the job
+   */
+  input?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  taskStatus?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  completedAt?: string | null;
+  totalTried?: number | null;
+  /**
+   * If hasError is true this job will not be retried
+   */
+  hasError?: boolean | null;
+  /**
+   * If hasError is true, this is the error that caused it
+   */
+  error?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Task execution log
+   */
+  log?:
+    | {
+        executedAt: string;
+        completedAt: string;
+        taskSlug: 'inline' | 'expire-raw-scan-payloads';
+        taskID: string;
+        input?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+        output?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+        state: 'failed' | 'succeeded';
+        error?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+        id?: string | null;
+      }[]
+    | null;
+  taskSlug?: ('inline' | 'expire-raw-scan-payloads') | null;
+  queue?: string | null;
+  waitUntil?: string | null;
+  processing?: boolean | null;
+  meta?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -804,8 +982,56 @@ export interface AssetsSelect<T extends boolean = true> {
   gateway_ip?: T;
   gateway_mac?: T;
   mac?: T;
+  mac_metadata?:
+    | T
+    | {
+        kind?: T;
+        vendor_resolution?: T;
+      };
   vendor?: T;
   hostname?: T;
+  names?:
+    | T
+    | {
+        value?: T;
+        source?: T;
+        id?: T;
+      };
+  is_scanner_host?: T;
+  scanner_host_match?: T;
+  asset_coverage?:
+    | T
+    | {
+        port_scan?: T;
+        service_detection?: T;
+        os_detection?: T;
+        name_resolution?: T;
+      };
+  scan_issues?:
+    | T
+    | {
+        stage?: T;
+        code?: T;
+        id?: T;
+      };
+  evidence_history?:
+    | T
+    | {
+        kind?: T;
+        value?: T;
+        source?: T;
+        first_seen_at?: T;
+        last_seen_at?: T;
+        seen_count?: T;
+        last_report_id?: T;
+        id?: T;
+      };
+  applied_report_ids?:
+    | T
+    | {
+        report_id?: T;
+        id?: T;
+      };
   os?:
     | T
     | {
@@ -905,9 +1131,13 @@ export interface ScanReportsSelect<T extends boolean = true> {
   scan_start?: T;
   scan_end?: T;
   hosts_up?: T;
+  execution_status?: T;
+  report_coverage?: T;
+  scanner_interfaces?: T;
   gateway_ip?: T;
   gateway_mac?: T;
   raw_payload?: T;
+  raw_payload_expires_at?: T;
   status?: T;
   processed_at?: T;
   error?: T;
@@ -1061,6 +1291,38 @@ export interface PayloadKvSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs_select".
+ */
+export interface PayloadJobsSelect<T extends boolean = true> {
+  input?: T;
+  taskStatus?: T;
+  completedAt?: T;
+  totalTried?: T;
+  hasError?: T;
+  error?: T;
+  log?:
+    | T
+    | {
+        executedAt?: T;
+        completedAt?: T;
+        taskSlug?: T;
+        taskID?: T;
+        input?: T;
+        output?: T;
+        state?: T;
+        error?: T;
+        id?: T;
+      };
+  taskSlug?: T;
+  queue?: T;
+  waitUntil?: T;
+  processing?: T;
+  meta?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-locked-documents_select".
  */
 export interface PayloadLockedDocumentsSelect<T extends boolean = true> {
@@ -1093,6 +1355,34 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs-stats".
+ */
+export interface PayloadJobsStat {
+  id: string;
+  stats?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs-stats_select".
+ */
+export interface PayloadJobsStatsSelect<T extends boolean = true> {
+  stats?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "collections_widget".
  */
 export interface CollectionsWidget {
@@ -1100,6 +1390,16 @@ export interface CollectionsWidget {
     [k: string]: unknown;
   };
   width: 'full';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskExpire-raw-scan-payloads".
+ */
+export interface TaskExpireRawScanPayloads {
+  input?: unknown;
+  output: {
+    expired: number;
+  };
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
