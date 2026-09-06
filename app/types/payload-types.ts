@@ -218,10 +218,6 @@ export interface Subscription {
     | null;
   max_offices?: number | null;
   /**
-   * Límite fijo para planes que lo utilicen. Premium calcula automáticamente dos agentes por oficina.
-   */
-  max_active_agents?: number | null;
-  /**
    * Mapa plano feature_key -> boolean, ver domain/subscriptions/features.ts
    */
   features?:
@@ -272,7 +268,13 @@ export interface Agent {
    */
   is_active?: boolean | null;
   revoked_at?: string | null;
+  /**
+   * Motivo de la revocación: manual (acción humana) o auto_lockout_abuse.
+   */
+  revocation_reason?: ('manual' | 'auto_lockout_abuse') | null;
   failedAttempts?: number | null;
+  lockedUntil?: string | null;
+  lockoutCount?: number | null;
   apiKeyPrefix?: string | null;
   apiKeyHash?: string | null;
   /**
@@ -778,7 +780,10 @@ export interface AgentsSelect<T extends boolean = true> {
   status?: T;
   is_active?: T;
   revoked_at?: T;
+  revocation_reason?: T;
   failedAttempts?: T;
+  lockedUntil?: T;
+  lockoutCount?: T;
   apiKeyPrefix?: T;
   apiKeyHash?: T;
   apiKey?: T;
@@ -945,7 +950,6 @@ export interface SubscriptionsSelect<T extends boolean = true> {
   level?: T;
   user_limits?: T;
   max_offices?: T;
-  max_active_agents?: T;
   features?: T;
   updatedAt?: T;
   createdAt?: T;

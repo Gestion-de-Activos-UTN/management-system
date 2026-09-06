@@ -43,14 +43,6 @@ export const Subscriptions: CollectionConfig = {
       type: 'number',
     },
     {
-      name: 'max_active_agents',
-      type: 'number',
-      admin: {
-        description:
-          'Límite fijo para planes que lo utilicen. Premium calcula automáticamente dos agentes por oficina.',
-      },
-    },
-    {
       name: 'features',
       type: 'json',
       admin: {

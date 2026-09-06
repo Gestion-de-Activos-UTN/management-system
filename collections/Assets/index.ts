@@ -3,6 +3,7 @@ import { orgScopedAccess } from '../../access/rbac/orgScopedAccess'
 import { validateOwnerTenant } from './hooks/validateOwnerTenant'
 import { rejectManualOfflineStatus } from './hooks/rejectManualOfflineStatus'
 import { rejectBusinessEditsBeforeIdentified } from './hooks/rejectBusinessEditsBeforeIdentified'
+import { enforceAuthorizationInvariant } from './hooks/enforceAuthorizationInvariant'
 import { SCANNED_ASSET_TYPE_OPTIONS } from '../../domain/assets/asset-types'
 
 const technicalFieldAccess = {
@@ -29,6 +30,7 @@ export const Assets: CollectionConfig = {
       validateOwnerTenant,
       rejectManualOfflineStatus,
       rejectBusinessEditsBeforeIdentified,
+      enforceAuthorizationInvariant,
     ],
   },
   fields: [
@@ -196,15 +198,20 @@ export const Assets: CollectionConfig = {
       admin: { readOnly: true },
     },
     {
+      // Solo lo escriben endpoints/assetIdentify.ts (overrideAccess) — un PATCH genérico nunca
+      // debe poder tocarlo directo, ver hooks/enforceAuthorizationInvariant.ts.
       name: 'confirmed_type',
       type: 'select',
       options: [...SCANNED_ASSET_TYPE_OPTIONS],
+      access: technicalFieldAccess,
     },
     {
+      // Solo lo escriben endpoints/assetIdentify.ts y assetUnidentify.ts (overrideAccess).
       name: 'authorization_status',
       type: 'select',
       options: ['pending', 'authorized', 'unauthorized'],
       defaultValue: 'pending',
+      access: technicalFieldAccess,
     },
     {
       name: 'type_confirmed_by',

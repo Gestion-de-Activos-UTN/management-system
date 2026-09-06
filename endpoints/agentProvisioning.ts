@@ -5,7 +5,11 @@ import { getTenantContext } from '../access/tenant/resolveTenantContext'
 import { assertOrganizationMatches } from '../access/tenant/assertOrganizationMatches'
 import { relationId } from '../lib/relationId'
 import { buildAgentPackage, isAgentPlatform } from '../domain/agents/buildAgentPackage'
-import { getAgentQuota, withAgentQuotaLock } from '../domain/subscriptions/agent-quota'
+import {
+  getAgentQuota,
+  withAgentQuotaLock,
+  SubscriptionNotFoundError,
+} from '../domain/subscriptions/agent-quota'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
@@ -44,21 +48,23 @@ export const agentProvisioningEndpoint: Endpoint = {
     assertOrganizationMatches(relationId(office.organization), ctx.organizationId, unrestricted)
 
     const organizationId = relationId(office.organization)
-    return withAgentQuotaLock(organizationId, async () => {
-      const quota = await getAgentQuota(req.payload, organizationId, req, officeId)
-      if (quota.available === 0) return json({ error: 'agent_limit_reached', ...quota }, 409)
+    const agentId = `agent-${crypto.randomUUID()}`
+    const platformToken = crypto.randomBytes(32).toString('base64url')
 
-      const agentId = `agent-${crypto.randomUUID()}`
-      const platformToken = crypto.randomBytes(32).toString('base64url')
-      const platformUrl = `${new URL(req.url || 'http://localhost').origin}/api/v1/reports`
-      const heartbeatUrl = `${new URL(req.url || 'http://localhost').origin}/api/v1/heartbeat`
-      const packageBytes = await buildAgentPackage({
-        agentId,
-        platformToken,
-        platformUrl,
-        heartbeatUrl,
-        platform,
-      })
+    // El lock solo serializa el check-de-cupo + create — buildAgentPackage (zip/IO, lento y sin
+    // relación con el invariante de cupo) corre después, afuera, para no bloquear otras requests
+    // de provisioning del mismo org detrás de un trabajo que no necesita exclusión mutua.
+    const denied = await withAgentQuotaLock(organizationId, async () => {
+      let quota
+      try {
+        quota = await getAgentQuota(req.payload, organizationId, req, officeId)
+      } catch (err) {
+        if (err instanceof SubscriptionNotFoundError) {
+          return json({ error: 'subscription_not_found' }, 422)
+        }
+        throw err
+      }
+      if (quota.available === 0) return json({ error: 'agent_limit_reached', ...quota }, 409)
 
       // AUDIT: this action must emit an AuditLogs entry (chain_hash over {agent, office, organization}, previous hash for this organization_id)
       // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
@@ -69,17 +75,29 @@ export const agentProvisioningEndpoint: Endpoint = {
         data: { id: agentId, office: office.id, is_active: true, lifecycle_status: 'provisioned' },
         context: { provisionApiKey: platformToken },
       })
+      return null
+    })
+    if (denied) return denied
 
-      // AUDIT: this action must emit an AuditLogs entry (chain_hash over {agent, office, organization, package_hash}, previous hash for this organization_id)
-      // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
-      return new Response(packageBytes as BodyInit, {
-        status: 201,
-        headers: {
-          'Content-Type': 'application/zip',
-          'Content-Disposition': `attachment; filename="${agentId}-${platform}.zip"`,
-          'Cache-Control': 'no-store',
-        },
-      })
+    const platformUrl = `${new URL(req.url || 'http://localhost').origin}/api/v1/reports`
+    const heartbeatUrl = `${new URL(req.url || 'http://localhost').origin}/api/v1/heartbeat`
+    const packageBytes = await buildAgentPackage({
+      agentId,
+      platformToken,
+      platformUrl,
+      heartbeatUrl,
+      platform,
+    })
+
+    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {agent, office, organization, package_hash}, previous hash for this organization_id)
+    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+    return new Response(packageBytes as BodyInit, {
+      status: 201,
+      headers: {
+        'Content-Type': 'application/zip',
+        'Content-Disposition': `attachment; filename="${agentId}-${platform}.zip"`,
+        'Cache-Control': 'no-store',
+      },
     })
   },
 }

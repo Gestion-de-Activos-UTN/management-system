@@ -29,7 +29,7 @@ export const reportsEndpoint: Endpoint = {
         authDeps
       )
     } catch (err) {
-      if (err instanceof AgentAuthError) return json({ error: err.message }, 401)
+      if (err instanceof AgentAuthError) return json({ error: err.message }, err.status)
       throw err
     }
     // Resetea acá, no solo al final: la resolución de auth arriba ya exigió el hash

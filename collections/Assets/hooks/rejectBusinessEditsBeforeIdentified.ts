@@ -19,12 +19,14 @@ const GATED_FIELDS = [
 export const rejectBusinessEditsBeforeIdentified: CollectionBeforeChangeHook = ({
   data,
   originalDoc,
-  operation,
+  req,
 }) => {
-  // Assets.create no está expuesto a usuarios: sólo lo ejecuta ingestScanReport con
-  // overrideAccess. Payload materializa defaults de negocio (p. ej. authorization_status)
-  // durante esa creación; no deben confundirse con una edición humana.
-  if (operation === 'create') return data
+  // ingestScanReport.ts es el único creador de Assets (overrideAccess + context.systemJob) y
+  // materializa defaults de negocio (p. ej. authorization_status) durante esa creación — no debe
+  // confundirse con una edición humana. Gatear por el marcador explícito, no por `operation`,
+  // para que cualquier futuro caller humano (admin tooling, import) siga bloqueado por defecto,
+  // mismo patrón que rejectManualOfflineStatus.ts.
+  if (req.context?.systemJob) return data
 
   const status = data?.identification_status ?? originalDoc?.identification_status
   const willBeIdentified =

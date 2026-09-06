@@ -221,13 +221,15 @@ export async function ingestScanReport(
         collection: 'assets',
         id: existingDoc.id,
         overrideAccess: true,
+        context: { systemJob: true },
         data: {
           ...technical,
           agent: auth.agentId,
           office: auth.officeId,
           organization: auth.organizationId,
           ...(existingDoc.status === 'retired' ? {} : { status: 'active' }),
-          ...(existingDoc.confirmed_type &&
+          ...(existingDoc.identification_status === 'confirmed' &&
+          existingDoc.confirmed_type &&
           technical.inference_confidence === 'likely' &&
           technical.inferred_type !== existingDoc.confirmed_type
             ? { identification_status: 'needs_review' }
@@ -239,6 +241,7 @@ export async function ingestScanReport(
       await payload.create({
         collection: 'assets',
         overrideAccess: true,
+        context: { systemJob: true },
         data: {
           ...technical,
           agent: auth.agentId,

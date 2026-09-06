@@ -5,25 +5,32 @@ import { rejectBusinessEditsBeforeIdentified } from './rejectBusinessEditsBefore
 function run(
   data: Record<string, unknown>,
   originalDoc: Record<string, unknown>,
-  operation: 'create' | 'update' = 'update'
+  systemJob = false
 ) {
   return (
     rejectBusinessEditsBeforeIdentified as unknown as (args: {
       data: Record<string, unknown>
       originalDoc: Record<string, unknown>
-      operation: 'create' | 'update'
-      // req/operation/context no los usa este hook — solo lo que necesita el test.
+      req: { context?: { systemJob?: boolean } }
+      // operation no lo usa este hook — solo lo que necesita el test.
     }) => unknown
-  )({ data, originalDoc, operation })
+  )({ data, originalDoc, req: { context: { systemJob } } })
 }
 
-test('permite que la ingesta cree el activo con defaults de negocio pendientes', () => {
+test('permite que la ingesta (systemJob) cree/actualice el activo con defaults de negocio pendientes', () => {
   assert.doesNotThrow(() =>
     run(
       { authorization_status: 'pending', identification_status: 'pending' },
       {},
-      'create'
+      true
     )
+  )
+})
+
+test('un create sin el marcador systemJob sigue gateado (bloquea campos de negocio)', () => {
+  assert.throws(
+    () => run({ alias: 'nuevo alias' }, {}, false),
+    e => (e as { status?: number }).status === 400
   )
 })
 

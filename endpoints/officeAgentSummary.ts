@@ -1,9 +1,8 @@
 import type { Endpoint } from 'payload'
 import { getTenantContext } from '../access/tenant/resolveTenantContext'
 import { relationId } from '../lib/relationId'
-import { isOnline } from '../lib/agentStatus'
-import { getAgentLifecycleStatus } from '../domain/agents/agent-state'
-import { getAgentQuota } from '../domain/subscriptions/agent-quota'
+import { getAgentLifecycleStatus, getAgentConnectivity } from '../domain/agents/agent-state'
+import { getAgentQuota, SubscriptionNotFoundError } from '../domain/subscriptions/agent-quota'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
@@ -20,6 +19,7 @@ export interface OfficeAgentSummary {
     id: string
     lifecycle_status: 'provisioned' | 'active' | 'revoked'
     connectivity: 'online' | 'offline' | 'pending' | 'revoked'
+    revocation_reason: 'manual' | 'auto_lockout_abuse' | null
     last_heartbeat_at: string | null
   }>
 }
@@ -92,14 +92,7 @@ export const officeAgentSummaryEndpoint: Endpoint = {
       current.total += 1
       const lifecycle = getAgentLifecycleStatus(agent)
       if (lifecycle !== 'revoked') current.active += 1
-      const connectivity =
-        lifecycle === 'revoked'
-          ? 'revoked'
-          : !agent.last_heartbeat_at
-            ? 'pending'
-            : isOnline(agent.last_heartbeat_at)
-              ? 'online'
-              : 'offline'
+      const connectivity = getAgentConnectivity(agent)
       if (connectivity === 'online') current.online += 1
       else if (connectivity === 'offline') current.offline += 1
       else if (connectivity === 'pending') current.never_connected += 1
@@ -107,11 +100,20 @@ export const officeAgentSummaryEndpoint: Endpoint = {
         id: String(agent.id),
         lifecycle_status: lifecycle,
         connectivity,
+        revocation_reason: agent.revocation_reason ?? null,
         last_heartbeat_at: agent.last_heartbeat_at ?? null,
       })
     }
 
-    const quota = await getAgentQuota(req.payload, ctx.organizationId, req)
+    let quota
+    try {
+      quota = await getAgentQuota(req.payload, ctx.organizationId, req)
+    } catch (err) {
+      if (err instanceof SubscriptionNotFoundError) {
+        return json({ docs: Array.from(summary.values()), quota: null })
+      }
+      throw err
+    }
     return json({ docs: Array.from(summary.values()), quota })
   },
 }

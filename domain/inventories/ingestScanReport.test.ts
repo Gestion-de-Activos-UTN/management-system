@@ -460,6 +460,63 @@ test('retired es sticky: un scan nuevo no revive un activo dado de baja', async 
   assert.equal(updates[0].status, undefined)
 })
 
+test('needs_review solo dispara si el asset está confirmed — no revive un pending con confirmed_type residual', async () => {
+  // assetUnidentify.ts deja `confirmed_type` a propósito tras des-identificar (prefill si se
+  // vuelve a identificar), pero identification_status vuelve a 'pending'. Un re-scan que infiere
+  // un tipo distinto no debe marcar needs_review sobre un asset que el usuario ya dijo "pending".
+  const existingDoc = {
+    id: 'existing-1',
+    first_viewed_at: '2025-01-01T00:00:00.000Z',
+    mac: null,
+    vendor: null,
+    hostname: null,
+    os: null,
+    ip: '10.0.0.1',
+    services: [],
+    gateway_ip: null,
+    gateway_mac: null,
+    status: 'active',
+    identification_status: 'pending',
+    confirmed_type: 'workstation',
+  }
+  const { payload, updates } = makePayload(existingDoc)
+
+  await ingestScanReport(
+    payload,
+    makeReport([makeAsset({ services: [makeService({ port: 9100 })] })]),
+    AUTH
+  )
+
+  assert.equal('identification_status' in updates[0], false)
+})
+
+test('needs_review dispara cuando el asset está confirmed y la inferencia diverge', async () => {
+  const existingDoc = {
+    id: 'existing-1',
+    first_viewed_at: '2025-01-01T00:00:00.000Z',
+    mac: null,
+    vendor: null,
+    hostname: null,
+    os: null,
+    ip: '10.0.0.1',
+    services: [],
+    gateway_ip: null,
+    gateway_mac: null,
+    status: 'active',
+    identification_status: 'confirmed',
+    confirmed_type: 'workstation',
+  }
+  const { payload, updates } = makePayload(existingDoc)
+
+  await ingestScanReport(
+    payload,
+    makeReport([makeAsset({ services: [makeService({ port: 9100 })] })]),
+    AUTH
+  )
+
+  assert.equal(updates[0].identification_status, 'needs_review')
+})
+
 test('campos técnicos obligatorios faltantes rechaza el asset sin crear/actualizar', async () => {
   const { payload, updates, creates } = makePayload(null)
 

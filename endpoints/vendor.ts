@@ -28,7 +28,7 @@ export const vendorEndpoint: Endpoint = {
         createPayloadAgentAuthDeps(req.payload)
       )
     } catch (err) {
-      if (err instanceof AgentAuthError) return json({ error: err.message }, 401)
+      if (err instanceof AgentAuthError) return json({ error: err.message }, err.status)
       throw err
     }
 

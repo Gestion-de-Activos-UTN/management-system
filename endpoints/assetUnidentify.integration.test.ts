@@ -87,6 +87,8 @@ async function seedIdentifiedAsset(payload: Payload) {
       organization: organization.id,
     },
     overrideAccess: true,
+    // Simula el único creador real (ingestScanReport.ts) — ver rejectBusinessEditsBeforeIdentified.ts.
+    context: { systemJob: true },
   })
   // Update separado, no en el create: validateOwnerTenant lee `organization` de `originalDoc`
   // (no existe todavía en el create), mismo motivo por el que assetIdentify.ts solo pisa `owner`

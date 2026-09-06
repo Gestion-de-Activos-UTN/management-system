@@ -40,7 +40,6 @@ async function seedTenant(payload: Payload, roleSlug: 'org_admin' | 'org_viewer'
       organization: organization.id,
       level: 'basic',
       max_offices: 3,
-      max_active_agents: 3,
       user_limits: { org_admin: 1, office_manager: 2, org_viewer: 4 },
       features: { asset_inventory: true },
     },
@@ -218,17 +217,17 @@ test('POST /v1/agents/provision: 400 con un platform desconocido', async () => {
 
 test('POST /v1/agents/provision: 409 cuando la organización agotó sus agentes', async () => {
   const payload = await getPayload({ config })
-  const { organization, office, user } = await seedTenant(payload, 'org_admin')
-  const subscriptions = await payload.find({
-    collection: 'subscriptions',
-    where: { organization: { equals: organization.id } },
-    overrideAccess: true,
-    limit: 1,
-  })
-  await payload.update({
-    collection: 'subscriptions',
-    id: subscriptions.docs[0].id,
-    data: { max_active_agents: 0 },
+  const { office, user } = await seedTenant(payload, 'org_admin')
+  // Plan 'basic' permite 1 agente por oficina (agents_per_office) — provisionar uno ya la agota,
+  // sin depender de ningún override de límite (max_active_agents no existe más, ver limits.ts).
+  await payload.create({
+    collection: 'agents',
+    data: {
+      id: `agent-${Math.random()}`,
+      office: office.id,
+      is_active: true,
+      lifecycle_status: 'active',
+    },
     overrideAccess: true,
   })
   const res = await agentProvisioningEndpoint.handler(

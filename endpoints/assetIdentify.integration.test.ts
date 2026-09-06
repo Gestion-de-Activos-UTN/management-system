@@ -56,6 +56,8 @@ async function seedTenant(
       identified: false,
     },
     overrideAccess: true,
+    // Simula el único creador real (ingestScanReport.ts) — ver rejectBusinessEditsBeforeIdentified.ts.
+    context: { systemJob: true },
   })
   // canDo (access/rbac/permissions.ts) indexa la matriz por el slug literal ('org_admin',
   // 'org_viewer') — Roles.slug es unique, así que se busca el existente (mismo patrón idempotente

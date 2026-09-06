@@ -4,17 +4,12 @@ import { getSubscriptionLimits, type SubscriptionLevel } from './limits'
 
 const organizationLocks = new Map<string, Promise<void>>()
 
-export function calculateAgentLimit(
-  level: SubscriptionLevel,
-  configuredLimit: number | null | undefined,
-  officeCount: number
-): number {
-  const limits = getSubscriptionLimits(level)
-  const fixedLimit: number | null = limits.max_active_agents
-  if (limits.agents_per_office !== null) {
-    return Math.max(0, officeCount) * limits.agents_per_office
-  }
-  return Number(configuredLimit ?? fixedLimit)
+// Distinguible de un error inesperado — una org sin subscriptions doc (legacy, en migración, o
+// borrado) es una condición esperable, no un 500: los callers deben poder responder limpio.
+export class SubscriptionNotFoundError extends Error {}
+
+export function calculateAgentLimit(level: SubscriptionLevel, officeCount: number): number {
+  return Math.max(0, officeCount) * getSubscriptionLimits(level).agents_per_office
 }
 
 // El sistema se ejecuta hoy como un único proceso Next/Payload. Esta cola serializa el check+create
@@ -46,35 +41,36 @@ export async function getAgentQuota(
   req?: PayloadRequest,
   officeId?: string
 ): Promise<{ limit: number; used: number; available: number; per_office: number | null }> {
-  const subscriptions = await payload.find({
-    collection: 'subscriptions',
-    where: { organization: { equals: organizationId } },
-    overrideAccess: true,
-    req,
-    depth: 0,
-    limit: 1,
-  })
+  const [subscriptions, offices, agents] = await Promise.all([
+    payload.find({
+      collection: 'subscriptions',
+      where: { organization: { equals: organizationId } },
+      overrideAccess: true,
+      req,
+      depth: 0,
+      limit: 1,
+    }),
+    payload.find({
+      collection: 'offices',
+      where: { organization: { equals: organizationId } },
+      overrideAccess: true,
+      req,
+      depth: 0,
+      limit: 1,
+    }),
+    payload.find({
+      collection: 'agents',
+      where: { organization: { equals: organizationId } },
+      overrideAccess: true,
+      req,
+      depth: 0,
+      limit: 5000,
+    }),
+  ])
   const subscription = subscriptions.docs[0]
-  if (!subscription) throw new Error('subscription_not_found')
+  if (!subscription) throw new SubscriptionNotFoundError('subscription_not_found')
   const level = subscription.level as SubscriptionLevel
-  const offices = await payload.find({
-    collection: 'offices',
-    where: { organization: { equals: organizationId } },
-    overrideAccess: true,
-    req,
-    depth: 0,
-    limit: 1,
-  })
-  const limit = calculateAgentLimit(level, subscription.max_active_agents, offices.totalDocs)
-
-  const agents = await payload.find({
-    collection: 'agents',
-    where: { organization: { equals: organizationId } },
-    overrideAccess: true,
-    req,
-    depth: 0,
-    limit: 5000,
-  })
+  const limit = calculateAgentLimit(level, offices.totalDocs)
   const used = agents.docs.filter(countsTowardAgentLimit).length
   const perOffice = getSubscriptionLimits(level).agents_per_office
   const officeUsed = officeId

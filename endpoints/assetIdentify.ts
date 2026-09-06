@@ -56,7 +56,7 @@ export const assetIdentifyEndpoint: Endpoint = {
         criticality: body.authorization_status === 'authorized' ? body.criticality : null,
         identified: true,
         identification_status: 'confirmed',
-        type_confirmed_by: req.user!.id,
+        type_confirmed_by: ctx.userId,
         type_confirmed_at: confirmedAt,
       },
     })

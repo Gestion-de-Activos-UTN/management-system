@@ -25,7 +25,6 @@ async function seedTenant(payload: Payload) {
     data: {
       organization: organization.id,
       level: 'basic',
-      max_active_agents: 3,
       user_limits: { org_admin: 1, office_manager: 2, org_viewer: 4 },
     },
     overrideAccess: true,

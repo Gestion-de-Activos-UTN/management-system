@@ -4,6 +4,7 @@ import type { CollectionConfig } from 'payload'
 import {
   AGENT_LIFECYCLE_STATUSES,
   AGENT_RUNTIME_STATUSES,
+  AGENT_REVOCATION_REASONS,
   assertAgentTransition,
   getAgentLifecycleStatus,
   isAgentOnline,
@@ -120,10 +121,32 @@ export const Agents: CollectionConfig = {
       admin: { readOnly: true },
     },
     {
+      name: 'revocation_reason',
+      type: 'select',
+      options: [...AGENT_REVOCATION_REASONS],
+      admin: {
+        readOnly: true,
+        description: 'Motivo de la revocación: manual (acción humana) o auto_lockout_abuse.',
+      },
+    },
+    {
       // Solo cuenta intentos con apiKeyPrefix correcto pero hash inválido — un prefix
       // desconocido no llega a asociarse a ningún Agent (resolveAgentAuth.ts). Se resetea
       // a 0 en cada ingesta exitosa (reports.ts/heartbeat.ts), no solo en el auth.
       name: 'failedAttempts',
+      type: 'number',
+      defaultValue: 0,
+      admin: { readOnly: true },
+    },
+    {
+      // Bloqueo temporal tras superar AGENT_LOCKOUT_THRESHOLD fallidos — ver resolveAgentAuth.ts.
+      name: 'lockedUntil',
+      type: 'date',
+      admin: { readOnly: true },
+    },
+    {
+      // Ciclos de lockout acumulados; al llegar a AGENT_LOCKOUT_ESCALATION_THRESHOLD se revoca.
+      name: 'lockoutCount',
       type: 'number',
       defaultValue: 0,
       admin: { readOnly: true },

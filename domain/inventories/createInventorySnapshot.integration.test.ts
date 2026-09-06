@@ -56,6 +56,7 @@ async function seedOfficeWithAssets(payload: Payload) {
   await payload.create({
     collection: 'assets',
     overrideAccess: true,
+    context: { systemJob: true },
     data: {
       asset_id: `a-${Math.random().toString(36).slice(2)}`,
       agent: agent.id,

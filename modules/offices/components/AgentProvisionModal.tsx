@@ -1,13 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { Badge, Button, Divider, Group, Modal, SegmentedControl, Stack, Text } from '@mantine/core'
+import { Button, Divider, Group, Modal, SegmentedControl, Stack, Text } from '@mantine/core'
 import { Download, ShieldAlert, ShieldCheck } from 'lucide-react'
 import type { Office } from '@/app/types/payload-types'
 import type { AgentPlatform } from '@/domain/agents/buildAgentPackage'
 import { useProvisionAgent } from '../hooks/use-offices'
 import { useRevokeAgent } from '../hooks/use-offices'
 import type { AgentQuotaSummary, OfficeAgentSummary } from '@/endpoints/officeAgentSummary'
+import { AgentConnectivityBadge } from './AgentConnectivityBadge'
 
 const PLATFORM_OPTIONS = [
   { label: 'Linux / macOS', value: 'posix' },
@@ -49,10 +50,10 @@ export function AgentProvisionModal({
   const revoke = useRevokeAgent()
   const [platform, setPlatform] = useState<AgentPlatform>('posix')
   const [agentToDeactivate, setAgentToDeactivate] = useState<string | null>(null)
-  const officeSlotsAvailable =
-    quota?.per_office == null
-      ? quota?.available
-      : Math.max(0, quota.per_office - (summary?.active ?? 0))
+  // quota.available ya viene resuelto server-side como min(cupo de organización, cupo de esta
+  // oficina) — ver domain/subscriptions/agent-quota.ts::getAgentQuota. Recalcular acá solo la
+  // mitad "por oficina" podía habilitar el botón con el cupo de organización ya agotado.
+  const officeSlotsAvailable = quota?.available
 
   function handleClose() {
     setPlatform('posix')
@@ -113,9 +114,10 @@ export function AgentProvisionModal({
                     <Text size="sm" truncate>
                       {agent.id}
                     </Text>
-                    <Badge size="xs" variant="light">
-                      {agent.connectivity}
-                    </Badge>
+                    <AgentConnectivityBadge
+                      connectivity={agent.connectivity}
+                      revocationReason={agent.revocation_reason}
+                    />
                   </Stack>
                   {agent.lifecycle_status !== 'revoked' && (
                     <Button

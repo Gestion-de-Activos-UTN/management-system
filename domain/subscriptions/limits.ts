@@ -1,7 +1,6 @@
 export const SUBSCRIPTION_LIMITS = {
   basic: {
     max_offices: 3,
-    max_active_agents: 3,
     agents_per_office: 1,
     user_limits: {
       org_admin: 1,
@@ -11,7 +10,6 @@ export const SUBSCRIPTION_LIMITS = {
   },
   premium: {
     max_offices: 10,
-    max_active_agents: 20,
     agents_per_office: 2,
     user_limits: {
       org_admin: 3,
