@@ -13,7 +13,8 @@ import { AgentProvisionModal } from '@/modules/offices/components/AgentProvision
 export default function AdminOfficesPage() {
   const asOrganization = useSearchParams().get('asOrganization') ?? undefined
   const { data, isPending } = useOfficesList(asOrganization)
-  const { data: agentSummary } = useOfficeAgentSummary(asOrganization)
+  const { data: agentSummaryResponse } = useOfficeAgentSummary(asOrganization)
+  const agentSummary = agentSummaryResponse?.docs
   const [selectedOffice, setSelectedOffice] = useState<Office | null>(null)
   const columns = useMemo(() => getOfficesColumns(setSelectedOffice, agentSummary), [agentSummary])
 
@@ -31,6 +32,8 @@ export default function AdminOfficesPage() {
         office={selectedOffice}
         opened={selectedOffice !== null}
         onClose={() => setSelectedOffice(null)}
+        summary={agentSummary?.find(summary => summary.office_id === String(selectedOffice?.id))}
+        quota={agentSummaryResponse?.quota ?? null}
       />
     </Stack>
   )

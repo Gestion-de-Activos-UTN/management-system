@@ -1,23 +1,23 @@
-'use client';
+'use client'
 
-import { Controller, useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Button, Group, Select, SimpleGrid, Stack, TextInput } from '@mantine/core';
-import { useOfficesList } from '@/modules/offices/hooks/use-offices';
-import { useOrgMembers } from '@/modules/users/hooks/use-org-members';
+import { Controller, useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { Button, Group, Select, SimpleGrid, Stack, TextInput } from '@mantine/core'
+import { useOfficesList } from '@/modules/offices/hooks/use-offices'
+import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
 import {
-  ASSET_CATEGORY_OPTIONS,
   CRITICALITY_OPTIONS,
   NON_NETWORK_ASSET_STATUS_OPTIONS,
   REVIEW_INTERVAL_OPTIONS,
-} from '@/lib/enum-labels';
-import type { NonNetworkAsset } from '@/app/types/payload-types';
-import { NonNetworkAssetSchema, type NonNetworkAssetFormValues } from '../schema';
-import { useSaveNonNetworkAsset } from '../hooks/use-save-non-network-asset';
+} from '@/lib/enum-labels'
+import type { NonNetworkAsset } from '@/app/types/payload-types'
+import { MANUAL_ASSET_CATEGORY_GROUPS } from '@/domain/assets/asset-types'
+import { NonNetworkAssetSchema, type NonNetworkAssetFormValues } from '../schema'
+import { useSaveNonNetworkAsset } from '../hooks/use-save-non-network-asset'
 
 function relationIdOf(value: string | { id: string } | null | undefined): string {
-  if (!value) return '';
-  return typeof value === 'string' ? value : value.id;
+  if (!value) return ''
+  return typeof value === 'string' ? value : value.id
 }
 
 export function NonNetworkAssetForm({
@@ -25,19 +25,23 @@ export function NonNetworkAssetForm({
   asOrganization,
   onSaved,
 }: {
-  asset?: NonNetworkAsset;
-  asOrganization?: string;
-  onSaved?: () => void;
+  asset?: NonNetworkAsset
+  asOrganization?: string
+  onSaved?: () => void
 }) {
-  const { data: offices } = useOfficesList(asOrganization);
-  const { data: members } = useOrgMembers(asOrganization);
-  const save = useSaveNonNetworkAsset(asset?.id);
+  const { data: offices } = useOfficesList(asOrganization)
+  const { data: members } = useOrgMembers(asOrganization)
+  const save = useSaveNonNetworkAsset(asset?.id)
 
-  const { control, handleSubmit, formState: { errors } } = useForm<NonNetworkAssetFormValues>({
+  const {
+    control,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<NonNetworkAssetFormValues>({
     resolver: zodResolver(NonNetworkAssetSchema),
     defaultValues: {
       alias: asset?.alias ?? '',
-      asset_category: asset?.asset_category ?? 'other',
+      asset_category: asset?.asset_category,
       criticality: asset?.criticality ?? 'medium',
       owner: relationIdOf(asset?.owner as string | { id: string } | null | undefined),
       location: asset?.location ?? '',
@@ -45,11 +49,11 @@ export function NonNetworkAssetForm({
       office: relationIdOf(asset?.office as string | { id: string } | null | undefined),
       review_interval: asset?.review_interval ?? 'never',
     },
-  });
+  })
 
-  const onSubmit = handleSubmit((values) => {
-    save.mutate(values, { onSuccess: onSaved });
-  });
+  const onSubmit = handleSubmit(values => {
+    save.mutate(values, { onSuccess: onSaved })
+  })
 
   return (
     // noValidate: `required` below is kept ONLY for the visual asterisk. Without this, the
@@ -71,7 +75,7 @@ export function NonNetworkAssetForm({
                 label="Alias"
                 required
                 value={field.value}
-                onChange={(e) => field.onChange(e.currentTarget.value)}
+                onChange={e => field.onChange(e.currentTarget.value)}
                 error={errors.alias?.message}
               />
             )}
@@ -82,9 +86,16 @@ export function NonNetworkAssetForm({
             render={({ field }) => (
               <Select
                 label="Category"
-                data={ASSET_CATEGORY_OPTIONS}
-                value={field.value}
-                onChange={(v) => field.onChange(v ?? 'other')}
+                placeholder="Search or select a category"
+                searchable
+                clearable
+                nothingFoundMessage="No category found"
+                data={MANUAL_ASSET_CATEGORY_GROUPS.map(group => ({
+                  group: group.group,
+                  items: [...group.items],
+                }))}
+                value={field.value ?? null}
+                onChange={field.onChange}
                 error={errors.asset_category?.message}
               />
             )}
@@ -97,7 +108,7 @@ export function NonNetworkAssetForm({
                 label="Criticality"
                 data={CRITICALITY_OPTIONS}
                 value={field.value}
-                onChange={(v) => field.onChange(v ?? 'medium')}
+                onChange={v => field.onChange(v ?? 'medium')}
                 error={errors.criticality?.message}
               />
             )}
@@ -110,7 +121,7 @@ export function NonNetworkAssetForm({
                 label="Owner"
                 required
                 placeholder="Select owner"
-                data={(members ?? []).map((m) => ({ value: m.id, label: `${m.name} (${m.email})` }))}
+                data={(members ?? []).map(m => ({ value: m.id, label: m.name || m.email }))}
                 value={field.value || null}
                 onChange={field.onChange}
                 searchable
@@ -125,7 +136,7 @@ export function NonNetworkAssetForm({
               <Select
                 label="Office"
                 required
-                data={(offices ?? []).map((o) => ({ value: String(o.id), label: o.name }))}
+                data={(offices ?? []).map(o => ({ value: String(o.id), label: o.name }))}
                 value={field.value || null}
                 onChange={field.onChange}
                 error={errors.office?.message}
@@ -139,7 +150,7 @@ export function NonNetworkAssetForm({
               <TextInput
                 label="Location"
                 value={field.value ?? ''}
-                onChange={(e) => field.onChange(e.currentTarget.value)}
+                onChange={e => field.onChange(e.currentTarget.value)}
                 error={errors.location?.message}
               />
             )}
@@ -156,7 +167,7 @@ export function NonNetworkAssetForm({
                 description=" "
                 data={NON_NETWORK_ASSET_STATUS_OPTIONS}
                 value={field.value}
-                onChange={(v) => field.onChange(v ?? 'active')}
+                onChange={v => field.onChange(v ?? 'active')}
                 error={errors.status?.message}
               />
             )}
@@ -170,7 +181,7 @@ export function NonNetworkAssetForm({
                 description="How often this asset needs to be reconfirmed"
                 data={REVIEW_INTERVAL_OPTIONS}
                 value={field.value}
-                onChange={(v) => field.onChange(v ?? 'never')}
+                onChange={v => field.onChange(v ?? 'never')}
                 error={errors.review_interval?.message}
               />
             )}
@@ -183,5 +194,5 @@ export function NonNetworkAssetForm({
         </Group>
       </Stack>
     </form>
-  );
+  )
 }

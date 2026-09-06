@@ -3,6 +3,7 @@ import type { Asset } from '../../app/types/payload-types'
 import type { AssetPayload } from '../../contracts/asset.schema'
 import type { ScanReportPayload } from '../../contracts/scan-report.schema'
 import type { AgentAuthResult } from '../../access/middleware/resolveAgentAuth'
+import { inferDeviceCategory } from '../assets/inferDeviceCategory'
 
 export interface IngestResult {
   processedAssetIds: string[]
@@ -20,7 +21,7 @@ export interface IngestResult {
 const REQUIRED_ASSET_FIELDS: Array<keyof AssetPayload> = ['asset_id', 'ip', 'scan_time']
 
 function findMissingFields(asset: AssetPayload): string[] {
-  return REQUIRED_ASSET_FIELDS.filter((field) => !asset[field]) as string[]
+  return REQUIRED_ASSET_FIELDS.filter(field => !asset[field]) as string[]
 }
 
 type ExistingAssetDoc = Asset
@@ -45,17 +46,23 @@ const OS_ACCURACY_THRESHOLD = 85
 
 // Decisión de negocio de la plataforma, nunca del agente (el scanner solo reporta candidatos
 // crudos) — ver management-system/CLAUDE.md y la nota de conversación sobre esta regla.
-function resolveOsStatus(osCandidates: AssetPayload['os_candidates']): 'identified' | 'indeterminate' {
+function resolveOsStatus(
+  osCandidates: AssetPayload['os_candidates']
+): 'identified' | 'indeterminate' {
   return (osCandidates[0]?.accuracy ?? 0) >= OS_ACCURACY_THRESHOLD ? 'identified' : 'indeterminate'
 }
 
-function sanitizeTechnicalBlock(asset: AssetPayload, report: ScanReportPayload, existingDoc?: ExistingAssetDoc) {
+function sanitizeTechnicalBlock(
+  asset: AssetPayload,
+  report: ScanReportPayload,
+  existingDoc?: ExistingAssetDoc
+) {
   const osCandidates =
     asset.os_candidates.length > 0
       ? asset.os_candidates
       : ((existingDoc?.os_candidates as AssetPayload['os_candidates'] | undefined) ?? [])
 
-  return {
+  const technical = {
     asset_id: asset.asset_id,
     ip: asset.ip,
     // El scanner manda "" cuando no pudo resolverlos (ver nota arriba) — se normaliza a `null`
@@ -63,7 +70,8 @@ function sanitizeTechnicalBlock(asset: AssetPayload, report: ScanReportPayload, 
     // documenta (`mac: string | null`, doc 05 §5.1), no un string vacío disfrazado de dato.
     mac: (asset.mac || null) ?? (existingDoc?.mac as string | null | undefined) ?? null,
     vendor: (asset.vendor || null) ?? (existingDoc?.vendor as string | null | undefined) ?? null,
-    hostname: (asset.hostname || null) ?? (existingDoc?.hostname as string | null | undefined) ?? null,
+    hostname:
+      (asset.hostname || null) ?? (existingDoc?.hostname as string | null | undefined) ?? null,
     // Payload tipa el group field como opcional (undefined), no nullable — el wire protocol
     // sí manda `null` cuando nmap no detecta OS (models.py::Asset.os: Optional[...]).
     os: asset.os ?? (existingDoc?.os as AssetPayload['os'] | undefined) ?? undefined,
@@ -74,11 +82,31 @@ function sanitizeTechnicalBlock(asset: AssetPayload, report: ScanReportPayload, 
     services: asset.services,
     last_seen: asset.scan_time,
     gateway_ip: report.gateway_ip ?? (existingDoc?.gateway_ip as string | null | undefined) ?? null,
-    gateway_mac: report.gateway_mac ?? (existingDoc?.gateway_mac as string | null | undefined) ?? null,
+    gateway_mac:
+      report.gateway_mac ?? (existingDoc?.gateway_mac as string | null | undefined) ?? null,
+  }
+  const inference = inferDeviceCategory(technical)
+  const inferredType = inference.category ?? ('unknown' as const)
+  return {
+    ...technical,
+    inferred_type: inferredType,
+    inference_confidence: inference.tier,
+    inference_signals: inference.signals,
+    inference_version: 1,
   }
 }
 
-const TECHNICAL_DIFF_FIELDS = ['ip', 'mac', 'vendor', 'hostname', 'os', 'os_candidates', 'services', 'gateway_ip', 'gateway_mac'] as const
+const TECHNICAL_DIFF_FIELDS = [
+  'ip',
+  'mac',
+  'vendor',
+  'hostname',
+  'os',
+  'os_candidates',
+  'services',
+  'gateway_ip',
+  'gateway_mac',
+] as const
 
 // `state_reason`/`host_scripts` quedan fuera a propósito: cambian con cada scan aunque nada
 // relevante haya cambiado, no aportan señal útil de "Changed" para el usuario.
@@ -88,20 +116,30 @@ const TECHNICAL_DIFF_FIELDS = ['ip', 'mac', 'vendor', 'hostname', 'os', 'os_cand
 // payload del agente nunca. Sin este strip, JSON.stringify los ve distintos en casi cualquier
 // ingesta con filas, disparando "Changed" aunque nada haya cambiado de verdad. Se compara solo
 // el contenido real de cada fila.
-const ARRAY_DIFF_FIELDS = new Set<(typeof TECHNICAL_DIFF_FIELDS)[number]>(['services', 'os_candidates'])
+const ARRAY_DIFF_FIELDS = new Set<(typeof TECHNICAL_DIFF_FIELDS)[number]>([
+  'services',
+  'os_candidates',
+])
 
-function stripArrayIds(rows: Array<Record<string, unknown>> | null | undefined): Array<Record<string, unknown>> {
+function stripArrayIds(
+  rows: Array<Record<string, unknown>> | null | undefined
+): Array<Record<string, unknown>> {
   return (rows ?? []).map(({ id: _id, ...rest }) => rest)
 }
 
 // Comparación por JSON.stringify: suficiente para detectar cambios reales (no le importa el
 // orden interno de `services`/`os.cpe` a costa de falsos positivos si el scanner reordena el
 // mismo set — aceptable para un badge informativo, no para lógica de negocio).
-function hasTechnicalChanged(existingDoc: ExistingAssetDoc, technical: ReturnType<typeof sanitizeTechnicalBlock>): boolean {
-  return TECHNICAL_DIFF_FIELDS.some((field) => {
+function hasTechnicalChanged(
+  existingDoc: ExistingAssetDoc,
+  technical: ReturnType<typeof sanitizeTechnicalBlock>
+): boolean {
+  return TECHNICAL_DIFF_FIELDS.some(field => {
     if (ARRAY_DIFF_FIELDS.has(field)) {
       return (
-        JSON.stringify(stripArrayIds(existingDoc[field] as Array<Record<string, unknown>> | null)) !==
+        JSON.stringify(
+          stripArrayIds(existingDoc[field] as Array<Record<string, unknown>> | null)
+        ) !==
         JSON.stringify(stripArrayIds(technical[field] as Array<Record<string, unknown>> | null))
       )
     }
@@ -118,7 +156,7 @@ function hasTechnicalChanged(existingDoc: ExistingAssetDoc, technical: ReturnTyp
 async function findExistingAsset(
   payload: Payload,
   agentId: string,
-  asset: AssetPayload,
+  asset: AssetPayload
 ): Promise<ExistingAssetDoc | undefined> {
   if (asset.mac) {
     const byMac = await payload.find({
@@ -153,7 +191,7 @@ async function findExistingAsset(
 export async function ingestScanReport(
   payload: Payload,
   report: ScanReportPayload,
-  auth: AgentAuthResult,
+  auth: AgentAuthResult
 ): Promise<IngestResult> {
   const processedAssetIds: string[] = []
   const rejectedAssets: IngestResult['rejectedAssets'] = []
@@ -174,7 +212,8 @@ export async function ingestScanReport(
     if (existingDoc) {
       // "Changed" solo aplica a un activo que un humano ya vio (first_viewed_at != null) — antes
       // de eso el badge "New" ya cubre "hay algo nuevo acá", marcar ambos sería redundante.
-      const technicalChanged = existingDoc.first_viewed_at != null && hasTechnicalChanged(existingDoc, technical)
+      const technicalChanged =
+        existingDoc.first_viewed_at != null && hasTechnicalChanged(existingDoc, technical)
 
       // Bloque de negocio (alias/criticality/location/status) nunca se toca acá, salvo
       // 'retired' → sticky (doc05§5.1): un scan nuevo no revive un activo dado de baja.
@@ -182,12 +221,19 @@ export async function ingestScanReport(
         collection: 'assets',
         id: existingDoc.id,
         overrideAccess: true,
+        context: { systemJob: true },
         data: {
           ...technical,
           agent: auth.agentId,
           office: auth.officeId,
           organization: auth.organizationId,
           ...(existingDoc.status === 'retired' ? {} : { status: 'active' }),
+          ...(existingDoc.identification_status === 'confirmed' &&
+          existingDoc.confirmed_type &&
+          technical.inference_confidence === 'likely' &&
+          technical.inferred_type !== existingDoc.confirmed_type
+            ? { identification_status: 'needs_review' }
+            : {}),
           ...(technicalChanged ? { technical_changed_at: new Date().toISOString() } : {}),
         },
       })
@@ -195,6 +241,7 @@ export async function ingestScanReport(
       await payload.create({
         collection: 'assets',
         overrideAccess: true,
+        context: { systemJob: true },
         data: {
           ...technical,
           agent: auth.agentId,

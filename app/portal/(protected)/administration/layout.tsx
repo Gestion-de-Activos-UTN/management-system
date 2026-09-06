@@ -1,17 +1,17 @@
-'use client';
+'use client'
 
-import { notFound, useSearchParams } from 'next/navigation';
-import { Button, Center, Loader, Stack, Text } from '@mantine/core';
-import { useTenantContext, isEffectiveOrgAdmin } from '@/modules/auth/hooks/use-tenant-context';
+import { notFound, useSearchParams } from 'next/navigation'
+import { Button, Center, Loader, Stack, Text } from '@mantine/core'
+import { useTenantContext, isEffectiveOrgAdmin } from '@/modules/auth/hooks/use-tenant-context'
 
 // ponytail/debt: role gate is client-side only, same limitation as portal/(protected)/layout.tsx
 // (no server-side session to check before the Auth0 migration) — see that file's comment for
 // the full note.
 export default function PortalAdminLayout({ children }: { children: React.ReactNode }) {
-  const searchParams = useSearchParams();
-  const asOrganization = searchParams.get('asOrganization') ?? undefined;
-  const tenantContext = useTenantContext(asOrganization);
-  const isOrgAdmin = isEffectiveOrgAdmin(tenantContext.data);
+  const searchParams = useSearchParams()
+  const asOrganization = searchParams.get('asOrganization') ?? undefined
+  const tenantContext = useTenantContext(asOrganization)
+  const isOrgAdmin = isEffectiveOrgAdmin(tenantContext.data)
 
   // Same failure mode as portal/(protected)/layout.tsx: without this, a failed fetch leaves
   // tenantContext.data undefined -> isOrgAdmin false -> the check below 404s the user out of
@@ -27,7 +27,7 @@ export default function PortalAdminLayout({ children }: { children: React.ReactN
           </Button>
         </Stack>
       </Center>
-    );
+    )
   }
 
   if (tenantContext.isPending) {
@@ -35,7 +35,7 @@ export default function PortalAdminLayout({ children }: { children: React.ReactN
       <Center h="60vh">
         <Loader />
       </Center>
-    );
+    )
   }
 
   // Renders the global not-found boundary instead of bouncing to /portal/dashboard: a redirect
@@ -43,8 +43,8 @@ export default function PortalAdminLayout({ children }: { children: React.ReactN
   // gated, leaking which routes are permission-walled. A 404 looks identical to a route that
   // was never there at all.
   if (!isOrgAdmin) {
-    notFound();
+    notFound()
   }
 
-  return <>{children}</>;
+  return <>{children}</>
 }

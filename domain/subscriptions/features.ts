@@ -7,5 +7,5 @@ export type FeatureKey = (typeof FEATURE_CATALOG)[number]
 export type FeatureToggles = Record<FeatureKey, boolean>
 
 export function defaultFeatures(): FeatureToggles {
-  return Object.fromEntries(FEATURE_CATALOG.map((key) => [key, true])) as FeatureToggles
+  return Object.fromEntries(FEATURE_CATALOG.map(key => [key, true])) as FeatureToggles
 }

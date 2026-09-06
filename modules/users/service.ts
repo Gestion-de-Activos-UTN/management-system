@@ -1,12 +1,12 @@
-import { httpClient } from '@/lib/http-client';
+import { httpClient } from '@/lib/http-client'
 
 export type OrgMember = {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  status: 'onboarding' | 'active';
-};
+  id: string
+  name: string
+  email: string
+  role: string
+  status: 'onboarding' | 'active'
+}
 
 // Deliberadamente NO usa /api/users (Users.read es () => false hoy, ver el ponytail: en
 // app/portal/(protected)/admin/users/page.tsx) — endpoints/orgMembers.ts expone solo lo mínimo
@@ -17,5 +17,5 @@ export type OrgMember = {
 export function listOrgMembers(params?: { asOrganization?: string }) {
   return httpClient
     .get<{ docs: OrgMember[] }>('/api/v1/org-members', { asOrganization: params?.asOrganization })
-    .then((r) => r.docs);
+    .then(r => r.docs)
 }

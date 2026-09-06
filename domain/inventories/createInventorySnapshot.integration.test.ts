@@ -4,6 +4,7 @@ import { getPayload } from 'payload'
 import type { Payload } from 'payload'
 import config from '../../payload.config'
 import { createInventorySnapshot } from './createInventorySnapshot'
+import { relationId } from '@/lib/relationId'
 
 // Integration test real contra Postgres (ver endpoints/reports.integration.test.ts para el
 // mismo criterio) — el foco acá es la garantía de copia-por-valor de assets_dump, que un mock
@@ -28,12 +29,19 @@ async function seedOfficeWithAssets(payload: Payload) {
   const user = await payload.create({
     collection: 'users',
     overrideAccess: true,
-    data: { email: `owner-${Math.random().toString(36).slice(2)}@test.com`, password: 'x', name: 'Owner Test' },
+    data: {
+      email: `owner-${Math.random().toString(36).slice(2)}@test.com`,
+      password: 'x'.repeat(12),
+      name: 'Owner Test',
+    },
   })
 
   const criticalAsset = await payload.create({
     collection: 'assets',
     overrideAccess: true,
+    // status: 'offline' es autoridad de ingesta/aging (rejectManualOfflineStatus.ts) — el seed
+    // necesita el mismo `context.systemJob` que esos procesos para poder sembrarlo directo.
+    context: { systemJob: true },
     data: {
       asset_id: `a-${Math.random().toString(36).slice(2)}`,
       agent: agent.id,
@@ -42,11 +50,13 @@ async function seedOfficeWithAssets(payload: Payload) {
       ip: '10.0.0.1',
       criticality: 'critical',
       status: 'offline',
+      identified: true,
     },
   })
   await payload.create({
     collection: 'assets',
     overrideAccess: true,
+    context: { systemJob: true },
     data: {
       asset_id: `a-${Math.random().toString(36).slice(2)}`,
       agent: agent.id,
@@ -55,6 +65,7 @@ async function seedOfficeWithAssets(payload: Payload) {
       ip: '10.0.0.2',
       criticality: 'low',
       status: 'active',
+      identified: true,
     },
   })
 
@@ -94,6 +105,47 @@ test('createInventorySnapshot: assets_dump refleja Network y Other Assets, risk_
   assert.equal((snapshot.risk_score as { global: number }).global, 83)
 })
 
+test('createInventorySnapshot: un asset no identificado entra en assets_dump pero no en risk_score', async () => {
+  const payload = await getPayload({ config })
+  const { office } = await seedOfficeWithAssets(payload)
+
+  // Sin identificar (identified: false, default): criticidad 'critical' pero offline, si contara
+  // pesaría el score a 100%. No debe contar (ver nota junto a computeRiskScore en
+  // createInventorySnapshot.ts) — ni recién detectado ni des-identificado después.
+  await payload.create({
+    collection: 'assets',
+    overrideAccess: true,
+    context: { systemJob: true },
+    data: {
+      asset_id: `a-${Math.random().toString(36).slice(2)}`,
+      agent: (await payload.find({
+        collection: 'agents',
+        where: { office: { equals: office.id } },
+        overrideAccess: true,
+        limit: 1,
+      })).docs[0].id,
+      office: office.id,
+      organization: relationId(office.organization),
+      ip: '10.0.0.3',
+      criticality: 'critical',
+      status: 'offline',
+    },
+  })
+
+  const snapshot = await createInventorySnapshot(payload, String(office.id), {
+    type: 'manual',
+    userId: 'u-test',
+  })
+
+  const dump = snapshot.assets_dump as { network: unknown[] }
+  assert.equal(dump.network.length, 3, 'el no-identificado sigue en el dump')
+  assert.equal(
+    (snapshot.risk_score as { global: number }).global,
+    83,
+    'el no-identificado no debe mover el score (sigue siendo 5/6)'
+  )
+})
+
 test('createInventorySnapshot: assets_dump es una copia por valor, no una referencia viva', async () => {
   const payload = await getPayload({ config })
   const { office, criticalAsset, nonNetworkAsset } = await seedOfficeWithAssets(payload)
@@ -124,8 +176,16 @@ test('createInventorySnapshot: assets_dump es una copia por valor, no una refere
     network: Array<{ id: string; status: string }>
     non_network: Array<{ id: string; status: string }>
   }
-  const dumpedCritical = dump.network.find((a) => a.id === criticalAsset.id)
-  const dumpedNonNetwork = dump.non_network.find((a) => a.id === nonNetworkAsset.id)
-  assert.equal(dumpedCritical?.status, 'offline', 'el dump no debe seguir el estado actual del Asset')
-  assert.equal(dumpedNonNetwork?.status, 'active', 'el dump no debe seguir el estado actual del NonNetworkAsset')
+  const dumpedCritical = dump.network.find(a => a.id === criticalAsset.id)
+  const dumpedNonNetwork = dump.non_network.find(a => a.id === nonNetworkAsset.id)
+  assert.equal(
+    dumpedCritical?.status,
+    'offline',
+    'el dump no debe seguir el estado actual del Asset'
+  )
+  assert.equal(
+    dumpedNonNetwork?.status,
+    'active',
+    'el dump no debe seguir el estado actual del NonNetworkAsset'
+  )
 })

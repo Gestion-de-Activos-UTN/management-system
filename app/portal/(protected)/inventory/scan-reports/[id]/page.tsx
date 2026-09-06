@@ -1,44 +1,68 @@
-'use client';
+'use client'
 
-import { useParams, useSearchParams } from 'next/navigation';
-import type { ColumnDef } from '@tanstack/react-table';
-import { Card, Center, Loader, SimpleGrid, Stack, Tabs, Text } from '@mantine/core';
-import { Network, Radar, CircleCheck, CircleX } from 'lucide-react';
-import { DataTable } from '@/components/ui/DataTable';
-import { PageHeader } from '@/components/ui/PageHeader';
-import { BackButton } from '@/components/ui/BackButton';
-import { TechnicalText } from '@/components/ui/TechnicalText';
-import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge';
-import { formatDateTime } from '@/lib/format-date';
-import { relationId } from '@/lib/relationId';
-import { useScanReport } from '@/modules/scan-reports/hooks/use-scan-report';
+import { useParams, useSearchParams } from 'next/navigation'
+import type { ColumnDef } from '@tanstack/react-table'
+import { Card, Center, Loader, SimpleGrid, Stack, Tabs, Text } from '@mantine/core'
+import { Network, Radar, CircleCheck, CircleX } from 'lucide-react'
+import { DataTable } from '@/components/ui/DataTable'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { BackButton } from '@/components/ui/BackButton'
+import { TechnicalText } from '@/components/ui/TechnicalText'
+import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
+import { formatDateTime } from '@/lib/format-date'
+import { relationId } from '@/lib/relationId'
+import { useScanReport } from '@/modules/scan-reports/hooks/use-scan-report'
 import {
   acceptedAssetsInReport,
   parseRejectedAssets,
   totalAssetsInReport,
   type RejectedAsset,
   type ReportedAsset,
-} from '@/modules/scan-reports/service';
+} from '@/modules/scan-reports/service'
 
 const STATUS_TONE: Record<string, StatusTone> = {
   received: 'neutral',
   processed: 'success',
   failed: 'danger',
-};
+}
 
 const acceptedColumns: ColumnDef<ReportedAsset, unknown>[] = [
-  { accessorKey: 'asset_id', header: 'Asset ID', cell: ({ row }) => <TechnicalText>{row.original.asset_id}</TechnicalText> },
-  { accessorKey: 'ip', header: 'IP', cell: ({ row }) => <TechnicalText>{row.original.ip}</TechnicalText> },
+  {
+    accessorKey: 'asset_id',
+    header: 'Asset ID',
+    cell: ({ row }) => <TechnicalText>{row.original.asset_id}</TechnicalText>,
+  },
+  {
+    accessorKey: 'ip',
+    header: 'IP',
+    cell: ({ row }) => <TechnicalText>{row.original.ip}</TechnicalText>,
+  },
   { accessorKey: 'hostname', header: 'Hostname', cell: ({ row }) => row.original.hostname || '—' },
-  { accessorKey: 'mac', header: 'MAC', cell: ({ row }) => <TechnicalText>{row.original.mac || '—'}</TechnicalText> },
-];
+  {
+    accessorKey: 'mac',
+    header: 'MAC',
+    cell: ({ row }) => <TechnicalText>{row.original.mac || '—'}</TechnicalText>,
+  },
+]
 
 const rejectedColumns: ColumnDef<RejectedAsset, unknown>[] = [
-  { accessorKey: 'asset_id', header: 'Asset ID', cell: ({ row }) => <TechnicalText>{row.original.asset_id}</TechnicalText> },
+  {
+    accessorKey: 'asset_id',
+    header: 'Asset ID',
+    cell: ({ row }) => <TechnicalText>{row.original.asset_id}</TechnicalText>,
+  },
   { accessorKey: 'error', header: 'Reason' },
-];
+]
 
-function StatCard({ icon, value, label }: { icon: React.ReactNode; value: React.ReactNode; label: string }) {
+function StatCard({
+  icon,
+  value,
+  label,
+}: {
+  icon: React.ReactNode
+  value: React.ReactNode
+  label: string
+}) {
   return (
     <Card withBorder padding="lg">
       <Stack gap="sm">
@@ -53,21 +77,21 @@ function StatCard({ icon, value, label }: { icon: React.ReactNode; value: React.
         </Stack>
       </Stack>
     </Card>
-  );
+  )
 }
 
 export default function ScanReportDetailPage() {
-  const { id } = useParams<{ id: string }>();
-  const asOrganization = useSearchParams().get('asOrganization') ?? undefined;
-  const backHref = `/portal/inventory/scan-reports${asOrganization ? `?asOrganization=${asOrganization}` : ''}`;
-  const { data: report, isPending } = useScanReport(id);
+  const { id } = useParams<{ id: string }>()
+  const asOrganization = useSearchParams().get('asOrganization') ?? undefined
+  const backHref = `/portal/inventory/scan-reports${asOrganization ? `?asOrganization=${asOrganization}` : ''}`
+  const { data: report, isPending } = useScanReport(id)
 
   if (isPending) {
     return (
       <Center py="xl">
         <Loader color="pine" />
       </Center>
-    );
+    )
   }
 
   if (!report) {
@@ -75,13 +99,13 @@ export default function ScanReportDetailPage() {
       <Center py="xl">
         <Text c="dimmed">Could not load this scan report.</Text>
       </Center>
-    );
+    )
   }
 
-  const total = totalAssetsInReport(report.raw_payload);
-  const rejected = parseRejectedAssets(report.error);
-  const accepted = acceptedAssetsInReport(report.raw_payload, rejected);
-  const status = report.status ?? 'received';
+  const total = totalAssetsInReport(report.raw_payload)
+  const rejected = parseRejectedAssets(report.error)
+  const accepted = acceptedAssetsInReport(report.raw_payload, rejected)
+  const status = report.status ?? 'received'
 
   return (
     <Stack gap="lg">
@@ -94,10 +118,26 @@ export default function ScanReportDetailPage() {
       />
 
       <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} spacing="md">
-        <StatCard icon={<Network size={20} strokeWidth={1.5} />} value={report.network ?? '—'} label="Network" />
-        <StatCard icon={<Radar size={20} strokeWidth={1.5} />} value={report.hosts_up ?? total} label="Hosts detected" />
-        <StatCard icon={<CircleCheck size={20} strokeWidth={1.5} />} value={`${accepted.length} / ${total}`} label="Accepted" />
-        <StatCard icon={<CircleX size={20} strokeWidth={1.5} />} value={rejected.length} label="Rejected" />
+        <StatCard
+          icon={<Network size={20} strokeWidth={1.5} />}
+          value={report.network ?? '—'}
+          label="Network"
+        />
+        <StatCard
+          icon={<Radar size={20} strokeWidth={1.5} />}
+          value={report.hosts_up ?? total}
+          label="Hosts detected"
+        />
+        <StatCard
+          icon={<CircleCheck size={20} strokeWidth={1.5} />}
+          value={`${accepted.length} / ${total}`}
+          label="Accepted"
+        />
+        <StatCard
+          icon={<CircleX size={20} strokeWidth={1.5} />}
+          value={rejected.length}
+          label="Rejected"
+        />
       </SimpleGrid>
 
       <Tabs defaultValue="accepted">
@@ -125,5 +165,5 @@ export default function ScanReportDetailPage() {
         </Tabs.Panel>
       </Tabs>
     </Stack>
-  );
+  )
 }

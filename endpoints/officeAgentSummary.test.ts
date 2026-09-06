@@ -9,6 +9,7 @@ const summary = (overrides: Partial<OfficeAgentSummary> = {}): OfficeAgentSummar
   online: 0,
   offline: 0,
   never_connected: 0,
+  agents: [],
   ...overrides,
 })
 

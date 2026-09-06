@@ -1,46 +1,46 @@
-'use client';
+'use client'
 
-import { useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { Button, Group, Select, SimpleGrid, Stack, Tooltip } from '@mantine/core';
-import { Camera } from 'lucide-react';
-import { DataTable } from '@/components/ui/DataTable';
-import { PageHeader } from '@/components/ui/PageHeader';
-import { useUiStore } from '@/lib/ui-store';
-import { useSnapshotsList } from '@/modules/inventory-snapshots/hooks/use-snapshots';
-import { useGenerateSnapshot } from '@/modules/inventory-snapshots/hooks/use-generate-snapshot';
-import { inventorySnapshotsColumns } from '@/modules/inventory-snapshots/inventory-snapshots.columns';
-import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context';
-import { canDo } from '@/access/rbac/permissions';
+import { useMemo, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
+import { Button, Group, Select, SimpleGrid, Stack, Tooltip } from '@mantine/core'
+import { Camera } from 'lucide-react'
+import { DataTable } from '@/components/ui/DataTable'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { useUiStore } from '@/lib/ui-store'
+import { useSnapshotsList } from '@/modules/inventory-snapshots/hooks/use-snapshots'
+import { useGenerateSnapshot } from '@/modules/inventory-snapshots/hooks/use-generate-snapshot'
+import { inventorySnapshotsColumns } from '@/modules/inventory-snapshots/inventory-snapshots.columns'
+import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
+import { canDo } from '@/access/rbac/permissions'
 
-const ALL = '';
+const ALL = ''
 
 const GENERATED_BY_OPTIONS = [
   { value: ALL, label: 'All sources' },
   { value: 'manual', label: 'Manual' },
   { value: 'scheduled', label: 'Scheduled' },
   { value: 'pre_audit', label: 'Pre-audit' },
-];
+]
 
 export default function InventorySnapshotsPage() {
-  const asOrganization = useSearchParams().get('asOrganization') ?? undefined;
-  const selectedOfficeId = useUiStore((s) => s.selectedOfficeId);
-  const { data, isPending } = useSnapshotsList(asOrganization);
-  const generateSnapshot = useGenerateSnapshot();
-  const tenantContext = useTenantContext(asOrganization);
+  const asOrganization = useSearchParams().get('asOrganization') ?? undefined
+  const selectedOfficeId = useUiStore(s => s.selectedOfficeId)
+  const { data, isPending } = useSnapshotsList(asOrganization)
+  const generateSnapshot = useGenerateSnapshot()
+  const tenantContext = useTenantContext(asOrganization)
   const canGenerate = canDo(
     tenantContext.data?.role,
     'inventory-snapshots',
     'create',
-    tenantContext.data?.organizationId ?? null,
-  );
+    tenantContext.data?.organizationId ?? null
+  )
 
-  const [generatedBy, setGeneratedBy] = useState<string>(ALL);
+  const [generatedBy, setGeneratedBy] = useState<string>(ALL)
 
   const filteredSnapshots = useMemo(
-    () => (data ?? []).filter((s) => generatedBy === ALL || s.generated_by === generatedBy),
-    [data, generatedBy],
-  );
+    () => (data ?? []).filter(s => generatedBy === ALL || s.generated_by === generatedBy),
+    [data, generatedBy]
+  )
 
   return (
     <Stack gap="md">
@@ -60,7 +60,9 @@ export default function InventorySnapshotsPage() {
               leftSection={<Camera size={16} strokeWidth={1.5} />}
               disabled={!selectedOfficeId || !canGenerate}
               loading={generateSnapshot.isPending}
-              onClick={() => selectedOfficeId && canGenerate && generateSnapshot.mutate(selectedOfficeId)}
+              onClick={() =>
+                selectedOfficeId && canGenerate && generateSnapshot.mutate(selectedOfficeId)
+              }
               w={{ base: '100%', sm: 'auto' }}
             >
               Generate snapshot
@@ -73,7 +75,7 @@ export default function InventorySnapshotsPage() {
           placeholder="Source"
           data={GENERATED_BY_OPTIONS}
           value={generatedBy}
-          onChange={(v) => setGeneratedBy(v ?? ALL)}
+          onChange={v => setGeneratedBy(v ?? ALL)}
           w="100%"
         />
       </SimpleGrid>
@@ -85,5 +87,5 @@ export default function InventorySnapshotsPage() {
         minWidth={760}
       />
     </Stack>
-  );
+  )
 }

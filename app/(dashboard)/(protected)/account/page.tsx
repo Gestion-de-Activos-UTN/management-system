@@ -1,11 +1,11 @@
-'use client';
+'use client'
 
-import { Card, Stack, Text, TextInput } from '@mantine/core';
-import { PageHeader } from '@/components/ui/PageHeader';
-import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context';
+import { Card, Stack, Text, TextInput } from '@mantine/core'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
 
 export default function AccountPage() {
-  const { data: tenantContext } = useTenantContext();
+  const { data: tenantContext } = useTenantContext()
 
   return (
     <Stack gap="md">
@@ -19,5 +19,5 @@ export default function AccountPage() {
         </Stack>
       </Card>
     </Stack>
-  );
+  )
 }

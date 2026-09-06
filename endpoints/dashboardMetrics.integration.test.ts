@@ -8,7 +8,7 @@ import { dashboardMetricsEndpoint } from './dashboardMetrics'
 // Mismo enfoque que assetIdentify.integration.test.ts (Local API real + PayloadRequest mínimo).
 function fakeRequest(
   payload: Payload,
-  opts: { user?: { id: string; collection: 'users' }; url?: string },
+  opts: { user?: { id: string; collection: 'users' }; url?: string }
 ) {
   return {
     payload,
@@ -49,12 +49,22 @@ async function seedTenant(payload: Payload) {
     existingRole.docs[0] ??
     (await payload.create({
       collection: 'roles',
-      data: { slug: 'org_admin', name: 'org_admin', rank: 2, scope: 'organization', is_platform_role: false },
+      data: {
+        slug: 'org_admin',
+        name: 'org_admin',
+        rank: 2,
+        scope: 'organization',
+        is_platform_role: false,
+      },
       overrideAccess: true,
     }))
   const user = await payload.create({
     collection: 'users',
-    data: { name: 'Test User', email: `u-${Math.random().toString(36).slice(2)}@test.local`, password: 'x'.repeat(12) },
+    data: {
+      name: 'Test User',
+      email: `u-${Math.random().toString(36).slice(2)}@test.local`,
+      password: 'x'.repeat(12),
+    },
     overrideAccess: true,
   })
   await payload.create({
@@ -86,7 +96,7 @@ test('GET /v1/dashboard/metrics: 403 si se pide una office fuera del alcance del
     fakeRequest(payload, {
       user: { id: String(user.id), collection: 'users' },
       url: 'http://localhost/api/v1/dashboard/metrics?office_id=000000000000000000000000',
-    }),
+    })
   )
   assert.equal(res.status, 403)
 })
@@ -96,7 +106,7 @@ test('GET /v1/dashboard/metrics: 200 cuenta scanners online dentro del alcance d
   const { user } = await seedTenant(payload)
 
   const res = await dashboardMetricsEndpoint.handler(
-    fakeRequest(payload, { user: { id: String(user.id), collection: 'users' } }),
+    fakeRequest(payload, { user: { id: String(user.id), collection: 'users' } })
   )
   assert.equal(res.status, 200)
   const body = await res.json()

@@ -1,7 +1,8 @@
 import type { Endpoint } from 'payload'
 import { getTenantContext } from '../access/tenant/resolveTenantContext'
 import { relationId } from '../lib/relationId'
-import { isOnline } from '../lib/agentStatus'
+import { getAgentLifecycleStatus, getAgentConnectivity } from '../domain/agents/agent-state'
+import { getAgentQuota, SubscriptionNotFoundError } from '../domain/subscriptions/agent-quota'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
@@ -14,6 +15,20 @@ export interface OfficeAgentSummary {
   online: number
   offline: number
   never_connected: number
+  agents: Array<{
+    id: string
+    lifecycle_status: 'provisioned' | 'active' | 'revoked'
+    connectivity: 'online' | 'offline' | 'pending' | 'revoked'
+    revocation_reason: 'manual' | 'auto_lockout_abuse' | null
+    last_heartbeat_at: string | null
+  }>
+}
+
+export interface AgentQuotaSummary {
+  limit: number
+  used: number
+  available: number
+  per_office: number | null
 }
 
 export type OfficeScannerStatus = 'not_installed' | 'pending' | 'online' | 'offline' | 'inactive'
@@ -34,7 +49,7 @@ export const officeAgentSummaryEndpoint: Endpoint = {
   handler: async req => {
     const ctx = await getTenantContext(req)
     if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
-    if (!ctx.organizationId) return json({ docs: [] })
+    if (!ctx.organizationId) return json({ docs: [], quota: null })
 
     const offices = await req.payload.find({
       collection: 'offices',
@@ -47,7 +62,7 @@ export const officeAgentSummaryEndpoint: Endpoint = {
       limit: 1000,
     })
     const officeIds = offices.docs.map(office => String(office.id))
-    if (officeIds.length === 0) return json({ docs: [] })
+    if (officeIds.length === 0) return json({ docs: [], quota: null })
 
     const agents = await req.payload.find({
       collection: 'agents',
@@ -66,6 +81,7 @@ export const officeAgentSummaryEndpoint: Endpoint = {
         online: 0,
         offline: 0,
         never_connected: 0,
+        agents: [],
       })
     }
 
@@ -74,12 +90,30 @@ export const officeAgentSummaryEndpoint: Endpoint = {
       const current = summary.get(officeId)
       if (!current) continue
       current.total += 1
-      if (agent.is_active) current.active += 1
-      if (isOnline(agent.last_heartbeat_at)) current.online += 1
-      else if (agent.last_heartbeat_at) current.offline += 1
-      else current.never_connected += 1
+      const lifecycle = getAgentLifecycleStatus(agent)
+      if (lifecycle !== 'revoked') current.active += 1
+      const connectivity = getAgentConnectivity(agent)
+      if (connectivity === 'online') current.online += 1
+      else if (connectivity === 'offline') current.offline += 1
+      else if (connectivity === 'pending') current.never_connected += 1
+      current.agents.push({
+        id: String(agent.id),
+        lifecycle_status: lifecycle,
+        connectivity,
+        revocation_reason: agent.revocation_reason ?? null,
+        last_heartbeat_at: agent.last_heartbeat_at ?? null,
+      })
     }
 
-    return json({ docs: Array.from(summary.values()) })
+    let quota
+    try {
+      quota = await getAgentQuota(req.payload, ctx.organizationId, req)
+    } catch (err) {
+      if (err instanceof SubscriptionNotFoundError) {
+        return json({ docs: Array.from(summary.values()), quota: null })
+      }
+      throw err
+    }
+    return json({ docs: Array.from(summary.values()), quota })
   },
 }

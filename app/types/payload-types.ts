@@ -256,13 +256,25 @@ export interface Agent {
   id: string;
   office: string | Office;
   organization?: (string | null) | Organization;
+  provisioned_at?: string | null;
+  first_heartbeat_at?: string | null;
   last_heartbeat_at?: string | null;
+  last_agent_timestamp?: string | null;
+  runtime_status?: ('idle' | 'scanning' | 'unknown') | null;
+  lifecycle_status?: ('provisioned' | 'active' | 'revoked') | null;
   status?: ('online' | 'offline') | null;
   /**
-   * false = token revocado, rechazar toda ingesta de este agente
+   * Compatibilidad: false = token revocado. Usar lifecycle_status en código nuevo.
    */
   is_active?: boolean | null;
+  revoked_at?: string | null;
+  /**
+   * Motivo de la revocación: manual (acción humana) o auto_lockout_abuse.
+   */
+  revocation_reason?: ('manual' | 'auto_lockout_abuse') | null;
   failedAttempts?: number | null;
+  lockedUntil?: string | null;
+  lockoutCount?: number | null;
   apiKeyPrefix?: string | null;
   apiKeyHash?: string | null;
   /**
@@ -296,6 +308,7 @@ export interface Asset {
     osfamily?: string | null;
     osgen?: string | null;
     vendor?: string | null;
+    device_type?: string | null;
   };
   os_candidates?:
     | {
@@ -305,6 +318,7 @@ export interface Asset {
         osfamily?: string | null;
         osgen?: string | null;
         vendor?: string | null;
+        device_type?: string | null;
         id?: string | null;
       }[]
     | null;
@@ -345,7 +359,27 @@ export interface Asset {
         id?: string | null;
       }[]
     | null;
+  inferred_type?:
+    | ('workstation' | 'mobile' | 'gateway' | 'network_device' | 'printer' | 'server' | 'iot' | 'other' | 'unknown')
+    | null;
+  inference_confidence?: ('likely' | 'possible' | 'unknown') | null;
+  inference_signals?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  inference_version?: number | null;
   identified?: boolean | null;
+  identification_status?: ('pending' | 'confirmed' | 'needs_review') | null;
+  confirmed_type?:
+    ('workstation' | 'mobile' | 'gateway' | 'network_device' | 'printer' | 'server' | 'iot' | 'other') | null;
+  authorization_status?: ('pending' | 'authorized' | 'unauthorized') | null;
+  type_confirmed_by?: (string | null) | User;
+  type_confirmed_at?: string | null;
   alias?: string | null;
   criticality?: ('low' | 'medium' | 'high' | 'critical') | null;
   owner?: (string | null) | User;
@@ -423,7 +457,23 @@ export interface Role {
 export interface NonNetworkAsset {
   id: string;
   alias: string;
-  asset_category: 'antivirus_edr' | 'software_license' | 'cloud_asset' | 'backup' | 'other';
+  asset_category:
+    | 'computer'
+    | 'mobile_device'
+    | 'server'
+    | 'network_device'
+    | 'printer'
+    | 'iot'
+    | 'removable_media'
+    | 'other_equipment'
+    | 'antivirus_edr'
+    | 'software_license'
+    | 'cloud_asset'
+    | 'provider_service'
+    | 'backup'
+    | 'information_repository'
+    | 'physical_record'
+    | 'other';
   criticality: 'low' | 'medium' | 'high' | 'critical';
   owner: string | User;
   location?: string | null;
@@ -721,10 +771,19 @@ export interface AgentsSelect<T extends boolean = true> {
   id?: T;
   office?: T;
   organization?: T;
+  provisioned_at?: T;
+  first_heartbeat_at?: T;
   last_heartbeat_at?: T;
+  last_agent_timestamp?: T;
+  runtime_status?: T;
+  lifecycle_status?: T;
   status?: T;
   is_active?: T;
+  revoked_at?: T;
+  revocation_reason?: T;
   failedAttempts?: T;
+  lockedUntil?: T;
+  lockoutCount?: T;
   apiKeyPrefix?: T;
   apiKeyHash?: T;
   apiKey?: T;
@@ -756,6 +815,7 @@ export interface AssetsSelect<T extends boolean = true> {
         osfamily?: T;
         osgen?: T;
         vendor?: T;
+        device_type?: T;
       };
   os_candidates?:
     | T
@@ -766,6 +826,7 @@ export interface AssetsSelect<T extends boolean = true> {
         osfamily?: T;
         osgen?: T;
         vendor?: T;
+        device_type?: T;
         id?: T;
       };
   os_status?: T;
@@ -789,7 +850,16 @@ export interface AssetsSelect<T extends boolean = true> {
         scripts?: T;
         id?: T;
       };
+  inferred_type?: T;
+  inference_confidence?: T;
+  inference_signals?: T;
+  inference_version?: T;
   identified?: T;
+  identification_status?: T;
+  confirmed_type?: T;
+  authorization_status?: T;
+  type_confirmed_by?: T;
+  type_confirmed_at?: T;
   alias?: T;
   criticality?: T;
   owner?: T;

@@ -1,8 +1,9 @@
 import { z } from 'zod'
+import { MANUAL_ASSET_CATEGORY_VALUES } from '@/domain/assets/asset-types'
 
 export const NonNetworkAssetSchema = z.object({
   alias: z.string().trim().min(1, 'Alias is required').max(120),
-  asset_category: z.enum(['antivirus_edr', 'software_license', 'cloud_asset', 'backup', 'other']),
+  asset_category: z.enum(MANUAL_ASSET_CATEGORY_VALUES),
   criticality: z.enum(['low', 'medium', 'high', 'critical']),
   owner: z.string().min(1, 'Owner is required'),
   location: z.string().trim().max(200).nullable(),

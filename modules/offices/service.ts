@@ -1,7 +1,7 @@
 import { listResource } from '@/lib/list-resource'
 import type { Office } from '@/app/types/payload-types'
 import { httpClient } from '@/lib/http-client'
-import type { OfficeAgentSummary } from '@/endpoints/officeAgentSummary'
+import type { AgentQuotaSummary, OfficeAgentSummary } from '@/endpoints/officeAgentSummary'
 import type { AgentPlatform } from '@/domain/agents/buildAgentPackage'
 
 export function listOffices(params?: { asOrganization?: string }) {
@@ -16,7 +16,12 @@ export function provisionAgent(officeId: string, platform: AgentPlatform) {
 }
 
 export function listOfficeAgentSummary(asOrganization?: string) {
-  return httpClient
-    .get<{ docs: OfficeAgentSummary[] }>('/api/v1/offices/agent-summary', { asOrganization })
-    .then(result => result.docs)
+  return httpClient.get<{ docs: OfficeAgentSummary[]; quota: AgentQuotaSummary | null }>(
+    '/api/v1/offices/agent-summary',
+    { asOrganization }
+  )
+}
+
+export function revokeAgent(agentId: string) {
+  return httpClient.post(`/api/v1/agents/${agentId}/revoke`, {})
 }

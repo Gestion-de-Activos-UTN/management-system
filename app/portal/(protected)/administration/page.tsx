@@ -1,26 +1,44 @@
-'use client';
+'use client'
 
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { Card, SimpleGrid, Stack, Text } from '@mantine/core';
-import { Users, MapPin, Settings } from 'lucide-react';
-import { PageHeader } from '@/components/ui/PageHeader';
+import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
+import { Card, SimpleGrid, Stack, Text } from '@mantine/core'
+import { Users, MapPin, Settings } from 'lucide-react'
+import { PageHeader } from '@/components/ui/PageHeader'
 
 const HUB_ITEMS = [
-  { label: 'Users', href: '/portal/administration/users', icon: Users, description: 'Members of your organization' },
-  { label: 'Offices', href: '/portal/administration/offices', icon: MapPin, description: 'Offices in your organization' },
-  { label: 'Settings', href: '/portal/administration/settings', icon: Settings, description: 'Organization-level settings' },
-];
+  {
+    label: 'Users',
+    href: '/portal/administration/users',
+    icon: Users,
+    description: 'Members of your organization',
+  },
+  {
+    label: 'Offices',
+    href: '/portal/administration/offices',
+    icon: MapPin,
+    description: 'Offices in your organization',
+  },
+  {
+    label: 'Settings',
+    href: '/portal/administration/settings',
+    icon: Settings,
+    description: 'Organization-level settings',
+  },
+]
 
 export default function PortalAdminHub() {
-  const asOrganization = useSearchParams().get('asOrganization');
-  const suffix = asOrganization ? `?asOrganization=${asOrganization}` : '';
+  const asOrganization = useSearchParams().get('asOrganization')
+  const suffix = asOrganization ? `?asOrganization=${asOrganization}` : ''
 
   return (
     <Stack gap="md">
-      <PageHeader title="Administration" description="Manage your organization's users, offices and settings." />
+      <PageHeader
+        title="Administration"
+        description="Manage your organization's users, offices and settings."
+      />
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
-        {HUB_ITEMS.map((item) => (
+        {HUB_ITEMS.map(item => (
           <Card
             key={item.href}
             component={Link}
@@ -40,5 +58,5 @@ export default function PortalAdminHub() {
         ))}
       </SimpleGrid>
     </Stack>
-  );
+  )
 }

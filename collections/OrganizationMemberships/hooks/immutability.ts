@@ -1,7 +1,11 @@
 import type { CollectionBeforeValidateHook } from 'payload'
 
 // organization/user inmutables tras creación — mismo patrón que Agents.office.
-export const enforceImmutableOrgAndUser: CollectionBeforeValidateHook = ({ data, operation, originalDoc }) => {
+export const enforceImmutableOrgAndUser: CollectionBeforeValidateHook = ({
+  data,
+  operation,
+  originalDoc,
+}) => {
   if (operation !== 'update' || !originalDoc) return data
   const patch = data ?? {}
   for (const field of ['organization', 'user'] as const) {

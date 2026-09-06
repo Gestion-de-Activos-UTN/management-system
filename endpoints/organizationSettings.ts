@@ -12,9 +12,7 @@ function json(body: unknown, status = 200) {
 // que no tienen UI real todavía (ver app/portal/(protected)/admin/settings/page.tsx).
 // El portal ya oculta /admin a quien no es org_admin (client-side, ver admin/layout.tsx) — acá se
 // repite la validación server-side, que es la que realmente cuenta.
-type LoadResult =
-  | { ok: false; response: Response }
-  | { ok: true; doc: { id: string | number } }
+type LoadResult = { ok: false; response: Response } | { ok: true; doc: { id: string | number } }
 
 async function loadSettings(req: Parameters<Endpoint['handler']>[0]): Promise<LoadResult> {
   const ctx = await getTenantContext(req)
@@ -40,7 +38,7 @@ async function loadSettings(req: Parameters<Endpoint['handler']>[0]): Promise<Lo
 export const organizationSettingsGetEndpoint: Endpoint = {
   path: '/v1/organization-settings',
   method: 'get',
-  handler: async (req) => {
+  handler: async req => {
     const loaded = await loadSettings(req)
     if (!loaded.ok) return loaded.response
     const doc = await req.payload.findByID({
@@ -57,7 +55,7 @@ export const organizationSettingsGetEndpoint: Endpoint = {
 export const organizationSettingsUpdateEndpoint: Endpoint = {
   path: '/v1/organization-settings',
   method: 'patch',
-  handler: async (req) => {
+  handler: async req => {
     const loaded = await loadSettings(req)
     if (!loaded.ok) return loaded.response
 

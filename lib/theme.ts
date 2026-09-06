@@ -8,7 +8,7 @@ import {
   rgba,
   type MantineColorsTuple,
   type VariantColorsResolver,
-} from '@mantine/core';
+} from '@mantine/core'
 
 /**
  * SIAM palette — warm neutral "bone" base + muted slate-teal "pine" accent.
@@ -29,7 +29,7 @@ const bone: MantineColorsTuple = [
   '#766b57',
   '#5a5142',
   '#3a342a',
-];
+]
 
 const pine: MantineColorsTuple = [
   '#eef3f1',
@@ -42,28 +42,27 @@ const pine: MantineColorsTuple = [
   '#2f5b52',
   '#23443e',
   '#182f2b',
-];
+]
 
 // Mantine's default "light"/"subtle" hover alpha (0.12) reads as almost no
 // feedback on the bone/pine palette — bump it up. "subtle" also gets a
 // visible border so it doesn't look identical to plain text until hovered.
-const variantColorResolver: VariantColorsResolver = (input) => {
-  const base = defaultVariantColorsResolver(input);
-  const parsed = parseThemeColor({ color: input.color, theme: input.theme });
+const variantColorResolver: VariantColorsResolver = input => {
+  const base = defaultVariantColorsResolver(input)
+  const parsed = parseThemeColor({ color: input.color, theme: input.theme })
 
   if (input.variant === 'light') {
-    const shade =
-      parsed.shade ?? (input.theme.primaryShade as { light: number }).light;
-    const shadeColor = input.theme.colors[parsed.color]?.[shade];
-    return shadeColor ? { ...base, hover: rgba(shadeColor, 0.22) } : base;
+    const shade = parsed.shade ?? (input.theme.primaryShade as { light: number }).light
+    const shadeColor = input.theme.colors[parsed.color]?.[shade]
+    return shadeColor ? { ...base, hover: rgba(shadeColor, 0.22) } : base
   }
 
   if (input.variant === 'subtle') {
-    return { ...base, border: `1px solid var(--mantine-color-default-border)` };
+    return { ...base, border: `1px solid var(--mantine-color-default-border)` }
   }
 
-  return base;
-};
+  return base
+}
 
 export const theme = createTheme({
   colors: { bone, pine },
@@ -84,14 +83,12 @@ export const theme = createTheme({
   variantColorResolver,
   // System font stack — every browser already ships one of these, no
   // webfont to load/flash.
-  fontFamily:
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, Arial, sans-serif',
+  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, Arial, sans-serif',
   // Used deliberately, not decoratively — technical/identifying data (IPs,
   // hostnames, asset/org ids) renders in this face wherever it appears, the one
   // typographic signature tying the UI to an inventory/compliance tool's actual
   // subject matter. See components/ui/TechnicalText.tsx.
-  fontFamilyMonospace:
-    'ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace',
+  fontFamilyMonospace: 'ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace',
   headings: {
     fontWeight: '700',
   },
@@ -116,4 +113,4 @@ export const theme = createTheme({
     Card: Card.extend({ defaultProps: { shadow: 'sm' } }),
     Modal: Modal.extend({ defaultProps: { shadow: 'lg' } }),
   },
-});
+})

@@ -22,6 +22,6 @@ test('assertOrganizationMatches: el mismatch es 403, no 500', () => {
   const statusOf = (e: unknown) => (e as { status?: number }).status
   assert.throws(
     () => assertOrganizationMatches('org-2', 'org-1', false),
-    (e) => statusOf(e) === 403
+    e => statusOf(e) === 403
   )
 })

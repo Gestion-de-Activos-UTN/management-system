@@ -50,6 +50,10 @@
             "vendor": {
               "default": "",
               "type": "string"
+            },
+            "device_type": {
+              "default": "",
+              "type": "string"
             }
           },
           "required": [
@@ -58,7 +62,8 @@
             "cpe",
             "osfamily",
             "osgen",
-            "vendor"
+            "vendor",
+            "device_type"
           ],
           "additionalProperties": false
         },
@@ -179,6 +184,10 @@
           "vendor": {
             "default": "",
             "type": "string"
+          },
+          "device_type": {
+            "default": "",
+            "type": "string"
           }
         },
         "required": [
@@ -187,7 +196,8 @@
           "cpe",
           "osfamily",
           "osgen",
-          "vendor"
+          "vendor",
+          "device_type"
         ],
         "additionalProperties": false
       }

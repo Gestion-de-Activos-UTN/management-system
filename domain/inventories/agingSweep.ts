@@ -12,7 +12,11 @@ export interface AgingSweepSummary {
 // Pura y testeable sin DB — el resto de la función es I/O (Payload find/update). `lastSeen: null`
 // (nunca hubo scan, teóricamente imposible por como ingestScanReport siempre lo setea, pero no se
 // asume) cuenta como "vencido hace la eternidad", nunca como "recién visto".
-export function shouldGoOffline(lastSeen: string | null, offlineAfterHours: number, now: number): boolean {
+export function shouldGoOffline(
+  lastSeen: string | null,
+  offlineAfterHours: number,
+  now: number
+): boolean {
   const lastSeenMs = lastSeen ? new Date(lastSeen).getTime() : 0
   const elapsedHours = (now - lastSeenMs) / (1000 * 60 * 60)
   return elapsedHours >= offlineAfterHours

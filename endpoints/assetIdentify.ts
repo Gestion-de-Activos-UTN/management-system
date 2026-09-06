@@ -4,18 +4,18 @@ import { canDo } from '../access/rbac/permissions'
 import { assertOfficeInScope } from '../collections/NonNetworkAssets/invariants'
 import { assertOrganizationMatches } from '../access/tenant/assertOrganizationMatches'
 import { relationId } from '../lib/relationId'
+import { AssetIdentificationSchema } from '../modules/assets/schema'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
 }
 
-// Confirmar (o deshacer) la identificación de un activo no reescribe el resto de los campos —
-// su propio endpoint en vez de sobrecargar el PATCH genérico de assets con un flag mágico.
-// Acción directa y bidireccional (org_admin/office_manager, sin flujo de aprobación este sprint).
+// La identificación es una operación atómica: tipo, autorización y, cuando corresponde, owner y
+// criticidad. Reemplaza el antiguo toggle que podía declarar identificado un host sin contexto.
 export const assetIdentifyEndpoint: Endpoint = {
   path: '/v1/assets/:id/identify',
   method: 'patch',
-  handler: async (req) => {
+  handler: async req => {
     const ctx = await getTenantContext(req)
     if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
     if (!canDo(ctx.role, 'assets', 'update', ctx.organizationId)) {
@@ -36,17 +36,29 @@ export const assetIdentifyEndpoint: Endpoint = {
     // en officeIds — verificar la organización real del documento antes de mutarlo.
     assertOrganizationMatches(relationId(existing.organization), ctx.organizationId, unrestricted)
 
-    const body = (await req.json!().catch(() => ({}))) as { identified?: boolean }
-    const identified = Boolean(body.identified)
+    const parsed = AssetIdentificationSchema.safeParse(await req.json!().catch(() => ({})))
+    if (!parsed.success) {
+      return json({ error: 'invalid_identification', issues: parsed.error.issues }, 400)
+    }
+    const body = parsed.data
+    const confirmedAt = new Date().toISOString()
 
-    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {id, identified}, previous hash for this organization_id)
+    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {id, confirmed_type, authorization_status, owner, criticality}, previous hash for this organization_id)
     // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
     const updated = await req.payload.update({
       collection: 'assets',
       id,
       overrideAccess: true,
       req,
-      data: { identified },
+      data: {
+        ...body,
+        owner: body.authorization_status === 'authorized' ? body.owner : null,
+        criticality: body.authorization_status === 'authorized' ? body.criticality : null,
+        identified: true,
+        identification_status: 'confirmed',
+        type_confirmed_by: ctx.userId,
+        type_confirmed_at: confirmedAt,
+      },
     })
 
     return json(updated)

@@ -32,7 +32,7 @@ export interface TenantResolverDeps {
 export async function resolveTenantContext(
   identity: ResolvedIdentity | null,
   deps: TenantResolverDeps,
-  requestedOrganizationId?: string | null, // ?asOrganization=<id> — solo tiene efecto para platform_admin
+  requestedOrganizationId?: string | null // ?asOrganization=<id> — solo tiene efecto para platform_admin
 ): Promise<TenantContext | null> {
   if (!identity) return null // fail-closed: sin sesión, sin fallback
 
@@ -41,14 +41,17 @@ export async function resolveTenantContext(
     // paralelo (organizationExists no depende de admin, solo del query param).
     const [admin, orgExists] = await Promise.all([
       deps.findActiveAdminById(identity.externalId),
-      requestedOrganizationId ? deps.organizationExists(requestedOrganizationId) : Promise.resolve(null),
+      requestedOrganizationId
+        ? deps.organizationExists(requestedOrganizationId)
+        : Promise.resolve(null),
     ])
     if (!admin) return null
 
     let organizationId: string | null = null
     let officeIds: string[] = []
     if (requestedOrganizationId) {
-      if (!orgExists) throw new TenantResolutionError('asOrganization inválido: la organización no existe')
+      if (!orgExists)
+        throw new TenantResolutionError('asOrganization inválido: la organización no existe')
       organizationId = requestedOrganizationId
       // "Visitar" una organización debe verse igual que un org_admin logueado (offices
       // reales de esa org para el OfficeSelector, no un array vacío) — ver frontend
@@ -129,7 +132,7 @@ export function createPayloadTenantResolverDeps(payload: Payload): TenantResolve
         depth: 0,
         limit: 1000,
       })
-      return result.docs.map((doc) => String(doc.id))
+      return result.docs.map(doc => String(doc.id))
     },
   }
 }
