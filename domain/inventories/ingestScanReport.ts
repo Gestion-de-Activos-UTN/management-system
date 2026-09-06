@@ -24,21 +24,30 @@ function findMissingFields(asset: AssetPayload): string[] {
   return REQUIRED_ASSET_FIELDS.filter(field => !asset[field]) as string[]
 }
 
+type EvidenceHistoryRow = {
+  id?: string | null
+  kind?: 'mac' | 'vendor' | 'name' | 'device_class' | null
+  value?: string | null
+  source?: string | null
+  first_seen_at?: string | null
+  last_seen_at?: string | null
+  seen_count?: number | null
+  last_report_id?: string | null
+}
+
 type ExistingAssetDoc = Asset
 
-// Saneo: el Zod schema es .passthrough() a propósito (permisivo-en-lectura), pero acá se
-// extrae EXPLÍCITAMENTE solo el bloque técnico conocido — nada del payload original (con
-// eventuales campos extra) llega directo a `payload.create`/`update`.
+// Aunque el contrato Zod es estricto, acá se extrae EXPLÍCITAMENTE solo el bloque técnico
+// conocido: el modelo HTTP nunca se persiste por spread directo en Assets.
 //
 // Política de merge no es uniforme para todo el bloque (dos naturalezas distintas):
 // - IDENTIDAD (mac/vendor/hostname/os/gateway_*): requieren privilegios (ARP/raw socket) para
 //   resolverse. Un scan degraded (sin sudo/Npcap, ver scan-report.schema.ts) manda "" — eso NO
 //   significa "el dato cambió a vacío", significa "este scan no pudo verlo". Not-null-wins: se
 //   conserva el último valor conocido si el nuevo viene vacío.
-// - DINÁMICO (ip/services): refleja estado real y cambiante del activo (puertos que se
-//   abren/cierran, IP que cambia por DHCP) — un TCP-connect sin privilegios igual reporta esto
-//   con precisión. Siempre se sobreescribe con lo último, incluso si viene "menos lleno"
-//   (ej. servicios vacío = puertos cerrados, dato real, no ausencia de dato).
+// - DINÁMICO (ip/services/cobertura/issues): refleja la última observación y solo se reemplaza
+//   cuando scan_time no es anterior a last_seen. `services: []` describe cero observaciones;
+//   la inferencia consulta asset_coverage antes de convertir esa ausencia en señal.
 //   `state_reason`/`host_scripts` son igual de dinámicos (evidencia puntual de ESE scan). `os_candidates`
 //   viaja pegado a `os` (misma naturaleza identidad, mismo not-null-wins) — no tiene sentido
 //   vaciar candidatos previos solo porque un scan puntual no trajo osmatch.
@@ -57,14 +66,27 @@ function sanitizeTechnicalBlock(
   report: ScanReportPayload,
   existingDoc?: ExistingAssetDoc
 ) {
+  const incomingIsLatest =
+    !existingDoc?.last_seen || Date.parse(asset.scan_time) >= Date.parse(existingDoc.last_seen)
   const osCandidates =
-    asset.os_candidates.length > 0
+    incomingIsLatest && asset.os_candidates.length > 0
       ? asset.os_candidates
       : ((existingDoc?.os_candidates as AssetPayload['os_candidates'] | undefined) ?? [])
 
+  const scannerHostMatch = deriveScannerHostMatch(asset, report.scanner_interfaces)
+  const appliedReportIds = (existingDoc?.applied_report_ids ?? [])
+    .map(row => row.report_id)
+    .filter((id): id is string => Boolean(id))
+  const evidenceHistory = mergeEvidenceHistory(
+    existingDoc?.evidence_history,
+    asset,
+    report.report_id,
+    appliedReportIds.includes(report.report_id)
+  )
+
   const technical = {
-    asset_id: asset.asset_id,
-    ip: asset.ip,
+    asset_id: existingDoc?.asset_id ?? asset.asset_id,
+    ip: incomingIsLatest ? asset.ip : existingDoc?.ip,
     // El scanner manda "" cuando no pudo resolverlos (ver nota arriba) — se normaliza a `null`
     // acá, no en el scanner, para que Assets guarde exactamente lo que su propio contrato
     // documenta (`mac: string | null`, doc 05 §5.1), no un string vacío disfrazado de dato.
@@ -74,26 +96,145 @@ function sanitizeTechnicalBlock(
       (asset.hostname || null) ?? (existingDoc?.hostname as string | null | undefined) ?? null,
     // Payload tipa el group field como opcional (undefined), no nullable — el wire protocol
     // sí manda `null` cuando nmap no detecta OS (models.py::Asset.os: Optional[...]).
-    os: asset.os ?? (existingDoc?.os as AssetPayload['os'] | undefined) ?? undefined,
+    os:
+      (incomingIsLatest ? asset.os : undefined) ??
+      (existingDoc?.os as AssetPayload['os'] | undefined) ??
+      undefined,
     os_candidates: osCandidates,
     os_status: resolveOsStatus(osCandidates),
-    state_reason: asset.state_reason,
-    host_scripts: asset.host_scripts,
-    services: asset.services,
-    last_seen: asset.scan_time,
-    gateway_ip: report.gateway_ip ?? (existingDoc?.gateway_ip as string | null | undefined) ?? null,
+    state_reason: incomingIsLatest ? asset.state_reason : existingDoc?.state_reason,
+    host_scripts: incomingIsLatest ? asset.host_scripts : existingDoc?.host_scripts,
+    services: incomingIsLatest ? asset.services : existingDoc?.services,
+    last_seen: incomingIsLatest ? asset.scan_time : existingDoc?.last_seen,
+    gateway_ip:
+      (incomingIsLatest ? report.gateway_ip : undefined) ??
+      (existingDoc?.gateway_ip as string | null | undefined) ??
+      null,
     gateway_mac:
-      report.gateway_mac ?? (existingDoc?.gateway_mac as string | null | undefined) ?? null,
+      (incomingIsLatest ? report.gateway_mac : undefined) ??
+      (existingDoc?.gateway_mac as string | null | undefined) ??
+      null,
+    names: incomingIsLatest ? asset.names : (existingDoc?.names ?? []),
+    mac_metadata: incomingIsLatest ? asset.mac_metadata : existingDoc?.mac_metadata,
+    asset_coverage: incomingIsLatest ? asset.asset_coverage : existingDoc?.asset_coverage,
+    scan_issues: incomingIsLatest ? asset.scan_issues : (existingDoc?.scan_issues ?? []),
+    is_scanner_host: incomingIsLatest
+      ? scannerHostMatch !== 'none' &&
+        scannerHostMatch !== 'unknown' &&
+        scannerHostMatch !== 'conflict'
+      : existingDoc?.is_scanner_host,
+    scanner_host_match: incomingIsLatest
+      ? scannerHostMatch
+      : (existingDoc?.scanner_host_match ?? 'unknown'),
+    evidence_history: evidenceHistory,
+    applied_report_ids: [
+      ...appliedReportIds.filter(id => id !== report.report_id),
+      report.report_id,
+    ]
+      .slice(-50)
+      .map(report_id => ({ report_id })),
   }
-  const inference = inferDeviceCategory(technical)
+  const inference = inferDeviceCategory({
+    ...technical,
+    gateway_match_conflict:
+      hasGatewayConflict(report) &&
+      (asset.ip === report.gateway_ip || asset.mac === report.gateway_mac),
+  })
   const inferredType = inference.category ?? ('unknown' as const)
   return {
     ...technical,
     inferred_type: inferredType,
     inference_confidence: inference.tier,
     inference_signals: inference.signals,
-    inference_version: 1,
+    inference_version: 2,
   }
+}
+
+function hasGatewayConflict(report: ScanReportPayload): boolean {
+  if (!report.gateway_ip || !report.gateway_mac) return false
+  const ipMatch = report.assets.findIndex(asset => asset.ip === report.gateway_ip)
+  const macMatch = report.assets.findIndex(asset => asset.mac === report.gateway_mac)
+  return ipMatch >= 0 && macMatch >= 0 && ipMatch !== macMatch
+}
+
+function deriveScannerHostMatch(
+  asset: AssetPayload,
+  interfaces: ScanReportPayload['scanner_interfaces']
+): 'ip' | 'mac' | 'both' | 'conflict' | 'none' | 'unknown' {
+  if (interfaces.length === 0) return 'unknown'
+  const ipMatches = new Set(
+    interfaces.flatMap((iface, index) => (iface.ip === asset.ip ? [index] : []))
+  )
+  const macMatches = new Set(
+    interfaces.flatMap((iface, index) =>
+      asset.mac && iface.mac && iface.mac === asset.mac ? [index] : []
+    )
+  )
+  if (ipMatches.size > 0 && macMatches.size > 0) {
+    return [...ipMatches].some(index => macMatches.has(index)) ? 'both' : 'conflict'
+  }
+  if (macMatches.size > 0) return 'mac'
+  if (ipMatches.size > 0) return 'ip'
+  return 'none'
+}
+
+function mergeEvidenceHistory(
+  existingRows: EvidenceHistoryRow[] | null | undefined,
+  asset: AssetPayload,
+  reportId: string,
+  alreadyApplied: boolean
+): EvidenceHistoryRow[] {
+  const rows = (existingRows ?? []).map(({ id: _id, ...row }) => ({ ...row }))
+  if (alreadyApplied) return rows
+  const observations: Array<Pick<EvidenceHistoryRow, 'kind' | 'value' | 'source'>> = []
+  if (asset.mac && asset.mac_metadata.kind === 'globally_administered') {
+    observations.push({ kind: 'mac', value: asset.mac, source: 'scanner' })
+  }
+  if (asset.vendor) observations.push({ kind: 'vendor', value: asset.vendor, source: 'oui' })
+  for (const name of asset.names) {
+    observations.push({ kind: 'name', value: name.value.toLowerCase(), source: name.source })
+  }
+  if (asset.os?.device_type) {
+    observations.push({ kind: 'device_class', value: asset.os.device_type, source: 'nmap' })
+  }
+
+  for (const observation of observations) {
+    const existing = rows.find(
+      row =>
+        row.kind === observation.kind &&
+        row.value === observation.value &&
+        row.source === observation.source
+    )
+    if (existing) {
+      if (existing.last_report_id !== reportId) {
+        if (
+          !existing.first_seen_at ||
+          Date.parse(asset.scan_time) < Date.parse(existing.first_seen_at)
+        ) {
+          existing.first_seen_at = asset.scan_time
+        }
+        if (
+          !existing.last_seen_at ||
+          Date.parse(asset.scan_time) > Date.parse(existing.last_seen_at)
+        ) {
+          existing.last_seen_at = asset.scan_time
+        }
+        existing.seen_count = (existing.seen_count ?? 0) + 1
+        existing.last_report_id = reportId
+      }
+    } else {
+      rows.push({
+        ...observation,
+        first_seen_at: asset.scan_time,
+        last_seen_at: asset.scan_time,
+        seen_count: 1,
+        last_report_id: reportId,
+      })
+    }
+  }
+  return rows
+    .sort((a, b) => Date.parse(b.last_seen_at ?? '') - Date.parse(a.last_seen_at ?? ''))
+    .slice(0, 100)
 }
 
 const TECHNICAL_DIFF_FIELDS = [
@@ -106,6 +247,12 @@ const TECHNICAL_DIFF_FIELDS = [
   'services',
   'gateway_ip',
   'gateway_mac',
+  'names',
+  'mac_metadata',
+  'asset_coverage',
+  'scan_issues',
+  'is_scanner_host',
+  'scanner_host_match',
 ] as const
 
 // `state_reason`/`host_scripts` quedan fuera a propósito: cambian con cada scan aunque nada
@@ -119,6 +266,8 @@ const TECHNICAL_DIFF_FIELDS = [
 const ARRAY_DIFF_FIELDS = new Set<(typeof TECHNICAL_DIFF_FIELDS)[number]>([
   'services',
   'os_candidates',
+  'names',
+  'scan_issues',
 ])
 
 function stripArrayIds(
@@ -135,6 +284,9 @@ function hasTechnicalChanged(
   technical: ReturnType<typeof sanitizeTechnicalBlock>
 ): boolean {
   return TECHNICAL_DIFF_FIELDS.some(field => {
+    // Campos incorporados por una versión nueva no convierten por sí solos al documento en
+    // "Changed"; el badge representa un cambio observado entre dos valores conocidos.
+    if (existingDoc[field] === undefined) return false
     if (ARRAY_DIFF_FIELDS.has(field)) {
       return (
         JSON.stringify(

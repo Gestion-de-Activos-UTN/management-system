@@ -3,47 +3,75 @@
   "type": "object",
   "properties": {
     "report_id": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
     },
     "agent_id": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
     },
     "network": {
-      "type": "string"
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 43
     },
     "scan_start": {
-      "type": "string"
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
     },
     "scan_end": {
-      "type": "string"
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
     },
     "hosts_up": {
       "type": "integer",
-      "minimum": -9007199254740991,
-      "maximum": 9007199254740991
+      "minimum": 0,
+      "maximum": 65534
     },
     "assets": {
+      "maxItems": 65534,
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
           "asset_id": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
           },
           "agent_id": {
-            "type": "string"
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
           },
           "ip": {
-            "type": "string"
+            "type": "string",
+            "format": "ipv4",
+            "pattern": "^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$"
           },
           "mac": {
-            "type": "string"
+            "anyOf": [
+              {
+                "type": "string",
+                "const": ""
+              },
+              {
+                "type": "string",
+                "pattern": "^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$"
+              }
+            ]
           },
           "vendor": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 240
           },
           "hostname": {
-            "type": "string"
+            "type": "string",
+            "maxLength": 253
           },
           "os": {
             "anyOf": [
@@ -51,34 +79,37 @@
                 "type": "object",
                 "properties": {
                   "name": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 240
                   },
                   "accuracy": {
                     "type": "integer",
-                    "minimum": -9007199254740991,
-                    "maximum": 9007199254740991
+                    "minimum": 0,
+                    "maximum": 100
                   },
                   "cpe": {
+                    "maxItems": 20,
                     "type": "array",
                     "items": {
-                      "type": "string"
+                      "type": "string",
+                      "maxLength": 500
                     }
                   },
                   "osfamily": {
-                    "default": "",
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 120
                   },
                   "osgen": {
-                    "default": "",
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 120
                   },
                   "vendor": {
-                    "default": "",
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 120
                   },
                   "device_type": {
-                    "default": "",
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 120
                   }
                 },
                 "required": [
@@ -98,62 +129,87 @@
             ]
           },
           "services": {
+            "maxItems": 4096,
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
                 "port": {
                   "type": "integer",
-                  "minimum": -9007199254740991,
-                  "maximum": 9007199254740991
+                  "minimum": 0,
+                  "maximum": 65535
                 },
                 "protocol": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "tcp",
+                    "udp",
+                    "sctp",
+                    "ip"
+                  ]
                 },
                 "state": {
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "open",
+                    "closed",
+                    "filtered",
+                    "unfiltered",
+                    "open|filtered",
+                    "closed|filtered",
+                    "unknown"
+                  ]
                 },
                 "name": {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 120
                 },
                 "product": {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 240
                 },
                 "version": {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 120
                 },
                 "extra_info": {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 500
                 },
                 "cpe": {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 500
                 },
                 "reason": {
-                  "default": "",
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 120
                 },
                 "detection_method": {
-                  "default": "table",
-                  "type": "string"
+                  "type": "string",
+                  "enum": [
+                    "probed",
+                    "table",
+                    "unknown"
+                  ]
                 },
                 "confidence": {
-                  "default": 0,
                   "type": "integer",
                   "minimum": 0,
                   "maximum": 10
                 },
                 "tunnel": {
-                  "default": "",
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 40
                 },
                 "scripts": {
-                  "default": {},
                   "type": "object",
                   "propertyNames": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 120
                   },
                   "additionalProperties": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 4000
                   }
                 }
               },
@@ -176,43 +232,48 @@
             }
           },
           "scan_time": {
-            "type": "string"
+            "type": "string",
+            "format": "date-time",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z|([+-](?:[01]\\d|2[0-3]):[0-5]\\d)))$"
           },
           "os_candidates": {
-            "default": [],
+            "maxItems": 3,
             "type": "array",
             "items": {
               "type": "object",
               "properties": {
                 "name": {
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 240
                 },
                 "accuracy": {
                   "type": "integer",
-                  "minimum": -9007199254740991,
-                  "maximum": 9007199254740991
+                  "minimum": 0,
+                  "maximum": 100
                 },
                 "cpe": {
+                  "maxItems": 20,
                   "type": "array",
                   "items": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 500
                   }
                 },
                 "osfamily": {
-                  "default": "",
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 120
                 },
                 "osgen": {
-                  "default": "",
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 120
                 },
                 "vendor": {
-                  "default": "",
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 120
                 },
                 "device_type": {
-                  "default": "",
-                  "type": "string"
+                  "type": "string",
+                  "maxLength": 120
                 }
               },
               "required": [
@@ -228,17 +289,164 @@
             }
           },
           "state_reason": {
-            "default": "",
-            "type": "string"
+            "type": "string",
+            "maxLength": 120
           },
           "host_scripts": {
-            "default": {},
             "type": "object",
             "propertyNames": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 120
             },
             "additionalProperties": {
-              "type": "string"
+              "type": "string",
+              "maxLength": 4000
+            }
+          },
+          "names": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 253
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "nmap",
+                    "ptr",
+                    "mdns",
+                    "netbios",
+                    "ssdp"
+                  ]
+                }
+              },
+              "required": [
+                "value",
+                "source"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "mac_metadata": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "globally_administered",
+                  "locally_administered",
+                  "multicast",
+                  "broadcast",
+                  "invalid",
+                  "unknown"
+                ]
+              },
+              "vendor_resolution": {
+                "type": "string",
+                "enum": [
+                  "resolved",
+                  "not_found",
+                  "not_attempted",
+                  "unknown"
+                ]
+              }
+            },
+            "required": [
+              "kind",
+              "vendor_resolution"
+            ],
+            "additionalProperties": false
+          },
+          "asset_coverage": {
+            "type": "object",
+            "properties": {
+              "port_scan": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "partial",
+                  "not_attempted",
+                  "unknown"
+                ]
+              },
+              "service_detection": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "partial",
+                  "not_attempted",
+                  "unknown"
+                ]
+              },
+              "os_detection": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "partial",
+                  "not_attempted",
+                  "unknown"
+                ]
+              },
+              "name_resolution": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "partial",
+                  "not_attempted",
+                  "unknown"
+                ]
+              }
+            },
+            "required": [
+              "port_scan",
+              "service_detection",
+              "os_detection",
+              "name_resolution"
+            ],
+            "additionalProperties": false
+          },
+          "scan_issues": {
+            "maxItems": 20,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "stage": {
+                  "type": "string",
+                  "enum": [
+                    "discovery",
+                    "port_scan",
+                    "service_detection",
+                    "os_detection",
+                    "name_resolution",
+                    "routing",
+                    "scanner"
+                  ]
+                },
+                "code": {
+                  "type": "string",
+                  "enum": [
+                    "host_timeout",
+                    "permission_denied",
+                    "tool_unavailable",
+                    "resolution_timeout",
+                    "parse_error",
+                    "route_ambiguous",
+                    "execution_error",
+                    "other"
+                  ]
+                }
+              },
+              "required": [
+                "stage",
+                "code"
+              ],
+              "additionalProperties": false
             }
           }
         },
@@ -254,13 +462,16 @@
           "scan_time",
           "os_candidates",
           "state_reason",
-          "host_scripts"
+          "host_scripts",
+          "names",
+          "mac_metadata",
+          "asset_coverage",
+          "scan_issues"
         ],
-        "additionalProperties": {}
+        "additionalProperties": false
       }
     },
     "scan_mode": {
-      "default": "full",
       "type": "string",
       "enum": [
         "full",
@@ -268,21 +479,270 @@
       ]
     },
     "scan_mode_reason": {
-      "default": null,
       "anyOf": [
         {
-          "type": "string"
+          "type": "string",
+          "maxLength": 500
         },
         {
           "type": "null"
         }
       ]
     },
+    "execution_status": {
+      "type": "string",
+      "enum": [
+        "completed",
+        "partial",
+        "failed"
+      ]
+    },
+    "scanner_interfaces": {
+      "maxItems": 16,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "ip": {
+            "type": "string",
+            "format": "ipv4",
+            "pattern": "^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$"
+          },
+          "mac": {
+            "anyOf": [
+              {
+                "type": "string",
+                "const": ""
+              },
+              {
+                "type": "string",
+                "pattern": "^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$"
+              }
+            ]
+          },
+          "network": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 43
+          },
+          "is_route_to_target": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "ip",
+          "mac",
+          "network",
+          "is_route_to_target"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "report_coverage": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "type": "number",
+          "const": 1
+        },
+        "profile": {
+          "type": "string",
+          "const": "siam_standard_v1"
+        },
+        "discovery": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "complete",
+                "partial",
+                "not_attempted",
+                "unknown"
+              ]
+            },
+            "methods_attempted": {
+              "maxItems": 12,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              }
+            }
+          },
+          "required": [
+            "status",
+            "methods_attempted"
+          ],
+          "additionalProperties": false
+        },
+        "ports": {
+          "maxItems": 8,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "protocol": {
+                "type": "string",
+                "enum": [
+                  "tcp",
+                  "udp",
+                  "sctp",
+                  "ip"
+                ]
+              },
+              "port_spec": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "complete",
+                  "partial",
+                  "not_attempted",
+                  "unknown"
+                ]
+              }
+            },
+            "required": [
+              "protocol",
+              "port_spec",
+              "status"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "service_detection": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "complete",
+                "partial",
+                "not_attempted",
+                "unknown"
+              ]
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "additionalProperties": false
+        },
+        "os_detection": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "complete",
+                "partial",
+                "not_attempted",
+                "unknown"
+              ]
+            }
+          },
+          "required": [
+            "status"
+          ],
+          "additionalProperties": false
+        },
+        "name_resolution": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "type": "string",
+              "enum": [
+                "complete",
+                "partial",
+                "not_attempted",
+                "unknown"
+              ]
+            },
+            "methods_attempted": {
+              "maxItems": 12,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              }
+            }
+          },
+          "required": [
+            "status",
+            "methods_attempted"
+          ],
+          "additionalProperties": false
+        },
+        "limitations": {
+          "maxItems": 30,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "stage": {
+                "type": "string",
+                "enum": [
+                  "discovery",
+                  "port_scan",
+                  "service_detection",
+                  "os_detection",
+                  "name_resolution",
+                  "routing",
+                  "scanner"
+                ]
+              },
+              "code": {
+                "type": "string",
+                "enum": [
+                  "host_timeout",
+                  "permission_denied",
+                  "tool_unavailable",
+                  "resolution_timeout",
+                  "parse_error",
+                  "route_ambiguous",
+                  "execution_error",
+                  "other"
+                ]
+              }
+            },
+            "required": [
+              "stage",
+              "code"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "required": [
+        "schema_version",
+        "profile",
+        "discovery",
+        "ports",
+        "service_detection",
+        "os_detection",
+        "name_resolution",
+        "limitations"
+      ],
+      "additionalProperties": false
+    },
     "gateway_ip": {
-      "default": null,
       "anyOf": [
         {
-          "type": "string"
+          "type": "string",
+          "format": "ipv4",
+          "pattern": "^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$"
         },
         {
           "type": "null"
@@ -290,10 +750,10 @@
       ]
     },
     "gateway_mac": {
-      "default": null,
       "anyOf": [
         {
-          "type": "string"
+          "type": "string",
+          "pattern": "^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$"
         },
         {
           "type": "null"
@@ -311,8 +771,11 @@
     "assets",
     "scan_mode",
     "scan_mode_reason",
+    "execution_status",
+    "scanner_interfaces",
+    "report_coverage",
     "gateway_ip",
     "gateway_mac"
   ],
-  "additionalProperties": {}
+  "additionalProperties": false
 }

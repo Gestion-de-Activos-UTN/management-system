@@ -10,8 +10,8 @@ function json(body: unknown, status = 200) {
   return Response.json(body, { status })
 }
 
-// La identificación es una operación atómica: tipo, autorización y, cuando corresponde, owner y
-// criticidad. Reemplaza el antiguo toggle que podía declarar identificado un host sin contexto.
+// La identificación confirma tipo y autorización de forma atómica. Owner y criticidad son contexto
+// opcional: `null` expresa que el usuario no los conoce todavía, sin inventar un valor de negocio.
 export const assetIdentifyEndpoint: Endpoint = {
   path: '/v1/assets/:id/identify',
   method: 'patch',

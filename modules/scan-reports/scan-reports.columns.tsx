@@ -30,6 +30,7 @@ export const scanReportsColumns: ColumnDef<ScanReport, unknown>[] = [
     id: 'processed',
     header: 'Processed',
     cell: ({ row }) => {
+      if (!row.original.raw_payload) return 'Archived'
       const total = totalAssetsInReport(row.original.raw_payload)
       const rejected = parseRejectedAssets(row.original.error).length
       return `${total - rejected} / ${total}`

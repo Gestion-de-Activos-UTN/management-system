@@ -22,6 +22,15 @@ function makeAsset(overrides: Partial<AssetPayload> = {}): AssetPayload {
     os_candidates: [],
     state_reason: '',
     host_scripts: {},
+    names: [],
+    mac_metadata: { kind: 'unknown', vendor_resolution: 'unknown' },
+    asset_coverage: {
+      port_scan: 'complete',
+      service_detection: 'not_attempted',
+      os_detection: 'not_attempted',
+      name_resolution: 'complete',
+    },
+    scan_issues: [],
     ...overrides,
   }
 }
@@ -61,6 +70,18 @@ function makeReport(
     assets,
     scan_mode: 'full',
     scan_mode_reason: null,
+    execution_status: 'completed',
+    scanner_interfaces: [],
+    report_coverage: {
+      schema_version: 1,
+      profile: 'siam_standard_v1',
+      discovery: { status: 'complete', methods_attempted: ['arp'] },
+      ports: [{ protocol: 'tcp', port_spec: '1-1000', status: 'complete' }],
+      service_detection: { status: 'not_attempted' },
+      os_detection: { status: 'not_attempted' },
+      name_resolution: { status: 'complete', methods_attempted: ['ptr'] },
+      limitations: [],
+    },
     gateway_ip: null,
     gateway_mac: null,
     ...overrides,
@@ -526,4 +547,120 @@ test('campos técnicos obligatorios faltantes rechaza el asset sin crear/actuali
   assert.equal(result.rejectedAssets.length, 1)
   assert.equal(updates.length, 0)
   assert.equal(creates.length, 0)
+})
+
+test('retry del mismo report_id no incrementa dos veces evidence_history', async () => {
+  const doc: Record<string, unknown> = {
+    id: 'existing-1',
+    asset_id: 'stable-a',
+    first_viewed_at: null,
+    last_seen: '2025-12-01T00:00:00.000Z',
+    mac: '00:11:22:33:44:55',
+    vendor: null,
+    hostname: null,
+    os: null,
+    os_candidates: [],
+    ip: '10.0.0.1',
+    services: [],
+    gateway_ip: null,
+    gateway_mac: null,
+    status: 'active',
+    evidence_history: [],
+  }
+  const payload = {
+    async find() {
+      return { docs: [doc] }
+    },
+    async update({ data }: { data: Record<string, unknown> }) {
+      Object.assign(doc, data)
+      return doc
+    },
+  } as unknown as Payload
+  const report = makeReport([
+    makeAsset({
+      mac: '00:11:22:33:44:55',
+      mac_metadata: { kind: 'globally_administered', vendor_resolution: 'not_found' },
+    }),
+  ])
+
+  await ingestScanReport(payload, report, AUTH)
+  await ingestScanReport(payload, report, AUTH)
+
+  const history = doc.evidence_history as Array<{ seen_count: number }>
+  assert.equal(history.length, 1)
+  assert.equal(history[0].seen_count, 1)
+})
+
+test('un reporte demorado no reemplaza evidencia dinámica más reciente', async () => {
+  const latestService = makeService({ port: 22, name: 'ssh' })
+  const doc = {
+    id: 'existing-1',
+    asset_id: 'stable-a',
+    first_viewed_at: null,
+    last_seen: '2026-02-01T00:00:00.000Z',
+    mac: null,
+    vendor: null,
+    hostname: null,
+    os: null,
+    os_candidates: [],
+    state_reason: 'arp-response',
+    host_scripts: {},
+    ip: '10.0.0.1',
+    services: [latestService],
+    gateway_ip: null,
+    gateway_mac: null,
+    status: 'active',
+    asset_coverage: {
+      port_scan: 'complete',
+      service_detection: 'complete',
+      os_detection: 'not_attempted',
+      name_resolution: 'complete',
+    },
+  }
+  const { payload, updates } = makePayload(doc)
+  await ingestScanReport(
+    payload,
+    makeReport([
+      makeAsset({
+        scan_time: '2026-01-01T00:00:00.000Z',
+        services: [makeService({ port: 9100 })],
+      }),
+    ]),
+    AUTH
+  )
+
+  assert.deepEqual(updates[0].services, [latestService])
+  assert.equal(updates[0].last_seen, doc.last_seen)
+})
+
+test('deriva scanner host server-side por IP y MAC de la misma interfaz', async () => {
+  const { payload, creates } = makePayload(null)
+  await ingestScanReport(
+    payload,
+    makeReport(
+      [
+        makeAsset({
+          ip: '10.0.0.25',
+          mac: '00:11:22:33:44:55',
+          mac_metadata: { kind: 'globally_administered', vendor_resolution: 'not_found' },
+        }),
+      ],
+      {
+        scanner_interfaces: [
+          {
+            name: 'eth0',
+            ip: '10.0.0.25',
+            mac: '00:11:22:33:44:55',
+            network: '10.0.0.0/24',
+            is_route_to_target: true,
+          },
+        ],
+      }
+    ),
+    AUTH
+  )
+
+  assert.equal(creates[0].is_scanner_host, true)
+  assert.equal(creates[0].scanner_host_match, 'both')
+  assert.equal(creates[0].inferred_type, 'workstation')
 })

@@ -6,7 +6,12 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { Button, Group, Modal, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core'
 import type { Asset } from '@/app/types/payload-types'
 import { CRITICALITY_OPTIONS } from '@/lib/enum-labels'
-import { AssetIdentificationSchema, type AssetIdentification } from '../schema'
+import {
+  AssetIdentificationFormSchema,
+  type AssetIdentificationForm,
+  normalizeAssetIdentificationForm,
+  UNKNOWN_IDENTIFICATION_VALUE,
+} from '../schema'
 import { useIdentifyAsset } from '../hooks/use-identify-asset'
 import { SCANNED_ASSET_TYPE_OPTIONS } from '@/domain/assets/asset-types'
 
@@ -30,38 +35,58 @@ export function AssetIdentificationModal({
     reset,
     watch,
     formState: { errors },
-  } = useForm<AssetIdentification>({
-    resolver: zodResolver(AssetIdentificationSchema),
+  } = useForm<AssetIdentificationForm>({
+    resolver: zodResolver(AssetIdentificationFormSchema),
     defaultValues: {
       confirmed_type: (asset.confirmed_type ??
         suggestedType ??
-        'other') as AssetIdentification['confirmed_type'],
+        'other') as AssetIdentificationForm['confirmed_type'],
       authorization_status:
         asset.authorization_status === 'unauthorized' ? 'unauthorized' : 'authorized',
-      owner: typeof asset.owner === 'string' ? asset.owner : (asset.owner?.id ?? null),
-      criticality: asset.criticality ?? null,
+      owner:
+        typeof asset.owner === 'string'
+          ? asset.owner
+          : (asset.owner?.id ?? UNKNOWN_IDENTIFICATION_VALUE),
+      criticality: asset.criticality ?? UNKNOWN_IDENTIFICATION_VALUE,
       alias: asset.alias ?? null,
       location: asset.location ?? null,
     },
   })
   const authorizationStatus = watch('authorization_status')
+  const suggestionMessage = asset.is_scanner_host
+    ? 'Classification evidence: this device hosts the SIAM scanner.'
+    : asset.inferred_type === 'gateway'
+      ? 'Classification evidence: this device matches the network gateway.'
+      : asset.inference_confidence === 'unknown'
+        ? 'The scan did not provide enough evidence to suggest a device type.'
+        : `Suggested classification: ${suggestedType ?? 'not determined'} (${asset.inference_confidence ?? 'unknown'} confidence).`
 
   useEffect(() => {
     if (!opened) reset()
   }, [opened, reset])
 
-  const submit = handleSubmit(identification => {
+  const submit = handleSubmit(formValue => {
+    const identification = normalizeAssetIdentificationForm(formValue)
     identify.mutate({ id: String(asset.id), identification }, { onSuccess: onClose })
   })
 
   return (
-    <Modal opened={opened} onClose={onClose} title="Identify asset" centered size="lg">
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={
+        <Text component="span" size="lg" fw={700}>
+          Asset identification
+        </Text>
+      }
+      centered
+      size="lg"
+    >
       <form onSubmit={submit} noValidate>
         <Stack gap="md">
           <Text size="sm" c="dimmed">
-            SIAM suggests {suggestedType ?? 'no specific type'} with{' '}
-            {asset.inference_confidence ?? 'unknown'} confidence. Confirm the device and its
-            business context.
+            {suggestionMessage} Review the classification and complete the available business
+            information.
           </Text>
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <Controller
@@ -82,7 +107,7 @@ export function AssetIdentificationModal({
               control={control}
               render={({ field }) => (
                 <Select
-                  label="Is this device authorized?"
+                  label="Authorization status"
                   data={[
                     { value: 'authorized', label: 'Authorized' },
                     { value: 'unauthorized', label: 'Not authorized' },
@@ -100,15 +125,19 @@ export function AssetIdentificationModal({
                   control={control}
                   render={({ field }) => (
                     <Select
-                      label="Owner"
-                      placeholder="Unassigned"
+                      label="Asset owner"
                       searchable
-                      clearable
-                      data={members.map(member => ({
-                        value: member.id,
-                        label: member.name || member.email,
-                      }))}
-                      value={field.value ?? null}
+                      data={[
+                        {
+                          value: UNKNOWN_IDENTIFICATION_VALUE,
+                          label: 'Unassigned or unknown',
+                        },
+                        ...members.map(member => ({
+                          value: member.id,
+                          label: member.name || member.email,
+                        })),
+                      ]}
+                      value={field.value ?? UNKNOWN_IDENTIFICATION_VALUE}
                       onChange={field.onChange}
                       error={errors.owner?.message}
                     />
@@ -119,11 +148,12 @@ export function AssetIdentificationModal({
                   control={control}
                   render={({ field }) => (
                     <Select
-                      label="Criticality"
-                      placeholder="Unknown"
-                      clearable
-                      data={CRITICALITY_OPTIONS}
-                      value={field.value ?? null}
+                      label="Business criticality"
+                      data={[
+                        { value: UNKNOWN_IDENTIFICATION_VALUE, label: 'Not yet assessed' },
+                        ...CRITICALITY_OPTIONS,
+                      ]}
+                      value={field.value ?? UNKNOWN_IDENTIFICATION_VALUE}
                       onChange={field.onChange}
                       error={errors.criticality?.message}
                     />
@@ -161,7 +191,7 @@ export function AssetIdentificationModal({
               Cancel
             </Button>
             <Button type="submit" loading={identify.isPending}>
-              Confirm identification
+              Confirm asset
             </Button>
           </Group>
         </Stack>

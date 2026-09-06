@@ -57,6 +57,20 @@ export const ScanReports: CollectionConfig = {
       type: 'number',
     },
     {
+      name: 'execution_status',
+      type: 'select',
+      options: ['completed', 'partial', 'failed'],
+      required: true,
+    },
+    {
+      name: 'report_coverage',
+      type: 'json',
+    },
+    {
+      name: 'scanner_interfaces',
+      type: 'json',
+    },
+    {
       // Resuelto por el agente (tabla de ruteo/ARP), no un guess — todo asset de este
       // reporte está, por construcción del scan, detrás de este gateway (contracts/scan-report.schema.ts).
       name: 'gateway_ip',
@@ -69,6 +83,11 @@ export const ScanReports: CollectionConfig = {
     {
       name: 'raw_payload',
       type: 'json',
+    },
+    {
+      name: 'raw_payload_expires_at',
+      type: 'date',
+      index: true,
     },
     {
       name: 'status',

@@ -100,6 +100,13 @@ curl -X POST http://localhost:3001/api/v1/internal/jobs/aging-sweep \
 `INTERNAL_JOBS_TOKEN` no viene seteada en `docker-compose.yml` por default — agregarla ahí para
 poder probar este endpoint localmente.
 
+**Retención de reportes crudos (Fase 4)** — el cuerpo completo de cada `ScanReport` se conserva
+30 días. Payload agenda diariamente la tarea local `expire-raw-scan-payloads` y la ejecuta desde
+la cola `maintenance`; se elimina solamente `raw_payload`, manteniendo el resumen y la cobertura
+del reporte. El mismo proceso puede dispararse manualmente con
+`POST /api/v1/internal/jobs/expire-scan-payloads` y `INTERNAL_JOBS_TOKEN`. No requiere un scheduler
+ni almacenamiento externos.
+
 ## Estructura
 
 Ver `blueprint-siam.md` en la raíz del monorepo para el detalle de cada carpeta (`access/`, `collections/`, `domain/`, `endpoints/`, `services/`, `app/`). Sin `migrations/`: no se usan migraciones en este proyecto (ver sección "Levantar el proyecto"). Fuera de alcance para SIAM: Assessments, Heatmap, VideoTraining.
