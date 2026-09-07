@@ -17,6 +17,7 @@ import { Users } from './collections/Users'
 import { OrganizationMemberships } from './collections/OrganizationMemberships'
 import { JobRun } from './collections/JobRun'
 import { InventorySnapshots } from './collections/InventorySnapshots'
+import { AppSettings } from './collections/AppSettings'
 import { reportsEndpoint } from './endpoints/reports'
 import { heartbeatEndpoint } from './endpoints/heartbeat'
 import { vendorEndpoint } from './endpoints/vendor'
@@ -73,6 +74,7 @@ export default buildConfig({
     OrganizationMemberships,
     JobRun,
     InventorySnapshots,
+    AppSettings,
   ],
   // Servidos vía app/(payload)/api/[...slug]/route.ts (catch-all de Next que reexporta
   // REST_GET/REST_POST/... de @payloadcms/next/routes) — sin ese archivo, Payload no recibe

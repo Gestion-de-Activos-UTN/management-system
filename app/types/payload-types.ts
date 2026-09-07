@@ -82,6 +82,7 @@ export interface Config {
     'organization-memberships': OrganizationMembership;
     'job-runs': JobRun;
     'inventory-snapshots': InventorySnapshot;
+    'app-settings': AppSetting;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -103,6 +104,7 @@ export interface Config {
     'organization-memberships': OrganizationMembershipsSelect<false> | OrganizationMembershipsSelect<true>;
     'job-runs': JobRunsSelect<false> | JobRunsSelect<true>;
     'inventory-snapshots': InventorySnapshotsSelect<false> | InventorySnapshotsSelect<true>;
+    'app-settings': AppSettingsSelect<false> | AppSettingsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -609,6 +611,16 @@ export interface InventorySnapshot {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "app-settings".
+ */
+export interface AppSetting {
+  id: string;
+  default_offline_after_hours?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -686,6 +698,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'inventory-snapshots';
         value: string | InventorySnapshot;
+      } | null)
+    | ({
+        relationTo: 'app-settings';
+        value: string | AppSetting;
       } | null);
   globalSlug?: string | null;
   user:
@@ -1048,6 +1064,15 @@ export interface InventorySnapshotsSelect<T extends boolean = true> {
         policy_snapshot?: T;
       };
   assets_dump?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "app-settings_select".
+ */
+export interface AppSettingsSelect<T extends boolean = true> {
+  default_offline_after_hours?: T;
   updatedAt?: T;
   createdAt?: T;
 }

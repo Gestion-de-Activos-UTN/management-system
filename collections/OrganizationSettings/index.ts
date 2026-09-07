@@ -1,8 +1,9 @@
 import type { CollectionConfig } from 'payload'
 
 // Sin lectura ni escritura externa esta fase — solo lo escribe
-// domain/organizations/createOrgWithAdmin.ts vía overrideAccess. Sin AppSettings
-// singleton todavía, así que risk_score_policy no tiene lógica de default heredado.
+// domain/organizations/createOrgWithAdmin.ts vía overrideAccess. AppSettings (singleton de
+// plataforma) ya existe para offline_after_hours (ver agingSweep.ts), pero risk_score_policy
+// todavía no tiene lógica de default heredado — queda fuera de esta tarea.
 export const OrganizationSettings: CollectionConfig = {
   slug: 'organization-settings',
   admin: {
@@ -34,9 +35,9 @@ export const OrganizationSettings: CollectionConfig = {
     },
     {
       // Umbral del job de aging (domain/inventories/agingSweep.ts) — cuánto tiempo sin aparecer en
-      // un scan antes de pasar un Asset de 'active' a 'offline'. Sin override, cae a
-      // DEFAULT_OFFLINE_AFTER_HOURS (constante en código); no hay AppSettings singleton todavía
-      // para un default de plataforma editable (mismo gap que risk_score_policy).
+      // un scan antes de pasar un Asset de 'active' a 'offline'. Sin override acá, cae al default
+      // de plataforma en AppSettings.default_offline_after_hours, y si tampoco existe, a la
+      // constante DEFAULT_OFFLINE_AFTER_HOURS en código.
       name: 'offline_after_hours',
       type: 'number',
     },

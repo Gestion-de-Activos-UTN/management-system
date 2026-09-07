@@ -1,7 +1,9 @@
 import type { Payload, Where } from 'payload'
 
-// Sin AppSettings singleton todavía (mismo gap que risk_score_policy) — este es el default de
-// plataforma cuando una organización no tiene override en OrganizationSettings.offline_after_hours.
+// Último fallback de la cadena (org override -> AppSettings.default_offline_after_hours -> esta
+// constante), para cuando ni la organización ni AppSettings tienen un valor configurado todavía
+// (ej. instalación recién bootstrapeada, sin documento de app-settings creado aún). El gap de
+// risk_score_policy (OrganizationSettings/index.ts) sigue sin resolver, no forma parte de esta tarea.
 export const DEFAULT_OFFLINE_AFTER_HOURS = 72
 
 export interface AgingSweepSummary {
@@ -22,7 +24,20 @@ export function shouldGoOffline(
   return elapsedHours >= offlineAfterHours
 }
 
-async function fetchOfflineAfterHours(payload: Payload, organizationId: string): Promise<number> {
+async function fetchPlatformDefaultOfflineAfterHours(payload: Payload): Promise<number> {
+  const result = await payload.find({
+    collection: 'app-settings',
+    overrideAccess: true,
+    depth: 0,
+    limit: 1,
+  })
+  const configured = result.docs[0]?.default_offline_after_hours
+  return typeof configured === 'number' && configured > 0 ? configured : DEFAULT_OFFLINE_AFTER_HOURS
+}
+
+// Exportada (antes privada) para poder testearla directamente en
+// agingSweep.integration.test.ts sin pasar por todo sweepActiveAssets.
+export async function fetchOfflineAfterHours(payload: Payload, organizationId: string): Promise<number> {
   const result = await payload.find({
     collection: 'organization-settings',
     where: { organization: { equals: organizationId } },
@@ -31,7 +46,8 @@ async function fetchOfflineAfterHours(payload: Payload, organizationId: string):
     limit: 1,
   })
   const configured = result.docs[0]?.offline_after_hours
-  return typeof configured === 'number' && configured > 0 ? configured : DEFAULT_OFFLINE_AFTER_HOURS
+  if (typeof configured === 'number' && configured > 0) return configured
+  return fetchPlatformDefaultOfflineAfterHours(payload)
 }
 
 // El umbral es por organización, nunca una ventana global fija (doc 05 §5.3) — dos organizaciones
