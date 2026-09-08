@@ -1,6 +1,9 @@
 import type { CollectionAfterChangeHook } from 'payload'
 import type { NonNetworkAsset } from '@/app/types/payload-types'
-import { reconcileManualAssetAssessmentInstance } from '@/domain/assessments/reconcileAssessmentInstance'
+import {
+  reconcileManualAssetAssessmentInstance,
+  syncManualAssetAssessmentAssignee,
+} from '@/domain/assessments/reconcileAssessmentInstance'
 import { relationId } from '@/lib/relationId'
 
 const relationChanged = (current: unknown, previous: unknown) =>
@@ -11,12 +14,12 @@ export function manualAssessmentApplicabilityChanged(
   previousDoc: NonNetworkAsset | undefined,
   operation: 'create' | 'update'
 ): boolean {
-  if (operation === 'create' || !previousDoc) return true
+  if (operation === 'create' || !previousDoc) {
+    return doc.asset_category === 'computer' && doc.status !== 'retired'
+  }
   return (
     doc.asset_category !== previousDoc.asset_category ||
-    doc.status !== previousDoc.status ||
-    relationChanged(doc.office, previousDoc.office) ||
-    relationChanged(doc.organization, previousDoc.organization)
+    (doc.status === 'retired') !== (previousDoc.status === 'retired')
   )
 }
 
@@ -26,7 +29,11 @@ export const reconcileAssessmentApplicability: CollectionAfterChangeHook<NonNetw
   operation,
   req,
 }) => {
-  if (!manualAssessmentApplicabilityChanged(doc, previousDoc, operation)) return doc
-  await reconcileManualAssetAssessmentInstance(req.payload, doc, 'asset_identified', req)
+  if (manualAssessmentApplicabilityChanged(doc, previousDoc, operation)) {
+    await reconcileManualAssetAssessmentInstance(req.payload, doc, 'asset_identified', req)
+  }
+  if (operation === 'update' && previousDoc && relationChanged(doc.owner, previousDoc.owner)) {
+    await syncManualAssetAssessmentAssignee(req.payload, doc, req)
+  }
   return doc
 }

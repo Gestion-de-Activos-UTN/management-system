@@ -7,6 +7,61 @@ import { resolveApplicableQuestions } from './resolveApplicableQuestions'
 export type ReconcileReason =
   'initial' | 'asset_identified' | 'policy_changed' | 'answer_expired' | 'manual_review'
 
+async function syncAssessmentAssignee(
+  payload: Payload,
+  subjectField: 'asset' | 'manual_asset',
+  subjectId: string,
+  owner: Asset['owner'] | NonNetworkAsset['owner'],
+  req?: PayloadRequest
+): Promise<void> {
+  const open = await payload.find({
+    collection: 'assessment-instances',
+    overrideAccess: true,
+    req,
+    depth: 0,
+    limit: 10,
+    where: {
+      and: [
+        { scope: { equals: 'asset' } },
+        { [subjectField]: { equals: subjectId } },
+        { status: { in: ['pending', 'in_progress'] } },
+      ],
+    },
+  })
+  const assignedTo = owner ? relationId(owner) : null
+  for (const assessment of open.docs) {
+    const current = assessment.assigned_to ? relationId(assessment.assigned_to) : null
+    if (current === assignedTo) continue
+    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {assessment, assigned_to}, previous hash for this organization_id)
+    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+    // NOTIFY: this event should trigger a Notification Bell entry for {previous and new asset owner}
+    // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
+    await payload.update({
+      collection: 'assessment-instances',
+      id: assessment.id,
+      overrideAccess: true,
+      req,
+      data: { assigned_to: assignedTo },
+    })
+  }
+}
+
+export function syncAssetAssessmentAssignee(
+  payload: Payload,
+  asset: Asset,
+  req?: PayloadRequest
+): Promise<void> {
+  return syncAssessmentAssignee(payload, 'asset', String(asset.id), asset.owner, req)
+}
+
+export function syncManualAssetAssessmentAssignee(
+  payload: Payload,
+  asset: NonNetworkAsset,
+  req?: PayloadRequest
+): Promise<void> {
+  return syncAssessmentAssignee(payload, 'manual_asset', String(asset.id), asset.owner, req)
+}
+
 function addDays(iso: string, days: number): string {
   return new Date(Date.parse(iso) + days * 24 * 60 * 60 * 1000).toISOString()
 }
@@ -210,18 +265,24 @@ export async function reconcileAssetAssessmentInstance(
   if (!policy)
     throw new Error('Selected assessment policy is not available in the deployed catalog')
 
-  const applicable = resolveApplicableQuestions(
-    {
-      scope: 'asset',
-      status: asset.status ?? 'active',
-      identified: asset.identified ?? false,
-      identification_status: asset.identification_status ?? 'pending',
-      confirmed_type: asset.confirmed_type ?? null,
-    },
-    policy,
-    { include_unresolved_answer_dependencies: true },
-    QUESTION_CATALOG
-  )
+  // El assessment manual de activo está limitado a endpoints de usuario: workstation para
+  // Assets descubiertos y computer (mapeado a workstation) para NonNetworkAssets. Los demás
+  // tipos conservan sus resultados automáticos, pero no reciben este cuestionario.
+  const applicable =
+    asset.confirmed_type === 'workstation'
+      ? resolveApplicableQuestions(
+          {
+            scope: 'asset',
+            status: asset.status ?? 'active',
+            identified: asset.identified ?? false,
+            identification_status: asset.identification_status ?? 'pending',
+            confirmed_type: asset.confirmed_type,
+          },
+          policy,
+          { include_unresolved_answer_dependencies: true },
+          QUESTION_CATALOG
+        )
+      : []
   const expectedKeys = applicable.map(question => `${question.key}@${question.version}`).sort()
   const matching = openResult.docs.find(instance => {
     if (

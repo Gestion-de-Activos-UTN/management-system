@@ -35,7 +35,7 @@ describe('manual asset assessment applicability changes', () => {
     )
   })
 
-  it('reacts to category, lifecycle and target changes', () => {
+  it('reacts only to category and retirement changes', () => {
     assert.equal(
       manualAssessmentApplicabilityChanged(
         { ...computer, asset_category: 'mobile_device' },
@@ -50,7 +50,7 @@ describe('manual asset assessment applicability changes', () => {
     )
     assert.equal(
       manualAssessmentApplicabilityChanged({ ...computer, office: 'office-2' }, computer, 'update'),
-      true
+      false
     )
   })
 })

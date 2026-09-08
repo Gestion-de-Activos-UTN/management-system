@@ -59,6 +59,23 @@ export const Assets: CollectionConfig = {
       access: technicalFieldAccess,
     },
     {
+      name: 'observed_agents',
+      type: 'array',
+      access: technicalFieldAccess,
+      fields: [
+        {
+          name: 'agent',
+          type: 'relationship',
+          relationTo: 'agents',
+          required: true,
+        },
+        { name: 'ip', type: 'text' },
+        { name: 'gateway_ip', type: 'text' },
+        { name: 'gateway_mac', type: 'text' },
+        { name: 'last_seen', type: 'date', required: true },
+      ],
+    },
+    {
       name: 'organization',
       type: 'relationship',
       relationTo: 'organizations',

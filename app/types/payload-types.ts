@@ -367,6 +367,16 @@ export interface Asset {
   asset_id: string;
   agent: string | Agent;
   office?: (string | null) | Office;
+  observed_agents?:
+    | {
+        agent: string | Agent;
+        ip?: string | null;
+        gateway_ip?: string | null;
+        gateway_mac?: string | null;
+        last_seen: string;
+        id?: string | null;
+      }[]
+    | null;
   organization?: (string | null) | Organization;
   ip?: string | null;
   last_seen?: string | null;

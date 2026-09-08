@@ -5,6 +5,8 @@ import type { Asset, NonNetworkAsset } from '@/app/types/payload-types'
 import {
   reconcileAssetAssessmentInstance,
   reconcileManualAssetAssessmentInstance,
+  syncAssetAssessmentAssignee,
+  syncManualAssetAssessmentAssignee,
 } from './reconcileAssessmentInstance'
 
 const workstation = {
@@ -174,5 +176,40 @@ describe('manually entered computer assessment reconciliation', () => {
     )
     assert.equal(result.action, 'superseded')
     assert.equal((updates[0].data as { status: string }).status, 'superseded')
+  })
+})
+
+describe('assessment assignee synchronization', () => {
+  it('updates open scanned-asset assessments without creating a new cycle', async () => {
+    const existing = {
+      id: 'assessment-1',
+      assigned_to: 'user-1',
+      status: 'in_progress',
+    }
+    const { payload, creates, updates } = makePayload([existing])
+
+    await syncAssetAssessmentAssignee(payload, { ...workstation, owner: 'user-2' } as Asset)
+
+    assert.equal(creates.length, 0)
+    assert.equal(updates.length, 1)
+    assert.equal((updates[0].data as { assigned_to: string }).assigned_to, 'user-2')
+  })
+
+  it('updates open manual-asset assessments and skips an unchanged owner', async () => {
+    const existing = {
+      id: 'assessment-1',
+      assigned_to: 'user-1',
+      status: 'pending',
+    }
+    const unchanged = makePayload([existing])
+    await syncManualAssetAssessmentAssignee(unchanged.payload, manualComputer)
+    assert.equal(unchanged.updates.length, 0)
+
+    const changed = makePayload([existing])
+    await syncManualAssetAssessmentAssignee(changed.payload, {
+      ...manualComputer,
+      owner: 'user-2',
+    } as NonNetworkAsset)
+    assert.equal((changed.updates[0].data as { assigned_to: string }).assigned_to, 'user-2')
   })
 })
