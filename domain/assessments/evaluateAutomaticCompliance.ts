@@ -255,26 +255,7 @@ export async function reevaluateComplianceAfterScan(
   req?: PayloadRequest,
   now = new Date()
 ): Promise<void> {
-  const [targets, settingsResult, subscriptionResult] = await Promise.all([
-    payload.find({
-      collection: 'assessment-instances',
-      overrideAccess: true,
-      req,
-      depth: 0,
-      limit: 500,
-      sort: '-createdAt',
-      where: {
-        and: [
-          { organization: { equals: organizationId } },
-          {
-            or: [
-              { office: { equals: officeId }, scope: { equals: 'office' } },
-              { asset: { in: [...assetIds] }, scope: { equals: 'asset' } },
-            ],
-          },
-        ],
-      },
-    }),
+  const [settingsResult, subscriptionResult] = await Promise.all([
     payload.find({
       collection: 'organization-settings',
       where: { organization: { equals: organizationId } },
@@ -299,6 +280,27 @@ export async function reevaluateComplianceAfterScan(
       ? featureValue
       : null
   if (!settings || features?.security_assessments !== true) return
+  const targets = await payload.find({
+    collection: 'assessment-instances',
+    overrideAccess: true,
+    req,
+    depth: 0,
+    limit: 500,
+    sort: '-createdAt',
+    where: {
+      and: [
+        { organization: { equals: organizationId } },
+        { policy_key: { equals: settings.assessment_policy_key } },
+        { policy_version: { equals: settings.assessment_policy_version } },
+        {
+          or: [
+            { office: { equals: officeId }, scope: { equals: 'office' } },
+            { asset: { in: [...assetIds] }, scope: { equals: 'asset' } },
+          ],
+        },
+      ],
+    },
+  })
   const latestByTarget = new Map<string, AssessmentInstance>()
   for (const assessment of targets.docs) {
     const key =

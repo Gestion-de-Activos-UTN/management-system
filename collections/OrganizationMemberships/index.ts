@@ -6,6 +6,7 @@ import {
   blockLastActiveOrgAdminOnDelete,
 } from './hooks/rankInvariants'
 import { linkMembershipToUser, cascadeDeactivationToUser } from './hooks/userLifecycleCascade'
+import { enforceOrgAdminOffices } from './hooks/enforceOrgAdminOffices'
 
 // TODO(rbac-feature): create/update/delete cerrados por alcance de esta fase (solo-lectura).
 // Ni siquiera `read` esta fase — no hay UI de "ver mi membership" todavía; el TenantContext
@@ -64,7 +65,7 @@ export const OrganizationMemberships: CollectionConfig = {
   ],
   hooks: {
     beforeValidate: [enforceImmutableOrgAndUser],
-    beforeChange: [blockRankEscalation, blockLastActiveOrgAdminOnUpdate],
+    beforeChange: [blockRankEscalation, enforceOrgAdminOffices, blockLastActiveOrgAdminOnUpdate],
     beforeDelete: [blockLastActiveOrgAdminOnDelete],
     afterChange: [linkMembershipToUser, cascadeDeactivationToUser],
   },
