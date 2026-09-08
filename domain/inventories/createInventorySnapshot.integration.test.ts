@@ -16,6 +16,17 @@ async function seedOfficeWithAssets(payload: Payload) {
     data: { name: `Org ${Math.random()}` },
     overrideAccess: true,
   })
+  await payload.create({
+    collection: 'organization-settings',
+    data: {
+      organization: organization.id,
+      industry: 'Professional services',
+      assessment_policy_key: 'essential',
+      assessment_policy_version: 1,
+      assessment_policy_selected_at: new Date().toISOString(),
+    },
+    overrideAccess: true,
+  })
   const office = await payload.create({
     collection: 'offices',
     data: { organization: organization.id, name: 'Oficina Test' },
@@ -84,46 +95,48 @@ async function seedOfficeWithAssets(payload: Payload) {
     },
   })
 
-  return { organization, office, criticalAsset, nonNetworkAsset }
+  return { organization, office, user, criticalAsset, nonNetworkAsset }
 }
 
-test('createInventorySnapshot: assets_dump refleja Network y Other Assets, risk_score solo ve Network', async () => {
+test('createInventorySnapshot: freezes inventory and an independently calculated risk summary', async () => {
   const payload = await getPayload({ config })
-  const { office } = await seedOfficeWithAssets(payload)
+  const { office, user } = await seedOfficeWithAssets(payload)
 
   const snapshot = await createInventorySnapshot(payload, String(office.id), {
     type: 'manual',
-    userId: 'u-test',
+    userId: String(user.id),
   })
 
   assert.equal(snapshot.generated_by, 'manual')
   const dump = snapshot.assets_dump as { network: unknown[]; non_network: unknown[] }
   assert.equal(dump.network.length, 2, 'debe incluir los 2 Assets de red')
   assert.equal(dump.non_network.length, 1, 'debe incluir el NonNetworkAsset manual (RF-49-54)')
-  // peso offline (critical=5) / peso total (5 + low=1) = 5/6 -> 83% — el NonNetworkAsset (criticality
-  // 'high', status 'active') NO debe afectar este número, ver nota en createInventorySnapshot.ts.
-  assert.equal((snapshot.risk_score as { global: number }).global, 83)
+  const risk = snapshot.risk_score as { global: number | null; evaluated_percentage: number }
+  assert.equal(risk.global, null, 'sin resultados evaluables el riesgo no debe aparentar cero')
+  assert.equal(risk.evaluated_percentage, 0)
+  assert.ok(snapshot.assessment_results_snapshot)
 })
 
-test('createInventorySnapshot: un asset no identificado entra en assets_dump pero no en risk_score', async () => {
+test('createInventorySnapshot: an unidentified asset is visible without becoming fabricated risk', async () => {
   const payload = await getPayload({ config })
-  const { office } = await seedOfficeWithAssets(payload)
+  const { office, user } = await seedOfficeWithAssets(payload)
 
-  // Sin identificar (identified: false, default): criticidad 'critical' pero offline, si contara
-  // pesaría el score a 100%. No debe contar (ver nota junto a computeRiskScore en
-  // createInventorySnapshot.ts) — ni recién detectado ni des-identificado después.
+  // Sin identificar (identified: false, default): queda visible en el inventario, pero no existe
+  // evidencia suficiente para convertirlo por sí solo en cumplimiento o incumplimiento.
   await payload.create({
     collection: 'assets',
     overrideAccess: true,
     context: { systemJob: true },
     data: {
       asset_id: `a-${Math.random().toString(36).slice(2)}`,
-      agent: (await payload.find({
-        collection: 'agents',
-        where: { office: { equals: office.id } },
-        overrideAccess: true,
-        limit: 1,
-      })).docs[0].id,
+      agent: (
+        await payload.find({
+          collection: 'agents',
+          where: { office: { equals: office.id } },
+          overrideAccess: true,
+          limit: 1,
+        })
+      ).docs[0].id,
       office: office.id,
       organization: relationId(office.organization),
       ip: '10.0.0.3',
@@ -134,16 +147,12 @@ test('createInventorySnapshot: un asset no identificado entra en assets_dump per
 
   const snapshot = await createInventorySnapshot(payload, String(office.id), {
     type: 'manual',
-    userId: 'u-test',
+    userId: String(user.id),
   })
 
   const dump = snapshot.assets_dump as { network: unknown[] }
   assert.equal(dump.network.length, 3, 'el no-identificado sigue en el dump')
-  assert.equal(
-    (snapshot.risk_score as { global: number }).global,
-    83,
-    'el no-identificado no debe mover el score (sigue siendo 5/6)'
-  )
+  assert.equal((snapshot.risk_score as { global: number | null }).global, null)
 })
 
 test('createInventorySnapshot: assets_dump es una copia por valor, no una referencia viva', async () => {

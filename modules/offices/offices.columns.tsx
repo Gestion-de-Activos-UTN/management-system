@@ -54,7 +54,7 @@ export function getOfficesColumns(
         if (status === 'inactive') {
           return (
             <Tooltip label={`${summary.total} provisioned agent(s), all inactive`}>
-              <Badge color="gray" variant="light">
+              <Badge color="gray" variant="filled">
                 Inactive
               </Badge>
             </Tooltip>
@@ -63,7 +63,7 @@ export function getOfficesColumns(
         if (status === 'pending') {
           return (
             <Tooltip label="Scanner provisioned, waiting for its first heartbeat">
-              <Badge color="blue" variant="light">
+              <Badge color="blue" variant="filled">
                 Pending
               </Badge>
             </Tooltip>
@@ -72,7 +72,7 @@ export function getOfficesColumns(
         if (status === 'online') {
           return (
             <Tooltip label={`${summary.online} of ${summary.active} active agent(s) online`}>
-              <Badge color="green" variant="light">
+              <Badge color="green" variant="filled">
                 Online
               </Badge>
             </Tooltip>
@@ -80,7 +80,7 @@ export function getOfficesColumns(
         }
         return (
           <Tooltip label={`${summary.active} active agent(s), none online`}>
-            <Badge color="yellow" variant="light">
+            <Badge color="yellow" variant="filled">
               Offline
             </Badge>
           </Tooltip>

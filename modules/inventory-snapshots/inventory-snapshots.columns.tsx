@@ -25,7 +25,7 @@ export const inventorySnapshotsColumns: ColumnDef<InventorySnapshot, unknown>[] 
   {
     accessorKey: 'risk_score',
     header: 'Risk Score',
-    cell: ({ row }) => row.original.risk_score?.global ?? '—',
+    cell: ({ row }) => row.original.risk_score?.global ?? 'Not evaluable',
   },
   {
     id: 'actions',

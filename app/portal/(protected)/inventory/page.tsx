@@ -95,13 +95,15 @@ export default function InventoryPage() {
   const assetBucket = useFrozenBucket(assets, a => (a.status ?? 'active') === 'active')
 
   const filteredAssets = useMemo(() => {
-    return (assets ?? []).filter(
-      (a: Asset) =>
-        matchesSearch([a.alias, a.hostname, a.ip], assetSearch) &&
-        (assetCriticality === ALL || a.criticality === assetCriticality) &&
+    return (assets ?? []).filter((a: Asset) => {
+      const isIdentified = a.identification_status === 'confirmed'
+      return (
+        matchesSearch([isIdentified ? a.alias : null, a.hostname, a.ip], assetSearch) &&
+        (assetCriticality === ALL || (isIdentified && a.criticality === assetCriticality)) &&
         (assetStatus === ALL || (a.status ?? 'active') === assetStatus) &&
         (assetIdentified === ALL || String(Boolean(a.identified)) === assetIdentified)
-    )
+      )
+    })
   }, [assets, assetSearch, assetCriticality, assetStatus, assetIdentified])
 
   const { active: activeAssets, inactive: inactiveAssets } = useMemo(

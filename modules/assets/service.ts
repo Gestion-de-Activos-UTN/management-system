@@ -18,7 +18,7 @@ export function getAsset(id: string) {
 // Solo el bloque de negocio — los campos técnicos son read-only en UI (RF-55) y el servidor los
 // rechaza igual vía technicalFieldAccess si alguna vez se colaran acá.
 export function updateAsset(id: string, data: Partial<AssetBusinessFields>) {
-  return httpClient.patch<Asset>(`/api/assets/${id}`, data)
+  return httpClient.patch<Asset>(`/api/v1/assets/${id}/business`, data)
 }
 
 // Apaga el badge "NEW" de la tabla la primera vez que alguien entra al detalle. Nunca se llama

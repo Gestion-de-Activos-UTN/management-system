@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { orgScopedAccess } from '../../access/rbac/orgScopedAccess'
+import { syncOrgAdminMemberships } from './hooks/syncOrgAdminMemberships'
 
 // TODO(rbac-feature): create/update/delete cerrados por alcance de esta fase (solo-lectura).
 export const Offices: CollectionConfig = {
@@ -13,6 +14,7 @@ export const Offices: CollectionConfig = {
     update: () => false,
     delete: () => false,
   },
+  hooks: { afterChange: [syncOrgAdminMemberships] },
   fields: [
     {
       name: 'organization',

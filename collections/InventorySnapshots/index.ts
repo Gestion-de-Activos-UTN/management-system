@@ -47,18 +47,22 @@ export const InventorySnapshots: CollectionConfig = {
       name: 'risk_score',
       type: 'group',
       fields: [
-        { name: 'global', type: 'number', required: true },
+        { name: 'global', type: 'number' },
+        { name: 'evaluated_percentage', type: 'number', required: true },
+        { name: 'requires_attention', type: 'number', required: true },
+        { name: 'not_evaluable', type: 'number', required: true },
         { name: 'policy_snapshot', type: 'json' },
       ],
     },
+    { name: 'assessment_results_snapshot', type: 'json', required: true },
     {
       // Copia por valor completa (depth:0 + clonada, ver createInventorySnapshot.ts) — nunca una
       // lista de referencias. Doc 05 §5.2: si fuera FKs, leer este snapshot mostraría el estado
       // *actual* de esos Assets, no el que tenían en `taken_at`.
       // Forma: { network: Asset[], non_network: NonNetworkAsset[] } — Other Assets es tan parte
       // del inventario como Network, un snapshot que solo copiara Assets documentaría la mitad
-      // de lo que la UI ya muestra bajo "Inventory". `risk_score.global` sigue viendo solo
-      // `network` (ver comentario en createInventorySnapshot.ts sobre por qué).
+      // de lo que la UI ya muestra bajo "Inventory". El Risk Score se congela por separado desde
+      // ComplianceResults vigentes; nunca se infiere del estado de este dump.
       name: 'assets_dump',
       type: 'json',
       required: true,

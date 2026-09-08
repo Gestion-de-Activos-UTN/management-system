@@ -4,6 +4,7 @@ import { validateOwnerTenant } from './hooks/validateOwnerTenant'
 import { rejectManualOfflineStatus } from './hooks/rejectManualOfflineStatus'
 import { rejectBusinessEditsBeforeIdentified } from './hooks/rejectBusinessEditsBeforeIdentified'
 import { enforceAuthorizationInvariant } from './hooks/enforceAuthorizationInvariant'
+import { reconcileAssessmentApplicability } from './hooks/reconcileAssessmentApplicability'
 import { SCANNED_ASSET_TYPE_OPTIONS } from '../../domain/assets/asset-types'
 
 const technicalFieldAccess = {
@@ -32,6 +33,7 @@ export const Assets: CollectionConfig = {
       rejectBusinessEditsBeforeIdentified,
       enforceAuthorizationInvariant,
     ],
+    afterChange: [reconcileAssessmentApplicability],
   },
   fields: [
     {
@@ -55,6 +57,23 @@ export const Assets: CollectionConfig = {
       relationTo: 'offices',
       admin: { readOnly: true },
       access: technicalFieldAccess,
+    },
+    {
+      name: 'observed_agents',
+      type: 'array',
+      access: technicalFieldAccess,
+      fields: [
+        {
+          name: 'agent',
+          type: 'relationship',
+          relationTo: 'agents',
+          required: true,
+        },
+        { name: 'ip', type: 'text' },
+        { name: 'gateway_ip', type: 'text' },
+        { name: 'gateway_mac', type: 'text' },
+        { name: 'last_seen', type: 'date', required: true },
+      ],
     },
     {
       name: 'organization',

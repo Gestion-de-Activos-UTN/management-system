@@ -50,7 +50,24 @@ function makePayload(overrides: { roleDocs?: unknown[] } = {}) {
     async find({ collection, req }: { collection: string; req: PayloadRequest }) {
       calls.push(`find:${collection}`)
       assert.ok(req.transactionID, `find:${collection} debe correr dentro de una transacción`)
-      return { docs: overrides.roleDocs ?? [{ id: 'role-org-admin', slug: 'org_admin' }] }
+      if (collection === 'roles') {
+        return { docs: overrides.roleDocs ?? [{ id: 'role-org-admin', slug: 'org_admin' }] }
+      }
+      if (collection === 'organization-settings') {
+        return {
+          docs: [
+            {
+              assessment_policy_key: 'essential',
+              assessment_policy_version: 1,
+            },
+          ],
+        }
+      }
+      if (collection === 'subscriptions') {
+        return { docs: [{ features: { security_assessments: true } }] }
+      }
+      if (collection === 'assessment-instances') return { docs: [] }
+      return { docs: [] }
     },
   } as unknown as Payload
 
@@ -71,9 +88,17 @@ test('orden de creación sigue doc 04: organization -> settings+subscription -> 
   await createOrgWithAdmin(payload, INPUT)
 
   const subscription = creates.find(c => c.collection === 'subscriptions')
+  const settings = creates.find(c => c.collection === 'organization-settings')
   assert.equal(subscription?.data.level, 'basic')
   assert.equal(typeof subscription?.data.max_offices, 'number')
   assert.ok(subscription?.data.user_limits && typeof subscription.data.user_limits === 'object')
+  assert.equal(settings?.data.assessment_policy_key, 'essential')
+  assert.equal(settings?.data.assessment_policy_version, 1)
+  assert.equal(typeof settings?.data.assessment_policy_selected_at, 'string')
+  assert.deepEqual(subscription?.data.features, {
+    asset_inventory: true,
+    security_assessments: true,
+  })
 
   assert.deepEqual(calls, [
     'beginTransaction',
@@ -82,6 +107,14 @@ test('orden de creación sigue doc 04: organization -> settings+subscription -> 
     'create:subscriptions',
     'update:organizations',
     'create:offices',
+    'find:organization-settings',
+    'find:subscriptions',
+    'find:assessment-instances',
+    'create:assessment-instances',
+    'find:organization-settings',
+    'find:subscriptions',
+    'find:assessment-instances',
+    'create:assessment-instances',
     'find:roles',
     'create:users',
     'create:organization-memberships',

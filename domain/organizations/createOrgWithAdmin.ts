@@ -1,6 +1,7 @@
 import type { Payload, PayloadRequest } from 'payload'
 import { defaultFeatures } from '../subscriptions/features'
 import { getSubscriptionLimits } from '../subscriptions/limits'
+import { reconcileAssessmentInstance } from '../assessments/reconcileAssessmentInstance'
 
 export interface CreateOrgWithAdminInput {
   organizationName: string
@@ -51,7 +52,13 @@ export async function createOrgWithAdmin(
         collection: 'organization-settings',
         overrideAccess: true,
         req,
-        data: { organization: organization.id, industry: input.industry },
+        data: {
+          organization: organization.id,
+          industry: input.industry,
+          assessment_policy_key: 'essential',
+          assessment_policy_version: 1,
+          assessment_policy_selected_at: new Date().toISOString(),
+        },
       }),
       payload.create({
         collection: 'subscriptions',
@@ -85,6 +92,29 @@ export async function createOrgWithAdmin(
       req,
       data: { organization: organization.id, name: 'Main Office' },
     })
+
+    await reconcileAssessmentInstance(
+      payload,
+      {
+        scope: 'organization',
+        id: String(organization.id),
+        organizationId: String(organization.id),
+        is_active: organization.is_active ?? true,
+      },
+      'initial',
+      req
+    )
+    await reconcileAssessmentInstance(
+      payload,
+      {
+        scope: 'office',
+        id: String(office.id),
+        organizationId: String(organization.id),
+        is_active: true,
+      },
+      'initial',
+      req
+    )
 
     const orgAdminRoleResult = await payload.find({
       collection: 'roles',

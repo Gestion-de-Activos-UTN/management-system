@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { notifications } from '@mantine/notifications'
 import type { HttpError } from '@/lib/http-client'
+import { showApiError } from '@/lib/notify-error'
 import { markReviewed } from '../service'
 
 export function useMarkReviewed() {
@@ -13,8 +14,6 @@ export function useMarkReviewed() {
       queryClient.invalidateQueries({ queryKey: ['non-network-assets'] })
       notifications.show({ color: 'green', message: 'Review confirmed' })
     },
-    onError: error => {
-      notifications.show({ color: 'red', message: error.message ?? 'Could not confirm the review' })
-    },
+    onError: error => showApiError(error, 'Could not confirm the review'),
   })
 }

@@ -18,6 +18,9 @@ import { useOrganizationSettings } from '@/modules/organization-settings/hooks/u
 import { useSaveOrganizationSettings } from '@/modules/organization-settings/hooks/use-save-organization-settings'
 import { OrganizationSettingsFormSchema } from '@/modules/organization-settings/schema'
 import type { OrganizationSettingsFormValues } from '@/modules/organization-settings/service'
+import { useUpdateAssessmentPolicy } from '@/modules/assessments/hooks/use-update-assessment-policy'
+import { useState } from 'react'
+import { Badge, Modal, SimpleGrid } from '@mantine/core'
 
 const OFFLINE_AFTER_HOURS_OPTIONS = [
   { value: '24', label: '1 day (24h)' },
@@ -38,6 +41,8 @@ const SNAPSHOT_INTERVAL_DAYS_OPTIONS = [
 export default function AdminSettingsPage() {
   const { data: settings, isPending } = useOrganizationSettings()
   const save = useSaveOrganizationSettings()
+  const policy = useUpdateAssessmentPolicy()
+  const [pendingPolicy, setPendingPolicy] = useState<'essential' | 'reinforced' | null>(null)
 
   return (
     <Stack gap="md">
@@ -61,6 +66,95 @@ export default function AdminSettingsPage() {
           />
         )}
       </Card>
+      {settings && (
+        <Card withBorder padding="lg" w="100%">
+          <Stack gap="md">
+            <div>
+              <Text fw={700}>Security review policy</Text>
+              <Text size="sm" c="dimmed">
+                Choose how often the company revisits its everyday security routines.
+              </Text>
+            </div>
+            <SimpleGrid cols={{ base: 1, md: 2 }}>
+              {[
+                {
+                  key: 'essential' as const,
+                  name: 'Essential',
+                  cadence: 'Yearly',
+                  detail:
+                    'A shorter review covering the routines every small business should know.',
+                },
+                {
+                  key: 'reinforced' as const,
+                  name: 'Reinforced',
+                  cadence: 'Every 6 months',
+                  detail: 'Adds access reviews, recovery tests and closer network organization.',
+                },
+              ].map(option => (
+                <Card
+                  key={option.key}
+                  withBorder
+                  radius="md"
+                  p="md"
+                  style={
+                    settings.assessment_policy_key === option.key
+                      ? { borderColor: 'var(--mantine-color-pine-6)' }
+                      : undefined
+                  }
+                >
+                  <Group justify="space-between">
+                    <Text fw={650}>{option.name}</Text>
+                    <Badge color="pine" variant="light">
+                      {option.cadence}
+                    </Badge>
+                  </Group>
+                  <Text size="sm" c="dimmed" my="sm">
+                    {option.detail}
+                  </Text>
+                  <Button
+                    variant={settings.assessment_policy_key === option.key ? 'light' : 'default'}
+                    disabled={settings.assessment_policy_key === option.key}
+                    onClick={() => setPendingPolicy(option.key)}
+                  >
+                    Choose {option.name}
+                  </Button>
+                </Card>
+              ))}
+            </SimpleGrid>
+          </Stack>
+        </Card>
+      )}
+      <Modal
+        opened={pendingPolicy !== null}
+        onClose={() => setPendingPolicy(null)}
+        title="Change review policy?"
+        centered
+      >
+        <Stack>
+          <Text size="sm">
+            This opens new review cycles under the selected policy. Completed reviews remain
+            unchanged.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setPendingPolicy(null)}>
+              Cancel
+            </Button>
+            <Button
+              color="pine"
+              loading={policy.isPending}
+              onClick={() =>
+                pendingPolicy &&
+                policy.mutate(
+                  { policy_key: pendingPolicy, policy_version: 1 },
+                  { onSuccess: () => setPendingPolicy(null) }
+                )
+              }
+            >
+              Confirm change
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   )
 }

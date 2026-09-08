@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { notifications } from '@mantine/notifications'
 import type { HttpError } from '@/lib/http-client'
+import { showApiError } from '@/lib/notify-error'
 import { generateSnapshot } from '../service'
 
 // Invalida solo ['inventory-snapshots'] — nunca ['assets']/['non-network-assets']: generar un
@@ -15,11 +16,6 @@ export function useGenerateSnapshot() {
       queryClient.invalidateQueries({ queryKey: ['inventory-snapshots'] })
       notifications.show({ color: 'green', message: 'Snapshot generated' })
     },
-    onError: error => {
-      notifications.show({
-        color: 'red',
-        message: error.message ?? 'Could not generate the snapshot',
-      })
-    },
+    onError: error => showApiError(error, 'Could not generate the snapshot'),
   })
 }

@@ -69,3 +69,30 @@ test('assets: org_viewer y platform_admin siguen en solo-lectura', () => {
     assert.equal(canDo(role, 'assets', 'create', 'org-1'), false, role)
   }
 })
+
+test('assessment collections are read through RBAC but never written directly', () => {
+  for (const role of ['platform_admin', 'org_admin', 'office_manager', 'org_viewer'] as const) {
+    for (const collection of [
+      'assessment-instances',
+      'assessment-answers',
+      'compliance-results',
+    ] as const) {
+      assert.equal(canDo(role, collection, 'read', 'org-1'), true, `${role}:${collection}:read`)
+      assert.equal(
+        canDo(role, collection, 'create', 'org-1'),
+        false,
+        `${role}:${collection}:create`
+      )
+      assert.equal(
+        canDo(role, collection, 'update', 'org-1'),
+        false,
+        `${role}:${collection}:update`
+      )
+      assert.equal(
+        canDo(role, collection, 'delete', 'org-1'),
+        false,
+        `${role}:${collection}:delete`
+      )
+    }
+  }
+})

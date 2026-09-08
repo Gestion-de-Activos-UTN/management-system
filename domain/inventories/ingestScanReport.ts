@@ -7,6 +7,7 @@ import { inferDeviceCategory } from '../assets/inferDeviceCategory'
 
 export interface IngestResult {
   processedAssetIds: string[]
+  processedDocumentIds: string[]
   rejectedAssets: Array<{ asset_id: string; error: string }>
 }
 
@@ -37,6 +38,8 @@ type EvidenceHistoryRow = {
 
 type ExistingAssetDoc = Asset
 
+type ObservedAgentRow = Omit<NonNullable<Asset['observed_agents']>[number], 'id'>
+
 // Aunque el contrato Zod es estricto, acá se extrae EXPLÍCITAMENTE solo el bloque técnico
 // conocido: el modelo HTTP nunca se persiste por spread directo en Assets.
 //
@@ -64,7 +67,8 @@ function resolveOsStatus(
 function sanitizeTechnicalBlock(
   asset: AssetPayload,
   report: ScanReportPayload,
-  existingDoc?: ExistingAssetDoc
+  existingDoc: ExistingAssetDoc | undefined,
+  agentId: string
 ) {
   const incomingIsLatest =
     !existingDoc?.last_seen || Date.parse(asset.scan_time) >= Date.parse(existingDoc.last_seen)
@@ -114,6 +118,13 @@ function sanitizeTechnicalBlock(
       (incomingIsLatest ? report.gateway_mac : undefined) ??
       (existingDoc?.gateway_mac as string | null | undefined) ??
       null,
+    observed_agents: mergeObservedAgents(existingDoc?.observed_agents, {
+      agentId,
+      ip: asset.ip,
+      gatewayIp: report.gateway_ip,
+      gatewayMac: report.gateway_mac,
+      lastSeen: asset.scan_time,
+    }),
     names: incomingIsLatest ? asset.names : (existingDoc?.names ?? []),
     mac_metadata: incomingIsLatest ? asset.mac_metadata : existingDoc?.mac_metadata,
     asset_coverage: incomingIsLatest ? asset.asset_coverage : existingDoc?.asset_coverage,
@@ -148,6 +159,42 @@ function sanitizeTechnicalBlock(
     inference_signals: inference.signals,
     inference_version: 2,
   }
+}
+
+function mergeObservedAgents(
+  existingRows: ExistingAssetDoc['observed_agents'] | undefined,
+  observation: {
+    agentId: string
+    ip: string
+    gatewayIp: string | null
+    gatewayMac: string | null
+    lastSeen: string
+  }
+) {
+  const rows: ObservedAgentRow[] = (existingRows ?? []).map(({ id: _id, ...row }) => row)
+  const existing = rows.find(row => {
+    const agent = row.agent
+    return typeof agent === 'string' ? agent === observation.agentId : agent?.id === observation.agentId
+  })
+
+  if (existing) {
+    existing.ip = observation.ip
+    existing.gateway_ip = observation.gatewayIp
+    existing.gateway_mac = observation.gatewayMac
+    if (!existing.last_seen || Date.parse(observation.lastSeen) >= Date.parse(existing.last_seen)) {
+      existing.last_seen = observation.lastSeen
+    }
+  } else {
+    rows.push({
+      agent: observation.agentId,
+      ip: observation.ip,
+      gateway_ip: observation.gatewayIp,
+      gateway_mac: observation.gatewayMac,
+      last_seen: observation.lastSeen,
+    })
+  }
+
+  return rows
 }
 
 function hasGatewayConflict(report: ScanReportPayload): boolean {
@@ -247,6 +294,7 @@ const TECHNICAL_DIFF_FIELDS = [
   'services',
   'gateway_ip',
   'gateway_mac',
+  'observed_agents',
   'names',
   'mac_metadata',
   'asset_coverage',
@@ -266,6 +314,7 @@ const TECHNICAL_DIFF_FIELDS = [
 const ARRAY_DIFF_FIELDS = new Set<(typeof TECHNICAL_DIFF_FIELDS)[number]>([
   'services',
   'os_candidates',
+  'observed_agents',
   'names',
   'scan_issues',
 ])
@@ -307,13 +356,17 @@ function hasTechnicalChanged(
 // cruzar oficinas que reusan el mismo rango privado (mismo motivo por el que existía el hash).
 async function findExistingAsset(
   payload: Payload,
-  agentId: string,
+  officeId: string,
+  organizationId: string,
   asset: AssetPayload
 ): Promise<ExistingAssetDoc | undefined> {
   if (asset.mac) {
     const byMac = await payload.find({
       collection: 'assets',
-      where: { agent: { equals: agentId }, mac: { equals: asset.mac } },
+      where: {
+        organization: { equals: organizationId },
+        mac: { equals: asset.mac },
+      },
       overrideAccess: true,
       limit: 1,
       depth: 0,
@@ -323,7 +376,11 @@ async function findExistingAsset(
 
   const byIp = await payload.find({
     collection: 'assets',
-    where: { agent: { equals: agentId }, ip: { equals: asset.ip } },
+    where: {
+      organization: { equals: organizationId },
+      office: { equals: officeId },
+      ip: { equals: asset.ip },
+    },
     overrideAccess: true,
     limit: 1,
     depth: 0,
@@ -346,6 +403,7 @@ export async function ingestScanReport(
   auth: AgentAuthResult
 ): Promise<IngestResult> {
   const processedAssetIds: string[] = []
+  const processedDocumentIds: string[] = []
   const rejectedAssets: IngestResult['rejectedAssets'] = []
 
   for (const asset of report.assets) {
@@ -358,8 +416,13 @@ export async function ingestScanReport(
       continue
     }
 
-    const existingDoc = await findExistingAsset(payload, auth.agentId, asset)
-    const technical = sanitizeTechnicalBlock(asset, report, existingDoc)
+    const existingDoc = await findExistingAsset(
+      payload,
+      auth.officeId,
+      auth.organizationId,
+      asset
+    )
+    const technical = sanitizeTechnicalBlock(asset, report, existingDoc, auth.agentId)
 
     if (existingDoc) {
       // "Changed" solo aplica a un activo que un humano ya vio (first_viewed_at != null) — antes
@@ -369,7 +432,8 @@ export async function ingestScanReport(
 
       // Bloque de negocio (alias/criticality/location/status) nunca se toca acá, salvo
       // 'retired' → sticky (doc05§5.1): un scan nuevo no revive un activo dado de baja.
-      await payload.update({
+      // AUDIT: emits AuditLogs entry (chain_hash, chained per organization_id) — TODO(audit-feature): wire via domain/audit/builder.ts::addAuditEvent
+      const updated = await payload.update({
         collection: 'assets',
         id: existingDoc.id,
         overrideAccess: true,
@@ -389,8 +453,10 @@ export async function ingestScanReport(
           ...(technicalChanged ? { technical_changed_at: new Date().toISOString() } : {}),
         },
       })
+      processedDocumentIds.push(String(updated.id))
     } else {
-      await payload.create({
+      // AUDIT: emits AuditLogs entry (chain_hash, chained per organization_id) — TODO(audit-feature): wire via domain/audit/builder.ts::addAuditEvent
+      const created = await payload.create({
         collection: 'assets',
         overrideAccess: true,
         context: { systemJob: true },
@@ -402,10 +468,11 @@ export async function ingestScanReport(
           status: 'active',
         },
       })
+      processedDocumentIds.push(String(created.id))
     }
 
     processedAssetIds.push(technical.asset_id)
   }
 
-  return { processedAssetIds, rejectedAssets }
+  return { processedAssetIds, processedDocumentIds, rejectedAssets }
 }

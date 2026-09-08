@@ -6,6 +6,7 @@ import { SCANNED_ASSET_TYPE_VALUES } from '@/domain/assets/asset-types'
 // hay nada ahí para extender. Este schema valida exactamente lo que el PATCH de edición manual
 // acepta (RF-55: solo negocio, nunca los campos técnicos).
 export const AssetBusinessFieldsSchema = z.object({
+  authorization_status: z.enum(['authorized', 'unauthorized']),
   alias: z.string().trim().max(120).nullable(),
   criticality: z.enum(['low', 'medium', 'high', 'critical']).nullable(),
   owner: z.string().nullable(),
@@ -14,6 +15,7 @@ export const AssetBusinessFieldsSchema = z.object({
 })
 
 export type AssetBusinessFields = z.infer<typeof AssetBusinessFieldsSchema>
+export const AssetBusinessUpdateSchema = AssetBusinessFieldsSchema.partial().strict()
 
 export const AssetTypeSchema = z.enum(SCANNED_ASSET_TYPE_VALUES)
 

@@ -5,7 +5,7 @@ import { Boxes, MapPin, RadioTower, ScanLine } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useSearchParams } from 'next/navigation'
 import { useDashboardMetrics } from '@/modules/dashboard/hooks/use-dashboard-metrics'
-import { formatDateTime } from '@/lib/format-date'
+import { formatDate, formatTime } from '@/lib/format-date'
 
 export default function PortalDashboardPage() {
   const asOrganization = useSearchParams().get('asOrganization') ?? undefined
@@ -21,7 +21,11 @@ export default function PortalDashboardPage() {
     },
     {
       label: 'Last scan',
-      value: data?.last_scan_at ? formatDateTime(data.last_scan_at) : 'No scans yet',
+      // The date is what matters here (how stale is our data) — the time is a
+      // secondary detail, so it renders smaller/dimmed instead of fused into
+      // one same-weight string with the date.
+      value: data?.last_scan_at ? formatDate(data.last_scan_at) : 'No scans yet',
+      caption: data?.last_scan_at ? formatTime(data.last_scan_at) : undefined,
       icon: ScanLine,
     },
   ]
@@ -44,6 +48,11 @@ export default function PortalDashboardPage() {
                 <Stack gap={0} style={{ minWidth: 0, flex: 1 }}>
                   <Text size="xl" fw={700}>
                     {metric.value}
+                    {metric.caption && (
+                      <Text span size="sm" fw={400} c="dimmed" ml={6}>
+                        {metric.caption}
+                      </Text>
+                    )}
                   </Text>
                   <Text size="sm" c="dimmed">
                     {metric.label}

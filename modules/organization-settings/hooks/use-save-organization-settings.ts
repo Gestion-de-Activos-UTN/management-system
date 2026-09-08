@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { notifications } from '@mantine/notifications'
 import type { HttpError } from '@/lib/http-client'
+import { showApiError } from '@/lib/notify-error'
 import { updateOrganizationSettings, type OrganizationSettingsFormValues } from '../service'
 
 export function useSaveOrganizationSettings() {
@@ -13,8 +14,6 @@ export function useSaveOrganizationSettings() {
       queryClient.invalidateQueries({ queryKey: ['organization-settings'] })
       notifications.show({ color: 'green', message: 'Settings saved' })
     },
-    onError: error => {
-      notifications.show({ color: 'red', message: error.message ?? 'Could not save settings' })
-    },
+    onError: error => showApiError(error, 'Could not save settings'),
   })
 }

@@ -8,8 +8,8 @@ function json(body: unknown, status = 200) {
 // OrganizationSettings.access es () => false en las 4 acciones a propósito (solo la creación de
 // org escribe el doc inicial, ver domain/organizations/createOrgWithAdmin.ts). Estos dos
 // endpoints son el único otro punto de lectura/escritura, acotados a los campos de config de
-// Inventario (snapshot_before_each_scan/snapshot_interval_days) — nunca industry/risk_score_policy,
-// que no tienen UI real todavía (ver app/portal/(protected)/admin/settings/page.tsx).
+// Inventario (snapshot_before_each_scan/snapshot_interval_days). La política de assessments
+// tendrá su endpoint dedicado; no se modifica desde este comando genérico de settings.
 // El portal ya oculta /admin a quien no es org_admin (client-side, ver admin/layout.tsx) — acá se
 // repite la validación server-side, que es la que realmente cuenta.
 type LoadResult = { ok: false; response: Response } | { ok: true; doc: { id: string | number } }

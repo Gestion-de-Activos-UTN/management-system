@@ -664,3 +664,64 @@ test('deriva scanner host server-side por IP y MAC de la misma interfaz', async 
   assert.equal(creates[0].scanner_host_match, 'both')
   assert.equal(creates[0].inferred_type, 'workstation')
 })
+
+test('reconcilia el mismo host por MAC aunque lo reporten agentes distintos', async () => {
+  const existingDoc = {
+    id: 'existing-1',
+    first_viewed_at: null,
+    asset_id: 'router-1-host-a',
+    mac: 'AA:BB:CC:DD:EE:01',
+    ip: '10.0.0.5',
+    vendor: null,
+    hostname: null,
+    os: null,
+    os_candidates: [],
+    services: [],
+    gateway_ip: '10.0.0.1',
+    gateway_mac: 'AA:AA:AA:AA:AA:01',
+    observed_agents: [
+      {
+        agent: 'agent-1',
+        ip: '10.0.0.5',
+        gateway_ip: '10.0.0.1',
+        gateway_mac: 'AA:AA:AA:AA:AA:01',
+        last_seen: '2026-01-01T00:00:00.000Z',
+      },
+    ],
+    status: 'active',
+  }
+  const { payload, updates, creates } = makePayloadWithDocs([existingDoc])
+  const secondRouterAuth: AgentAuthResult = {
+    agentId: 'agent-2',
+    officeId: AUTH.officeId,
+    organizationId: AUTH.organizationId,
+  }
+
+  await ingestScanReport(
+    payload,
+    makeReport(
+      [
+        makeAsset({
+          asset_id: 'router-2-host-a',
+          agent_id: secondRouterAuth.agentId,
+          mac: 'AA:BB:CC:DD:EE:01',
+          scan_time: '2026-01-01T00:05:00.000Z',
+        }),
+      ],
+      {
+        agent_id: secondRouterAuth.agentId,
+        gateway_ip: '10.0.1.1',
+        gateway_mac: 'AA:AA:AA:AA:AA:02',
+      }
+    ),
+    secondRouterAuth
+  )
+
+  assert.equal(creates.length, 0)
+  assert.equal(updates.length, 1)
+  assert.equal(updates[0].id, 'existing-1')
+  assert.deepEqual(
+    (updates[0].data.observed_agents as Array<{ agent: string }>).map(row => row.agent),
+    ['agent-1', 'agent-2']
+  )
+})

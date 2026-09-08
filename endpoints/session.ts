@@ -16,6 +16,21 @@ export const sessionEndpoint: Endpoint = {
   handler: async req => {
     const ctx = await getTenantContext(req)
     if (!ctx) return json({ error: 'unauthenticated' }, 401)
-    return json(ctx)
+    const subscription = ctx.organizationId
+      ? await req.payload.find({
+          collection: 'subscriptions',
+          where: { organization: { equals: ctx.organizationId } },
+          overrideAccess: true,
+          req,
+          depth: 0,
+          limit: 1,
+        })
+      : null
+    const rawFeatures = subscription?.docs[0]?.features
+    const features =
+      rawFeatures && typeof rawFeatures === 'object' && !Array.isArray(rawFeatures)
+        ? rawFeatures
+        : {}
+    return json({ ...ctx, features })
   },
 }
