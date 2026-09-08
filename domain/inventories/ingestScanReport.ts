@@ -7,6 +7,7 @@ import { inferDeviceCategory } from '../assets/inferDeviceCategory'
 
 export interface IngestResult {
   processedAssetIds: string[]
+  processedDocumentIds: string[]
   rejectedAssets: Array<{ asset_id: string; error: string }>
 }
 
@@ -346,6 +347,7 @@ export async function ingestScanReport(
   auth: AgentAuthResult
 ): Promise<IngestResult> {
   const processedAssetIds: string[] = []
+  const processedDocumentIds: string[] = []
   const rejectedAssets: IngestResult['rejectedAssets'] = []
 
   for (const asset of report.assets) {
@@ -369,7 +371,7 @@ export async function ingestScanReport(
 
       // Bloque de negocio (alias/criticality/location/status) nunca se toca acá, salvo
       // 'retired' → sticky (doc05§5.1): un scan nuevo no revive un activo dado de baja.
-      await payload.update({
+      const updated = await payload.update({
         collection: 'assets',
         id: existingDoc.id,
         overrideAccess: true,
@@ -389,8 +391,9 @@ export async function ingestScanReport(
           ...(technicalChanged ? { technical_changed_at: new Date().toISOString() } : {}),
         },
       })
+      processedDocumentIds.push(String(updated.id))
     } else {
-      await payload.create({
+      const created = await payload.create({
         collection: 'assets',
         overrideAccess: true,
         context: { systemJob: true },
@@ -402,10 +405,11 @@ export async function ingestScanReport(
           status: 'active',
         },
       })
+      processedDocumentIds.push(String(created.id))
     }
 
     processedAssetIds.push(technical.asset_id)
   }
 
-  return { processedAssetIds, rejectedAssets }
+  return { processedAssetIds, processedDocumentIds, rejectedAssets }
 }

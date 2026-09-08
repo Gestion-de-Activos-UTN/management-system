@@ -3,6 +3,7 @@ import { orgScopedAccess, canDoAccess } from '@/access/rbac/orgScopedAccess'
 import { resolveTenantAndReview } from './hooks/resolveTenant'
 import { computeReviewStatus, canReviewNow, type ReviewInterval } from './invariants'
 import { MANUAL_ASSET_CATEGORY_OPTIONS } from '../../domain/assets/asset-types'
+import { reconcileAssessmentApplicability } from './hooks/reconcileAssessmentApplicability'
 
 const resolvedFieldAccess = {
   create: () => false,
@@ -24,6 +25,7 @@ export const NonNetworkAssets: CollectionConfig = {
   },
   hooks: {
     beforeChange: [resolveTenantAndReview],
+    afterChange: [reconcileAssessmentApplicability],
   },
   fields: [
     {

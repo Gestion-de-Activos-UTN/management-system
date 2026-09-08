@@ -1,5 +1,4 @@
 import {
-  Button,
   Card,
   Modal,
   createTheme,
@@ -58,7 +57,14 @@ const variantColorResolver: VariantColorsResolver = input => {
   }
 
   if (input.variant === 'subtle') {
-    return { ...base, border: `1px solid var(--mantine-color-default-border)` }
+    // Mantine's own "subtle" border is always transparent — make it visible so
+    // it doesn't look identical to plain text until hovered. A colored subtle
+    // button (e.g. color="red" for a destructive action) must border in that
+    // same color, so reuse `base.color` — it's already the exact CSS var
+    // Mantine resolved for the text, which adapts to light/dark on its own.
+    return input.color
+      ? { ...base, border: `1px solid ${base.color}` }
+      : { ...base, border: `1px solid var(--mantine-color-default-border)` }
   }
 
   return base
@@ -102,12 +108,6 @@ export const theme = createTheme({
     Badge: {
       defaultProps: { variant: 'filled', radius: 'sm' },
     },
-    Button: Button.extend({
-      styles: (_theme, props) =>
-        props.variant === 'subtle'
-          ? { root: { borderColor: 'var(--mantine-color-default-border)' } }
-          : {},
-    }),
     // Soft elevation by default — cards/modals/papers read as "raised" surfaces
     // instead of flat outlined boxes (hover lift itself lives in globals.css).
     Card: Card.extend({ defaultProps: { shadow: 'sm' } }),

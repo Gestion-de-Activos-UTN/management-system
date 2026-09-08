@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import crypto from 'node:crypto'
 import { getPayload } from 'payload'
 import type { Payload, PayloadRequest } from 'payload'
 import config from '../payload.config'
@@ -18,8 +19,8 @@ function fakeRequest(payload: Payload, headers: Record<string, string>, body: un
   } as unknown as PayloadRequest
 }
 
-function reportPayload(overrides: Record<string, unknown> = {}) {
-  return {
+function reportPayload(agentId: string, overrides: Record<string, unknown> = {}) {
+  const report = {
     report_id: `r-${Math.random().toString(36).slice(2)}`,
     agent_id: 'agent-001',
     network: '192.168.0.0/24',
@@ -69,6 +70,11 @@ function reportPayload(overrides: Record<string, unknown> = {}) {
     gateway_mac: null,
     ...overrides,
   }
+  return {
+    ...report,
+    agent_id: agentId,
+    assets: report.assets.map(asset => ({ ...asset, agent_id: agentId })),
+  }
 }
 
 async function seedAgent(payload: Payload) {
@@ -82,21 +88,22 @@ async function seedAgent(payload: Payload) {
     data: { organization: organization.id, name: 'Oficina Test' },
     overrideAccess: true,
   })
+  const agentId = crypto.randomUUID()
   const agent = await payload.create({
     collection: 'agents',
-    data: { id: 'agent-001', office: office.id },
+    data: { id: agentId, office: office.id },
     overrideAccess: true,
   })
-  return { organization, office, apiKey: agent.apiKey as string }
+  return { organization, office, agentId, apiKey: agent.apiKey as string }
 }
 
 test('POST /v1/reports crea assets y es idempotente por report_id', async () => {
   const payload = await getPayload({ config })
-  const { apiKey } = await seedAgent(payload)
-  const body = reportPayload()
+  const { apiKey, agentId } = await seedAgent(payload)
+  const body = reportPayload(agentId)
 
   const first = await reportsEndpoint.handler(
-    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' }, body)
+    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': agentId }, body)
   )
   assert.equal(first.status, 200)
   const firstJson = await first.json()
@@ -110,7 +117,7 @@ test('POST /v1/reports crea assets y es idempotente por report_id', async () => 
   assert.equal(asset.docs.length, 1)
 
   const second = await reportsEndpoint.handler(
-    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' }, body)
+    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': agentId }, body)
   )
   assert.equal(second.status, 200)
   const secondJson = await second.json()
@@ -130,11 +137,12 @@ test('POST /v1/reports reconcilia un scan degradado seguido de uno full: mismo d
   // mac se resuelve -> asset_id hash distinto -> antes de este fix, ingestScanReport.ts no lo
   // encontraba por asset_id y creaba un documento nuevo, huérfano de esos datos de negocio.
   const payload = await getPayload({ config })
-  const { apiKey } = await seedAgent(payload)
+  const { apiKey, agentId } = await seedAgent(payload)
   const degradedAssetId = `a-degraded-${Math.random().toString(36).slice(2)}`
   const fullAssetId = `a-full-${Math.random().toString(36).slice(2)}`
+  const uniqueIp = `10.${crypto.randomInt(1, 255)}.${crypto.randomInt(1, 255)}.${crypto.randomInt(1, 255)}`
 
-  const degradedBody = reportPayload({
+  const degradedBody = reportPayload(agentId, {
     scan_mode: 'degraded',
     scan_mode_reason: 'not running elevated',
     report_coverage: {
@@ -151,7 +159,7 @@ test('POST /v1/reports reconcilia un scan degradado seguido de uno full: mismo d
       {
         asset_id: degradedAssetId,
         agent_id: 'agent-001',
-        ip: '192.168.0.77',
+        ip: uniqueIp,
         mac: '',
         vendor: '',
         hostname: '',
@@ -174,16 +182,12 @@ test('POST /v1/reports reconcilia un scan degradado seguido de uno full: mismo d
     ],
   })
   await reportsEndpoint.handler(
-    fakeRequest(
-      payload,
-      { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' },
-      degradedBody
-    )
+    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': agentId }, degradedBody)
   )
 
   const created = await payload.find({
     collection: 'assets',
-    where: { ip: { equals: '192.168.0.77' } },
+    where: { ip: { equals: uniqueIp } },
     overrideAccess: true,
   })
   assert.equal(created.docs.length, 1)
@@ -194,13 +198,13 @@ test('POST /v1/reports reconcilia un scan degradado seguido de uno full: mismo d
     data: { alias: 'Notebook de Gervasio', identified: true, status: 'retired' },
   })
 
-  const fullBody = reportPayload({
+  const fullBody = reportPayload(agentId, {
     scan_mode: 'full',
     assets: [
       {
         asset_id: fullAssetId,
         agent_id: 'agent-001',
-        ip: '192.168.0.77',
+        ip: uniqueIp,
         mac: 'AA:BB:CC:DD:EE:77',
         vendor: 'Acme',
         hostname: 'gervasio-nb',
@@ -223,12 +227,12 @@ test('POST /v1/reports reconcilia un scan degradado seguido de uno full: mismo d
     ],
   })
   await reportsEndpoint.handler(
-    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' }, fullBody)
+    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': agentId }, fullBody)
   )
 
   const afterFull = await payload.find({
     collection: 'assets',
-    where: { ip: { equals: '192.168.0.77' } },
+    where: { ip: { equals: uniqueIp } },
     overrideAccess: true,
   })
   assert.equal(afterFull.docs.length, 1, 'no debe duplicar el asset al resolverse la mac')
@@ -246,8 +250,8 @@ test('POST /v1/reports NO rechaza un host sin mac/vendor/hostname resueltos', as
   // descartaba en silencio exactamente estos hosts (regresión real reportada por el usuario:
   // "solo veo dos activos" contra la plataforma vs. muchos más en el JSON local sin filtrar).
   const payload = await getPayload({ config })
-  const { apiKey } = await seedAgent(payload)
-  const body = reportPayload({
+  const { apiKey, agentId } = await seedAgent(payload)
+  const body = reportPayload(agentId, {
     assets: [
       {
         asset_id: `a-${Math.random().toString(36).slice(2)}`,
@@ -276,7 +280,7 @@ test('POST /v1/reports NO rechaza un host sin mac/vendor/hostname resueltos', as
   })
 
   const res = await reportsEndpoint.handler(
-    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' }, body)
+    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': agentId }, body)
   )
   assert.equal(res.status, 200)
   const resJson = await res.json()
@@ -296,10 +300,14 @@ test('POST /v1/reports NO rechaza un host sin mac/vendor/hostname resueltos', as
 
 test('POST /v1/reports rechaza token inválido', async () => {
   const payload = await getPayload({ config })
-  await seedAgent(payload)
+  const { agentId } = await seedAgent(payload)
 
   const res = await reportsEndpoint.handler(
-    fakeRequest(payload, { authorization: 'Bearer not-a-real-token' }, reportPayload())
+    fakeRequest(
+      payload,
+      { authorization: 'Bearer not-a-real-token', 'x-agent-id': agentId },
+      reportPayload(agentId)
+    )
   )
   assert.equal(res.status, 401)
 })

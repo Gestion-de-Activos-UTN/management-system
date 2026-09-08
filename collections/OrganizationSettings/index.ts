@@ -1,8 +1,9 @@
 import type { CollectionConfig } from 'payload'
+import { POLICY_KEYS } from '@/domain/assessments/catalog'
 
 // Sin lectura ni escritura externa esta fase — solo lo escribe
 // domain/organizations/createOrgWithAdmin.ts vía overrideAccess. Sin AppSettings
-// singleton todavía, así que risk_score_policy no tiene lógica de default heredado.
+// singleton todavía; la política de assessments es explícita, versionada y se congela al elegirla.
 export const OrganizationSettings: CollectionConfig = {
   slug: 'organization-settings',
   admin: {
@@ -29,14 +30,20 @@ export const OrganizationSettings: CollectionConfig = {
       required: true,
     },
     {
-      name: 'risk_score_policy',
-      type: 'json',
+      name: 'assessment_policy_key',
+      type: 'select',
+      options: [...POLICY_KEYS],
+      required: true,
+      defaultValue: 'essential',
     },
+    { name: 'assessment_policy_version', type: 'number', required: true, defaultValue: 1 },
+    { name: 'assessment_policy_selected_at', type: 'date', required: true },
+    { name: 'assessment_policy_selected_by', type: 'relationship', relationTo: 'users' },
     {
       // Umbral del job de aging (domain/inventories/agingSweep.ts) — cuánto tiempo sin aparecer en
       // un scan antes de pasar un Asset de 'active' a 'offline'. Sin override, cae a
       // DEFAULT_OFFLINE_AFTER_HOURS (constante en código); no hay AppSettings singleton todavía
-      // para un default de plataforma editable (mismo gap que risk_score_policy).
+      // para un default de plataforma editable.
       name: 'offline_after_hours',
       type: 'number',
     },

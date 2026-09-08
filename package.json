@@ -7,7 +7,7 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "test": "cross-env NODE_ENV=test PAYLOAD_DISABLE_JOBS=1 node --import tsx --test --test-force-exit $(find . -name \"*.test.ts\" -not -name \"*.integration.test.ts\" -not -path \"./node_modules/*\" -not -path \"./.next/*\")",
-    "test:integration": "cross-env NODE_ENV=test PAYLOAD_DISABLE_JOBS=1 node --import tsx --test --test-force-exit $(find . -name \"*.integration.test.ts\" -not -path \"./node_modules/*\" -not -path \"./.next/*\")",
+    "test:integration": "cross-env NODE_ENV=test PAYLOAD_DISABLE_JOBS=1 node --import tsx --test --test-concurrency=1 --test-force-exit $(find . -name \"*.integration.test.ts\" -not -path \"./node_modules/*\" -not -path \"./.next/*\")",
     "type-check": "tsc --noEmit",
     "lint": "next lint",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,scss,md}\"",

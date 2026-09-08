@@ -110,15 +110,17 @@ export default function SnapshotDetailPage() {
           <RingProgress
             size={120}
             thickness={12}
-            sections={[{ value: snapshot.risk_score.global, color: 'pine' }]}
+            sections={[{ value: snapshot.risk_score.global ?? 0, color: 'red' }]}
             label={
               <Text ta="center" fw={700}>
-                {snapshot.risk_score.global}
+                {snapshot.risk_score.global ?? '—'}
               </Text>
             }
           />
           <Text c="dimmed">
-            Global risk score at the time of this snapshot (based on Network assets only).
+            {snapshot.risk_score.global == null
+              ? 'Risk was not evaluable at the time of this snapshot.'
+              : `Risk at this point in time. Assessment coverage was ${snapshot.risk_score.evaluated_percentage}%.`}
           </Text>
         </Group>
       </Card>
@@ -126,9 +128,7 @@ export default function SnapshotDetailPage() {
       <Tabs defaultValue="network">
         <Tabs.List>
           <Tabs.Tab value="network">Network ({networkAssets.length})</Tabs.Tab>
-          <Tabs.Tab value="non-network">
-            Manual assets ({nonNetworkAssets.length})
-          </Tabs.Tab>
+          <Tabs.Tab value="non-network">Manual assets ({nonNetworkAssets.length})</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="network" pt="md">

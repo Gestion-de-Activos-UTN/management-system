@@ -82,6 +82,9 @@ export interface Config {
     'organization-memberships': OrganizationMembership;
     'job-runs': JobRun;
     'inventory-snapshots': InventorySnapshot;
+    'assessment-instances': AssessmentInstance;
+    'assessment-answers': AssessmentAnswer;
+    'compliance-results': ComplianceResult;
     'payload-kv': PayloadKv;
     'payload-jobs': PayloadJob;
     'payload-locked-documents': PayloadLockedDocument;
@@ -104,6 +107,9 @@ export interface Config {
     'organization-memberships': OrganizationMembershipsSelect<false> | OrganizationMembershipsSelect<true>;
     'job-runs': JobRunsSelect<false> | JobRunsSelect<true>;
     'inventory-snapshots': InventorySnapshotsSelect<false> | InventorySnapshotsSelect<true>;
+    'assessment-instances': AssessmentInstancesSelect<false> | AssessmentInstancesSelect<true>;
+    'assessment-answers': AssessmentAnswersSelect<false> | AssessmentAnswersSelect<true>;
+    'compliance-results': ComplianceResultsSelect<false> | ComplianceResultsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-jobs': PayloadJobsSelect<false> | PayloadJobsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -128,6 +134,7 @@ export interface Config {
   jobs: {
     tasks: {
       'expire-raw-scan-payloads': TaskExpireRawScanPayloads;
+      'reconcile-expired-assessments': TaskReconcileExpiredAssessments;
       inline: {
         input: unknown;
         output: unknown;
@@ -193,18 +200,86 @@ export interface OrganizationSetting {
   id: string;
   organization: string | Organization;
   industry: string;
-  risk_score_policy?:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
+  assessment_policy_key: 'essential' | 'reinforced';
+  assessment_policy_version: number;
+  assessment_policy_selected_at: string;
+  assessment_policy_selected_by?: (string | null) | User;
   offline_after_hours?: number | null;
   snapshot_before_each_scan?: boolean | null;
   snapshot_interval_days?: number | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "users".
+ */
+export interface User {
+  id: string;
+  name: string;
+  status?: ('active' | 'inactive') | null;
+  organization_membership?: (string | null) | OrganizationMembership;
+  updatedAt: string;
+  createdAt: string;
+  email: string;
+  resetPasswordToken?: string | null;
+  resetPasswordExpiration?: string | null;
+  salt?: string | null;
+  hash?: string | null;
+  loginAttempts?: number | null;
+  lockUntil?: string | null;
+  sessions?:
+    | {
+        id: string;
+        createdAt?: string | null;
+        expiresAt: string;
+      }[]
+    | null;
+  password?: string | null;
+  collection: 'users';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "organization-memberships".
+ */
+export interface OrganizationMembership {
+  id: string;
+  user: string | User;
+  organization: string | Organization;
+  offices?: (string | Office)[] | null;
+  role: string | Role;
+  status?: ('onboarding' | 'active') | null;
+  is_active?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "offices".
+ */
+export interface Office {
+  id: string;
+  organization: string | Organization;
+  name: string;
+  county_fips?: string | null;
+  is_active?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "roles".
+ */
+export interface Role {
+  id: string;
+  slug: string;
+  name: string;
+  /**
+   * 1 = máxima autoridad
+   */
+  rank: number;
+  scope: 'platform' | 'organization' | 'organization_office' | 'office_user';
+  is_platform_role?: boolean | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -241,19 +316,6 @@ export interface Subscription {
     | number
     | boolean
     | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "offices".
- */
-export interface Office {
-  id: string;
-  organization: string | Organization;
-  name: string;
-  county_fips?: string | null;
-  is_active?: boolean | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -449,66 +511,6 @@ export interface Asset {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "users".
- */
-export interface User {
-  id: string;
-  name: string;
-  status?: ('active' | 'inactive') | null;
-  organization_membership?: (string | null) | OrganizationMembership;
-  updatedAt: string;
-  createdAt: string;
-  email: string;
-  resetPasswordToken?: string | null;
-  resetPasswordExpiration?: string | null;
-  salt?: string | null;
-  hash?: string | null;
-  loginAttempts?: number | null;
-  lockUntil?: string | null;
-  sessions?:
-    | {
-        id: string;
-        createdAt?: string | null;
-        expiresAt: string;
-      }[]
-    | null;
-  password?: string | null;
-  collection: 'users';
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "organization-memberships".
- */
-export interface OrganizationMembership {
-  id: string;
-  user: string | User;
-  organization: string | Organization;
-  offices?: (string | Office)[] | null;
-  role: string | Role;
-  status?: ('onboarding' | 'active') | null;
-  is_active?: boolean | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "roles".
- */
-export interface Role {
-  id: string;
-  slug: string;
-  name: string;
-  /**
-   * 1 = máxima autoridad
-   */
-  rank: number;
-  scope: 'platform' | 'organization' | 'organization_office' | 'office_user';
-  is_platform_role?: boolean | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "non-network-assets".
  */
 export interface NonNetworkAsset {
@@ -661,7 +663,10 @@ export interface InventorySnapshot {
   generated_by: 'manual' | 'scheduled' | 'pre_audit';
   triggered_by_user?: (string | null) | User;
   risk_score: {
-    global: number;
+    global?: number | null;
+    evaluated_percentage: number;
+    requires_attention: number;
+    not_evaluable: number;
     policy_snapshot?:
       | {
           [k: string]: unknown;
@@ -672,6 +677,15 @@ export interface InventorySnapshot {
       | boolean
       | null;
   };
+  assessment_results_snapshot:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   assets_dump:
     | {
         [k: string]: unknown;
@@ -681,6 +695,101 @@ export interface InventorySnapshot {
     | number
     | boolean
     | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "assessment-instances".
+ */
+export interface AssessmentInstance {
+  id: string;
+  organization: string | Organization;
+  scope: 'organization' | 'office' | 'asset';
+  office?: (string | null) | Office;
+  asset?: (string | null) | Asset;
+  manual_asset?: (string | null) | NonNetworkAsset;
+  policy_key: 'essential' | 'reinforced';
+  policy_version: number;
+  catalog_version: number;
+  question_set_snapshot:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  status: 'pending' | 'in_progress' | 'completed' | 'expired' | 'superseded';
+  assigned_to?: (string | null) | User;
+  created_reason: 'initial' | 'asset_identified' | 'policy_changed' | 'answer_expired' | 'manual_review';
+  opened_at: string;
+  due_at: string;
+  completed_at?: string | null;
+  completed_by?: (string | null) | User;
+  completion_summary: {
+    compliant: number;
+    non_compliant: number;
+    not_evaluable: number;
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "assessment-answers".
+ */
+export interface AssessmentAnswer {
+  id: string;
+  organization: string | Organization;
+  assessment: string | AssessmentInstance;
+  question_key: string;
+  question_version: number;
+  answer: 'yes' | 'no' | 'unknown' | 'not_applicable';
+  justification?: string | null;
+  evidence_note?: string | null;
+  answered_by: string | User;
+  answered_at: string;
+  valid_until: string;
+  evaluation_effect_snapshot: {
+    status: 'compliant' | 'non_compliant' | 'not_evaluable';
+    reason_code: string;
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "compliance-results".
+ */
+export interface ComplianceResult {
+  id: string;
+  organization: string | Organization;
+  office?: (string | null) | Office;
+  asset?: (string | null) | Asset;
+  manual_asset?: (string | null) | NonNetworkAsset;
+  service_key?: string | null;
+  control_key: string;
+  check_key: string;
+  status: 'compliant' | 'non_compliant' | 'not_evaluable';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  policy_key: 'essential' | 'reinforced';
+  policy_version: number;
+  evaluated_at: string;
+  valid_until: string;
+  reason_code: string;
+  explanation: string;
+  evidence_snapshot:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  supersedes?: (string | null) | ComplianceResult;
   updatedAt: string;
   createdAt: string;
 }
@@ -753,7 +862,7 @@ export interface PayloadJob {
     | {
         executedAt: string;
         completedAt: string;
-        taskSlug: 'inline' | 'expire-raw-scan-payloads';
+        taskSlug: 'inline' | 'expire-raw-scan-payloads' | 'reconcile-expired-assessments';
         taskID: string;
         input?:
           | {
@@ -786,7 +895,7 @@ export interface PayloadJob {
         id?: string | null;
       }[]
     | null;
-  taskSlug?: ('inline' | 'expire-raw-scan-payloads') | null;
+  taskSlug?: ('inline' | 'expire-raw-scan-payloads' | 'reconcile-expired-assessments') | null;
   queue?: string | null;
   waitUntil?: string | null;
   processing?: boolean | null;
@@ -864,6 +973,18 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'inventory-snapshots';
         value: string | InventorySnapshot;
+      } | null)
+    | ({
+        relationTo: 'assessment-instances';
+        value: string | AssessmentInstance;
+      } | null)
+    | ({
+        relationTo: 'assessment-answers';
+        value: string | AssessmentAnswer;
+      } | null)
+    | ({
+        relationTo: 'compliance-results';
+        value: string | ComplianceResult;
       } | null);
   globalSlug?: string | null;
   user:
@@ -1164,7 +1285,10 @@ export interface RolesSelect<T extends boolean = true> {
 export interface OrganizationSettingsSelect<T extends boolean = true> {
   organization?: T;
   industry?: T;
-  risk_score_policy?: T;
+  assessment_policy_key?: T;
+  assessment_policy_version?: T;
+  assessment_policy_selected_at?: T;
+  assessment_policy_selected_by?: T;
   offline_after_hours?: T;
   snapshot_before_each_scan?: T;
   snapshot_interval_days?: T;
@@ -1275,9 +1399,93 @@ export interface InventorySnapshotsSelect<T extends boolean = true> {
     | T
     | {
         global?: T;
+        evaluated_percentage?: T;
+        requires_attention?: T;
+        not_evaluable?: T;
         policy_snapshot?: T;
       };
+  assessment_results_snapshot?: T;
   assets_dump?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "assessment-instances_select".
+ */
+export interface AssessmentInstancesSelect<T extends boolean = true> {
+  organization?: T;
+  scope?: T;
+  office?: T;
+  asset?: T;
+  manual_asset?: T;
+  policy_key?: T;
+  policy_version?: T;
+  catalog_version?: T;
+  question_set_snapshot?: T;
+  status?: T;
+  assigned_to?: T;
+  created_reason?: T;
+  opened_at?: T;
+  due_at?: T;
+  completed_at?: T;
+  completed_by?: T;
+  completion_summary?:
+    | T
+    | {
+        compliant?: T;
+        non_compliant?: T;
+        not_evaluable?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "assessment-answers_select".
+ */
+export interface AssessmentAnswersSelect<T extends boolean = true> {
+  organization?: T;
+  assessment?: T;
+  question_key?: T;
+  question_version?: T;
+  answer?: T;
+  justification?: T;
+  evidence_note?: T;
+  answered_by?: T;
+  answered_at?: T;
+  valid_until?: T;
+  evaluation_effect_snapshot?:
+    | T
+    | {
+        status?: T;
+        reason_code?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "compliance-results_select".
+ */
+export interface ComplianceResultsSelect<T extends boolean = true> {
+  organization?: T;
+  office?: T;
+  asset?: T;
+  manual_asset?: T;
+  service_key?: T;
+  control_key?: T;
+  check_key?: T;
+  status?: T;
+  severity?: T;
+  policy_key?: T;
+  policy_version?: T;
+  evaluated_at?: T;
+  valid_until?: T;
+  reason_code?: T;
+  explanation?: T;
+  evidence_snapshot?: T;
+  supersedes?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -1399,6 +1607,19 @@ export interface TaskExpireRawScanPayloads {
   input?: unknown;
   output: {
     expired: number;
+  };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskReconcile-expired-assessments".
+ */
+export interface TaskReconcileExpiredAssessments {
+  input?: unknown;
+  output: {
+    expired_cycles_examined: number;
+    cycles_created: number;
+    cycles_preserved: number;
+    cycles_skipped: number;
   };
 }
 /**

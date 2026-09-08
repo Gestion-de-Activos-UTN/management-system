@@ -4,6 +4,7 @@ import { validateOwnerTenant } from './hooks/validateOwnerTenant'
 import { rejectManualOfflineStatus } from './hooks/rejectManualOfflineStatus'
 import { rejectBusinessEditsBeforeIdentified } from './hooks/rejectBusinessEditsBeforeIdentified'
 import { enforceAuthorizationInvariant } from './hooks/enforceAuthorizationInvariant'
+import { reconcileAssessmentApplicability } from './hooks/reconcileAssessmentApplicability'
 import { SCANNED_ASSET_TYPE_OPTIONS } from '../../domain/assets/asset-types'
 
 const technicalFieldAccess = {
@@ -32,6 +33,7 @@ export const Assets: CollectionConfig = {
       rejectBusinessEditsBeforeIdentified,
       enforceAuthorizationInvariant,
     ],
+    afterChange: [reconcileAssessmentApplicability],
   },
   fields: [
     {

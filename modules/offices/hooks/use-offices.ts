@@ -5,6 +5,7 @@ import { listOfficeAgentSummary, listOffices, revokeAgent } from '../service'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { notifications } from '@mantine/notifications'
 import type { HttpError } from '@/lib/http-client'
+import { showApiError } from '@/lib/notify-error'
 import type { AgentPlatform } from '@/domain/agents/buildAgentPackage'
 import { provisionAgent } from '../service'
 
@@ -17,12 +18,7 @@ export function useProvisionAgent() {
   return useMutation<Blob, HttpError, { officeId: string; platform: AgentPlatform }>({
     mutationFn: ({ officeId, platform }) => provisionAgent(officeId, platform),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['office-agent-summary'] }),
-    onError: error => {
-      notifications.show({
-        color: 'red',
-        message: error.message ?? 'Could not install the scanner',
-      })
-    },
+    onError: error => showApiError(error, 'Could not install the scanner'),
   })
 }
 
@@ -40,8 +36,6 @@ export function useRevokeAgent() {
       queryClient.invalidateQueries({ queryKey: ['office-agent-summary'] })
       notifications.show({ color: 'green', message: 'Scanner access revoked' })
     },
-    onError: error => {
-      notifications.show({ color: 'red', message: error.message ?? 'Could not revoke the scanner' })
-    },
+    onError: error => showApiError(error, 'Could not revoke the scanner'),
   })
 }

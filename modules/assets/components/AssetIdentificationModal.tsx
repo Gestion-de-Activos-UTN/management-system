@@ -76,7 +76,9 @@ export function AssetIdentificationModal({
       onClose={onClose}
       title={
         <Text component="span" size="lg" fw={700}>
-          Asset identification
+          {asset.identification_status === 'confirmed'
+            ? 'Edit asset identification'
+            : 'Asset identification'}
         </Text>
       }
       centered
@@ -88,6 +90,12 @@ export function AssetIdentificationModal({
             {suggestionMessage} Review the classification and complete the available business
             information.
           </Text>
+          {authorizationStatus === 'unauthorized' && (
+            <Text size="sm" c="orange.8">
+              An unauthorized device has no assigned owner or business criticality. Those fields
+              will be cleared when you save.
+            </Text>
+          )}
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <Controller
               name="confirmed_type"

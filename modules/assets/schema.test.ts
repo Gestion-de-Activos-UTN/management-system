@@ -1,10 +1,19 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
+  AssetBusinessUpdateSchema,
   AssetIdentificationSchema,
   normalizeAssetIdentificationForm,
   UNKNOWN_IDENTIFICATION_VALUE,
 } from './schema'
+
+test('business data accepts authorization changes and rejects technical fields', () => {
+  assert.deepEqual(AssetBusinessUpdateSchema.parse({ authorization_status: 'unauthorized' }), {
+    authorization_status: 'unauthorized',
+  })
+  assert.throws(() => AssetBusinessUpdateSchema.parse({ authorization_status: 'pending' }))
+  assert.throws(() => AssetBusinessUpdateSchema.parse({ ip: '10.0.0.1' }))
+})
 
 test('permite identificar un activo autorizado sin conocer owner ni criticality', () => {
   const parsed = AssetIdentificationSchema.parse({

@@ -40,9 +40,10 @@ export function getAssetsColumns(
       // ya visto (ingestScanReport.ts no lo marca si first_viewed_at es null), así que nunca se
       // muestran los dos juntos.
       cell: ({ row }) => {
-        const alias = row.original.alias ?? ''
+        const alias =
+          row.original.identification_status === 'confirmed' ? (row.original.alias ?? '') : ''
         const isOverflowing = alias.length > ALIAS_TRUNCATE_AT
-        const label = <span>{truncateChars(alias, ALIAS_TRUNCATE_AT)}</span>
+        const label = <span>{alias ? truncateChars(alias, ALIAS_TRUNCATE_AT) : '—'}</span>
         return (
           <Group gap="xs" wrap="nowrap">
             {row.original.first_viewed_at == null ? (
@@ -81,7 +82,9 @@ export function getAssetsColumns(
       header: 'Criticality',
       size: 140,
       cell: ({ row }) =>
-        row.original.criticality ? CRITICALITY_LABEL[row.original.criticality] : '—',
+        row.original.identification_status === 'confirmed' && row.original.criticality
+          ? CRITICALITY_LABEL[row.original.criticality]
+          : '—',
     },
     showOffice
       ? {
@@ -97,7 +100,8 @@ export function getAssetsColumns(
           accessorKey: 'location',
           header: 'Location',
           size: 180,
-          cell: ({ row }) => row.original.location || '—',
+          cell: ({ row }) =>
+            row.original.identification_status === 'confirmed' ? row.original.location || '—' : '—',
         },
     {
       accessorKey: 'status',
@@ -118,6 +122,7 @@ export function getAssetsColumns(
       accessorKey: 'owner',
       header: 'Owner',
       cell: ({ row }) => {
+        if (row.original.identification_status !== 'confirmed') return '—'
         const owner = row.original.owner
         if (typeof owner === 'object' && owner) return owner.name
         return (owner && ownerNameById[owner]) || '—'

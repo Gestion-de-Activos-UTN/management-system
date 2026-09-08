@@ -12,6 +12,7 @@ import {
   History,
   ScanLine,
   ShieldCheck,
+  ClipboardCheck,
 } from 'lucide-react'
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { SidebarProfile } from '@/components/layout/SidebarProfile'
@@ -94,6 +95,15 @@ function PortalProtectedLayoutInner({ children }: { children: React.ReactNode })
       href: `/portal/risk-score${suffix}`,
       icon: <Gauge size={18} strokeWidth={1.5} />,
     },
+    ...(tenantContext.data?.features.security_assessments
+      ? [
+          {
+            label: 'Security Review',
+            href: `/portal/security-review${suffix}`,
+            icon: <ClipboardCheck size={18} strokeWidth={1.5} />,
+          },
+        ]
+      : []),
     {
       label: 'Inventory',
       href: `/portal/inventory${suffix}`,

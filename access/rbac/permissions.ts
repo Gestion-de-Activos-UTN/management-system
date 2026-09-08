@@ -9,6 +9,9 @@ export type CollectionSlug =
   | 'roles'
   | 'job-runs'
   | 'inventory-snapshots'
+  | 'assessment-instances'
+  | 'assessment-answers'
+  | 'compliance-results'
 export type Action = 'create' | 'read' | 'update' | 'delete'
 
 // Matriz estática — decisión explícita (documentation/01-erd-core.md nota 9): el sistema no
@@ -30,6 +33,9 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     roles: ['read'],
     'job-runs': ['read'],
     'inventory-snapshots': ['create', 'read'],
+    'assessment-instances': ['read'],
+    'assessment-answers': ['read'],
+    'compliance-results': ['read'],
   },
   org_admin: {
     organizations: ['read'],
@@ -39,6 +45,9 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     'non-network-assets': ['create', 'read', 'update', 'delete'],
     'scan-reports': ['read'],
     'inventory-snapshots': ['create', 'read'],
+    'assessment-instances': ['read'],
+    'assessment-answers': ['read'],
+    'compliance-results': ['read'],
   },
   org_viewer: {
     organizations: ['read'],
@@ -47,6 +56,9 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     'non-network-assets': ['read'],
     'scan-reports': ['read'],
     'inventory-snapshots': ['read'],
+    'assessment-instances': ['read'],
+    'assessment-answers': ['read'],
+    'compliance-results': ['read'],
   },
   office_manager: {
     organizations: ['read'],
@@ -55,6 +67,9 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     'non-network-assets': ['create', 'read', 'update'],
     'scan-reports': ['read'],
     'inventory-snapshots': ['read'],
+    'assessment-instances': ['read'],
+    'assessment-answers': ['read'],
+    'compliance-results': ['read'],
   },
 }
 

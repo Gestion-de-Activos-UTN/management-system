@@ -12,6 +12,7 @@ export type TenantContext = {
   selectedOfficeId: string | null
   isPlatformAdmin: boolean
   isActive: boolean
+  features: Record<string, boolean>
 }
 
 // Only place this endpoint is queried — mirrors access/tenant/resolveTenantContext.ts's

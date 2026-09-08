@@ -7,6 +7,7 @@ import {
 } from '../access/middleware/resolveAgentAuth'
 import { ingestScanReport } from '../domain/inventories/ingestScanReport'
 import { maybeCreateAutoSnapshot } from '../domain/inventories/autoSnapshot'
+import { reevaluateComplianceAfterScan } from '../domain/assessments/evaluateAutomaticCompliance'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
@@ -113,6 +114,15 @@ export const reportsEndpoint: Endpoint = {
     }
 
     const result = await ingestScanReport(req.payload, body, auth)
+
+    await reevaluateComplianceAfterScan(
+      req.payload,
+      auth.organizationId,
+      auth.officeId,
+      result.processedDocumentIds,
+      req,
+      new Date(body.scan_end)
+    )
 
     await req.payload.update({
       collection: 'scan-reports',

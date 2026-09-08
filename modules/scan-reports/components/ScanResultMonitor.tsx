@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { formatDateTime } from '@/lib/format-date'
 import { useNewScanResult } from '../hooks/use-new-scan-result'
+import { invalidateSecurityReview } from '@/modules/assessments/invalidate-security-review'
 
 const NOTIFICATION_ID = 'new-scan-result'
 
@@ -31,6 +32,7 @@ export function ScanResultMonitor({
 
     queryClient.invalidateQueries({ queryKey: ['assets'] })
     queryClient.invalidateQueries({ queryKey: ['non-network-assets'] })
+    invalidateSecurityReview(queryClient)
     queryClient.invalidateQueries({
       predicate: query =>
         query.queryKey[0] === 'scan-reports' && query.queryKey[1] !== 'latest-processed',

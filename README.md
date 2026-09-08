@@ -107,9 +107,38 @@ del reporte. El mismo proceso puede dispararse manualmente con
 `POST /api/v1/internal/jobs/expire-scan-payloads` y `INTERNAL_JOBS_TOKEN`. No requiere un scheduler
 ni almacenamiento externos.
 
+## Security Review y Risk Score
+
+`/portal/security-review` reúne ciclos por organización, oficina, workstation confirmada y
+computadora activa cargada manualmente. Las
+preguntas usan lenguaje cotidiano; puertos y servicios se evalúan automáticamente mediante la
+Línea Base Segura y aparecen separados como observaciones técnicas.
+
+- Política **Essential v1**: respuestas manuales por 365 días, salvo prueba de recuperación
+  (180 días).
+- Política **Reinforced v1**: respuestas manuales por 180 días.
+- Evidencia técnica: 30 días.
+- Una respuesta ausente, desconocida o vencida es `not_evaluable`: baja la cobertura y nunca
+  incrementa el Risk Score.
+- Los ciclos completados conservan historial. Una nueva versión sólo nace desde la última y copia
+  respuestas compatibles como borrador para su reconfirmación.
+- Cambiar alias, owner, criticidad o frecuencia del activo no crea versiones. Al moverlo de oficina,
+  su historia se conserva pero los filtros lo muestran únicamente en la oficina actual.
+
+Payload ejecuta diariamente `reconcile-expired-assessments` en la cola local `maintenance`. El
+estado vencido se deriva al leer; el job sólo abre un nuevo ciclo cuando no existe uno abierto.
+Los reintentos son idempotentes y no requieren infraestructura externa.
+
+El Risk Score usa únicamente resultados vigentes `non_compliant`, ponderados por control,
+severidad y criticidad. La cobertura se muestra por separado. Si no existe evidencia evaluable,
+el score es “Not evaluable”, no cero. Los snapshots congelan política, ponderaciones, resultados
+y cobertura utilizados.
+
 ## Estructura
 
-Ver `blueprint-siam.md` en la raíz del monorepo para el detalle de cada carpeta (`access/`, `collections/`, `domain/`, `endpoints/`, `services/`, `app/`). Sin `migrations/`: no se usan migraciones en este proyecto (ver sección "Levantar el proyecto"). Fuera de alcance para SIAM: Assessments, Heatmap, VideoTraining.
+Ver [`../documentation/README.md`](../documentation/README.md) para arquitectura, contratos,
+inventario y Security Reviews. Sin `migrations/`: no se usan migraciones en este proyecto (ver
+sección "Levantar el proyecto"). Heatmap y VideoTraining continúan fuera de alcance.
 
 ## Notas
 

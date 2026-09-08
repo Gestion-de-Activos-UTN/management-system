@@ -39,6 +39,7 @@ import { useMarkAssetViewed } from '../hooks/use-mark-asset-viewed'
 import { useMarkAssetChangesViewed } from '../hooks/use-mark-asset-changes-viewed'
 import { BadgeCheck, Fingerprint, Lock, Network, ScanSearch, Undo2 } from 'lucide-react'
 import { AssetIdentificationModal } from './AssetIdentificationModal'
+import { AssetSecurityReviewCard } from '@/modules/assessments/components/AssetSecurityReviewCard'
 import {
   DEVICE_CATEGORY_HELP,
   DEVICE_CATEGORY_LABEL,
@@ -76,7 +77,7 @@ function IdentificationHelpCard({ asset }: { asset: Asset }) {
       <Stack gap="sm">
         <Group gap="xs">
           <Text fw={600}>Identification help</Text>
-          <Badge variant="light" color={tier === 'likely' ? 'pine' : 'gray'}>
+          <Badge variant="filled" color={tier === 'likely' ? 'pine' : 'gray'}>
             {tier === 'likely' ? 'Likely' : 'Possible'}: {DEVICE_CATEGORY_LABEL[category]}
           </Badge>
         </Group>
@@ -178,7 +179,7 @@ function CoverageRow({ coverage }: { coverage: Asset['asset_coverage'] }) {
     <TechnicalContentRow label="Scan coverage">
       <Group gap={6} wrap="wrap">
         {items.map(([label, status]) => (
-          <Badge key={label} variant="light" color={coverageColor(status)} size="sm" tt="none">
+          <Badge key={label} variant="filled" color={coverageColor(status)} size="sm" tt="none">
             {label} · {COVERAGE_LABELS[status ?? 'unknown']}
           </Badge>
         ))}
@@ -423,7 +424,7 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
                       </Group>
                     </Table.Td>
                     <Table.Td>
-                      <Badge variant="light" color={confidenceColor(service.confidence)} size="sm">
+                      <Badge variant="filled" color={confidenceColor(service.confidence)} size="sm">
                         {service.confidence ?? 0}/10
                       </Badge>
                     </Table.Td>
@@ -498,10 +499,13 @@ export function AssetDetailView({
     control,
     handleSubmit,
     reset,
+    watch,
     formState: { isDirty, dirtyFields, errors },
   } = useForm<AssetBusinessFields>({
     resolver: zodResolver(AssetBusinessFieldsSchema),
     defaultValues: {
+      authorization_status:
+        asset.authorization_status === 'unauthorized' ? 'unauthorized' : 'authorized',
       alias: asset.alias ?? null,
       criticality: asset.criticality ?? null,
       owner: typeof asset.owner === 'string' ? asset.owner : (asset.owner?.id ?? null),
@@ -509,6 +513,7 @@ export function AssetDetailView({
       status: asset.status ?? 'active',
     },
   })
+  const authorizationStatus = watch('authorization_status')
 
   // `defaultValues` se fija una sola vez al montar y no se resincroniza sola si `asset` cambia
   // después (ej. el modal de identificación guarda, o llega un re-scan mientras la página está
@@ -517,6 +522,8 @@ export function AssetDetailView({
   useEffect(() => {
     if (isDirty) return
     reset({
+      authorization_status:
+        asset.authorization_status === 'unauthorized' ? 'unauthorized' : 'authorized',
       alias: asset.alias ?? null,
       criticality: asset.criticality ?? null,
       owner: typeof asset.owner === 'string' ? asset.owner : (asset.owner?.id ?? null),
@@ -524,7 +531,14 @@ export function AssetDetailView({
       status: asset.status ?? 'active',
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [asset.alias, asset.criticality, asset.owner, asset.location, asset.status])
+  }, [
+    asset.alias,
+    asset.authorization_status,
+    asset.criticality,
+    asset.owner,
+    asset.location,
+    asset.status,
+  ])
 
   // Solo los campos que el usuario tocó, nunca el objeto completo: mandar todo el formulario
   // reenviaría un `status` (u otro campo de negocio) desactualizado y pisaría en silencio un
@@ -717,6 +731,8 @@ export function AssetDetailView({
 
       <IdentificationHelpCard asset={asset} />
 
+      <AssetSecurityReviewCard assetId={String(asset.id)} asOrganization={asOrganization} />
+
       <Divider label="Business data" />
 
       {asset.identification_status !== 'confirmed' && (
@@ -733,6 +749,23 @@ export function AssetDetailView({
       <form onSubmit={onSubmit} noValidate>
         <Stack gap="md">
           <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <Controller
+              name="authorization_status"
+              control={control}
+              render={({ field }) => (
+                <Select
+                  label="Authorization status"
+                  data={[
+                    { value: 'authorized', label: 'Authorized' },
+                    { value: 'unauthorized', label: 'Not authorized' },
+                  ]}
+                  disabled={asset.identification_status !== 'confirmed'}
+                  value={field.value}
+                  onChange={value => field.onChange(value ?? 'unauthorized')}
+                  error={errors.authorization_status?.message}
+                />
+              )}
+            />
             <Controller
               name="alias"
               control={control}
@@ -760,7 +793,10 @@ export function AssetDetailView({
                     { value: UNKNOWN_IDENTIFICATION_VALUE, label: 'Not yet assessed' },
                     ...CRITICALITY_OPTIONS,
                   ]}
-                  disabled={asset.identification_status !== 'confirmed'}
+                  disabled={
+                    asset.identification_status !== 'confirmed' ||
+                    authorizationStatus !== 'authorized'
+                  }
                   value={field.value ?? UNKNOWN_IDENTIFICATION_VALUE}
                   onChange={value =>
                     field.onChange(value === UNKNOWN_IDENTIFICATION_VALUE ? null : value)
@@ -782,7 +818,10 @@ export function AssetDetailView({
                       label: m.name || m.email,
                     })),
                   ]}
-                  disabled={asset.identification_status !== 'confirmed'}
+                  disabled={
+                    asset.identification_status !== 'confirmed' ||
+                    authorizationStatus !== 'authorized'
+                  }
                   value={field.value ?? UNKNOWN_IDENTIFICATION_VALUE}
                   onChange={value =>
                     field.onChange(value === UNKNOWN_IDENTIFICATION_VALUE ? null : value)
@@ -812,7 +851,7 @@ export function AssetDetailView({
               render={({ field }) => (
                 <Select
                   label="Status"
-                  description="'Offline' is set automatically. You can reactivate to Active or retire."
+                  disabled={asset.identification_status !== 'confirmed'}
                   // 'offline' nunca es una opción elegible a mano (RF-37); si el asset ya está
                   // offline se muestra deshabilitada para no ocultar el estado real.
                   data={

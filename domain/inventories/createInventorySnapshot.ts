@@ -1,6 +1,7 @@
 import type { Payload } from 'payload'
 import { relationId } from '@/lib/relationId'
-import { computeRiskScore } from './computeRiskScore'
+import { getRiskSummary } from '@/domain/assessments/getRiskSummary'
+import { POLICY_CATALOG } from '@/domain/assessments/catalog'
 
 export type SnapshotTrigger =
   { type: 'manual'; userId: string } | { type: 'scheduled' } | { type: 'pre_audit' }
@@ -25,7 +26,19 @@ export async function createInventorySnapshot(
     depth: 0,
     limit: 1,
   })
-  const policy = settingsResult.docs[0]?.risk_score_policy ?? null
+  const settings = settingsResult.docs[0]
+  const policy = settings
+    ? {
+        key: settings.assessment_policy_key,
+        version: settings.assessment_policy_version,
+        selected_at: settings.assessment_policy_selected_at,
+        risk_weights: POLICY_CATALOG.find(
+          candidate =>
+            candidate.key === settings.assessment_policy_key &&
+            candidate.version === settings.assessment_policy_version
+        )?.risk_weights,
+      }
+    : null
 
   // depth:0 a propósito: nunca poblar relaciones anidadas en el dump (ver nota en
   // collections/InventorySnapshots/index.ts) — assets_dump guarda IDs planos, no sub-documentos
@@ -56,17 +69,12 @@ export async function createInventorySnapshot(
   const networkAssetsDump = structuredClone(liveAssetsResult.docs)
   const nonNetworkAssetsDump = structuredClone(liveNonNetworkAssetsResult.docs)
 
-  // computeRiskScore sigue viendo SOLO Network a propósito: la heurística actual puntúa riesgo
-  // como "% de superficie offline", y un NonNetworkAsset nunca puede estar 'offline' (solo
-  // 'active'/'retired') — sumarlo ahí diluiría el score (más denominador, casi nunca más
-  // numerador) sin ningún fundamento real, no es "menos riesgo" solo por cargar más licencias a
-  // mano. Corresponde resolverlo cuando exista el algoritmo real (RF-30, fuera de alcance hoy),
-  // no forzarlo acá con la heurística placeholder.
-  // Un activo detectado pero no confirmado por un humano (identified === false) no debería pesar
-  // en el score: incluye tanto los nunca identificados como los que se des-identificaron después
-  // (ver endpoints/assetUnidentify.ts) — su criticality/owner quedan guardados pero no cuentan acá.
-  const riskScoreGlobal = computeRiskScore(networkAssetsDump.filter(a => a.identified))
+  // Risk y cobertura se calculan desde ComplianceResults vigentes; el dump de inventario se
+  // conserva por separado y nunca se usa como sustituto de evidencia de cumplimiento.
+  const risk = await getRiskSummary(payload, { organizationId, officeId })
 
+  // AUDIT: this action must emit an AuditLogs entry (chain_hash over {id, organization, office, taken_at}, previous hash for this organization_id)
+  // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   const snapshot = await payload.create({
     collection: 'inventory-snapshots',
     overrideAccess: true,
@@ -76,13 +84,20 @@ export async function createInventorySnapshot(
       taken_at: new Date().toISOString(),
       generated_by: triggeredBy.type,
       triggered_by_user: triggeredBy.type === 'manual' ? triggeredBy.userId : null,
-      risk_score: { global: riskScoreGlobal, policy_snapshot: policy },
+      risk_score: {
+        global: risk.summary.risk_score,
+        evaluated_percentage: risk.summary.evaluated_percentage,
+        requires_attention: risk.summary.requires_attention,
+        not_evaluable: risk.summary.not_evaluable,
+        policy_snapshot: policy,
+      },
+      assessment_results_snapshot: {
+        summary: risk.summary,
+        evidence: risk.evidence,
+      },
       assets_dump: { network: networkAssetsDump, non_network: nonNetworkAssetsDump },
     },
   })
-
-  // AUDIT: this action must emit an AuditLogs entry (chain_hash over {id, organization, office, taken_at}, previous hash for this organization_id)
-  // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
 
   return snapshot
 }
