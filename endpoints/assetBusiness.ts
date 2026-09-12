@@ -25,9 +25,6 @@ export const assetBusinessEndpoint: Endpoint = {
     const unrestricted = ctx.isPlatformAdmin && !ctx.organizationId
     assertOfficeInScope(relationId(existing.office), ctx.officeIds, unrestricted)
     assertOrganizationMatches(relationId(existing.organization), ctx.organizationId, unrestricted)
-    if (existing.identification_status !== 'confirmed')
-      return json({ error: 'asset_not_identified' }, 409)
-
     const parsed = AssetBusinessUpdateSchema.safeParse(await req.json!().catch(() => ({})))
     if (!parsed.success || Object.keys(parsed.data).length === 0)
       return json(
@@ -35,7 +32,19 @@ export const assetBusinessEndpoint: Endpoint = {
         400
       )
 
-    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {asset, business fields, authorization_status}, previous hash for this organization_id)
+    const assessmentScopeFields = new Set([
+      'assessment_scope',
+      'assessment_exclusion_reason',
+      'assessment_exclusion_note',
+      'assessment_excluded_until',
+    ])
+    if (
+      existing.identification_status !== 'confirmed' &&
+      Object.keys(parsed.data).some(field => !assessmentScopeFields.has(field))
+    )
+      return json({ error: 'asset_not_identified' }, 409)
+
+    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {asset, business fields, authorization_status, assessment scope and exclusion}, previous hash for this organization_id)
     // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
     const updated = await req.payload.update({
       collection: 'assets',

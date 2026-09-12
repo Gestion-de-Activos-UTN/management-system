@@ -77,6 +77,17 @@ describe('asset assessment reconciliation', () => {
     assert.equal(creates.length, 0)
   })
 
+  it('does not create questions for an excluded workstation', async () => {
+    const { payload, creates } = makePayload()
+    const result = await reconcileAssetAssessmentInstance(
+      payload,
+      { ...workstation, assessment_scope: 'excluded' } as Asset,
+      'asset_identified'
+    )
+    assert.equal(result.action, 'none')
+    assert.equal(creates.length, 0)
+  })
+
   it('preserves an identical open cycle and supersedes an inapplicable one', async () => {
     const question_set_snapshot = [
       'endpoint.authorized_users',
@@ -155,6 +166,17 @@ describe('manually entered computer assessment reconciliation', () => {
     const result = await reconcileManualAssetAssessmentInstance(
       payload,
       { ...manualComputer, asset_category: 'mobile_device' } as NonNetworkAsset,
+      'asset_identified'
+    )
+    assert.equal(result.action, 'none')
+    assert.equal(creates.length, 0)
+  })
+
+  it('does not create a review for an excluded manual computer', async () => {
+    const { payload, creates } = makePayload()
+    const result = await reconcileManualAssetAssessmentInstance(
+      payload,
+      { ...manualComputer, assessment_scope: 'excluded' } as NonNetworkAsset,
       'asset_identified'
     )
     assert.equal(result.action, 'none')

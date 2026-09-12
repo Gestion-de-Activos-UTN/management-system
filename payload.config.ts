@@ -41,6 +41,7 @@ import { dashboardMetricsEndpoint } from './endpoints/dashboardMetrics'
 import { agentRevokeEndpoint } from './endpoints/agentRevoke'
 import { expireRawScanPayloads } from './domain/inventories/expireRawScanPayloads'
 import { reconcileExpiredAssessments } from './domain/assessments/reconcileExpiredAssessments'
+import { reconcileExpiredAssetExclusions } from './domain/assessments/reconcileExpiredAssetExclusions'
 import {
   assessmentCompleteEndpoint,
   assessmentDetailEndpoint,
@@ -148,6 +149,19 @@ export default buildConfig({
         schedule: [{ cron: '0 30 3 * * *', queue: 'maintenance' }],
         handler: async ({ req }) => ({
           output: await reconcileExpiredAssessments(req.payload),
+        }),
+      },
+      {
+        slug: 'reconcile-expired-asset-exclusions',
+        label: 'Reinclude assets with expired assessment exclusions',
+        inputSchema: [],
+        outputSchema: [
+          { name: 'network_assets_reincluded', type: 'number', required: true },
+          { name: 'manual_assets_reincluded', type: 'number', required: true },
+        ],
+        schedule: [{ cron: '0 0 * * * *', queue: 'maintenance' }],
+        handler: async ({ req }) => ({
+          output: await reconcileExpiredAssetExclusions(req.payload),
         }),
       },
     ],

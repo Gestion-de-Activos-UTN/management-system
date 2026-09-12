@@ -60,6 +60,11 @@ export function getAssetsColumns(
               )
             )}
             {isOverflowing ? <Tooltip label={alias}>{label}</Tooltip> : label}
+            {row.original.assessment_scope === 'excluded' && (
+              <Badge size="sm" color="gray" variant="light" style={{ flexShrink: 0 }}>
+                Out of scope
+              </Badge>
+            )}
           </Group>
         )
       },

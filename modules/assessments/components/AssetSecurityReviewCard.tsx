@@ -18,11 +18,30 @@ import { useAssessments } from '../hooks/use-assessments'
 export function AssetSecurityReviewCard({
   assetId,
   asOrganization,
+  excluded = false,
 }: {
   assetId: string
   asOrganization?: string
+  excluded?: boolean
 }) {
   const query = useAssessments({ scope: 'asset', assetId, asOrganization })
+  if (excluded)
+    return (
+      <Card withBorder radius="lg" p="lg">
+        <Group gap="md">
+          <ThemeIcon color="gray" variant="light">
+            <ClipboardCheck size={18} />
+          </ThemeIcon>
+          <div>
+            <Text fw={650}>Excluded from security assessments</Text>
+            <Text size="sm" c="dimmed">
+              This asset remains visible and can still be scanned, but it does not affect Risk
+              Score.
+            </Text>
+          </div>
+        </Group>
+      </Card>
+    )
   if (query.isPending) return <Skeleton height={112} radius="lg" />
   const assessment = query.data?.docs.find(item => item.status !== 'superseded')
   if (!assessment)

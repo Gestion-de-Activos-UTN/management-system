@@ -122,6 +122,12 @@ export default function SnapshotDetailPage() {
               ? 'Risk was not evaluable at the time of this snapshot.'
               : `Risk at this point in time. Assessment coverage was ${snapshot.risk_score.evaluated_percentage}%.`}
           </Text>
+          {(snapshot.risk_score.excluded_assets ?? 0) > 0 && (
+            <Text size="sm" c="dimmed">
+              {snapshot.risk_score.excluded_assets} assets were outside the security assessment
+              scope at this point in time.
+            </Text>
+          )}
         </Group>
       </Card>
 

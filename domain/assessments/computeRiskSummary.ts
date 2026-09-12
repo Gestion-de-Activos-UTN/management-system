@@ -15,6 +15,7 @@ export type RiskSummary = {
   not_evaluable: number
   applicable_checks: number
   pending_asset_identifications: number
+  excluded_assets: number
   last_valid_scan_at: string | null
   policy: { key: string; version: number }
 }
@@ -22,7 +23,11 @@ export type RiskSummary = {
 export function computeRiskSummary(
   checks: readonly RiskCheck[],
   policy: PolicyDefinition,
-  context: { pendingAssetIdentifications?: number; lastValidScanAt?: string | null } = {}
+  context: {
+    pendingAssetIdentifications?: number
+    excludedAssets?: number
+    lastValidScanAt?: string | null
+  } = {}
 ): RiskSummary {
   let evaluatedWeight = 0
   let nonCompliantWeight = 0
@@ -55,6 +60,7 @@ export function computeRiskSummary(
     not_evaluable: notEvaluable,
     applicable_checks: checks.length,
     pending_asset_identifications: context.pendingAssetIdentifications ?? 0,
+    excluded_assets: context.excludedAssets ?? 0,
     last_valid_scan_at: context.lastValidScanAt ?? null,
     policy: { key: policy.key, version: policy.version },
   }

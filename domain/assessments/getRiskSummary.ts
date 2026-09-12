@@ -2,6 +2,7 @@ import type { Payload, PayloadRequest, Where } from 'payload'
 import { relationId } from '@/lib/relationId'
 import { POLICY_CATALOG, QUESTION_CATALOG, type PolicyKey } from './catalog'
 import { computeRiskSummary, type RiskCheck, type RiskSummary } from './computeRiskSummary'
+import { isAssetExcludedFromAssessments } from './asset-assessment-scope'
 
 type RiskSummaryScope = { organizationId: string; officeId?: string; now?: Date }
 
@@ -59,7 +60,6 @@ export async function getRiskSummary(
       and: [
         { organization: { equals: scope.organizationId } },
         ...(scope.officeId ? [{ office: { equals: scope.officeId } }] : []),
-        { asset_category: { equals: 'computer' } },
         { status: { not_equals: 'retired' } },
       ],
     },
@@ -68,8 +68,12 @@ export async function getRiskSummary(
     depth: 0,
     limit: 5000,
   })
-  const assetById = new Map(assets.docs.map(asset => [String(asset.id), asset]))
-  const manualAssetById = new Map(manualAssets.docs.map(asset => [String(asset.id), asset]))
+  const includedAssets = assets.docs.filter(asset => !isAssetExcludedFromAssessments(asset, now))
+  const includedManualAssets = manualAssets.docs.filter(
+    asset => asset.asset_category === 'computer' && !isAssetExcludedFromAssessments(asset, now)
+  )
+  const assetById = new Map(includedAssets.map(asset => [String(asset.id), asset]))
+  const manualAssetById = new Map(includedManualAssets.map(asset => [String(asset.id), asset]))
   const assetIds = [...assetById.keys()]
   const manualAssetIds = [...manualAssetById.keys()]
   const officeIds = scope.officeId
@@ -223,7 +227,11 @@ export async function getRiskSummary(
   const checkRows = [...checks.values()]
   return {
     summary: computeRiskSummary(checkRows, policy, {
-      pendingAssetIdentifications: assets.docs.filter(asset => !asset.identified).length,
+      pendingAssetIdentifications: includedAssets.filter(asset => !asset.identified).length,
+      excludedAssets:
+        assets.docs.length -
+        includedAssets.length +
+        manualAssets.docs.filter(asset => isAssetExcludedFromAssessments(asset, now)).length,
       lastValidScanAt: scans.docs[0]?.processed_at ?? null,
     }),
     evidence: { checks: checkRows, result_ids: resultIds },

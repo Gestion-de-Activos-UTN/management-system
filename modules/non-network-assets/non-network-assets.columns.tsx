@@ -1,4 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table'
+import { Badge, Group } from '@mantine/core'
 import type { NonNetworkAsset } from '@/app/types/payload-types'
 import { ASSET_CATEGORY_LABEL, CRITICALITY_LABEL } from '@/lib/enum-labels'
 import { formatDate } from '@/lib/format-date'
@@ -14,7 +15,20 @@ export function getNonNetworkAssetsColumns(
   ownerNameById: Record<string, string>
 ): ColumnDef<NonNetworkAsset, unknown>[] {
   return [
-    { accessorKey: 'alias', header: 'Alias' },
+    {
+      accessorKey: 'alias',
+      header: 'Alias',
+      cell: ({ row }) => (
+        <Group gap="xs" wrap="nowrap">
+          {row.original.alias}
+          {row.original.assessment_scope === 'excluded' && (
+            <Badge size="sm" color="gray" variant="light">
+              Out of scope
+            </Badge>
+          )}
+        </Group>
+      ),
+    },
     {
       accessorKey: 'asset_category',
       header: 'Category',

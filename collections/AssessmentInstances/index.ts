@@ -52,7 +52,14 @@ export const AssessmentInstances: CollectionConfig = {
     {
       name: 'created_reason',
       type: 'select',
-      options: ['initial', 'asset_identified', 'policy_changed', 'answer_expired', 'manual_review'],
+      options: [
+        'initial',
+        'asset_identified',
+        'assessment_scope_changed',
+        'policy_changed',
+        'answer_expired',
+        'manual_review',
+      ],
       required: true,
     },
     { name: 'opened_at', type: 'date', required: true },

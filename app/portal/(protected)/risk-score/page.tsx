@@ -78,6 +78,7 @@ export default function RiskScorePage() {
           <Metric value={data?.requires_attention ?? 0} label="Require attention" />
           <Metric value={data?.not_evaluable ?? 0} label="Not evaluable" />
           <Metric value={data?.pending_asset_identifications ?? 0} label="Devices to identify" />
+          <Metric value={data?.excluded_assets ?? 0} label="Assets out of scope" />
         </Group>
       </Card>
       <Text size="sm" c="dimmed">

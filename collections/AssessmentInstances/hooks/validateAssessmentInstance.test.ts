@@ -57,4 +57,36 @@ describe('assessment instance tenant hook', () => {
       /immutable/
     )
   })
+
+  it('allows reconciliation to supersede a cycle after its asset is retired', async () => {
+    const assetAssessment = {
+      ...baseData,
+      scope: 'asset',
+      asset: 'asset-1',
+      status: 'pending',
+    }
+    const req = {
+      payload: {
+        findByID: async ({ collection }: { collection: string }) =>
+          collection === 'offices'
+            ? { id: 'office-1', organization: 'org-1' }
+            : {
+                id: 'asset-1',
+                organization: 'org-1',
+                office: 'office-1',
+                status: 'retired',
+              },
+        find: async () => ({ docs: [] }),
+      },
+    }
+
+    await assert.doesNotReject(
+      validateAssessmentInstance({
+        data: { status: 'superseded' },
+        originalDoc: assetAssessment,
+        operation: 'update',
+        req,
+      } as never)
+    )
+  })
 })

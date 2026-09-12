@@ -25,6 +25,7 @@ import { POLICY_CATALOG } from '@/domain/assessments/catalog'
 import { resolveInheritedAssessmentEvidence } from '@/domain/assessments/resolveInheritedEvidence'
 import { withDerivedAssessmentStatus } from '@/domain/assessments/assessmentExpiration'
 import { getRiskSummary } from '@/domain/assessments/getRiskSummary'
+import { isAssetExcludedFromAssessments } from '@/domain/assessments/asset-assessment-scope'
 
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 
@@ -194,10 +195,24 @@ export const assessmentsListEndpoint: Endpoint = {
       overrideAccess: true,
       req,
       depth: 1,
-      limit: 100,
+      limit: 5000,
       sort: '-createdAt',
     })
-    return json({ ...result, docs: result.docs.map(doc => withDerivedAssessmentStatus(doc)) })
+    const docs = result.docs.filter(doc => {
+      const target = doc.manual_asset || doc.asset
+      return !(target && typeof target === 'object' && isAssetExcludedFromAssessments(target))
+    })
+    return json({
+      ...result,
+      docs: docs.map(doc => withDerivedAssessmentStatus(doc)),
+      totalDocs: docs.length,
+      totalPages: docs.length ? 1 : 0,
+      page: 1,
+      hasNextPage: false,
+      hasPrevPage: false,
+      nextPage: null,
+      prevPage: null,
+    })
   },
 }
 
@@ -373,6 +388,11 @@ async function writableAssessment(
   if (!assessment) return { ok: false, response: json({ error: 'not_found' }, 404) }
   const asset = await loadAsset(req, assessment.asset)
   const manualAsset = await loadManualAsset(req, assessment.manual_asset)
+  if (
+    (asset && isAssetExcludedFromAssessments(asset)) ||
+    (manualAsset && isAssetExcludedFromAssessments(manualAsset))
+  )
+    return { ok: false, response: json({ error: 'asset_excluded_from_assessments' }, 409) }
   if (!canAnswerAssessment(ctx, assessment, asset ?? manualAsset))
     return { ok: false, response: json({ error: 'forbidden' }, 403) }
   if (!(await featureEnabled(req, relationId(assessment.organization))))

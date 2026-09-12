@@ -19,14 +19,19 @@ import {
   Table,
   Text,
   TextInput,
+  Textarea,
   ThemeIcon,
   Tooltip,
 } from '@mantine/core'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { TechnicalText } from '@/components/ui/TechnicalText'
 import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
-import { CRITICALITY_OPTIONS, MANUAL_ASSET_STATUS_OPTIONS } from '@/lib/enum-labels'
-import { formatDateTime } from '@/lib/format-date'
+import {
+  ASSESSMENT_EXCLUSION_REASON_OPTIONS,
+  CRITICALITY_OPTIONS,
+  MANUAL_ASSET_STATUS_OPTIONS,
+} from '@/lib/enum-labels'
+import { formatDateInput, formatDateTime, localDateEndToISOString } from '@/lib/format-date'
 import type { Asset } from '@/app/types/payload-types'
 import {
   AssetBusinessFieldsSchema,
@@ -499,6 +504,7 @@ export function AssetDetailView({
     control,
     handleSubmit,
     reset,
+    setValue,
     watch,
     formState: { isDirty, dirtyFields, errors },
   } = useForm<AssetBusinessFields>({
@@ -511,9 +517,29 @@ export function AssetDetailView({
       owner: typeof asset.owner === 'string' ? asset.owner : (asset.owner?.id ?? null),
       location: asset.location ?? null,
       status: asset.status ?? 'active',
+      assessment_scope: asset.assessment_scope ?? 'included',
+      assessment_exclusion_reason: asset.assessment_exclusion_reason ?? null,
+      assessment_exclusion_note: asset.assessment_exclusion_note ?? null,
+      assessment_excluded_until: asset.assessment_excluded_until ?? null,
     },
   })
   const authorizationStatus = watch('authorization_status')
+  const assessmentScope = watch('assessment_scope')
+  const exclusionReason = watch('assessment_exclusion_reason')
+  const [confirmUnauthorizedExclusion, setConfirmUnauthorizedExclusion] = useState(false)
+  const warnedUnauthorizedExclusion = useRef(
+    asset.authorization_status === 'unauthorized' && asset.assessment_scope === 'excluded'
+  )
+  useEffect(() => {
+    if (authorizationStatus === 'unauthorized' && assessmentScope === 'excluded') {
+      if (!warnedUnauthorizedExclusion.current) {
+        warnedUnauthorizedExclusion.current = true
+        setConfirmUnauthorizedExclusion(true)
+      }
+    } else {
+      warnedUnauthorizedExclusion.current = false
+    }
+  }, [authorizationStatus, assessmentScope])
 
   // `defaultValues` se fija una sola vez al montar y no se resincroniza sola si `asset` cambia
   // después (ej. el modal de identificación guarda, o llega un re-scan mientras la página está
@@ -529,6 +555,10 @@ export function AssetDetailView({
       owner: typeof asset.owner === 'string' ? asset.owner : (asset.owner?.id ?? null),
       location: asset.location ?? null,
       status: asset.status ?? 'active',
+      assessment_scope: asset.assessment_scope ?? 'included',
+      assessment_exclusion_reason: asset.assessment_exclusion_reason ?? null,
+      assessment_exclusion_note: asset.assessment_exclusion_note ?? null,
+      assessment_excluded_until: asset.assessment_excluded_until ?? null,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -538,6 +568,10 @@ export function AssetDetailView({
     asset.owner,
     asset.location,
     asset.status,
+    asset.assessment_scope,
+    asset.assessment_exclusion_reason,
+    asset.assessment_exclusion_note,
+    asset.assessment_excluded_until,
   ])
 
   // Solo los campos que el usuario tocó, nunca el objeto completo: mandar todo el formulario
@@ -550,7 +584,7 @@ export function AssetDetailView({
     const changed = Object.fromEntries(
       dirtyKeys.map(key => [key, data[key]])
     ) as Partial<AssetBusinessFields>
-    updateAsset.mutate(changed)
+    updateAsset.mutate(changed, { onSuccess: () => reset(data) })
   })
 
   return (
@@ -731,7 +765,15 @@ export function AssetDetailView({
 
       <IdentificationHelpCard asset={asset} />
 
-      <AssetSecurityReviewCard assetId={String(asset.id)} asOrganization={asOrganization} />
+      <AssetSecurityReviewCard
+        assetId={String(asset.id)}
+        asOrganization={asOrganization}
+        excluded={
+          asset.assessment_scope === 'excluded' &&
+          (!asset.assessment_excluded_until ||
+            Date.parse(asset.assessment_excluded_until) > Date.now())
+        }
+      />
 
       <Divider label="Business data" />
 
@@ -869,6 +911,88 @@ export function AssetDetailView({
               )}
             />
           </SimpleGrid>
+          <Divider label="Security assessment scope" labelPosition="left" />
+          <Text size="sm" c="dimmed">
+            Excluded assets remain visible and continue to be scanned, but do not affect reviews or
+            Risk Score.
+          </Text>
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <Controller
+              name="assessment_scope"
+              control={control}
+              render={({ field }) => (
+                <Select
+                  label="Security assessment scope"
+                  data={[
+                    { value: 'included', label: 'Included' },
+                    { value: 'excluded', label: 'Excluded' },
+                  ]}
+                  value={field.value}
+                  onChange={value => {
+                    if (value === 'excluded' && authorizationStatus === 'unauthorized') {
+                      warnedUnauthorizedExclusion.current = true
+                      setConfirmUnauthorizedExclusion(true)
+                      return
+                    }
+                    field.onChange(value ?? 'included')
+                  }}
+                />
+              )}
+            />
+            {assessmentScope === 'excluded' && (
+              <Controller
+                name="assessment_exclusion_reason"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    label="Exclusion reason"
+                    required
+                    data={[...ASSESSMENT_EXCLUSION_REASON_OPTIONS]}
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.assessment_exclusion_reason?.message}
+                  />
+                )}
+              />
+            )}
+            {assessmentScope === 'excluded' && (
+              <Controller
+                name="assessment_excluded_until"
+                control={control}
+                render={({ field }) => (
+                  <TextInput
+                    type="date"
+                    label="Excluded until"
+                    description="Leave empty for an exclusion without expiration."
+                    value={field.value ? formatDateInput(field.value) : ''}
+                    onChange={event =>
+                      field.onChange(
+                        event.currentTarget.value
+                          ? localDateEndToISOString(event.currentTarget.value)
+                          : null
+                      )
+                    }
+                  />
+                )}
+              />
+            )}
+          </SimpleGrid>
+          {assessmentScope === 'excluded' && (
+            <Controller
+              name="assessment_exclusion_note"
+              control={control}
+              render={({ field }) => (
+                <Textarea
+                  label="Exclusion note"
+                  description="Add context for reviewers when useful."
+                  required={exclusionReason === 'other'}
+                  value={field.value ?? ''}
+                  onChange={field.onChange}
+                  error={errors.assessment_exclusion_note?.message}
+                />
+              )}
+            />
+          )}
           <Group justify="flex-end">
             <Button
               type="submit"
@@ -881,6 +1005,40 @@ export function AssetDetailView({
           </Group>
         </Stack>
       </form>
+      <Modal
+        opened={confirmUnauthorizedExclusion}
+        onClose={() => setConfirmUnauthorizedExclusion(false)}
+        title="Exclude an unauthorized device?"
+        centered
+      >
+        <Stack>
+          <Alert color="orange">
+            SIAM recommends keeping unauthorized devices in scope because they represent a security
+            finding. You can still exclude this device if that is your organization&apos;s decision.
+          </Alert>
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => {
+                setValue('assessment_scope', 'included', { shouldDirty: true })
+                setConfirmUnauthorizedExclusion(false)
+              }}
+            >
+              Keep included
+            </Button>
+            <Button
+              color="orange"
+              onClick={() => {
+                warnedUnauthorizedExclusion.current = true
+                setValue('assessment_scope', 'excluded', { shouldDirty: true })
+                setConfirmUnauthorizedExclusion(false)
+              }}
+            >
+              Exclude anyway
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   )
 }

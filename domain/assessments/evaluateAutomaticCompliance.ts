@@ -5,6 +5,7 @@ import { isAgentOnline } from '@/domain/agents/agent-state'
 import { evaluateNetworkBaseline, type NetworkEvaluation } from './evaluateNetworkBaseline'
 import type { ComplianceStatus, PolicyKey } from './catalog'
 import type { CheckEvaluation } from './evaluateCompliance'
+import { isAssetExcludedFromAssessments } from './asset-assessment-scope'
 
 type AutomaticCheck = CheckEvaluation & {
   control_key: string
@@ -189,7 +190,7 @@ export async function evaluateAutomaticComplianceForAssessment(
       req,
       depth: 0,
     })
-    if (asset.status !== 'retired') {
+    if (asset.status !== 'retired' && !isAssetExcludedFromAssessments(asset, now)) {
       checks.push(...evaluateAssetFacts(asset))
       const networkChecks = evaluateNetworkBaseline({
         confirmed_type: asset.confirmed_type ?? null,

@@ -28,7 +28,7 @@ describe('scanned asset assessment applicability changes', () => {
     )
   })
 
-  it('reacts only to confirmed category and retirement changes', () => {
+  it('reacts to confirmed category, retirement and assessment-scope changes', () => {
     assert.equal(
       assetAssessmentApplicabilityChanged(
         { ...workstation, confirmed_type: 'gateway' },
@@ -40,6 +40,14 @@ describe('scanned asset assessment applicability changes', () => {
     assert.equal(
       assetAssessmentApplicabilityChanged(
         { ...workstation, status: 'retired' },
+        workstation,
+        'update'
+      ),
+      true
+    )
+    assert.equal(
+      assetAssessmentApplicabilityChanged(
+        { ...workstation, assessment_scope: 'excluded' },
         workstation,
         'update'
       ),
