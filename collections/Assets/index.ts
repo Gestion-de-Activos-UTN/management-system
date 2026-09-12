@@ -6,6 +6,8 @@ import { rejectBusinessEditsBeforeIdentified } from './hooks/rejectBusinessEdits
 import { enforceAuthorizationInvariant } from './hooks/enforceAuthorizationInvariant'
 import { reconcileAssessmentApplicability } from './hooks/reconcileAssessmentApplicability'
 import { SCANNED_ASSET_TYPE_OPTIONS } from '../../domain/assets/asset-types'
+import { assessmentScopeFields } from '../../domain/assessments/asset-assessment-scope'
+import { validateAssetAssessmentScope } from '../../domain/assessments/validateAssetAssessmentScope'
 
 const technicalFieldAccess = {
   // Bloque técnico: solo lo escribe el upsert de ingesta (domain/inventories/ingestScanReport.ts), nunca un humano.
@@ -32,6 +34,7 @@ export const Assets: CollectionConfig = {
       rejectManualOfflineStatus,
       rejectBusinessEditsBeforeIdentified,
       enforceAuthorizationInvariant,
+      validateAssetAssessmentScope,
     ],
     afterChange: [reconcileAssessmentApplicability],
   },
@@ -371,6 +374,7 @@ export const Assets: CollectionConfig = {
       // el filtro de fila (RBAC) no alcanza para validar el *valor* de una FK a otra colección.
     },
     { name: 'location', type: 'text', maxLength: 200 },
+    ...assessmentScopeFields(),
     {
       name: 'status',
       type: 'select',

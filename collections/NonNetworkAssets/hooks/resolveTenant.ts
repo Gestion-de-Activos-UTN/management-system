@@ -64,7 +64,7 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
       : originalDoc.next_review_at
 
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {id, office, organization,
-  // asset_category, criticality, owner, status}, previous hash for this organization_id)
+  // asset_category, criticality, owner, status, assessment scope and exclusion}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   return {
     ...data,

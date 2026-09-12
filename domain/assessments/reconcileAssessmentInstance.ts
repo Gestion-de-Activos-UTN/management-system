@@ -3,9 +3,15 @@ import type { Asset, NonNetworkAsset } from '@/app/types/payload-types'
 import { relationId } from '@/lib/relationId'
 import { POLICY_CATALOG, QUESTION_CATALOG, type PolicyKey } from './catalog'
 import { resolveApplicableQuestions } from './resolveApplicableQuestions'
+import { isAssetExcludedFromAssessments } from './asset-assessment-scope'
 
 export type ReconcileReason =
-  'initial' | 'asset_identified' | 'policy_changed' | 'answer_expired' | 'manual_review'
+  | 'initial'
+  | 'asset_identified'
+  | 'assessment_scope_changed'
+  | 'policy_changed'
+  | 'answer_expired'
+  | 'manual_review'
 
 async function syncAssessmentAssignee(
   payload: Payload,
@@ -269,7 +275,7 @@ export async function reconcileAssetAssessmentInstance(
   // Assets descubiertos y computer (mapeado a workstation) para NonNetworkAssets. Los demás
   // tipos conservan sus resultados automáticos, pero no reciben este cuestionario.
   const applicable =
-    asset.confirmed_type === 'workstation'
+    asset.confirmed_type === 'workstation' && !isAssetExcludedFromAssessments(asset)
       ? resolveApplicableQuestions(
           {
             scope: 'asset',
@@ -412,6 +418,7 @@ export async function reconcileManualAssetAssessmentInstance(
   const eligible =
     asset.asset_category === 'computer' &&
     asset.status !== 'retired' &&
+    !isAssetExcludedFromAssessments(asset) &&
     features?.security_assessments === true
   const applicable =
     eligible && policy

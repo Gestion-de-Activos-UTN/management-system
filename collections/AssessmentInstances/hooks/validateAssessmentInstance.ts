@@ -68,7 +68,8 @@ export const validateAssessmentInstance: CollectionBeforeChangeHook = async ({
     ) {
       throw new Error('Assessment asset does not belong to its organization and office')
     }
-    if (asset.status === 'retired')
+    // Reconciliation must be able to close an existing cycle after its target is retired.
+    if (asset.status === 'retired' && merged.status !== 'superseded')
       throw new Error('Retired assets cannot receive assessment cycles')
   }
   if (manualAssetId) {
@@ -84,7 +85,10 @@ export const validateAssessmentInstance: CollectionBeforeChangeHook = async ({
       relationId(manualAsset.office) !== officeId
     )
       throw new Error('Manual assessment asset belongs to another organization or office')
-    if (manualAsset.status === 'retired' || manualAsset.asset_category !== 'computer')
+    if (
+      (manualAsset.status === 'retired' || manualAsset.asset_category !== 'computer') &&
+      merged.status !== 'superseded'
+    )
       throw new Error('Only active manually entered computers can receive assessment cycles')
   }
 

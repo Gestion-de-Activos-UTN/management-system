@@ -135,6 +135,7 @@ export interface Config {
     tasks: {
       'expire-raw-scan-payloads': TaskExpireRawScanPayloads;
       'reconcile-expired-assessments': TaskReconcileExpiredAssessments;
+      'reconcile-expired-asset-exclusions': TaskReconcileExpiredAssetExclusions;
       inline: {
         input: unknown;
         output: unknown;
@@ -513,6 +514,22 @@ export interface Asset {
   criticality?: ('low' | 'medium' | 'high' | 'critical') | null;
   owner?: (string | null) | User;
   location?: string | null;
+  assessment_scope?: ('included' | 'excluded') | null;
+  assessment_exclusion_reason?:
+    | (
+        | 'personal_device'
+        | 'visitor_device'
+        | 'third_party_managed'
+        | 'temporary_or_lab'
+        | 'duplicate_or_misidentified'
+        | 'contractually_out_of_scope'
+        | 'other'
+      )
+    | null;
+  assessment_exclusion_note?: string | null;
+  assessment_excluded_until?: string | null;
+  assessment_excluded_at?: string | null;
+  assessment_excluded_by?: (string | null) | User;
   status?: ('active' | 'retired' | 'offline') | null;
   first_viewed_at?: string | null;
   technical_changed_at?: string | null;
@@ -546,6 +563,22 @@ export interface NonNetworkAsset {
   criticality: 'low' | 'medium' | 'high' | 'critical';
   owner: string | User;
   location?: string | null;
+  assessment_scope?: ('included' | 'excluded') | null;
+  assessment_exclusion_reason?:
+    | (
+        | 'personal_device'
+        | 'visitor_device'
+        | 'third_party_managed'
+        | 'temporary_or_lab'
+        | 'duplicate_or_misidentified'
+        | 'contractually_out_of_scope'
+        | 'other'
+      )
+    | null;
+  assessment_exclusion_note?: string | null;
+  assessment_excluded_until?: string | null;
+  assessment_excluded_at?: string | null;
+  assessment_excluded_by?: (string | null) | User;
   status?: ('active' | 'retired') | null;
   review_interval: 'never' | '1d' | '3d' | '1w' | '1m' | '6m' | '1y';
   next_review_at?: string | null;
@@ -676,6 +709,7 @@ export interface InventorySnapshot {
     global?: number | null;
     evaluated_percentage: number;
     requires_attention: number;
+    excluded_assets?: number | null;
     not_evaluable: number;
     policy_snapshot?:
       | {
@@ -733,7 +767,8 @@ export interface AssessmentInstance {
     | null;
   status: 'pending' | 'in_progress' | 'completed' | 'expired' | 'superseded';
   assigned_to?: (string | null) | User;
-  created_reason: 'initial' | 'asset_identified' | 'policy_changed' | 'answer_expired' | 'manual_review';
+  created_reason:
+    'initial' | 'asset_identified' | 'assessment_scope_changed' | 'policy_changed' | 'answer_expired' | 'manual_review';
   opened_at: string;
   due_at: string;
   completed_at?: string | null;
@@ -872,7 +907,11 @@ export interface PayloadJob {
     | {
         executedAt: string;
         completedAt: string;
-        taskSlug: 'inline' | 'expire-raw-scan-payloads' | 'reconcile-expired-assessments';
+        taskSlug:
+          | 'inline'
+          | 'expire-raw-scan-payloads'
+          | 'reconcile-expired-assessments'
+          | 'reconcile-expired-asset-exclusions';
         taskID: string;
         input?:
           | {
@@ -905,7 +944,9 @@ export interface PayloadJob {
         id?: string | null;
       }[]
     | null;
-  taskSlug?: ('inline' | 'expire-raw-scan-payloads' | 'reconcile-expired-assessments') | null;
+  taskSlug?:
+    | ('inline' | 'expire-raw-scan-payloads' | 'reconcile-expired-assessments' | 'reconcile-expired-asset-exclusions')
+    | null;
   queue?: string | null;
   waitUntil?: string | null;
   processing?: boolean | null;
@@ -1107,6 +1148,16 @@ export interface AssetsSelect<T extends boolean = true> {
   asset_id?: T;
   agent?: T;
   office?: T;
+  observed_agents?:
+    | T
+    | {
+        agent?: T;
+        ip?: T;
+        gateway_ip?: T;
+        gateway_mac?: T;
+        last_seen?: T;
+        id?: T;
+      };
   organization?: T;
   ip?: T;
   last_seen?: T;
@@ -1221,6 +1272,12 @@ export interface AssetsSelect<T extends boolean = true> {
   criticality?: T;
   owner?: T;
   location?: T;
+  assessment_scope?: T;
+  assessment_exclusion_reason?: T;
+  assessment_exclusion_note?: T;
+  assessment_excluded_until?: T;
+  assessment_excluded_at?: T;
+  assessment_excluded_by?: T;
   status?: T;
   first_viewed_at?: T;
   technical_changed_at?: T;
@@ -1237,6 +1294,12 @@ export interface NonNetworkAssetsSelect<T extends boolean = true> {
   criticality?: T;
   owner?: T;
   location?: T;
+  assessment_scope?: T;
+  assessment_exclusion_reason?: T;
+  assessment_exclusion_note?: T;
+  assessment_excluded_until?: T;
+  assessment_excluded_at?: T;
+  assessment_excluded_by?: T;
   status?: T;
   review_interval?: T;
   next_review_at?: T;
@@ -1411,6 +1474,7 @@ export interface InventorySnapshotsSelect<T extends boolean = true> {
         global?: T;
         evaluated_percentage?: T;
         requires_attention?: T;
+        excluded_assets?: T;
         not_evaluable?: T;
         policy_snapshot?: T;
       };
@@ -1630,6 +1694,17 @@ export interface TaskReconcileExpiredAssessments {
     cycles_created: number;
     cycles_preserved: number;
     cycles_skipped: number;
+  };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskReconcile-expired-asset-exclusions".
+ */
+export interface TaskReconcileExpiredAssetExclusions {
+  input?: unknown;
+  output: {
+    network_assets_reincluded: number;
+    manual_assets_reincluded: number;
   };
 }
 /**

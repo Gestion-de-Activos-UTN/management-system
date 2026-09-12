@@ -44,4 +44,11 @@ describe('risk score and assessment coverage', () => {
     assert.equal(unknown.risk_score, null)
     assert.equal(unknown.evaluated_percentage, 0)
   })
+
+  it('reports excluded assets separately from risk and coverage', () => {
+    const result = computeRiskSummary([], policy, { excludedAssets: 3 })
+    assert.equal(result.excluded_assets, 3)
+    assert.equal(result.risk_score, null)
+    assert.equal(result.applicable_checks, 0)
+  })
 })

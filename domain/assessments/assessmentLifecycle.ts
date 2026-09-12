@@ -9,6 +9,7 @@ import {
 import type { SaveAssessmentDraft } from '@/modules/assessments/schema'
 import { relationId } from '@/lib/relationId'
 import { evaluateAutomaticComplianceForAssessment } from './evaluateAutomaticCompliance'
+import { isAssetExcludedFromAssessments } from './asset-assessment-scope'
 
 function questionDefinition(key: string, version: number): QuestionDefinition {
   const definition = QUESTION_CATALOG.find(item => item.key === key && item.version === version)
@@ -78,6 +79,32 @@ async function loadAssessment(
     req,
     depth: 0,
   })
+}
+
+async function assertTargetIncluded(
+  payload: Payload,
+  assessment: AssessmentInstance,
+  req: PayloadRequest
+) {
+  const target = assessment.asset
+    ? await payload.findByID({
+        collection: 'assets',
+        id: relationId(assessment.asset),
+        overrideAccess: true,
+        req,
+        depth: 0,
+      })
+    : assessment.manual_asset
+      ? await payload.findByID({
+          collection: 'non-network-assets',
+          id: relationId(assessment.manual_asset),
+          overrideAccess: true,
+          req,
+          depth: 0,
+        })
+      : null
+  if (target && isAssetExcludedFromAssessments(target))
+    throw new Error('asset_excluded_from_assessments')
 }
 
 async function upsertAnswers(
@@ -181,6 +208,7 @@ export async function saveAssessmentDraft(
   req: PayloadRequest
 ) {
   const assessment = await loadAssessment(payload, assessmentId, req)
+  await assertTargetIncluded(payload, assessment, req)
   return upsertAnswers(payload, assessment, command, actorId, req)
 }
 
@@ -196,6 +224,7 @@ export async function completeAssessment(
   const req = Object.assign(request, { transactionID })
   try {
     let assessment = await loadAssessment(payload, assessmentId, req)
+    await assertTargetIncluded(payload, assessment, req)
     if (assessment.status === 'completed') {
       if (ownsTransaction && transactionID) await payload.db.commitTransaction(transactionID)
       return assessment

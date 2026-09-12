@@ -50,6 +50,7 @@ export const InventorySnapshots: CollectionConfig = {
         { name: 'global', type: 'number' },
         { name: 'evaluated_percentage', type: 'number', required: true },
         { name: 'requires_attention', type: 'number', required: true },
+        { name: 'excluded_assets', type: 'number' },
         { name: 'not_evaluable', type: 'number', required: true },
         { name: 'policy_snapshot', type: 'json' },
       ],

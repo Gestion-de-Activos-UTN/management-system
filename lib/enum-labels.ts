@@ -65,3 +65,13 @@ export const REVIEW_INTERVAL_OPTIONS = Object.entries(REVIEW_INTERVAL_LABEL).map
     label,
   })
 )
+
+export const ASSESSMENT_EXCLUSION_REASON_OPTIONS = [
+  { value: 'personal_device', label: 'Personal device' },
+  { value: 'visitor_device', label: 'Visitor device' },
+  { value: 'third_party_managed', label: 'Managed by a third party' },
+  { value: 'temporary_or_lab', label: 'Temporary or laboratory asset' },
+  { value: 'duplicate_or_misidentified', label: 'Duplicate or misidentified' },
+  { value: 'contractually_out_of_scope', label: 'Contractually out of scope' },
+  { value: 'other', label: 'Other' },
+] as const

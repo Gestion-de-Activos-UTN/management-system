@@ -88,6 +88,7 @@ export async function createInventorySnapshot(
         global: risk.summary.risk_score,
         evaluated_percentage: risk.summary.evaluated_percentage,
         requires_attention: risk.summary.requires_attention,
+        excluded_assets: risk.summary.excluded_assets,
         not_evaluable: risk.summary.not_evaluable,
         policy_snapshot: policy,
       },

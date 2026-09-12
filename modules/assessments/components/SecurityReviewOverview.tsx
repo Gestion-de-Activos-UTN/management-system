@@ -49,6 +49,14 @@ export function SecurityReviewSummary({
           </div>
           <div>
             <Text size="xs" c="dimmed">
+              Out of scope
+            </Text>
+            <Text fz={28} fw={750}>
+              {riskSummary?.excluded_assets ?? 0}
+            </Text>
+          </div>
+          <div>
+            <Text size="xs" c="dimmed">
               Risk
             </Text>
             <Text fz={28} fw={750}>
