@@ -43,6 +43,35 @@ export const NonNetworkAssets: CollectionConfig = {
       required: true,
       options: [...MANUAL_ASSET_CATEGORY_OPTIONS],
     },
+    // Identificación declarada por el usuario, no verificada: el valor tiene la misma confianza
+    // que cualquier otro dato manual del inventario. Sin validación contra el diccionario CPE del
+    // NVD ni correlación con CVEs — fuera de alcance, y la columna derivada de abajo es el punto
+    // de enganche para cuando exista. Topes alineados con contracts/asset.schema.ts (vendor 120,
+    // product 240, version 120, cpe 500) para que los dos lados del sistema no diverjan.
+    // Visible solo en las categorías de CATEGORY_HAS_SOFTWARE (domain/assets/asset-types.ts).
+    { name: 'software_vendor', type: 'text', maxLength: 120, index: true },
+    { name: 'software_product', type: 'text', maxLength: 240, index: true },
+    { name: 'software_version', type: 'text', maxLength: 120 },
+    {
+      // Oculto: hoy siempre 'a'. Existe para que el identificador derivado sea compatible con CPE
+      // el día que entren categorías de equipo, que son las que pueden valer 'o'.
+      name: 'software_part',
+      type: 'select',
+      options: ['a', 'o'],
+      defaultValue: 'a',
+      admin: { hidden: true },
+    },
+    {
+      // Derivado en beforeChange desde los cuatro campos de arriba — nunca un input manual, mismo
+      // patrón que next_review_at. El nombre dice 'candidate' a propósito: es un identificador sin
+      // verificar contra ningún diccionario.
+      name: 'cpe_candidate',
+      type: 'text',
+      maxLength: 500,
+      index: true,
+      admin: { readOnly: true },
+      access: resolvedFieldAccess,
+    },
     {
       name: 'criticality',
       type: 'select',

@@ -95,3 +95,48 @@ export function computeReviewStatus(nextReviewAt: string | null, now: Date): Rev
   if (!nextReviewAt) return 'ok'
   return new Date(nextReviewAt).getTime() < now.getTime() ? 'overdue' : 'ok'
 }
+
+export class IncompleteSoftwareIdentityError extends APIError {
+  constructor(message: string) {
+    super(message, 400, undefined, true)
+  }
+}
+
+export type SoftwareIdentity = {
+  part?: string | null
+  vendor?: string | null
+  product?: string | null
+  version?: string | null
+}
+
+const blank = (value: string | null | undefined) => !value || !value.trim()
+
+// Todo-o-nada: proveedor y producto son el par mínimo que hace agrupable a un activo; uno solo
+// no identifica nada. La versión queda opcional (hay licencias perpetuas sin versión declarada).
+export function assertSoftwareIdentityComplete(
+  vendor: string | null | undefined,
+  product: string | null | undefined
+): void {
+  if (blank(vendor) === blank(product)) return
+  throw new IncompleteSoftwareIdentityError(
+    blank(vendor)
+      ? 'Falta el proveedor: proveedor y producto se cargan juntos'
+      : 'Falta el producto: proveedor y producto se cargan juntos'
+  )
+}
+
+// ponytail: normalización mínima (minúsculas + espacios a '_'). La WFN de CPE 2.3 además escapa
+// ':', '\', '?', '*' y no-ASCII; se completa el día que exista validación contra el diccionario
+// del NVD, que es lo único que vuelve significativa la diferencia.
+const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, '_')
+
+// CPE 2.3: cpe:2.3:<part>:<vendor>:<product>:<version> + 7 componentes que no modelamos.
+// Sin vendor o sin product no hay candidato — null, no un string con comodines que parezca dato.
+export function buildCpeCandidate(identity: SoftwareIdentity): string | null {
+  if (blank(identity.vendor) || blank(identity.product)) return null
+  const version = blank(identity.version) ? '*' : normalize(identity.version as string)
+  const part = identity.part === 'o' ? 'o' : 'a'
+  return `cpe:2.3:${part}:${normalize(identity.vendor as string)}:${normalize(
+    identity.product as string
+  )}:${version}:*:*:*:*:*:*:*`
+}

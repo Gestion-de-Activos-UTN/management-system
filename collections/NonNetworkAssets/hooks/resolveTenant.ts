@@ -1,6 +1,13 @@
 import type { CollectionBeforeChangeHook, PayloadRequest } from 'payload'
 import { getTenantContext } from '@/access/tenant/resolveTenantContext'
-import { assertOfficeInScope, computeNextReviewAt, type ReviewInterval } from '../invariants'
+import { categoryHasSoftware } from '@/domain/assets/asset-types'
+import {
+  assertOfficeInScope,
+  assertSoftwareIdentityComplete,
+  buildCpeCandidate,
+  computeNextReviewAt,
+  type ReviewInterval,
+} from '../invariants'
 import { relationId } from '@/lib/relationId'
 import { assertOwnerBelongsToOrganization } from '@/access/tenant/assertOwnerBelongsToOrganization'
 
@@ -63,8 +70,25 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
       ? computeNextReviewAt(interval, new Date())
       : originalDoc.next_review_at
 
+  // Mismo criterio que review_interval arriba: `'x' in data` y no `??`, porque un PATCH que manda
+  // explícitamente null para limpiar un campo tiene que poder hacerlo — con `??` el valor viejo
+  // del originalDoc resucitaría.
+  const incoming = (key: string) =>
+    data && key in data ? (data[key] as string | null) : ((originalDoc?.[key] as string) ?? null)
+
+  const category = incoming('asset_category') ?? null
+  const hasSoftware = categoryHasSoftware(category)
+  const identity = {
+    part: incoming('software_part') ?? 'a',
+    vendor: incoming('software_vendor'),
+    product: incoming('software_product'),
+    version: incoming('software_version'),
+  }
+  if (hasSoftware) assertSoftwareIdentityComplete(identity.vendor, identity.product)
+
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {id, office, organization,
-  // asset_category, criticality, owner, status}, previous hash for this organization_id)
+  // asset_category, criticality, owner, status, software_vendor, software_product,
+  // software_version, cpe_candidate}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   return {
     ...data,
@@ -72,5 +96,16 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
     organization: organizationId,
     next_review_at: nextReviewAt,
     last_updated_at: new Date().toISOString(),
+    // Cambiar a una categoría sin software limpia la identidad: si no, quedaría un cpe_candidate
+    // huérfano describiendo un producto que este activo ya no declara.
+    ...(hasSoftware
+      ? { cpe_candidate: buildCpeCandidate(identity) }
+      : {
+          software_vendor: null,
+          software_product: null,
+          software_version: null,
+          software_part: null,
+          cpe_candidate: null,
+        }),
   }
 }

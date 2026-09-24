@@ -2,7 +2,7 @@
 
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Button, Group, Select, SimpleGrid, Stack, TextInput } from '@mantine/core'
+import { Autocomplete, Button, Group, Select, SimpleGrid, Stack, TextInput } from '@mantine/core'
 import { useOfficesList } from '@/modules/offices/hooks/use-offices'
 import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
 import {
@@ -11,9 +11,10 @@ import {
   REVIEW_INTERVAL_OPTIONS,
 } from '@/lib/enum-labels'
 import type { NonNetworkAsset } from '@/app/types/payload-types'
-import { MANUAL_ASSET_CATEGORY_GROUPS } from '@/domain/assets/asset-types'
+import { categoryHasSoftware, MANUAL_ASSET_CATEGORY_GROUPS } from '@/domain/assets/asset-types'
 import { NonNetworkAssetSchema, type NonNetworkAssetFormValues } from '../schema'
 import { useSaveNonNetworkAsset } from '../hooks/use-save-non-network-asset'
+import { useSoftwareSuggestions } from '../hooks/use-software-suggestions'
 
 function relationIdOf(value: string | { id: string } | null | undefined): string {
   if (!value) return ''
@@ -36,6 +37,7 @@ export function NonNetworkAssetForm({
   const {
     control,
     handleSubmit,
+    watch,
     formState: { errors },
   } = useForm<NonNetworkAssetFormValues>({
     resolver: zodResolver(NonNetworkAssetSchema),
@@ -47,9 +49,15 @@ export function NonNetworkAssetForm({
       location: asset?.location ?? '',
       status: asset?.status ?? 'active',
       office: relationIdOf(asset?.office as string | { id: string } | null | undefined),
+      software_vendor: asset?.software_vendor ?? null,
+      software_product: asset?.software_product ?? null,
+      software_version: asset?.software_version ?? null,
       review_interval: asset?.review_interval ?? 'never',
     },
   })
+
+  const hasSoftware = categoryHasSoftware(watch('asset_category'))
+  const { data: suggestions } = useSoftwareSuggestions({ asOrganization, enabled: hasSoftware })
 
   const onSubmit = handleSubmit(values => {
     save.mutate(values, { onSuccess: onSaved })
@@ -100,6 +108,58 @@ export function NonNetworkAssetForm({
               />
             )}
           />
+          {/* Solo en las categorías que declaran software. Al cambiar a una que no lo declara, el
+              beforeChange del server limpia los valores — no hace falta resetearlos acá. */}
+          {hasSoftware && (
+            <>
+              <Controller
+                name="software_vendor"
+                control={control}
+                render={({ field }) => (
+                  <Autocomplete
+                    label="Vendor"
+                    // El error conocido de esta feature: el usuario escribe el producto donde va
+                    // el fabricante. El placeholder es la mitigación barata; el autocompletado es
+                    // la otra. No se elimina, se reduce.
+                    placeholder="Canonical, not Ubuntu"
+                    data={suggestions?.vendors ?? []}
+                    value={field.value ?? ''}
+                    // '' vuelve a null: el campo es nullable en el schema y en la colección, y una
+                    // cadena vacía ensuciaría el filtro `exists` del endpoint de sugerencias.
+                    onChange={value => field.onChange(value || null)}
+                    error={errors.software_vendor?.message}
+                  />
+                )}
+              />
+              <Controller
+                name="software_product"
+                control={control}
+                render={({ field }) => (
+                  <Autocomplete
+                    label="Product"
+                    placeholder="Search or type a product"
+                    data={suggestions?.products ?? []}
+                    value={field.value ?? ''}
+                    onChange={value => field.onChange(value || null)}
+                    error={errors.software_product?.message}
+                  />
+                )}
+              />
+              <Controller
+                name="software_version"
+                control={control}
+                render={({ field }) => (
+                  <TextInput
+                    label="Version"
+                    placeholder="Optional"
+                    value={field.value ?? ''}
+                    onChange={e => field.onChange(e.currentTarget.value || null)}
+                    error={errors.software_version?.message}
+                  />
+                )}
+              />
+            </>
+          )}
           <Controller
             name="criticality"
             control={control}

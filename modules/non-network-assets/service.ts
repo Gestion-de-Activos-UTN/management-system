@@ -14,6 +14,15 @@ export function listNonNetworkAssets(params?: {
   })
 }
 
+export type SoftwareSuggestions = { vendors: string[]; products: string[] }
+
+// No usa listResource: el endpoint devuelve dos listas, no la forma { docs } que ese helper asume.
+// asOrganization se reenvía siempre y explícito — el server lo lee de la URL de ESTA request, no
+// de la del browser (mismo gotcha documentado en modules/users/service.ts).
+export function getSoftwareSuggestions(asOrganization?: string) {
+  return httpClient.get<SoftwareSuggestions>('/api/v1/software-suggestions', { asOrganization })
+}
+
 export function createNonNetworkAsset(values: NonNetworkAssetFormValues) {
   return httpClient.post<NonNetworkAsset>('/api/non-network-assets', values)
 }

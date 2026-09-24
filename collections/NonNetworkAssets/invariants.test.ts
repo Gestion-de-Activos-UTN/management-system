@@ -2,9 +2,12 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   assertOfficeInScope,
+  assertSoftwareIdentityComplete,
+  buildCpeCandidate,
   canReviewNow,
   computeNextReviewAt,
   computeReviewStatus,
+  IncompleteSoftwareIdentityError,
   MissingOfficeError,
   OfficeOutOfScopeError,
 } from './invariants'
@@ -124,5 +127,43 @@ test('review_status: fecha pasada es overdue', () => {
   assert.equal(
     computeReviewStatus('2025-12-01T00:00:00.000Z', new Date('2026-01-01T00:00:00.000Z')),
     'overdue'
+  )
+})
+
+test('cpe: compone el candidato con los cuatro componentes', () => {
+  assert.equal(
+    buildCpeCandidate({ part: 'a', vendor: 'Adobe', product: 'Acrobat Reader', version: '2024.1' }),
+    'cpe:2.3:a:adobe:acrobat_reader:2024.1:*:*:*:*:*:*:*'
+  )
+})
+
+test('cpe: sin versión declarada el componente queda en comodín', () => {
+  assert.match(buildCpeCandidate({ vendor: 'Canonical', product: 'Ubuntu' })!, /:ubuntu:\*:/)
+})
+
+test('cpe: sin vendor o sin product no hay candidato', () => {
+  assert.equal(buildCpeCandidate({ product: 'Acrobat' }), null)
+  assert.equal(buildCpeCandidate({ vendor: 'Adobe' }), null)
+})
+
+test('cpe: part sólo acepta o, cualquier otra cosa cae en a', () => {
+  assert.match(buildCpeCandidate({ part: 'o', vendor: 'A', product: 'B' })!, /^cpe:2\.3:o:/)
+  assert.match(buildCpeCandidate({ part: null, vendor: 'A', product: 'B' })!, /^cpe:2\.3:a:/)
+})
+
+test('identidad de software: el par completo o ninguno pasa', () => {
+  assert.doesNotThrow(() => assertSoftwareIdentityComplete('Adobe', 'Acrobat'))
+  assert.doesNotThrow(() => assertSoftwareIdentityComplete(null, null))
+  assert.doesNotThrow(() => assertSoftwareIdentityComplete('   ', ''))
+})
+
+test('identidad de software: uno solo del par es un rechazo', () => {
+  assert.throws(
+    () => assertSoftwareIdentityComplete('Adobe', null),
+    IncompleteSoftwareIdentityError
+  )
+  assert.throws(
+    () => assertSoftwareIdentityComplete('  ', 'Acrobat'),
+    IncompleteSoftwareIdentityError
   )
 })

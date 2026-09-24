@@ -17,6 +17,9 @@ export function useSaveNonNetworkAsset(id?: string) {
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['non-network-assets'] }),
+        // Alcanza solo a esta pestaña: es lo que hace que quien carga un proveedor nuevo lo vea
+        // enseguida en el autocompletado, sin esperar a que venzan los 30s de staleness.
+        queryClient.invalidateQueries({ queryKey: ['software-suggestions'] }),
         invalidateSecurityReview(queryClient),
       ])
       notifications.show({ color: 'green', message: id ? 'Asset updated' : 'Asset created' })

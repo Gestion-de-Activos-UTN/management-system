@@ -543,6 +543,11 @@ export interface NonNetworkAsset {
     | 'information_repository'
     | 'physical_record'
     | 'other';
+  software_vendor?: string | null;
+  software_product?: string | null;
+  software_version?: string | null;
+  software_part?: ('a' | 'o') | null;
+  cpe_candidate?: string | null;
   criticality: 'low' | 'medium' | 'high' | 'critical';
   owner: string | User;
   location?: string | null;
@@ -1107,6 +1112,16 @@ export interface AssetsSelect<T extends boolean = true> {
   asset_id?: T;
   agent?: T;
   office?: T;
+  observed_agents?:
+    | T
+    | {
+        agent?: T;
+        ip?: T;
+        gateway_ip?: T;
+        gateway_mac?: T;
+        last_seen?: T;
+        id?: T;
+      };
   organization?: T;
   ip?: T;
   last_seen?: T;
@@ -1234,6 +1249,11 @@ export interface AssetsSelect<T extends boolean = true> {
 export interface NonNetworkAssetsSelect<T extends boolean = true> {
   alias?: T;
   asset_category?: T;
+  software_vendor?: T;
+  software_product?: T;
+  software_version?: T;
+  software_part?: T;
+  cpe_candidate?: T;
   criticality?: T;
   owner?: T;
   location?: T;

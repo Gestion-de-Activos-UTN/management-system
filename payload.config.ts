@@ -31,6 +31,7 @@ import { assetBusinessEndpoint } from './endpoints/assetBusiness'
 import { agingSweepEndpoint, expireRawScanPayloadsEndpoint } from './endpoints/internalJobs'
 import { generateInventorySnapshotEndpoint } from './endpoints/inventorySnapshots'
 import { orgMembersEndpoint } from './endpoints/orgMembers'
+import { softwareSuggestionsEndpoint } from './endpoints/softwareSuggestions'
 import {
   organizationSettingsGetEndpoint,
   organizationSettingsUpdateEndpoint,
@@ -108,6 +109,7 @@ export default buildConfig({
     expireRawScanPayloadsEndpoint,
     generateInventorySnapshotEndpoint,
     orgMembersEndpoint,
+    softwareSuggestionsEndpoint,
     organizationSettingsGetEndpoint,
     organizationSettingsUpdateEndpoint,
     agentProvisioningEndpoint,

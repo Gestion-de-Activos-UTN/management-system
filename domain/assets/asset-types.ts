@@ -46,6 +46,35 @@ export const MANUAL_ASSET_CATEGORY_VALUES = [
 
 export type ManualAssetCategory = (typeof MANUAL_ASSET_CATEGORY_VALUES)[number]
 
+// Capability por categoría, deliberadamente SEPARADA del gate de assessments
+// (`asset_category === 'computer'` en domain/assessments/reconcileAssessmentInstance.ts y
+// getRiskSummary.ts). Unificarlas cambiaría el set de preguntas aplicables y con eso el
+// denominador del risk score — son dos preguntas distintas sobre la misma categoría.
+// Record y no Set: agregar una categoría al enum rompe la compilación acá hasta que alguien
+// decida si tiene software, que es exactamente lo que se busca.
+export const CATEGORY_HAS_SOFTWARE: Record<ManualAssetCategory, boolean> = {
+  computer: false,
+  mobile_device: false,
+  server: false,
+  network_device: false,
+  printer: false,
+  iot: false,
+  removable_media: false,
+  other_equipment: false,
+  antivirus_edr: true,
+  software_license: true,
+  cloud_asset: false,
+  provider_service: false,
+  backup: false, // el backup es el artefacto; el producto que lo genera va como software_license
+  information_repository: false,
+  physical_record: false,
+  other: false,
+}
+
+export function categoryHasSoftware(category: string | null | undefined): boolean {
+  return !!category && CATEGORY_HAS_SOFTWARE[category as ManualAssetCategory] === true
+}
+
 export const MANUAL_ASSET_CATEGORY_OPTIONS = [
   { value: 'computer', label: 'Computer' },
   { value: 'mobile_device', label: 'Phone or tablet' },
