@@ -4,13 +4,13 @@ import { ASSESSMENT_EXCLUSION_REASON_VALUES } from '@/domain/assessments/asset-a
 
 export const NonNetworkAssetSchema = z
   .object({
-    alias: z.string().trim().min(1, 'Alias is required').max(120),
+    alias: z.string().trim().min(1, 'El alias es obligatorio').max(120),
     asset_category: z.enum(MANUAL_ASSET_CATEGORY_VALUES),
     criticality: z.enum(['low', 'medium', 'high', 'critical']),
-    owner: z.string().min(1, 'Owner is required'),
+    owner: z.string().min(1, 'El responsable es obligatorio'),
     location: z.string().trim().max(200).nullable(),
     status: z.enum(['active', 'retired']),
-    office: z.string().min(1, 'Office is required'),
+    office: z.string().min(1, 'La oficina es obligatoria'),
     // next_review_at ya no se edita a mano — se deriva de este intervalo (ver
     // collections/NonNetworkAssets/hooks/resolveTenant.ts).
     review_interval: z.enum(['never', '1d', '3d', '1w', '1m', '6m', '1y']),
@@ -24,7 +24,7 @@ export const NonNetworkAssetSchema = z
       ctx.addIssue({
         code: 'custom',
         path: ['assessment_exclusion_reason'],
-        message: 'Choose a reason',
+        message: 'Selecciona un motivo',
       })
     if (
       value.assessment_scope === 'excluded' &&
@@ -34,7 +34,7 @@ export const NonNetworkAssetSchema = z
       ctx.addIssue({
         code: 'custom',
         path: ['assessment_exclusion_note'],
-        message: 'Add a short explanation',
+        message: 'Agrega una breve explicación',
       })
   })
 

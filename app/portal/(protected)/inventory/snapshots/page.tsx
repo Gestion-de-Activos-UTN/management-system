@@ -16,10 +16,10 @@ import { canDo } from '@/access/rbac/permissions'
 const ALL = ''
 
 const GENERATED_BY_OPTIONS = [
-  { value: ALL, label: 'All sources' },
+  { value: ALL, label: 'Todos los orígenes' },
   { value: 'manual', label: 'Manual' },
-  { value: 'scheduled', label: 'Scheduled' },
-  { value: 'pre_audit', label: 'Pre-audit' },
+  { value: 'scheduled', label: 'Programada' },
+  { value: 'pre_audit', label: 'Preauditoría' },
 ]
 
 export default function InventorySnapshotsPage() {
@@ -45,14 +45,14 @@ export default function InventorySnapshotsPage() {
   return (
     <Stack gap="md">
       <PageHeader
-        title="Snapshot History"
-        description="Immutable snapshots of the inventory, with the risk score at that point in time."
+        title="Historial de instantáneas"
+        description="Instantáneas inmutables del inventario con el puntaje de riesgo de ese momento."
         rightSection={
           <Tooltip
             label={
               !canGenerate
-                ? "You don't have permission to generate snapshots"
-                : 'Select an office in the top bar to generate a snapshot'
+                ? 'No tienes permiso para generar instantáneas'
+                : 'Selecciona una oficina en la barra superior para generar una instantánea'
             }
             disabled={!!selectedOfficeId && canGenerate}
           >
@@ -65,14 +65,14 @@ export default function InventorySnapshotsPage() {
               }
               w={{ base: '100%', sm: 'auto' }}
             >
-              Generate snapshot
+              Generar instantánea
             </Button>
           </Tooltip>
         }
       />
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm">
         <Select
-          placeholder="Source"
+          placeholder="Origen"
           data={GENERATED_BY_OPTIONS}
           value={generatedBy}
           onChange={v => setGeneratedBy(v ?? ALL)}
@@ -83,7 +83,7 @@ export default function InventorySnapshotsPage() {
         columns={inventorySnapshotsColumns}
         data={filteredSnapshots}
         isLoading={isPending}
-        emptyLabel="No snapshots match this filter"
+        emptyLabel="Ninguna instantánea coincide con este filtro"
         minWidth={760}
       />
     </Stack>

@@ -56,7 +56,7 @@ export async function createOrgWithAdmin(
           organization: organization.id,
           industry: input.industry,
           assessment_policy_key: 'essential',
-          assessment_policy_version: 1,
+          assessment_policy_version: 2,
           assessment_policy_selected_at: new Date().toISOString(),
         },
       }),

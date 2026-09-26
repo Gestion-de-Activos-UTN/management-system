@@ -19,8 +19,8 @@ export function useSaveNonNetworkAsset(id?: string) {
         queryClient.invalidateQueries({ queryKey: ['non-network-assets'] }),
         invalidateSecurityReview(queryClient),
       ])
-      notifications.show({ color: 'green', message: id ? 'Asset updated' : 'Asset created' })
+      notifications.show({ color: 'green', message: id ? 'Activo actualizado' : 'Activo creado' })
     },
-    onError: error => showApiError(error, 'Could not save the asset'),
+    onError: error => showApiError(error, 'No se pudo guardar el activo'),
   })
 }

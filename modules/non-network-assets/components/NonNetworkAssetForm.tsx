@@ -104,11 +104,11 @@ export function NonNetworkAssetForm({
             control={control}
             render={({ field }) => (
               <Select
-                label="Category"
-                placeholder="Search or select a category"
+                label="Categoría"
+                placeholder="Busca o selecciona una categoría"
                 searchable
                 clearable
-                nothingFoundMessage="No category found"
+                nothingFoundMessage="No se encontró ninguna categoría"
                 data={MANUAL_ASSET_CATEGORY_GROUPS.map(group => ({
                   group: group.group,
                   items: [...group.items],
@@ -124,7 +124,7 @@ export function NonNetworkAssetForm({
             control={control}
             render={({ field }) => (
               <Select
-                label="Criticality"
+                label="Criticidad"
                 data={CRITICALITY_OPTIONS}
                 value={field.value}
                 onChange={v => field.onChange(v ?? 'medium')}
@@ -137,9 +137,9 @@ export function NonNetworkAssetForm({
             control={control}
             render={({ field }) => (
               <Select
-                label="Owner"
+                label="Responsable"
                 required
-                placeholder="Select owner"
+                placeholder="Selecciona un responsable"
                 data={(members ?? []).map(m => ({ value: m.id, label: m.name || m.email }))}
                 value={field.value || null}
                 onChange={field.onChange}
@@ -153,7 +153,7 @@ export function NonNetworkAssetForm({
             control={control}
             render={({ field }) => (
               <Select
-                label="Office"
+                label="Oficina"
                 required
                 data={(offices ?? []).map(o => ({ value: String(o.id), label: o.name }))}
                 value={field.value || null}
@@ -167,7 +167,7 @@ export function NonNetworkAssetForm({
             control={control}
             render={({ field }) => (
               <TextInput
-                label="Location"
+                label="Ubicación"
                 value={field.value ?? ''}
                 onChange={e => field.onChange(e.currentTarget.value)}
                 error={errors.location?.message}
@@ -179,7 +179,7 @@ export function NonNetworkAssetForm({
             control={control}
             render={({ field }) => (
               <Select
-                label="Status"
+                label="Estado"
                 // Espacio invisible: reserva la misma altura de línea que la description de
                 // "Review recurrence" (su vecino en la misma fila del grid) para que ambos
                 // Select queden alineados en vez de que este quede más arriba por no tener una.
@@ -196,8 +196,8 @@ export function NonNetworkAssetForm({
             control={control}
             render={({ field }) => (
               <Select
-                label="Review recurrence"
-                description="How often this asset needs to be reconfirmed"
+                label="Frecuencia de revisión"
+                description="Cada cuánto debe volver a confirmarse este activo"
                 data={REVIEW_INTERVAL_OPTIONS}
                 value={field.value}
                 onChange={v => field.onChange(v ?? 'never')}
@@ -206,9 +206,10 @@ export function NonNetworkAssetForm({
             )}
           />
         </SimpleGrid>
-        <Divider label="Security assessment scope" labelPosition="left" />
+        <Divider label="Alcance de la evaluación de seguridad" labelPosition="left" />
         <Text size="sm" c="dimmed">
-          Excluded assets stay in inventory but do not affect reviews or Risk Score.
+          Los activos excluidos permanecen en el inventario, pero no afectan las revisiones ni el
+          puntaje de riesgo.
         </Text>
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
           <Controller
@@ -216,10 +217,10 @@ export function NonNetworkAssetForm({
             control={control}
             render={({ field }) => (
               <Select
-                label="Security assessment scope"
+                label="Alcance de la evaluación de seguridad"
                 data={[
-                  { value: 'included', label: 'Included' },
-                  { value: 'excluded', label: 'Excluded' },
+                  { value: 'included', label: 'Incluido' },
+                  { value: 'excluded', label: 'Excluido' },
                 ]}
                 value={field.value}
                 onChange={value => field.onChange(value ?? 'included')}
@@ -232,7 +233,7 @@ export function NonNetworkAssetForm({
               control={control}
               render={({ field }) => (
                 <Select
-                  label="Exclusion reason"
+                  label="Motivo de exclusión"
                   required
                   data={[...ASSESSMENT_EXCLUSION_REASON_OPTIONS]}
                   value={field.value}
@@ -249,8 +250,8 @@ export function NonNetworkAssetForm({
               render={({ field }) => (
                 <TextInput
                   type="date"
-                  label="Excluded until"
-                  description="Leave empty for an exclusion without expiration."
+                  label="Excluido hasta"
+                  description="Déjalo vacío para una exclusión sin vencimiento."
                   value={field.value ? formatDateInput(field.value) : ''}
                   onChange={event =>
                     field.onChange(
@@ -270,8 +271,8 @@ export function NonNetworkAssetForm({
             control={control}
             render={({ field }) => (
               <Textarea
-                label="Exclusion note"
-                description="Add context for reviewers when useful."
+                label="Nota de exclusión"
+                description="Agrega contexto para quienes revisen cuando sea útil."
                 required={exclusionReason === 'other'}
                 value={field.value ?? ''}
                 onChange={field.onChange}
@@ -282,7 +283,7 @@ export function NonNetworkAssetForm({
         )}
         <Group justify="flex-end">
           <Button type="submit" loading={save.isPending} w={{ base: '100%', sm: 'auto' }}>
-            {asset ? 'Save changes' : 'Create asset'}
+            {asset ? 'Guardar cambios' : 'Crear activo'}
           </Button>
         </Group>
       </Stack>

@@ -53,7 +53,7 @@ function AdminProtectedLayoutInner({ children }: { children: React.ReactNode }) 
   const suffix = asOrganization ? `?asOrganization=${asOrganization}` : ''
   const navItems: SidebarItem[] = [
     {
-      label: 'Organizations',
+      label: 'Organizaciones',
       href: `/organizations${suffix}`,
       icon: <Building2 size={18} strokeWidth={1.5} />,
     },
@@ -62,19 +62,19 @@ function AdminProtectedLayoutInner({ children }: { children: React.ReactNode }) 
   return (
     <DashboardShell
       navItems={navItems}
-      sidebarFooter={<SidebarProfile title="Platform Admin" />}
+      sidebarFooter={<SidebarProfile title="Administrador de plataforma" />}
       topBarRight={
         asOrganization ? (
           <Group gap={4}>
             <Badge variant="light" ff="monospace" tt="none">
-              Viewing: {asOrganization}
+              Visualizando: {asOrganization}
             </Badge>
             <ActionIcon
               component="a"
               href={pathname}
               variant="subtle"
               size="md"
-              aria-label="Exit organization view"
+              aria-label="Salir de la vista de organización"
             >
               <X size={20} strokeWidth={1.5} />
             </ActionIcon>

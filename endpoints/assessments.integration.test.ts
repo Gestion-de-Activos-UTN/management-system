@@ -3,6 +3,7 @@ import { test } from 'node:test'
 import { getPayload } from 'payload'
 import type { Payload, PayloadRequest } from 'payload'
 import config from '../payload.config'
+import { RISK_QUESTIONS_V2 } from '@/domain/risk/catalog-v2'
 import { assessmentCompleteEndpoint, assessmentsListEndpoint } from './assessments'
 
 function request(
@@ -86,7 +87,7 @@ async function seedManualComputerFlow(payload: Payload) {
         organization: organization.id,
         industry: 'Professional services',
         assessment_policy_key: 'essential',
-        assessment_policy_version: 1,
+        assessment_policy_version: 2,
         assessment_policy_selected_at: new Date().toISOString(),
       },
     }),
@@ -139,7 +140,10 @@ async function completeLatestCycle(payload: Payload, userId: string, manualAsset
     answers: (cycle.question_set_snapshot as Array<{ key: string; version: number }>).map(item => ({
       question_key: item.key,
       question_version: item.version,
-      answer: 'yes' as const,
+      // Best option of each v2 question; any valid option would do for this flow test.
+      option_key: RISK_QUESTIONS_V2.find(question => question.key === item.key)!.options.find(
+        option => option.efficacy === 1
+      )!.key,
     })),
   }
   const response = await assessmentCompleteEndpoint.handler(

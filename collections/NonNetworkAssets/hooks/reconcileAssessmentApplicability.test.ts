@@ -58,7 +58,7 @@ describe('manual asset assessment applicability changes', () => {
     )
     assert.equal(
       manualAssessmentApplicabilityChanged({ ...computer, office: 'office-2' }, computer, 'update'),
-      false
+      true // the open cycle moves with the asset to its new office
     )
   })
 })

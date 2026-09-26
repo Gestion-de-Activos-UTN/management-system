@@ -12,8 +12,8 @@ export function useSaveOrganizationSettings() {
     mutationFn: values => updateOrganizationSettings(values),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['organization-settings'] })
-      notifications.show({ color: 'green', message: 'Settings saved' })
+      notifications.show({ color: 'green', message: 'Configuración guardada' })
     },
-    onError: error => showApiError(error, 'Could not save settings'),
+    onError: error => showApiError(error, 'No se pudo guardar la configuración'),
   })
 }

@@ -1,4 +1,5 @@
 import type { CollectionBeforeChangeHook } from 'payload'
+import { ASSESSMENT_EXCLUSION_MAX_DAYS } from '@/domain/risk/constants'
 import { getTenantContext } from '@/access/tenant/resolveTenantContext'
 
 export const validateAssetAssessmentScope: CollectionBeforeChangeHook = async ({
@@ -28,14 +29,14 @@ export const validateAssetAssessmentScope: CollectionBeforeChangeHook = async ({
     throw new Error('The “other” exclusion reason requires a note')
 
   const until = data?.assessment_excluded_until ?? originalDoc?.assessment_excluded_until ?? null
-  if (until && !Number.isFinite(Date.parse(until)))
+  if (!until) throw new Error('Excluded assets require an expiration date')
+  if (!Number.isFinite(Date.parse(until)))
     throw new Error('Assessment exclusion expiration is invalid')
-  if (
-    until &&
-    (changed || 'assessment_excluded_until' in (data ?? {})) &&
-    Date.parse(until) <= Date.now()
-  )
+  if ((changed || 'assessment_excluded_until' in (data ?? {})) && Date.parse(until) <= Date.now())
     throw new Error('Assessment exclusion expiration must be in the future')
+  const maximum = Date.now() + ASSESSMENT_EXCLUSION_MAX_DAYS * 24 * 60 * 60 * 1000
+  if ((changed || 'assessment_excluded_until' in (data ?? {})) && Date.parse(until) > maximum)
+    throw new Error('Assessment exclusion cannot exceed 90 days')
 
   if (!changed) return data
   const ctx = await getTenantContext(req)

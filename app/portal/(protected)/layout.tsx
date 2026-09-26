@@ -73,9 +73,9 @@ function PortalProtectedLayoutInner({ children }: { children: React.ReactNode })
     return (
       <Center h="100vh">
         <Stack align="center" gap="sm">
-          <Text c="dimmed">Couldn't load your organization context.</Text>
+          <Text c="dimmed">No se pudo cargar el contexto de tu organización.</Text>
           <Button variant="light" onClick={() => tenantContext.refetch()}>
-            Retry
+            Reintentar
           </Button>
         </Stack>
       </Center>
@@ -86,36 +86,36 @@ function PortalProtectedLayoutInner({ children }: { children: React.ReactNode })
   const isOrgAdmin = isEffectiveOrgAdmin(tenantContext.data)
   const navItems: SidebarItem[] = [
     {
-      label: 'Dashboard',
+      label: 'Panel general',
       href: `/portal/dashboard${suffix}`,
       icon: <LayoutDashboard size={18} strokeWidth={1.5} />,
     },
     {
-      label: 'Risk Score',
+      label: 'Puntaje de riesgo',
       href: `/portal/risk-score${suffix}`,
       icon: <Gauge size={18} strokeWidth={1.5} />,
     },
     ...(tenantContext.data?.features.security_assessments
       ? [
           {
-            label: 'Security Review',
+            label: 'Revisión de seguridad',
             href: `/portal/security-review${suffix}`,
             icon: <ClipboardCheck size={18} strokeWidth={1.5} />,
           },
         ]
       : []),
     {
-      label: 'Inventory',
+      label: 'Inventario',
       href: `/portal/inventory${suffix}`,
       icon: <Boxes size={18} strokeWidth={1.5} />,
       children: [
         {
-          label: 'Snapshot History',
+          label: 'Instantáneas',
           href: `/portal/inventory/snapshots${suffix}`,
           icon: <History size={16} strokeWidth={1.5} />,
         },
         {
-          label: 'Scan Reports',
+          label: 'Escaneos',
           href: `/portal/inventory/scan-reports${suffix}`,
           icon: <ScanLine size={16} strokeWidth={1.5} />,
         },
@@ -124,7 +124,7 @@ function PortalProtectedLayoutInner({ children }: { children: React.ReactNode })
     ...(isOrgAdmin
       ? [
           {
-            label: 'Administration',
+            label: 'Administración',
             href: `/portal/administration${suffix}`,
             icon: <ShieldCheck size={18} strokeWidth={1.5} />,
           },
@@ -154,7 +154,7 @@ function PortalProtectedLayoutInner({ children }: { children: React.ReactNode })
                 size="sm"
                 leftSection={<ArrowLeft size={16} strokeWidth={1.5} />}
               >
-                Back to Platform Portal
+                Volver al portal de la plataforma
               </Button>
             )}
             <OfficeSelector />

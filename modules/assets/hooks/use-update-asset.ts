@@ -20,8 +20,8 @@ export function useUpdateAsset(id: string) {
         queryClient.invalidateQueries({ queryKey: ['assets'] }),
         invalidateSecurityReview(queryClient),
       ])
-      notifications.show({ color: 'green', message: 'Asset updated' })
+      notifications.show({ color: 'green', message: 'Activo actualizado' })
     },
-    onError: error => showApiError(error, 'Could not update the asset'),
+    onError: error => showApiError(error, 'No se pudo actualizar el activo'),
   })
 }

@@ -16,11 +16,13 @@ export function AgentConnectivityBadge({
     return (
       <StatusBadge
         tone="danger"
-        label={revocationReason === 'auto_lockout_abuse' ? 'Removed (abuse detected)' : 'Removed'}
+        label={
+          revocationReason === 'auto_lockout_abuse' ? 'Eliminado (se detectó abuso)' : 'Eliminado'
+        }
       />
     )
   }
-  if (connectivity === 'online') return <StatusBadge tone="success" label="Online" />
-  if (connectivity === 'pending') return <StatusBadge tone="neutral" label="Never connected" />
-  return <StatusBadge tone="warning" label="Offline" />
+  if (connectivity === 'online') return <StatusBadge tone="success" label="En línea" />
+  if (connectivity === 'pending') return <StatusBadge tone="neutral" label="Nunca se conectó" />
+  return <StatusBadge tone="warning" label="Sin conexión" />
 }

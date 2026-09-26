@@ -39,16 +39,16 @@ export function isEffectiveOrgAdmin(ctx: TenantContext | null | undefined): bool
 }
 
 const ROLE_LABELS: Record<string, string> = {
-  platform_admin: 'Platform Admin',
-  org_admin: 'Org Admin',
-  org_viewer: 'Org Viewer',
-  office_manager: 'Office Manager',
+  platform_admin: 'Administrador de plataforma',
+  org_admin: 'Administrador de la organización',
+  org_viewer: 'Observador de la organización',
+  office_manager: 'Responsable de oficina',
 }
 
 // Display-only — a platform admin visiting an org reads as "Org Admin" here too,
 // same as isEffectiveOrgAdmin's nav gating (the backend keeps the real role).
 export function roleLabel(ctx: TenantContext | null | undefined): string {
   if (!ctx) return ''
-  if (isEffectiveOrgAdmin(ctx)) return 'Org Admin'
+  if (isEffectiveOrgAdmin(ctx)) return 'Administrador de la organización'
   return ROLE_LABELS[ctx.role ?? ''] ?? ''
 }

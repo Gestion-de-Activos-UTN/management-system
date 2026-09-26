@@ -1,17 +1,17 @@
-'use client';
+'use client'
 
-import { AppShell, Container, Drawer, Stack } from '@mantine/core';
-import { usePathname } from 'next/navigation';
-import { useEffect, useState, type ReactNode } from 'react';
-import { Sidebar, type SidebarItem } from './Sidebar';
-import { Breadcrumbs, buildBreadcrumbs } from './Breadcrumbs';
-import { TopBar } from './TopBar';
+import { AppShell, Container, Drawer, Stack } from '@mantine/core'
+import { usePathname } from 'next/navigation'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Sidebar, type SidebarItem } from './Sidebar'
+import { Breadcrumbs, buildBreadcrumbs } from './Breadcrumbs'
+import { TopBar } from './TopBar'
 
 function shouldHideBreadcrumbs(pathname: string): boolean {
   return (
     /^\/portal\/inventory\/[^/]+$/.test(pathname) &&
     !/^\/portal\/inventory\/(snapshots|scan-reports)\/[^/]+$/.test(pathname)
-  );
+  )
 }
 
 export function DashboardShell({
@@ -21,20 +21,20 @@ export function DashboardShell({
   homeHref,
   children,
 }: {
-  navItems: SidebarItem[];
-  topBarRight?: ReactNode;
-  sidebarFooter?: ReactNode;
-  homeHref?: string;
-  children: React.ReactNode;
+  navItems: SidebarItem[]
+  topBarRight?: ReactNode
+  sidebarFooter?: ReactNode
+  homeHref?: string
+  children: React.ReactNode
 }) {
-  const pathname = usePathname();
-  const breadcrumbs = buildBreadcrumbs(navItems, homeHref, pathname);
-  const showBreadcrumbs = !shouldHideBreadcrumbs(pathname);
-  const [mobileNavOpened, setMobileNavOpened] = useState(false);
+  const pathname = usePathname()
+  const breadcrumbs = buildBreadcrumbs(navItems, homeHref, pathname)
+  const showBreadcrumbs = !shouldHideBreadcrumbs(pathname)
+  const [mobileNavOpened, setMobileNavOpened] = useState(false)
 
   useEffect(() => {
-    setMobileNavOpened(false);
-  }, [pathname]);
+    setMobileNavOpened(false)
+  }, [pathname])
 
   return (
     <AppShell
@@ -49,7 +49,7 @@ export function DashboardShell({
       <AppShell.Header>
         <TopBar
           opened={mobileNavOpened}
-          onToggle={() => setMobileNavOpened((current) => !current)}
+          onToggle={() => setMobileNavOpened(current => !current)}
           rightSection={topBarRight}
           homeHref={homeHref}
         />
@@ -74,7 +74,7 @@ export function DashboardShell({
         size="100%"
         padding="md"
         withCloseButton={false}
-        title="Navigation"
+        title="Navegación"
       >
         <Stack justify="space-between" h="100%" gap={0}>
           <Sidebar items={navItems} onNavigate={() => setMobileNavOpened(false)} />
@@ -82,5 +82,5 @@ export function DashboardShell({
         </Stack>
       </Drawer>
     </AppShell>
-  );
+  )
 }

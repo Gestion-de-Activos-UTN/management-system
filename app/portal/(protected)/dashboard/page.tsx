@@ -12,19 +12,19 @@ export default function PortalDashboardPage() {
   const { data, isPending, isError } = useDashboardMetrics(asOrganization)
 
   const metrics = [
-    { label: 'Total assets', value: data ? String(data.total_assets) : '—', icon: Boxes },
-    { label: 'Active offices', value: data ? String(data.active_offices) : '—', icon: MapPin },
+    { label: 'Activos totales', value: data ? String(data.total_assets) : '—', icon: Boxes },
+    { label: 'Oficinas activas', value: data ? String(data.active_offices) : '—', icon: MapPin },
     {
-      label: 'Online scanners',
+      label: 'Escáneres en línea',
       value: data ? String(data.online_scanners) : '—',
       icon: RadioTower,
     },
     {
-      label: 'Last scan',
+      label: 'Último escaneo',
       // The date is what matters here (how stale is our data) — the time is a
       // secondary detail, so it renders smaller/dimmed instead of fused into
       // one same-weight string with the date.
-      value: data?.last_scan_at ? formatDate(data.last_scan_at) : 'No scans yet',
+      value: data?.last_scan_at ? formatDate(data.last_scan_at) : 'Aún no hay escaneos',
       caption: data?.last_scan_at ? formatTime(data.last_scan_at) : undefined,
       icon: ScanLine,
     },
@@ -32,7 +32,7 @@ export default function PortalDashboardPage() {
 
   return (
     <Stack gap="md">
-      <PageHeader title="Dashboard" description="Your organization at a glance." />
+      <PageHeader title="Panel general" description="Tu organización de un vistazo." />
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }}>
         {metrics.map(metric => (
           <Card key={metric.label} withBorder padding="lg">
@@ -40,7 +40,7 @@ export default function PortalDashboardPage() {
               <Skeleton height={48} />
             ) : isError ? (
               <Text c="red" size="sm">
-                Could not load metric
+                No se pudo cargar la métrica
               </Text>
             ) : (
               <Group gap="sm" wrap="wrap" align="flex-start">

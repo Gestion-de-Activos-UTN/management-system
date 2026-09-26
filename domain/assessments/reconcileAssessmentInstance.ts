@@ -1,14 +1,32 @@
 import type { Payload, PayloadRequest } from 'payload'
 import type { Asset, NonNetworkAsset } from '@/app/types/payload-types'
 import { relationId } from '@/lib/relationId'
-import { POLICY_CATALOG, QUESTION_CATALOG, type PolicyKey } from './catalog'
-import { resolveApplicableQuestions } from './resolveApplicableQuestions'
+import { RISK_QUESTIONS_V2, type RiskAssetType, type RiskPolicyKey } from '@/domain/risk/catalog-v2'
+import { riskAssetTypeForManual, riskAssetTypeForScanned } from '@/domain/risk/risk-asset-type'
+
+const POLICY_CATALOG = [
+  { key: 'essential', version: 2 },
+  { key: 'reinforced', version: 2 },
+] as const
+const v2Questions = (
+  scope: 'organization' | 'office' | 'asset',
+  policy: RiskPolicyKey,
+  assetType?: RiskAssetType | null
+) =>
+  RISK_QUESTIONS_V2.filter(
+    question =>
+      question.scope === scope &&
+      question.policies.includes(policy) &&
+      (!question.asset_types ||
+        (assetType ? question.asset_types.includes(assetType) : scope !== 'asset'))
+  )
 import { isAssetExcludedFromAssessments } from './asset-assessment-scope'
 
 export type ReconcileReason =
   | 'initial'
   | 'asset_identified'
   | 'assessment_scope_changed'
+  | 'office_changed'
   | 'policy_changed'
   | 'answer_expired'
   | 'manual_review'
@@ -131,22 +149,11 @@ export async function reconcileAssessmentInstance(
       ? subscription.features
       : null
   if (!settings || features?.security_assessments !== true) return { action: 'none' }
-  const policy = POLICY_CATALOG.find(
-    item =>
-      item.key === settings.assessment_policy_key &&
-      item.version === settings.assessment_policy_version
-  )
+  const policy = POLICY_CATALOG.find(item => item.key === settings.assessment_policy_key)
   if (!policy)
     throw new Error('Selected assessment policy is not available in the deployed catalog')
 
-  const applicable = resolveApplicableQuestions(
-    subject.scope === 'organization'
-      ? { scope: 'organization', is_active: subject.is_active }
-      : { scope: 'office', is_active: subject.is_active },
-    policy,
-    { include_unresolved_answer_dependencies: true },
-    QUESTION_CATALOG
-  )
+  const applicable = v2Questions(subject.scope, policy.key)
   const expectedKeys = applicable.map(question => `${question.key}@${question.version}`).sort()
   const matching = openResult.docs.find(instance => {
     if (instance.policy_key !== policy.key || instance.policy_version !== policy.version)
@@ -179,7 +186,9 @@ export async function reconcileAssessmentInstance(
   if (!applicable.length) return { action: openResult.docs.length ? 'superseded' : 'none' }
 
   const openedAt = new Date().toISOString()
-  const validityDays = Math.min(...applicable.map(question => question.validity_days[policy.key]))
+  const validityDays = Math.min(
+    ...applicable.map(question => (policy.key === 'reinforced' ? 180 : 365))
+  )
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {assessment target, policy, questions}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   // NOTIFY: this event should trigger a Notification Bell entry for {organization or office responsible roles}
@@ -194,17 +203,24 @@ export async function reconcileAssessmentInstance(
       office: subject.scope === 'office' ? subject.id : null,
       policy_key: policy.key,
       policy_version: policy.version,
-      catalog_version: 1,
+      catalog_version: 2,
       question_set_snapshot: applicable.map(question => ({
         key: question.key,
         version: question.version,
         prompt_snapshot: question.prompt,
+        options_snapshot: question.options,
+        control_key: question.control_key,
       })),
       status: 'pending',
       created_reason: reason,
       opened_at: openedAt,
       due_at: addDays(openedAt, validityDays),
-      completion_summary: { compliant: 0, non_compliant: 0, not_evaluable: applicable.length },
+      completion_summary: {
+        compliant: 0,
+        partially_effective: 0,
+        non_compliant: 0,
+        not_evaluable: applicable.length,
+      },
     },
   })
   return { action: 'created', id: created.id }
@@ -264,9 +280,7 @@ export async function reconcileAssetAssessmentInstance(
     return { action: 'none' }
   }
   const policy = POLICY_CATALOG.find(
-    item =>
-      item.key === (settings.assessment_policy_key as PolicyKey) &&
-      item.version === settings.assessment_policy_version
+    item => item.key === (settings.assessment_policy_key as RiskPolicyKey)
   )
   if (!policy)
     throw new Error('Selected assessment policy is not available in the deployed catalog')
@@ -274,20 +288,13 @@ export async function reconcileAssetAssessmentInstance(
   // El assessment manual de activo está limitado a endpoints de usuario: workstation para
   // Assets descubiertos y computer (mapeado a workstation) para NonNetworkAssets. Los demás
   // tipos conservan sus resultados automáticos, pero no reciben este cuestionario.
+  const assetType = asset.confirmed_type ? riskAssetTypeForScanned(asset.confirmed_type) : null
   const applicable =
-    asset.confirmed_type === 'workstation' && !isAssetExcludedFromAssessments(asset)
-      ? resolveApplicableQuestions(
-          {
-            scope: 'asset',
-            status: asset.status ?? 'active',
-            identified: asset.identified ?? false,
-            identification_status: asset.identification_status ?? 'pending',
-            confirmed_type: asset.confirmed_type,
-          },
-          policy,
-          { include_unresolved_answer_dependencies: true },
-          QUESTION_CATALOG
-        )
+    assetType &&
+    asset.identified &&
+    asset.identification_status === 'confirmed' &&
+    !isAssetExcludedFromAssessments(asset)
+      ? v2Questions('asset', policy.key, assetType)
       : []
   const expectedKeys = applicable.map(question => `${question.key}@${question.version}`).sort()
   const matching = openResult.docs.find(instance => {
@@ -326,7 +333,9 @@ export async function reconcileAssetAssessmentInstance(
   if (!applicable.length) return { action: openResult.docs.length ? 'superseded' : 'none' }
 
   const openedAt = new Date().toISOString()
-  const validityDays = Math.min(...applicable.map(question => question.validity_days[policy.key]))
+  const validityDays = Math.min(
+    ...applicable.map(question => (policy.key === 'reinforced' ? 180 : 365))
+  )
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {assessment target, policy, questions}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   // NOTIFY: this event should trigger a Notification Bell entry for {asset owner or responsible office roles}
@@ -342,18 +351,25 @@ export async function reconcileAssetAssessmentInstance(
       scope: 'asset',
       policy_key: policy.key,
       policy_version: policy.version,
-      catalog_version: 1,
+      catalog_version: 2,
       question_set_snapshot: applicable.map(question => ({
         key: question.key,
         version: question.version,
         prompt_snapshot: question.prompt,
+        options_snapshot: question.options,
+        control_key: question.control_key,
       })),
       status: 'pending',
       assigned_to: asset.owner ? relationId(asset.owner) : null,
       created_reason: reason,
       opened_at: openedAt,
       due_at: addDays(openedAt, validityDays),
-      completion_summary: { compliant: 0, non_compliant: 0, not_evaluable: applicable.length },
+      completion_summary: {
+        compliant: 0,
+        partially_effective: 0,
+        non_compliant: 0,
+        not_evaluable: applicable.length,
+      },
     },
   })
   return { action: 'created', id: created.id }
@@ -409,32 +425,16 @@ export async function reconcileManualAssetAssessmentInstance(
       ? subscription.features
       : null
   const policy = settings
-    ? POLICY_CATALOG.find(
-        item =>
-          item.key === (settings.assessment_policy_key as PolicyKey) &&
-          item.version === settings.assessment_policy_version
-      )
+    ? POLICY_CATALOG.find(item => item.key === (settings.assessment_policy_key as RiskPolicyKey))
     : null
+  const assetType = riskAssetTypeForManual(asset.asset_category)
   const eligible =
-    asset.asset_category === 'computer' &&
+    Boolean(assetType) &&
     asset.status !== 'retired' &&
     !isAssetExcludedFromAssessments(asset) &&
     features?.security_assessments === true
   const applicable =
-    eligible && policy
-      ? resolveApplicableQuestions(
-          {
-            scope: 'asset',
-            status: 'active',
-            identified: true,
-            identification_status: 'confirmed',
-            confirmed_type: 'workstation',
-          },
-          policy,
-          { include_unresolved_answer_dependencies: true },
-          QUESTION_CATALOG
-        )
-      : []
+    eligible && policy && assetType ? v2Questions('asset', policy.key, assetType) : []
 
   if (eligible && settings && !policy)
     throw new Error('Selected assessment policy is not available in the deployed catalog')
@@ -474,7 +474,9 @@ export async function reconcileManualAssetAssessmentInstance(
     return { action: openResult.docs.length ? 'superseded' : 'none' }
 
   const openedAt = new Date().toISOString()
-  const validityDays = Math.min(...applicable.map(question => question.validity_days[policy.key]))
+  const validityDays = Math.min(
+    ...applicable.map(question => (policy.key === 'reinforced' ? 180 : 365))
+  )
   const created = await payload.create({
     collection: 'assessment-instances',
     overrideAccess: true,
@@ -487,18 +489,25 @@ export async function reconcileManualAssetAssessmentInstance(
       scope: 'asset',
       policy_key: policy.key,
       policy_version: policy.version,
-      catalog_version: 1,
+      catalog_version: 2,
       question_set_snapshot: applicable.map(question => ({
         key: question.key,
         version: question.version,
         prompt_snapshot: question.prompt,
+        options_snapshot: question.options,
+        control_key: question.control_key,
       })),
       status: 'pending',
       assigned_to: asset.owner ? relationId(asset.owner) : null,
       created_reason: reason,
       opened_at: openedAt,
       due_at: addDays(openedAt, validityDays),
-      completion_summary: { compliant: 0, non_compliant: 0, not_evaluable: applicable.length },
+      completion_summary: {
+        compliant: 0,
+        partially_effective: 0,
+        non_compliant: 0,
+        not_evaluable: applicable.length,
+      },
     },
   })
   return { action: 'created', id: created.id }

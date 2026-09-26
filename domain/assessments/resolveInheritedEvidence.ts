@@ -53,7 +53,7 @@ export async function resolveInheritedAssessmentEvidence(
     const owner = instanceById.get(relationId(answer.assessment))
     if (!owner) continue
     const source: EffectiveAnswerCandidate['source'] =
-      answer.answer === 'not_applicable'
+      answer.option_key === 'not_applicable'
         ? 'exception'
         : owner.id === assessment.id
           ? 'exact'
@@ -61,7 +61,7 @@ export async function resolveInheritedAssessmentEvidence(
     const rows = candidates.get(answer.question_key) ?? []
     rows.push({
       id: String(answer.id),
-      answer: answer.answer,
+      option_key: answer.option_key,
       valid_until: answer.valid_until,
       source,
       justification: answer.justification,

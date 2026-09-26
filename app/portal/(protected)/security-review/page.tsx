@@ -42,35 +42,39 @@ export default function SecurityReviewPage() {
   return (
     <Stack gap="xl">
       <PageHeader
-        title="Security Review"
-        description="Short, practical checks about how work gets done. Missing information lowers coverage; only confirmed issues affect risk."
+        title="Revisión de seguridad"
+        description="Controles breves y prácticos sobre cómo se realiza el trabajo. La información faltante reduce la cobertura, pero no aumenta el riesgo; lo aumentan las protecciones ausentes o incompletas."
       />
       {!query.isPending && !query.isError && (
-        <SecurityReviewSummary assessments={query.data?.docs ?? []} riskSummary={risk.data} />
+        <SecurityReviewSummary
+          assessments={query.data?.docs ?? []}
+          riskSummary={risk.data}
+          riskHref={`/portal/risk-score${suffix}`}
+        />
       )}
       <Stack gap="sm">
         <Group align="flex-end">
           <Select
-            aria-label="Filter by review status"
+            aria-label="Filtrar por estado de revisión"
             value={status}
             onChange={value => setStatus(value ?? 'current')}
             data={[
-              { value: 'current', label: 'Current reviews' },
-              { value: 'pending', label: 'Not started' },
-              { value: 'in_progress', label: 'In progress' },
-              { value: 'completed', label: 'Completed' },
-              { value: 'expired', label: 'Review due' },
-              { value: 'all', label: 'Full history' },
+              { value: 'current', label: 'Revisiones actuales' },
+              { value: 'pending', label: 'Sin iniciar' },
+              { value: 'in_progress', label: 'En curso' },
+              { value: 'completed', label: 'Completada' },
+              { value: 'expired', label: 'Revisión vencida' },
+              { value: 'all', label: 'Historial completo' },
             ]}
             w={{ base: '100%', sm: 240 }}
           />
           <Select
-            label="Assignment"
+            label="Asignación"
             value={assignment}
             onChange={value => setAssignment(value ?? 'all')}
             data={[
-              { value: 'all', label: 'Everyone' },
-              { value: 'mine', label: 'Assigned to me' },
+              { value: 'all', label: 'Todas las personas' },
+              { value: 'mine', label: 'Asignadas a mí' },
             ]}
             w={{ base: '100%', sm: 220 }}
           />
@@ -81,7 +85,7 @@ export default function SecurityReviewPage() {
           <Loader color="pine" />
         </Center>
       ) : query.isError ? (
-        <Text c="red">Could not load security reviews.</Text>
+        <Text c="red">No se pudieron cargar las revisiones de seguridad.</Text>
       ) : (
         <SecurityReviewList assessments={rows} suffix={suffix} />
       )}

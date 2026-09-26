@@ -20,12 +20,12 @@ export default function AdminOfficesPage() {
 
   return (
     <Stack gap="md">
-      <PageHeader title="Offices" description="Offices in your organization." />
+      <PageHeader title="Oficinas" description="Oficinas de tu organización." />
       <DataTable
         columns={columns}
         data={data ?? []}
         isLoading={isPending}
-        emptyLabel="No offices"
+        emptyLabel="No hay oficinas"
         minWidth={760}
       />
       <AgentProvisionModal

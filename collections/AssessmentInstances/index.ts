@@ -56,6 +56,7 @@ export const AssessmentInstances: CollectionConfig = {
         'initial',
         'asset_identified',
         'assessment_scope_changed',
+        'office_changed',
         'policy_changed',
         'answer_expired',
         'manual_review',
@@ -71,6 +72,7 @@ export const AssessmentInstances: CollectionConfig = {
       type: 'group',
       fields: [
         { name: 'compliant', type: 'number', required: true, defaultValue: 0 },
+        { name: 'partially_effective', type: 'number', required: true, defaultValue: 0 },
         { name: 'non_compliant', type: 'number', required: true, defaultValue: 0 },
         { name: 'not_evaluable', type: 'number', required: true, defaultValue: 0 },
       ],

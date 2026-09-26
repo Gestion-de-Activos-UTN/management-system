@@ -20,6 +20,10 @@ import { InventorySnapshots } from './collections/InventorySnapshots'
 import { AssessmentInstances } from './collections/AssessmentInstances'
 import { AssessmentAnswers } from './collections/AssessmentAnswers'
 import { ComplianceResults } from './collections/ComplianceResults'
+import { RiskEvaluations } from './collections/RiskEvaluations'
+import { RiskContributions } from './collections/RiskContributions'
+import { latestRiskEvaluationEndpoint } from './endpoints/risk'
+import { recalculateRisk } from './domain/risk/recalculateRisk'
 import { reportsEndpoint } from './endpoints/reports'
 import { heartbeatEndpoint } from './endpoints/heartbeat'
 import { vendorEndpoint } from './endpoints/vendor'
@@ -34,6 +38,7 @@ import { orgMembersEndpoint } from './endpoints/orgMembers'
 import {
   organizationSettingsGetEndpoint,
   organizationSettingsUpdateEndpoint,
+  organizationMaturityUpdateEndpoint,
 } from './endpoints/organizationSettings'
 import { agentProvisioningEndpoint } from './endpoints/agentProvisioning'
 import { officeAgentSummaryEndpoint } from './endpoints/officeAgentSummary'
@@ -92,6 +97,8 @@ export default buildConfig({
     AssessmentInstances,
     AssessmentAnswers,
     ComplianceResults,
+    RiskEvaluations,
+    RiskContributions,
   ],
   // Servidos vía app/(payload)/api/[...slug]/route.ts (catch-all de Next que reexporta
   // REST_GET/REST_POST/... de @payloadcms/next/routes) — sin ese archivo, Payload no recibe
@@ -111,6 +118,7 @@ export default buildConfig({
     orgMembersEndpoint,
     organizationSettingsGetEndpoint,
     organizationSettingsUpdateEndpoint,
+    organizationMaturityUpdateEndpoint,
     agentProvisioningEndpoint,
     officeAgentSummaryEndpoint,
     dashboardMetricsEndpoint,
@@ -122,10 +130,28 @@ export default buildConfig({
     assessmentCompleteEndpoint,
     assessmentReopenEndpoint,
     assessmentPolicyEndpoint,
+    latestRiskEvaluationEndpoint,
   ],
   jobs: {
     deleteJobOnComplete: true,
     tasks: [
+      {
+        slug: 'recalculate-risk',
+        label: 'Recalculate risk',
+        inputSchema: [
+          { name: 'organization_id', type: 'text', required: true },
+          { name: 'office_id', type: 'text' },
+        ],
+        outputSchema: [{ name: 'evaluation_id', type: 'text', required: true }],
+        handler: async ({ input, req }) => {
+          const evaluation = await recalculateRisk(
+            req.payload,
+            { organizationId: input.organization_id, officeId: input.office_id || undefined },
+            req
+          )
+          return { output: { evaluation_id: String(evaluation.id) } }
+        },
+      },
       {
         slug: 'expire-raw-scan-payloads',
         label: 'Expire raw scan payloads',
@@ -167,7 +193,11 @@ export default buildConfig({
     ],
     // Payload agenda y ejecuta localmente la tarea diaria dentro del proceso de la aplicación.
     // No requiere cron administrado, workers ni servicios externos.
-    autoRun: [{ cron: '0 * * * * *', queue: 'maintenance', limit: 1 }],
+    autoRun: [
+      { cron: '0 * * * * *', queue: 'maintenance', limit: 1 },
+      // Risk recalculations are queued by domain events; duplicates are harmless (append-only).
+      { cron: '*/15 * * * * *', queue: 'risk', limit: 10 },
+    ],
   },
   typescript: {
     outputFile: path.resolve(dirname, 'app/types/payload-types.ts'),

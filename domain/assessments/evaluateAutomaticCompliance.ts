@@ -329,7 +329,12 @@ export async function reevaluateComplianceAfterScan(
       created_reason: 'initial',
       opened_at: now.toISOString(),
       due_at: now.toISOString(),
-      completion_summary: { compliant: 0, non_compliant: 0, not_evaluable: 0 },
+      completion_summary: {
+        compliant: 0,
+        partially_effective: 0,
+        non_compliant: 0,
+        not_evaluable: 0,
+      },
       updatedAt: now.toISOString(),
       createdAt: now.toISOString(),
     })

@@ -14,7 +14,7 @@ const AssessmentScopeInputSchema = z
       ctx.addIssue({
         code: 'custom',
         path: ['assessment_exclusion_reason'],
-        message: 'Choose a reason',
+        message: 'Selecciona un motivo',
       })
     if (
       value.assessment_scope === 'excluded' &&
@@ -24,7 +24,7 @@ const AssessmentScopeInputSchema = z
       ctx.addIssue({
         code: 'custom',
         path: ['assessment_exclusion_note'],
-        message: 'Add a short explanation',
+        message: 'Agrega una breve explicación',
       })
   })
 
@@ -67,7 +67,10 @@ export const AssetIdentificationSchema = z
     authorization_status: z.enum(['authorized', 'unauthorized']),
     owner: z
       .string()
-      .refine(value => value !== '__unknown__', 'Unknown owner must be represented as null')
+      .refine(
+        value => value !== '__unknown__',
+        'Un responsable desconocido debe representarse como nulo'
+      )
       .nullable()
       .optional(),
     criticality: z.enum(['low', 'medium', 'high', 'critical']).nullable().optional(),

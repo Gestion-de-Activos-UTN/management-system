@@ -49,13 +49,13 @@ export function ScanResultMonitor({
       id: NOTIFICATION_ID,
       color: 'pine',
       icon: <ScanLine size={18} strokeWidth={1.5} />,
-      title: 'New scan completed',
+      title: 'Nuevo escaneo completado',
       autoClose: false,
       withCloseButton: true,
       message: (
         <Stack gap="xs">
           <Text size="sm">
-            Results from {office} are ready
+            Los resultados de {office} están listos
             {result.processed_at ? ` · ${formatDateTime(result.processed_at)}` : ''}.
           </Text>
           <Group justify="flex-end">
@@ -67,7 +67,7 @@ export function ScanResultMonitor({
                 router.push(href)
               }}
             >
-              View inventory
+              Ver inventario
             </Button>
           </Group>
         </Stack>

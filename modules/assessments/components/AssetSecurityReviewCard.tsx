@@ -15,6 +15,14 @@ import {
 import { ArrowRight, ClipboardCheck } from 'lucide-react'
 import { useAssessments } from '../hooks/use-assessments'
 
+const STATUS_LABEL = {
+  pending: 'Sin iniciar',
+  in_progress: 'En curso',
+  completed: 'Completada',
+  expired: 'Vencida',
+  superseded: 'Reemplazada',
+} as const
+
 export function AssetSecurityReviewCard({
   assetId,
   asOrganization,
@@ -33,10 +41,10 @@ export function AssetSecurityReviewCard({
             <ClipboardCheck size={18} />
           </ThemeIcon>
           <div>
-            <Text fw={650}>Excluded from security assessments</Text>
+            <Text fw={650}>Excluido de las evaluaciones de seguridad</Text>
             <Text size="sm" c="dimmed">
-              This asset remains visible and can still be scanned, but it does not affect Risk
-              Score.
+              Este activo permanece visible y puede seguir escaneándose, pero no afecta el puntaje
+              de riesgo.
             </Text>
           </div>
         </Group>
@@ -52,9 +60,9 @@ export function AssetSecurityReviewCard({
             <ClipboardCheck size={18} />
           </ThemeIcon>
           <div>
-            <Text fw={650}>Security review</Text>
+            <Text fw={650}>Revisión de seguridad</Text>
             <Text size="sm" c="dimmed">
-              No everyday questions apply until this device type is confirmed.
+              No se aplican preguntas cotidianas hasta confirmar el tipo de dispositivo.
             </Text>
           </div>
         </Group>
@@ -78,13 +86,13 @@ export function AssetSecurityReviewCard({
             <ThemeIcon color="pine" variant="light">
               <ClipboardCheck size={18} />
             </ThemeIcon>
-            <Text fw={700}>Security review</Text>
+            <Text fw={700}>Revisión de seguridad</Text>
             <Badge variant="filled" color={assessment.status === 'completed' ? 'green' : 'orange'}>
-              {assessment.status.replaceAll('_', ' ')}
+              {STATUS_LABEL[assessment.status]}
             </Badge>
           </Group>
           <Text size="sm" c="dimmed">
-            Simple questions about how this computer is used and protected.
+            Preguntas sencillas sobre cómo se usa y protege esta computadora.
           </Text>
           <Progress value={total ? (answered / total) * 100 : 0} color="pine" radius="xl" />
         </Stack>
@@ -94,7 +102,7 @@ export function AssetSecurityReviewCard({
           variant="light"
           rightSection={<ArrowRight size={16} />}
         >
-          Review controls
+          Revisar controles
         </Button>
       </Group>
     </Card>

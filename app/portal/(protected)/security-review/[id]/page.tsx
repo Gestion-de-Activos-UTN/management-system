@@ -31,7 +31,7 @@ export default function AssessmentDetailPage() {
         <Loader color="pine" />
       </Center>
     )
-  if (!detail.data || detail.isError) return <Text c="red">Could not load this review.</Text>
+  if (!detail.data || detail.isError) return <Text c="red">No se pudo cargar esta revisión.</Text>
   const data = detail.data
   const readOnly =
     data.assessment.status === 'completed' ||
@@ -52,24 +52,27 @@ export default function AssessmentDetailPage() {
 
   return (
     <Stack gap="lg">
-      <BackButton href={'/portal/security-review' + suffix} label="Back to Security Review" />
+      <BackButton
+        href={'/portal/security-review' + suffix}
+        label="Volver a Revisión de seguridad"
+      />
       <PageHeader
-        title="Review everyday security routines"
-        description="Choose Yes only when the routine is followed consistently. If it happens only sometimes, choose No."
+        title="Revisa las rutinas cotidianas de seguridad"
+        description="Elige Sí solo cuando la rutina se cumpla de forma constante. Si se cumple solo algunas veces, elige No."
       />
       {(history.length > 1 || data.assessment.status === 'completed') && (
         <Group justify="space-between" gap="md" wrap="wrap">
           <Text size="sm" c="dimmed">
             {!isLatestCycle
-              ? `Viewing historical cycle ${currentCycleNumber} of ${history.length}`
+              ? `Viendo el ciclo histórico ${currentCycleNumber} de ${history.length}`
               : data.assessment.status === 'completed'
-                ? 'Completed cycle · kept as history'
-                : `Cycle ${currentCycleNumber} of ${history.length}`}
+                ? 'Ciclo completado · conservado en el historial'
+                : `Ciclo ${currentCycleNumber} de ${history.length}`}
           </Text>
           <Group gap="xs">
             {history.length > 1 && (
               <Button variant="default" leftSection={<History size={16} />} onClick={openHistory}>
-                View history
+                Ver historial
               </Button>
             )}
             {!isLatestCycle && history[0] && (
@@ -79,7 +82,7 @@ export default function AssessmentDetailPage() {
                 color="pine"
                 rightSection={<ArrowRight size={16} />}
               >
-                Back to latest
+                Volver a la última
               </Button>
             )}
             {data.assessment.status === 'completed' && isLatestCycle && canStartNewCycle && (
@@ -89,14 +92,14 @@ export default function AssessmentDetailPage() {
                 leftSection={<RefreshCw size={16} />}
                 loading={actions.startNewCycle.isPending}
                 onClick={() =>
-                  actions.startNewCycle.mutate('Requested from completed review', {
+                  actions.startNewCycle.mutate('Solicitado desde una revisión completada', {
                     onSuccess: result => {
                       if (result.id) router.push(`/portal/security-review/${result.id}${suffix}`)
                     },
                   })
                 }
               >
-                Start new review cycle
+                Iniciar nuevo ciclo de revisión
               </Button>
             )}
           </Group>
@@ -106,7 +109,7 @@ export default function AssessmentDetailPage() {
         opened={historyOpened}
         onClose={closeHistory}
         position="right"
-        title="Review history"
+        title="Historial de revisiones"
         size="md"
       >
         <Stack gap="xs">
@@ -132,11 +135,11 @@ export default function AssessmentDetailPage() {
               >
                 <Stack gap={2} align="flex-start">
                   <Text size="sm" fw={700}>
-                    Cycle {history.length - index}
-                    {current ? ' · Viewing' : ''}
+                    Ciclo {history.length - index}
+                    {current ? ' · Visualizando' : ''}
                   </Text>
                   <Text size="xs" c="dimmed" fw={400}>
-                    Started {formatDateTime(cycle.opened_at)}
+                    Iniciada {formatDateTime(cycle.opened_at)}
                   </Text>
                 </Stack>
               </Button>
@@ -146,7 +149,7 @@ export default function AssessmentDetailPage() {
       </Drawer>
       {data.assessment.status !== 'completed' && (data.previous_answers?.length ?? 0) > 0 && (
         <Text size="sm" c="pine.8" fw={600}>
-          Previous answers loaded · review them before completing this cycle
+          Se cargaron las respuestas anteriores · revísalas antes de completar este ciclo
         </Text>
       )}
       <AssessmentForm
@@ -167,14 +170,14 @@ export default function AssessmentDetailPage() {
 
 const statusLabel = (status: string) =>
   status === 'pending'
-    ? 'Not started'
+    ? 'Sin iniciar'
     : status === 'in_progress'
-      ? 'In progress'
+      ? 'En curso'
       : status === 'completed'
-        ? 'Completed'
+        ? 'Completada'
         : status === 'expired'
-          ? 'Review due'
-          : 'Replaced'
+          ? 'Revisión vencida'
+          : 'Reemplazada'
 
 const statusColor = (status: string) =>
   status === 'completed'

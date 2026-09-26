@@ -51,7 +51,7 @@ export const validateAssessmentAnswer: CollectionBeforeChangeHook = async ({
     throw new Error('Assessment answer question is not part of the frozen question set')
   }
 
-  if (merged.answer === 'not_applicable' && !String(merged.justification ?? '').trim()) {
+  if (merged.option_key === 'not_applicable' && !String(merged.justification ?? '').trim()) {
     throw new Error('Not applicable answers require a justification')
   }
 

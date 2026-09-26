@@ -4,6 +4,7 @@ import {
   reconcileAssetAssessmentInstance,
   syncAssetAssessmentAssignee,
 } from '@/domain/assessments/reconcileAssessmentInstance'
+import { enqueueRiskRecalculation } from '@/domain/risk/enqueueRiskRecalculation'
 import { relationId } from '@/lib/relationId'
 
 const relationChanged = (current: unknown, previous: unknown) =>
@@ -47,5 +48,6 @@ export const reconcileAssessmentApplicability: CollectionAfterChangeHook<Asset> 
   if (operation === 'update' && previousDoc && relationChanged(doc.owner, previousDoc.owner)) {
     await syncAssetAssessmentAssignee(req.payload, doc, req)
   }
+  await enqueueRiskRecalculation(req.payload, { organizationId: relationId(doc.organization), officeId: relationId(doc.office) })
   return doc
 }

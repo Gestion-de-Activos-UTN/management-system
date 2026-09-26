@@ -14,14 +14,14 @@ export default function ScanReportsPage() {
   return (
     <Stack gap="md">
       <PageHeader
-        title="Scan Reports"
-        description="Every report sent by an agent, with how many assets it accepted or rejected."
+        title="Informes de escaneo"
+        description="Todos los informes enviados por un agente, con la cantidad de activos aceptados o rechazados."
       />
       <DataTable
         columns={scanReportsColumns}
         data={data ?? []}
         isLoading={isPending}
-        emptyLabel="No scan reports yet"
+        emptyLabel="Aún no hay informes de escaneo"
         minWidth={760}
       />
     </Stack>

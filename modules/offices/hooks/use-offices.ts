@@ -18,7 +18,7 @@ export function useProvisionAgent() {
   return useMutation<Blob, HttpError, { officeId: string; platform: AgentPlatform }>({
     mutationFn: ({ officeId, platform }) => provisionAgent(officeId, platform),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['office-agent-summary'] }),
-    onError: error => showApiError(error, 'Could not install the scanner'),
+    onError: error => showApiError(error, 'No se pudo instalar el escáner'),
   })
 }
 
@@ -34,8 +34,8 @@ export function useRevokeAgent() {
     mutationFn: revokeAgent,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['office-agent-summary'] })
-      notifications.show({ color: 'green', message: 'Scanner access revoked' })
+      notifications.show({ color: 'green', message: 'Acceso del escáner revocado' })
     },
-    onError: error => showApiError(error, 'Could not revoke the scanner'),
+    onError: error => showApiError(error, 'No se pudo revocar el escáner'),
   })
 }

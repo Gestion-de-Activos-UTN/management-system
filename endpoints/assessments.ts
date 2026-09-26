@@ -21,10 +21,12 @@ import {
   reconcileManualAssetAssessmentInstance,
   reconcileOrganizationAssessments,
 } from '@/domain/assessments/reconcileAssessmentInstance'
-import { POLICY_CATALOG } from '@/domain/assessments/catalog'
+import { enqueueRiskRecalculation } from '@/domain/risk/enqueueRiskRecalculation'
+import { RISK_POLICY_KEYS } from '@/domain/risk/catalog-v2'
+import type { SecurityReviewSummary } from '@/modules/assessments/service'
+import type { RiskEvaluationDTO } from '@/modules/risk/service'
 import { resolveInheritedAssessmentEvidence } from '@/domain/assessments/resolveInheritedEvidence'
 import { withDerivedAssessmentStatus } from '@/domain/assessments/assessmentExpiration'
-import { getRiskSummary } from '@/domain/assessments/getRiskSummary'
 import { isAssetExcludedFromAssessments } from '@/domain/assessments/asset-assessment-scope'
 
 const json = (body: unknown, status = 200) => Response.json(body, { status })
@@ -230,12 +232,46 @@ export const securityReviewSummaryEndpoint: Endpoint = {
     )
     if (officeId && !ctx.officeIds.includes(officeId))
       return json({ error: 'office_forbidden' }, 403)
-    const result = await getRiskSummary(
-      req.payload,
-      { organizationId: ctx.organizationId, officeId: officeId ?? undefined },
-      req
-    )
-    return json(result.summary)
+    const evaluations = await req.payload.find({
+      collection: 'risk-evaluations',
+      overrideAccess: true,
+      req,
+      depth: 0,
+      limit: 1,
+      sort: '-evaluated_at',
+      where: {
+        and: [
+          { organization: { equals: ctx.organizationId } },
+          officeId ? { office: { equals: officeId } } : { office: { exists: false } },
+        ],
+      },
+    })
+    const evaluation = evaluations.docs[0]
+    if (!evaluation)
+      return json({
+        risk_score: null,
+        evaluated_percentage: 0,
+        applicable_checks: 0,
+        not_evaluable: 0,
+        requires_attention: 0,
+        excluded_assets: 0,
+        risk_band: null,
+        unconfirmed_assets: 0,
+      } satisfies SecurityReviewSummary)
+    // Counts are persisted with the evaluation; counting contribution rows here would truncate.
+    const counts = evaluation.counts as RiskEvaluationDTO['counts']
+    return json({
+      risk_score: evaluation.coverage < 20 ? null : (evaluation.score ?? null),
+      evaluated_percentage: evaluation.coverage,
+      applicable_checks:
+        counts.compliant + counts.partially_effective + counts.non_compliant + counts.not_evaluable,
+      not_evaluable: counts.not_evaluable,
+      requires_attention: counts.non_compliant + counts.partially_effective,
+      excluded_assets: counts.excluded_assets,
+      // Same visibility rule as the risk endpoint: no band on a preliminary result.
+      risk_band: evaluation.coverage < 40 ? null : (evaluation.final_band ?? null),
+      unconfirmed_assets: counts.unconfirmed_assets,
+    } satisfies SecurityReviewSummary)
   },
 }
 
@@ -553,12 +589,7 @@ export const assessmentPolicyEndpoint: Endpoint = {
       return json({ error: 'feature_disabled' }, 403)
     const parsed = UpdateAssessmentPolicySchema.safeParse(await req.json!().catch(() => ({})))
     if (!parsed.success) return json({ error: 'invalid_policy', issues: parsed.error.issues }, 400)
-    if (
-      !POLICY_CATALOG.some(
-        policy =>
-          policy.key === parsed.data.policy_key && policy.version === parsed.data.policy_version
-      )
-    )
+    if (!RISK_POLICY_KEYS.includes(parsed.data.policy_key) || parsed.data.policy_version !== 2)
       return json({ error: 'policy_version_unavailable' }, 400)
 
     const found = await req.payload.find({
@@ -599,6 +630,7 @@ export const assessmentPolicyEndpoint: Endpoint = {
       })
       await reconcileOrganizationAssessments(req.payload, ctx.organizationId, 'policy_changed', req)
       if (ownsTransaction && transactionID) await req.payload.db.commitTransaction(transactionID)
+      await enqueueRiskRecalculation(req.payload, { organizationId: ctx.organizationId })
       return json(updated)
     } catch (error) {
       if (ownsTransaction && transactionID) await req.payload.db.rollbackTransaction(transactionID)

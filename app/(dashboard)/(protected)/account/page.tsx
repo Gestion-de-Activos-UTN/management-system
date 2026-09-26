@@ -9,12 +9,12 @@ export default function AccountPage() {
 
   return (
     <Stack gap="md">
-      <PageHeader title="Account settings" />
+      <PageHeader title="Configuración de la cuenta" />
       <Card withBorder padding="lg" w="100%" maw={420}>
         <Stack gap="sm">
-          <TextInput label="Role" value={tenantContext?.role ?? ''} readOnly />
+          <TextInput label="Rol" value={tenantContext?.role ?? ''} readOnly />
           <Text size="xs" c="dimmed">
-            Read-only preview — editing ships with the mutation phase.
+            Vista de solo lectura; la edición estará disponible en una próxima etapa.
           </Text>
         </Stack>
       </Card>

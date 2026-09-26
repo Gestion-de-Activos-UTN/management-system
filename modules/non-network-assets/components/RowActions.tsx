@@ -18,12 +18,18 @@ export function RowActions({
 
   return (
     <Group gap={6} wrap="wrap" justify="center">
-      <Tooltip label="Edit">
-        <ActionIcon variant="light" size="md" aria-label="Edit" onClick={() => onEdit(asset)}>
+      <Tooltip label="Editar">
+        <ActionIcon variant="light" size="md" aria-label="Editar" onClick={() => onEdit(asset)}>
           <Pencil size={16} strokeWidth={1.5} />
         </ActionIcon>
       </Tooltip>
-      <Tooltip label={asset.can_review ? 'Mark reviewed' : 'Review opens closer to the due date'}>
+      <Tooltip
+        label={
+          asset.can_review
+            ? 'Marcar como revisado'
+            : 'La revisión se habilitará cerca de la fecha de vencimiento'
+        }
+      >
         <ActionIcon
           component="span"
           variant="light"
@@ -31,7 +37,11 @@ export function RowActions({
           size="md"
           loading={markReviewed.isPending}
           disabled={!asset.can_review}
-          aria-label={asset.can_review ? 'Mark reviewed' : 'Review opens closer to the due date'}
+          aria-label={
+            asset.can_review
+              ? 'Marcar como revisado'
+              : 'La revisión se habilitará cerca de la fecha de vencimiento'
+          }
           onClick={() => asset.can_review && markReviewed.mutate(asset.id)}
         >
           <CheckCheck size={16} strokeWidth={1.5} />
