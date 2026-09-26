@@ -182,8 +182,11 @@ export async function recalculateRisk(
       }
     })
   )
-  // Human answers only; automatic controls are derived here from current evidence.
-  const answers = results.filter(row => row.check_key.startsWith('manual:')).map(answerEvidence)
+  // Human answers only; automatic controls are derived here from current evidence. Answers given
+  // under another policy combine a different question set, so they never feed the current one.
+  const answers = results
+    .filter(row => row.check_key.startsWith('manual:') && row.policy_key === policy)
+    .map(answerEvidence)
 
   const { pairs, population, alerts } = buildRiskPairs({
     organizationId: input.organizationId,
@@ -195,7 +198,7 @@ export async function recalculateRisk(
   const result = calculateRisk(pairs, population)
   return persistRiskEvaluation(
     payload,
-    { ...input, policy, result, undeterminedExposure: alerts },
+    { ...input, policy, result, undeterminedExposure: alerts, evaluatedAt: now },
     req
   )
 }

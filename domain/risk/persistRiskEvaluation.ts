@@ -14,6 +14,9 @@ export async function persistRiskEvaluation(
     policy: RiskPolicyKey
     result: RiskEvaluationResult
     undeterminedExposure: ReadonlyArray<{ asset_id: string; cidr: string }>
+    // When the evidence was read, not when it was saved: a slow run over older evidence must not
+    // become the latest evaluation.
+    evaluatedAt: Date
   },
   externalReq?: PayloadRequest
 ) {
@@ -37,7 +40,7 @@ export async function persistRiskEvaluation(
         catalog_version: 2,
         engine_version: 2,
         policy_key: input.policy,
-        evaluated_at: new Date().toISOString(),
+        evaluated_at: input.evaluatedAt.toISOString(),
         rro_raw: result.rro_raw,
         rro_adjusted: result.rro_adjusted,
         riem: result.riem,

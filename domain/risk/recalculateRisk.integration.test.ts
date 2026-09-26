@@ -113,3 +113,37 @@ test('recalculateRisk: an office evaluation still inherits organization-level an
   })
   assert.equal(events.docs[0]?.status, 'compliant')
 })
+
+test('recalculateRisk: ignores answers from another policy and stamps the evidence read time', async () => {
+  const payload = await getPayload({ config })
+  const { organization, office, server } = await seedRiskOrganization(payload)
+  const ids = {
+    organizationId: String(organization.id),
+    officeId: String(office.id),
+    assetId: String(server.id),
+  }
+  // Answered under reinforced, then the organization moved to essential (seed): must not count.
+  await payload.create({
+    collection: 'compliance-results',
+    overrideAccess: true,
+    data: {
+      ...manualResult(ids, 'A.8.2', 1, new Date(Date.now() + 86_400_000).toISOString()),
+      policy_key: 'reinforced',
+    },
+  })
+  const now = new Date(Date.now() - 60_000)
+
+  const evaluation = await recalculateRisk(payload, { organizationId: ids.organizationId, now })
+
+  assert.equal(new Date(evaluation.evaluated_at).getTime(), now.getTime())
+  const privileged = await payload.find({
+    collection: 'risk-contributions',
+    overrideAccess: true,
+    depth: 0,
+    limit: 1,
+    where: {
+      and: [{ evaluation: { equals: evaluation.id } }, { control_key: { equals: 'A.8.2' } }],
+    },
+  })
+  assert.equal(privileged.docs[0]?.status, 'not_evaluable')
+})
