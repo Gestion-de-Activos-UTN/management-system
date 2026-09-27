@@ -18,7 +18,7 @@ import {
 } from '@mantine/core'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { DataTable } from '@/components/ui/DataTable'
-import { useUiStore } from '@/lib/ui-store'
+import { useConcreteOfficeId } from '@/modules/offices/hooks/use-concrete-office-id'
 import { formatDateTime } from '@/lib/format-date'
 import { RISK_BAND_LABEL, RISK_CONFIDENCE_LABEL } from '@/lib/enum-labels'
 import { useLatestRisk } from '@/modules/risk/hooks/use-latest-risk'
@@ -30,11 +30,11 @@ import { bandVisible, scoreVisible } from '@/domain/risk/constants'
 
 export default function RiskScorePage() {
   const asOrganization = useSearchParams().get('asOrganization') ?? undefined
-  const officeId = useUiStore(state => state.selectedOfficeId)
+  const { officeId, ready } = useConcreteOfficeId(asOrganization)
   const [page, setPage] = useState(1)
   // A different office or organization has its own evaluation: start again from the first page.
   useEffect(() => setPage(1), [officeId, asOrganization])
-  const query = useLatestRisk({ officeId, asOrganization, page })
+  const query = useLatestRisk({ officeId, asOrganization, page, enabled: ready })
   const data = query.data?.evaluation
   const pagination = query.data?.pagination
   const inventoryHref = `/portal/inventory${asOrganization ? `?asOrganization=${asOrganization}` : ''}`

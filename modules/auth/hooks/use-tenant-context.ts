@@ -12,6 +12,8 @@ export type TenantContext = {
   selectedOfficeId: string | null
   isPlatformAdmin: boolean
   isActive: boolean
+  /** Row scope from access/rbac/permissions.ts::hasOrgWideScope; false = only officeIds. */
+  orgWide: boolean
   features: Record<string, boolean>
 }
 

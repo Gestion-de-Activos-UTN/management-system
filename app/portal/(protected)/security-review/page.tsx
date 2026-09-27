@@ -9,7 +9,7 @@ import {
   SecurityReviewList,
   SecurityReviewSummary,
 } from '@/modules/assessments/components/SecurityReviewOverview'
-import { useUiStore } from '@/lib/ui-store'
+import { useConcreteOfficeId } from '@/modules/offices/hooks/use-concrete-office-id'
 import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
 import { relationId } from '@/lib/relationId'
 import { useRiskSummary } from '@/modules/assessments/hooks/use-risk-summary'
@@ -17,7 +17,7 @@ import { useRiskSummary } from '@/modules/assessments/hooks/use-risk-summary'
 export default function SecurityReviewPage() {
   const params = useSearchParams()
   const asOrganization = params.get('asOrganization') ?? undefined
-  const selectedOfficeId = useUiStore(state => state.selectedOfficeId)
+  const { officeId: selectedOfficeId, ready } = useConcreteOfficeId(asOrganization)
   const [status, setStatus] = useState('current')
   const [assignment, setAssignment] = useState('all')
   const tenant = useTenantContext(asOrganization)
@@ -25,7 +25,7 @@ export default function SecurityReviewPage() {
     officeId: selectedOfficeId,
     asOrganization,
   })
-  const risk = useRiskSummary({ officeId: selectedOfficeId, asOrganization })
+  const risk = useRiskSummary({ officeId: selectedOfficeId, asOrganization, enabled: ready })
   const rows = (query.data?.docs ?? []).filter(
     item =>
       (status === 'all'

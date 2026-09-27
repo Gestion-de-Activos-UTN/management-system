@@ -3,9 +3,14 @@
 import { useQuery } from '@tanstack/react-query'
 import { getSecurityReviewSummary } from '../service'
 
-export function useRiskSummary(params?: { officeId?: string | null; asOrganization?: string }) {
+export function useRiskSummary(params?: {
+  officeId?: string | null
+  asOrganization?: string
+  enabled?: boolean
+}) {
   return useQuery({
     queryKey: ['assessments', 'risk-summary', params?.asOrganization, params?.officeId],
     queryFn: () => getSecurityReviewSummary(params),
+    enabled: params?.enabled ?? true,
   })
 }
