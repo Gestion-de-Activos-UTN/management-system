@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { getPayload } from 'payload'
-import type { CollectionSlug, Payload } from 'payload'
+import type { CollectionSlug, Payload, PayloadRequest } from 'payload'
 import config from '../../payload.config'
 import { recalculateRisk } from '@/domain/risk/recalculateRisk'
+import { orgMembersEndpoint } from '@/endpoints/orgMembers'
 import { manualResult, member, seedRiskOrganization } from '@/domain/risk/risk-integration-seed'
 
 // REST row scoping per role (overrideAccess: false): office-scoped roles (office_manager,
@@ -126,4 +127,48 @@ test('office scoping: REST update of another office asset is rejected', async ()
     overrideAccess: true,
   })
   assert.equal(unchanged.alias, 'Other office laptop')
+})
+
+test('office scoping: asset owners must cover the asset office and member lists follow scope', async () => {
+  const payload = await getPayload({ config })
+  const { organizationId, office, other, admin } = await seedTwoOffices(payload)
+  const manager = await member(payload, organizationId, [String(office.id)], 'office_manager')
+  const otherManager = await member(payload, organizationId, [String(other.id)], 'office_manager')
+  const base = {
+    alias: 'Owner check',
+    asset_category: 'computer',
+    criticality: 'medium',
+    office: office.id,
+    organization: organizationId,
+    status: 'active',
+    review_interval: 'never',
+  } as const
+
+  await assert.rejects(
+    payload.create({
+      collection: 'non-network-assets',
+      overrideAccess: false,
+      user: { id: admin, collection: 'users' } as never,
+      data: { ...base, owner: otherManager },
+    }),
+    /no pertenece a la oficina/
+  )
+  for (const owner of [manager, admin])
+    await payload.create({
+      collection: 'non-network-assets',
+      overrideAccess: false,
+      user: { id: admin, collection: 'users' } as never,
+      data: { ...base, owner },
+    })
+
+  const members = await orgMembersEndpoint.handler({
+    payload,
+    user: { id: manager, collection: 'users' },
+    context: {},
+    url: 'http://localhost/api/v1/org-members',
+  } as unknown as PayloadRequest)
+  const ids = ((await members.json()) as { docs: Array<{ id: string }> }).docs.map(row => row.id)
+  assert.ok(ids.includes(manager))
+  assert.ok(ids.includes(admin))
+  assert.ok(!ids.includes(otherManager))
 })

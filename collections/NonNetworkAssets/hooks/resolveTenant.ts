@@ -2,7 +2,7 @@ import type { CollectionBeforeChangeHook, PayloadRequest } from 'payload'
 import { getTenantContext } from '@/access/tenant/resolveTenantContext'
 import { assertOfficeInScope, computeNextReviewAt, type ReviewInterval } from '../invariants'
 import { relationId } from '@/lib/relationId'
-import { assertOwnerBelongsToOrganization } from '@/access/tenant/assertOwnerBelongsToOrganization'
+import { assertOwnerCoversOffice } from '@/access/tenant/assertOwnerCoversOffice'
 
 async function findOrganizationOfOffice(req: PayloadRequest, officeId: string): Promise<string> {
   const office = await req.payload.findByID({
@@ -47,7 +47,7 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
       ? relationId(originalDoc.owner)
       : null
   if (ownerId) {
-    await assertOwnerBelongsToOrganization(req, ownerId, organizationId)
+    await assertOwnerCoversOffice(req, ownerId, organizationId, officeId)
   }
 
   // next_review_at se deriva de review_interval: en creación siempre se calcula; en edición
