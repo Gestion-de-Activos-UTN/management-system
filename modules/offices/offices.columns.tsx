@@ -19,15 +19,15 @@ export function getOfficesColumns(
   const summaryByOffice = new Map(agentSummary.map(summary => [summary.office_id, summary]))
 
   return [
-    { accessorKey: 'name', header: 'Name' },
+    { accessorKey: 'name', header: 'Nombre' },
     {
       id: 'organization',
-      header: 'Organization',
+      header: 'Organización',
       cell: ({ row }) => organizationLabel(row.original),
     },
     {
       accessorKey: 'county_fips',
-      header: 'County FIPS',
+      header: 'Código FIPS del condado',
       size: 150,
       cell: ({ row }) =>
         row.original.county_fips && <TechnicalText>{row.original.county_fips}</TechnicalText>,
@@ -35,7 +35,7 @@ export function getOfficesColumns(
     activeStatusColumn<Office>(office => Boolean(office.is_active)),
     {
       id: 'scanner',
-      header: 'Scanner',
+      header: 'Escáner',
       size: 150,
       meta: { align: 'center' },
       cell: ({ row }) => {
@@ -43,9 +43,9 @@ export function getOfficesColumns(
         const status = getOfficeScannerStatus(summary)
         if (status === 'not_installed') {
           return (
-            <Tooltip label="No scanner has been provisioned">
+            <Tooltip label="No se aprovisionó ningún escáner">
               <Badge color="gray" variant="light">
-                Not installed
+                No instalado
               </Badge>
             </Tooltip>
           )
@@ -53,35 +53,35 @@ export function getOfficesColumns(
         if (!summary) return null
         if (status === 'inactive') {
           return (
-            <Tooltip label={`${summary.total} provisioned agent(s), all inactive`}>
+            <Tooltip label={`${summary.total} agente(s) aprovisionado(s), todos inactivos`}>
               <Badge color="gray" variant="filled">
-                Inactive
+                Inactivo
               </Badge>
             </Tooltip>
           )
         }
         if (status === 'pending') {
           return (
-            <Tooltip label="Scanner provisioned, waiting for its first heartbeat">
+            <Tooltip label="Escáner aprovisionado; esperando su primera señal">
               <Badge color="blue" variant="filled">
-                Pending
+                Pendiente
               </Badge>
             </Tooltip>
           )
         }
         if (status === 'online') {
           return (
-            <Tooltip label={`${summary.online} of ${summary.active} active agent(s) online`}>
+            <Tooltip label={`${summary.online} de ${summary.active} agente(s) activo(s) en línea`}>
               <Badge color="green" variant="filled">
-                Online
+                En línea
               </Badge>
             </Tooltip>
           )
         }
         return (
-          <Tooltip label={`${summary.active} active agent(s), none online`}>
+          <Tooltip label={`${summary.active} agente(s) activo(s), ninguno en línea`}>
             <Badge color="yellow" variant="filled">
-              Offline
+              Sin conexión
             </Badge>
           </Tooltip>
         )
@@ -106,10 +106,10 @@ export function getOfficesColumns(
                 <Download size={15} strokeWidth={1.5} />
               )
             }
-            aria-label={`${hasAgents ? 'Manage scanners' : 'Install scanner'} for ${row.original.name}`}
+            aria-label={`${hasAgents ? 'Administrar escáneres' : 'Instalar escáner'} para ${row.original.name}`}
             onClick={() => onProvision(row.original)}
           >
-            {hasAgents ? 'Manage' : 'Install'}
+            {hasAgents ? 'Administrar' : 'Instalar'}
           </Button>
         )
       },

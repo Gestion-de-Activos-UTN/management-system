@@ -49,7 +49,7 @@ export function OfficeSelector() {
   }
 
   const options = [
-    ...(officeIds.length > 1 ? [{ value: ALL_OFFICES, label: 'All Offices' }] : []),
+    ...(officeIds.length > 1 ? [{ value: ALL_OFFICES, label: 'Todas las oficinas' }] : []),
     ...(offices ?? [])
       .filter(office => officeIds.includes(String(office.id)))
       .map(office => ({ value: String(office.id), label: office.name })),
@@ -59,7 +59,7 @@ export function OfficeSelector() {
 
   return (
     <Select
-      placeholder="Office"
+      placeholder="Oficina"
       data={options}
       value={selectedOfficeId ?? ALL_OFFICES}
       onChange={value => setSelectedOfficeId(value === ALL_OFFICES ? null : value)}

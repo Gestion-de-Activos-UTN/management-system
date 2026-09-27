@@ -67,7 +67,7 @@ function SidebarNavItem({
               variant="subtle"
               color="gray"
               size="sm"
-              aria-label={opened ? 'Collapse section' : 'Expand section'}
+              aria-label={opened ? 'Contraer sección' : 'Expandir sección'}
               onClick={event => {
                 event.preventDefault()
                 event.stopPropagation()
@@ -126,13 +126,7 @@ function SidebarNavItem({
  * knowledge of which modules exist (components/ui-layout stays
  * dependency-free of modules/*, SYSTEM_PROMPT.md #3).
  */
-export function Sidebar({
-  items,
-  onNavigate,
-}: {
-  items: SidebarItem[]
-  onNavigate?: () => void
-}) {
+export function Sidebar({ items, onNavigate }: { items: SidebarItem[]; onNavigate?: () => void }) {
   const pathname = usePathname()
 
   return (

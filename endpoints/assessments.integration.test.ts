@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { getPayload } from 'payload'
-import type { Payload, PayloadRequest } from 'payload'
+import type { Payload, PayloadRequest, Where } from 'payload'
 import config from '../payload.config'
-import { assessmentCompleteEndpoint, assessmentsListEndpoint } from './assessments'
+import { RISK_QUESTIONS_V2 } from '@/domain/risk/catalog-v2'
+import { reconcileOrganizationAssessments } from '@/domain/assessments/reconcileAssessmentInstance'
+import { member, seedRiskOrganization } from '@/domain/risk/risk-integration-seed'
+import {
+  assessmentCompleteEndpoint,
+  assessmentDetailEndpoint,
+  assessmentsListEndpoint,
+} from './assessments'
 
 function request(
   payload: Payload,
@@ -86,7 +93,7 @@ async function seedManualComputerFlow(payload: Payload) {
         organization: organization.id,
         industry: 'Professional services',
         assessment_policy_key: 'essential',
-        assessment_policy_version: 1,
+        assessment_policy_version: 2,
         assessment_policy_selected_at: new Date().toISOString(),
       },
     }),
@@ -139,7 +146,10 @@ async function completeLatestCycle(payload: Payload, userId: string, manualAsset
     answers: (cycle.question_set_snapshot as Array<{ key: string; version: number }>).map(item => ({
       question_key: item.key,
       question_version: item.version,
-      answer: 'yes' as const,
+      // Best option of each v2 question; any valid option would do for this flow test.
+      option_key: RISK_QUESTIONS_V2.find(question => question.key === item.key)!.options.find(
+        option => option.efficacy === 1
+      )!.key,
     })),
   }
   const response = await assessmentCompleteEndpoint.handler(
@@ -186,4 +196,110 @@ test('Security Review filters a moved manual computer by its current office and 
   }
   assert.equal(main.docs.filter(belongsToAsset).length, 0)
   assert.equal(secondary.docs.filter(belongsToAsset).length, 2)
+})
+
+async function openCycle(payload: Payload, where: Where) {
+  const cycle = (
+    await payload.find({
+      collection: 'assessment-instances',
+      where: { and: [where, { status: { in: ['pending', 'in_progress'] } }] },
+      overrideAccess: true,
+      limit: 1,
+    })
+  ).docs[0]
+  assert.ok(cycle)
+  return cycle
+}
+
+async function completeCycle(payload: Payload, userId: string, cycleId: string) {
+  const cycle = await payload.findByID({
+    collection: 'assessment-instances',
+    id: cycleId,
+    overrideAccess: true,
+  })
+  const answers = (cycle.question_set_snapshot as Array<{ key: string; version: number }>).map(
+    item => ({
+      question_key: item.key,
+      question_version: item.version,
+      option_key: RISK_QUESTIONS_V2.find(question => question.key === item.key)!.options.find(
+        option => option.efficacy === 1
+      )!.key,
+    })
+  )
+  const response = await assessmentCompleteEndpoint.handler(
+    request(payload, userId, { id: cycleId, body: { answers } })
+  )
+  assert.equal(response.status, 200)
+}
+
+test('Security Review hides organization-level cycles and answers from office-scoped roles', async () => {
+  const payload = await getPayload({ config })
+  const { organization, office } = await seedRiskOrganization(payload)
+  const organizationId = String(organization.id)
+  const officeId = String(office.id)
+  const admin = await member(payload, organizationId, [officeId], 'org_admin')
+  await reconcileOrganizationAssessments(payload, organizationId, 'policy_changed')
+  const organizationCycle = await openCycle(payload, {
+    and: [{ organization: { equals: organizationId } }, { scope: { equals: 'organization' } }],
+  })
+  const officeCycle = await openCycle(payload, {
+    and: [{ office: { equals: officeId } }, { scope: { equals: 'office' } }],
+  })
+  await completeCycle(payload, admin, String(organizationCycle.id))
+  await completeCycle(payload, admin, String(officeCycle.id))
+  const organizationKeys = (organizationCycle.question_set_snapshot as Array<{ key: string }>).map(
+    item => item.key
+  )
+
+  const detail = async (userId: string, id: string) => {
+    const response = await assessmentDetailEndpoint.handler(request(payload, userId, { id }))
+    return {
+      status: response.status,
+      body: (await response.json()) as { effective_evidence?: Record<string, unknown> },
+    }
+  }
+  // org_admin still sees organization answers inherited into the office view.
+  const adminView = await detail(admin, String(officeCycle.id))
+  assert.ok(organizationKeys.some(key => key in adminView.body.effective_evidence!))
+
+  for (const slug of ['office_manager', 'org_viewer'] as const) {
+    const scoped = await member(payload, organizationId, [officeId], slug)
+    const list = await assessmentsListEndpoint.handler(
+      request(payload, scoped, { url: 'http://localhost/api/v1/assessments' })
+    )
+    const docs = ((await list.json()) as { docs: Array<{ scope: string }> }).docs
+    assert.ok(docs.length > 0)
+    assert.ok(
+      docs.every(doc => doc.scope !== 'organization'),
+      `${slug} list`
+    )
+
+    const officeList = await assessmentsListEndpoint.handler(
+      request(payload, scoped, { url: `http://localhost/api/v1/assessments?office_id=${officeId}` })
+    )
+    const officeDocs = ((await officeList.json()) as { docs: Array<{ scope: string }> }).docs
+    assert.ok(
+      officeDocs.every(doc => doc.scope !== 'organization'),
+      `${slug} office list`
+    )
+
+    assert.equal((await detail(scoped, String(organizationCycle.id))).status, 403)
+    const officeView = await detail(scoped, String(officeCycle.id))
+    assert.equal(officeView.status, 200)
+    assert.ok(organizationKeys.every(key => !(key in officeView.body.effective_evidence!)))
+
+    // REST path query on assessment.office: organization answers never show up.
+    const answers = await payload.find({
+      collection: 'assessment-answers',
+      overrideAccess: false,
+      user: { id: scoped, collection: 'users' } as never,
+      depth: 0,
+      pagination: false,
+    })
+    assert.ok(answers.docs.length > 0)
+    assert.ok(
+      answers.docs.every(row => String(row.assessment) !== String(organizationCycle.id)),
+      `${slug} answers`
+    )
+  }
 })

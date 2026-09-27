@@ -5,7 +5,7 @@ import type { Organization } from '@/app/types/payload-types'
 import { activeStatusColumn } from '@/components/ui/activeStatusColumn'
 
 export const organizationsColumns: ColumnDef<Organization, unknown>[] = [
-  { accessorKey: 'name', header: 'Name' },
+  { accessorKey: 'name', header: 'Nombre' },
   activeStatusColumn<Organization>(org => Boolean(org.is_active)),
   {
     id: 'actions',
@@ -19,7 +19,7 @@ export const organizationsColumns: ColumnDef<Organization, unknown>[] = [
         variant="light"
         w={{ base: '100%', sm: 'auto' }}
       >
-        Visit
+        Visitar
       </Button>
     ),
   },

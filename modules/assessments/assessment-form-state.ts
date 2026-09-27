@@ -1,8 +1,7 @@
-import type { AnswerValue } from '@/domain/assessments/catalog'
 import type { SaveAssessmentDraft } from './schema'
 
 export type AssessmentAnswerFields = {
-  answer?: AnswerValue
+  option_key?: string
   justification?: string
   evidence_note?: string
 }
@@ -22,12 +21,12 @@ export function buildAssessmentDraft(
   return {
     answers: visibleQuestions.flatMap(question => {
       const fields = answers[assessmentFieldKey(questions, question.key)]
-      return fields?.answer
+      return fields?.option_key
         ? [
             {
               question_key: question.key,
               question_version: question.version,
-              answer: fields.answer,
+              option_key: fields.option_key,
               justification: fields.justification,
               evidence_note: fields.evidence_note,
             },

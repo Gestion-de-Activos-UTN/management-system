@@ -50,19 +50,19 @@ export function getAssetsColumns(
               // flexShrink: 0 — sin esto el Group (flex row) encoge el badge junto con todo lo demás
               // cuando falta espacio, y Mantine trunca su label con ellipsis interno ("New" → "N..").
               <Badge size="sm" color="pine" variant="filled" style={{ flexShrink: 0 }}>
-                New
+                Nuevo
               </Badge>
             ) : (
               row.original.technical_changed_at != null && (
                 <Badge size="sm" color="orange" variant="filled" style={{ flexShrink: 0 }}>
-                  Changed
+                  Modificado
                 </Badge>
               )
             )}
             {isOverflowing ? <Tooltip label={alias}>{label}</Tooltip> : label}
             {row.original.assessment_scope === 'excluded' && (
               <Badge size="sm" color="gray" variant="light" style={{ flexShrink: 0 }}>
-                Out of scope
+                Fuera de alcance
               </Badge>
             )}
           </Group>
@@ -77,14 +77,14 @@ export function getAssetsColumns(
     },
     {
       accessorKey: 'hostname',
-      header: 'Hostname',
+      header: 'Nombre del host',
       size: 220,
       cell: ({ row }) =>
         row.original.hostname && <TechnicalText truncate>{row.original.hostname}</TechnicalText>,
     },
     {
       accessorKey: 'criticality',
-      header: 'Criticality',
+      header: 'Criticidad',
       size: 140,
       cell: ({ row }) =>
         row.original.identification_status === 'confirmed' && row.original.criticality
@@ -94,7 +94,7 @@ export function getAssetsColumns(
     showOffice
       ? {
           accessorKey: 'office',
-          header: 'Office',
+          header: 'Oficina',
           size: 180,
           cell: ({ row }) => {
             const office = row.original.office
@@ -103,14 +103,14 @@ export function getAssetsColumns(
         }
       : {
           accessorKey: 'location',
-          header: 'Location',
+          header: 'Ubicación',
           size: 180,
           cell: ({ row }) =>
             row.original.identification_status === 'confirmed' ? row.original.location || '—' : '—',
         },
     {
       accessorKey: 'status',
-      header: 'Status',
+      header: 'Estado',
       size: 120,
       meta: { align: 'center' },
       cell: ({ row }) => {
@@ -125,7 +125,7 @@ export function getAssetsColumns(
     },
     {
       accessorKey: 'owner',
-      header: 'Owner',
+      header: 'Responsable',
       cell: ({ row }) => {
         if (row.original.identification_status !== 'confirmed') return '—'
         const owner = row.original.owner
@@ -142,9 +142,9 @@ export function getAssetsColumns(
         row.original.identification_status === 'confirmed' ? (
           <StatusBadge tone="success" label="Identified" />
         ) : row.original.identification_status === 'needs_review' ? (
-          <StatusBadge tone="warning" label="Needs review" />
+          <StatusBadge tone="warning" label="Requiere revisión" />
         ) : (
-          <StatusBadge tone="warning" label="Not identified" />
+          <StatusBadge tone="warning" label="No identificado" />
         ),
     },
     {

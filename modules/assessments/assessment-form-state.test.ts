@@ -8,12 +8,12 @@ describe('assessment form state', () => {
     const fieldKey = assessmentFieldKey(questions, questions[0].key)
 
     assert.equal(fieldKey, '0')
-    assert.deepEqual(buildAssessmentDraft(questions, questions, { 0: { answer: 'yes' } }), {
+    assert.deepEqual(buildAssessmentDraft(questions, questions, { 0: { option_key: 'yes' } }), {
       answers: [
         {
           question_key: 'access.individual_accounts',
           question_version: 1,
-          answer: 'yes',
+          option_key: 'yes',
           justification: undefined,
           evidence_note: undefined,
         },

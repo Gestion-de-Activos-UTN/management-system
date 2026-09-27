@@ -11,11 +11,15 @@ export async function resolveInheritedAssessmentEvidence(
   payload: Payload,
   assessment: AssessmentInstance,
   req?: PayloadRequest,
-  now = new Date()
+  // Office-scoped readers never see organization-level answers, not even as inherited evidence.
+  {
+    includeOrganization = true,
+    now = new Date(),
+  }: { includeOrganization?: boolean; now?: Date } = {}
 ): Promise<Record<string, EffectiveAnswer>> {
   const organizationId = relationId(assessment.organization)
   const scopeClauses: Where[] = [{ id: { equals: assessment.id } }]
-  if (assessment.scope !== 'organization')
+  if (assessment.scope !== 'organization' && includeOrganization)
     scopeClauses.push({
       scope: { equals: 'organization' },
       status: { equals: 'completed' },
@@ -53,7 +57,7 @@ export async function resolveInheritedAssessmentEvidence(
     const owner = instanceById.get(relationId(answer.assessment))
     if (!owner) continue
     const source: EffectiveAnswerCandidate['source'] =
-      answer.answer === 'not_applicable'
+      answer.option_key === 'not_applicable'
         ? 'exception'
         : owner.id === assessment.id
           ? 'exact'
@@ -61,7 +65,7 @@ export async function resolveInheritedAssessmentEvidence(
     const rows = candidates.get(answer.question_key) ?? []
     rows.push({
       id: String(answer.id),
-      answer: answer.answer,
+      option_key: answer.option_key,
       valid_until: answer.valid_until,
       source,
       justification: answer.justification,

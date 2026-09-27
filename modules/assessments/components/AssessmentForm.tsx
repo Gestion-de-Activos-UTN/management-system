@@ -23,11 +23,7 @@ import type {
   AssessmentInstance,
   ComplianceResult,
 } from '@/app/types/payload-types'
-import {
-  QUESTION_CATALOG,
-  type AnswerValue,
-  type QuestionDefinition,
-} from '@/domain/assessments/catalog'
+import { RISK_QUESTIONS_V2, type RiskQuestionV2 } from '@/domain/risk/catalog-v2'
 import type { SaveAssessmentDraft } from '../schema'
 import type { EffectiveAnswer } from '@/domain/assessments/evaluateCompliance'
 import {
@@ -37,11 +33,6 @@ import {
 } from '../assessment-form-state'
 
 type FormState = { answers: Record<string, AssessmentAnswerFields> }
-
-const practicalExample = (text: string) => {
-  const value = text.replace(/^For example,\s*/i, '')
-  return value.charAt(0).toLowerCase() + value.slice(1)
-}
 
 export function AssessmentForm(props: {
   assessment: AssessmentInstance
@@ -60,8 +51,8 @@ export function AssessmentForm(props: {
     : []
   const questions = snapshot.flatMap(item => {
     if (!item || typeof item !== 'object' || !('key' in item) || !('version' in item)) return []
-    const found = QUESTION_CATALOG.find(q => q.key === item.key && q.version === item.version)
-    return found ? [found as QuestionDefinition] : []
+    const found = RISK_QUESTIONS_V2.find(q => q.key === item.key && q.version === item.version)
+    return found ? [found as RiskQuestionV2] : []
   })
   const fieldKeyByQuestion = new Map(
     questions.map(question => [question.key, assessmentFieldKey(questions, question.key)])
@@ -77,7 +68,7 @@ export function AssessmentForm(props: {
             [
               String(index),
               {
-                answer: row.answer,
+                option_key: row.option_key,
                 justification: row.justification ?? '',
                 evidence_note: row.evidence_note ?? '',
               },
@@ -95,15 +86,7 @@ export function AssessmentForm(props: {
   useEffect(() => {
     if (props.assessment.status === 'completed') setCompletionCommand(null)
   }, [props.assessment.status])
-  const visible = questions.filter(question =>
-    (question.dependencies ?? []).every(
-      dependency =>
-        dependency.type !== 'requires_question_answer' ||
-        dependency.answers.includes(
-          values[fieldKeyByQuestion.get(dependency.question_key) ?? '']?.answer as AnswerValue
-        )
-    )
-  )
+  const visible = questions
   const command = (data: FormState): SaveAssessmentDraft =>
     buildAssessmentDraft(questions, visible, data.answers)
   const inheritedAnswer = (questionKey: string) => {
@@ -112,23 +95,19 @@ export function AssessmentForm(props: {
       ? evidence.candidate
       : null
   }
-  const answerLabel = (answer: AnswerValue) =>
-    answer === 'yes'
-      ? 'Yes'
-      : answer === 'no'
-        ? 'No'
-        : answer === 'unknown'
-          ? "I don't know"
-          : "Doesn't apply"
+  const answerLabel = (questionKey: string, answer: string) =>
+    questions
+      .find(question => question.key === questionKey)
+      ?.options.find(option => option.key === answer)?.label ?? answer
   const isExpired = (questionKey: string) => {
     const evidence = props.effectiveEvidence[questionKey]
     return evidence?.state === 'not_evaluable' && evidence.reason_code === 'answer_expired'
   }
   const completionCounts = completionCommand
     ? {
-        unknown: completionCommand.answers.filter(answer => answer.answer === 'unknown').length,
+        unknown: completionCommand.answers.filter(answer => answer.option_key === 'unknown').length,
         notApplicable: completionCommand.answers.filter(
-          answer => answer.answer === 'not_applicable'
+          answer => answer.option_key === 'not_applicable'
         ).length,
         unanswered: visible.length - completionCommand.answers.length,
       }
@@ -143,7 +122,7 @@ export function AssessmentForm(props: {
               {index > 0 && <Divider mb="xl" />}
               <Stack gap="md">
                 <Text size="xs" fw={700} c="pine.7">
-                  QUESTION {index + 1} OF {visible.length}
+                  PREGUNTA {index + 1} DE {visible.length}
                 </Text>
                 <div>
                   <Text fw={700} fz="lg">
@@ -152,41 +131,44 @@ export function AssessmentForm(props: {
                 </div>
                 {inheritedAnswer(question.key) && (
                   <Alert color="blue" variant="light">
-                    Inherited from the company review:{' '}
+                    Heredado de la revisión de la empresa:{' '}
                     <Text span fw={700}>
-                      {answerLabel(inheritedAnswer(question.key)!.answer)}
+                      {answerLabel(question.key, inheritedAnswer(question.key)!.option_key)}
                     </Text>
-                    . You can answer here only if this office or device works differently.
+                    . Solo puedes responder aquí si esta oficina o dispositivo funciona de manera
+                    diferente.
                   </Alert>
                 )}
                 {isExpired(question.key) && (
                   <Alert color="gray" variant="light">
-                    The previous answer expired. It is now not evaluable and only reduces review
-                    coverage; it does not add risk.
+                    La respuesta anterior venció. Ahora no es evaluable y solo reduce la cobertura
+                    de la revisión; no agrega riesgo.
                   </Alert>
                 )}
                 <Controller
-                  name={('answers.' + fieldKeyByQuestion.get(question.key) + '.answer') as never}
+                  name={
+                    ('answers.' + fieldKeyByQuestion.get(question.key) + '.option_key') as never
+                  }
                   control={control}
                   defaultValue={
-                    defaults[fieldKeyByQuestion.get(question.key) ?? '']?.answer as never
+                    defaults[fieldKeyByQuestion.get(question.key) ?? '']?.option_key as never
                   }
                   render={({ field }) => (
                     <Radio.Group {...field} value={field.value ?? ''}>
-                      <Group mt="xs">
-                        <Radio value="yes" label="Yes" disabled={props.readOnly} />
-                        <Radio value="no" label="No" disabled={props.readOnly} />
-                        <Radio value="unknown" label="I don't know" disabled={props.readOnly} />
-                        <Radio
-                          value="not_applicable"
-                          label="Doesn't apply"
-                          disabled={props.readOnly}
-                        />
-                      </Group>
+                      <Stack mt="xs" gap="xs">
+                        {question.options.map(option => (
+                          <Radio
+                            key={option.key}
+                            value={option.key}
+                            label={option.label}
+                            disabled={props.readOnly}
+                          />
+                        ))}
+                      </Stack>
                     </Radio.Group>
                   )}
                 />
-                {values[fieldKeyByQuestion.get(question.key) ?? '']?.answer ===
+                {values[fieldKeyByQuestion.get(question.key) ?? '']?.option_key ===
                   'not_applicable' && (
                   <Controller
                     name={
@@ -199,30 +181,8 @@ export function AssessmentForm(props: {
                       <Textarea
                         {...field}
                         value={field.value ?? ''}
-                        label="Why doesn't this apply?"
-                        placeholder="A short everyday explanation is enough."
-                        required
-                        disabled={props.readOnly}
-                      />
-                    )}
-                  />
-                )}
-                {question.evidence_note_required_for?.includes(
-                  values[fieldKeyByQuestion.get(question.key) ?? '']?.answer as 'yes' | 'no'
-                ) && (
-                  <Controller
-                    name={
-                      ('answers.' +
-                        fieldKeyByQuestion.get(question.key) +
-                        '.evidence_note') as never
-                    }
-                    control={control}
-                    render={({ field }) => (
-                      <Textarea
-                        {...field}
-                        value={field.value ?? ''}
-                        label="What did you check?"
-                        placeholder="For example: recovered last month's price list."
+                        label="¿Por qué no aplica?"
+                        placeholder="Una breve explicación cotidiana es suficiente."
                         required
                         disabled={props.readOnly}
                       />
@@ -230,13 +190,10 @@ export function AssessmentForm(props: {
                   />
                 )}
                 <Text size="sm" c="dimmed" maw={760}>
-                  <Text span fw={650} c="gray.7">
-                    Why it matters:{' '}
+                  <Text span fw={650}>
+                    Ayuda para responder:{' '}
                   </Text>
-                  {question.why_it_matters}{' '}
-                  <Text span fs="italic">
-                    For example, {practicalExample(question.help_text)}
-                  </Text>
+                  {question.help_text}
                 </Text>
               </Stack>
             </Box>
@@ -245,9 +202,9 @@ export function AssessmentForm(props: {
       </Card>
       {props.technicalObservations.length > 0 && (
         <Card withBorder radius="lg" p="lg">
-          <Text fw={700}>Technical observations</Text>
+          <Text fw={700}>Observaciones técnicas</Text>
           <Text size="sm" c="dimmed" mb="md">
-            Generated automatically. You do not need to explain ports or network services.
+            Generado automáticamente. No necesitas explicar puertos ni servicios de red.
           </Text>
           <Stack gap="sm">
             {props.technicalObservations.map(result => (
@@ -262,16 +219,16 @@ export function AssessmentForm(props: {
                 }
                 title={
                   result.status === 'non_compliant'
-                    ? 'Requires attention'
+                    ? 'Requiere atención'
                     : result.status === 'compliant'
-                      ? 'Protected'
-                      : 'Security could not be verified'
+                      ? 'Protegido'
+                      : 'No se pudo verificar la seguridad'
                 }
               >
                 {result.explanation}
                 <Accordion mt="xs">
                   <Accordion.Item value={String(result.id)}>
-                    <Accordion.Control>Technical details</Accordion.Control>
+                    <Accordion.Control>Detalles técnicos</Accordion.Control>
                     <Accordion.Panel>{result.service_key}</Accordion.Panel>
                   </Accordion.Item>
                 </Accordion>
@@ -288,44 +245,45 @@ export function AssessmentForm(props: {
             loading={props.saving}
             onClick={handleSubmit(data => props.onSave(command(data)))}
           >
-            Save draft
+            Guardar borrador
           </Button>
           <Button
             color="pine"
             loading={props.completing}
             onClick={handleSubmit(data => setCompletionCommand(command(data)))}
           >
-            Complete review
+            Completar revisión
           </Button>
         </Group>
       )}
       <Modal
         opened={completionCommand !== null}
         onClose={() => setCompletionCommand(null)}
-        title="Complete this review?"
+        title="¿Completar esta revisión?"
         centered
       >
         <Stack gap="md">
           <Group gap="xs">
             <Badge color={completionCounts?.unanswered ? 'orange' : 'green'} variant="light">
-              {completionCounts?.unanswered ?? 0} unanswered
+              {completionCounts?.unanswered ?? 0} sin responder
             </Badge>
             <Badge color="gray" variant="light">
-              {completionCounts?.unknown ?? 0} I don&apos;t know
+              {completionCounts?.unknown ?? 0} No lo sé
             </Badge>
             <Badge color="gray" variant="light">
-              {completionCounts?.notApplicable ?? 0} doesn&apos;t apply
+              {completionCounts?.notApplicable ?? 0} no aplica
             </Badge>
           </Group>
           <Text size="sm" c="dimmed">
-            Unknown and not-applicable answers reduce coverage but do not add risk.
+            Las respuestas desconocidas y las que no aplican reducen la cobertura, pero no agregan
+            riesgo.
             {completionCounts?.unanswered
-              ? ' Answer every visible question before completing this review.'
+              ? ' Responde todas las preguntas antes de completar la revisión.'
               : ''}
           </Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setCompletionCommand(null)}>
-              Keep reviewing
+              Seguir revisando
             </Button>
             <Button
               color="pine"
@@ -335,7 +293,7 @@ export function AssessmentForm(props: {
                 if (completionCommand) props.onComplete(completionCommand)
               }}
             >
-              Complete review
+              Completar revisión
             </Button>
           </Group>
         </Stack>

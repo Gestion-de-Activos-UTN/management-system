@@ -10,13 +10,13 @@ import type { Asset } from '@/app/types/payload-types'
 export function RowActions({ asset }: { asset: Asset }) {
   return (
     <Group gap={6} wrap="wrap" justify="center">
-      <Tooltip label="View details">
+      <Tooltip label="Ver detalles">
         <ActionIcon
           component={Link}
           href={`/portal/inventory/${asset.id}`}
           variant="light"
           size="md"
-          aria-label="View details"
+          aria-label="Ver detalles"
         >
           <Eye size={16} strokeWidth={1.5} />
         </ActionIcon>

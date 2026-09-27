@@ -14,8 +14,8 @@ export function useGenerateSnapshot() {
     mutationFn: officeId => generateSnapshot(officeId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory-snapshots'] })
-      notifications.show({ color: 'green', message: 'Snapshot generated' })
+      notifications.show({ color: 'green', message: 'Instantánea generada' })
     },
-    onError: error => showApiError(error, 'Could not generate the snapshot'),
+    onError: error => showApiError(error, 'No se pudo generar la instantánea'),
   })
 }

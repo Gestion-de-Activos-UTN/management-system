@@ -28,8 +28,9 @@ function fakeRequest(
 
 async function seedTenant(
   payload: Payload,
-  roleSlug: 'org_admin' | 'org_viewer',
-  officeIds: string[] | 'self'
+  roleSlug: 'org_admin' | 'org_viewer' | 'office_manager',
+  // 'other' = a second office of the same organization, not the asset's one.
+  officeIds: string[] | 'self' | 'other'
 ) {
   const organization = await payload.create({
     collection: 'organizations',
@@ -75,12 +76,20 @@ async function seedTenant(
       data: {
         slug: roleSlug,
         name: roleSlug,
-        rank: roleSlug === 'org_admin' ? 2 : 3,
-        scope: 'organization',
+        rank: roleSlug === 'org_admin' ? 2 : roleSlug === 'office_manager' ? 5 : 3,
+        scope: roleSlug === 'office_manager' ? 'organization_office' : 'organization',
         is_platform_role: false,
       },
       overrideAccess: true,
     }))
+  const otherOffice =
+    officeIds === 'other'
+      ? await payload.create({
+          collection: 'offices',
+          data: { organization: organization.id, name: 'Otra oficina' },
+          overrideAccess: true,
+        })
+      : null
   const user = await payload.create({
     collection: 'users',
     data: {
@@ -95,7 +104,8 @@ async function seedTenant(
     data: {
       user: user.id,
       organization: organization.id,
-      offices: officeIds === 'self' ? [office.id] : officeIds,
+      offices:
+        officeIds === 'self' ? [office.id] : officeIds === 'other' ? [otherOffice!.id] : officeIds,
       role: role.id,
       status: 'active',
       is_active: true,
@@ -131,8 +141,9 @@ test('PATCH /v1/assets/:id/identify: 403 sin permiso de update sobre assets (org
 
 test('PATCH /v1/assets/:id/identify: rechaza (403) si la office del asset no está en el alcance del usuario', async () => {
   const payload = await getPayload({ config })
-  // 'self' asignaría la office del propio asset — acá forzamos el desalineamiento pasando [].
-  const { asset, user } = await seedTenant(payload, 'org_admin', [])
+  // org_admin siempre recibe todas las oficinas de su organización (enforceOrgAdminOffices), así
+  // que el scoping por oficina se prueba con un office_manager asignado a otra oficina.
+  const { asset, user } = await seedTenant(payload, 'office_manager', 'other')
 
   await assert.rejects(
     async () => {

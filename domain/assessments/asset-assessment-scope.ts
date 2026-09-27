@@ -60,7 +60,7 @@ export function assessmentScopeFields() {
       },
     },
     {
-      // null means that the exclusion has no expiration date.
+      // Required by domain validation; exclusions may last at most 90 days.
       name: 'assessment_excluded_until',
       type: 'date' as const,
       admin: {

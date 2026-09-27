@@ -85,6 +85,8 @@ export interface Config {
     'assessment-instances': AssessmentInstance;
     'assessment-answers': AssessmentAnswer;
     'compliance-results': ComplianceResult;
+    'risk-evaluations': RiskEvaluation;
+    'risk-contributions': RiskContribution;
     'payload-kv': PayloadKv;
     'payload-jobs': PayloadJob;
     'payload-locked-documents': PayloadLockedDocument;
@@ -110,6 +112,8 @@ export interface Config {
     'assessment-instances': AssessmentInstancesSelect<false> | AssessmentInstancesSelect<true>;
     'assessment-answers': AssessmentAnswersSelect<false> | AssessmentAnswersSelect<true>;
     'compliance-results': ComplianceResultsSelect<false> | ComplianceResultsSelect<true>;
+    'risk-evaluations': RiskEvaluationsSelect<false> | RiskEvaluationsSelect<true>;
+    'risk-contributions': RiskContributionsSelect<false> | RiskContributionsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-jobs': PayloadJobsSelect<false> | PayloadJobsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -133,6 +137,8 @@ export interface Config {
   user: Admin | User;
   jobs: {
     tasks: {
+      'recalculate-risk': TaskRecalculateRisk;
+      'refresh-risk': TaskRefreshRisk;
       'expire-raw-scan-payloads': TaskExpireRawScanPayloads;
       'reconcile-expired-assessments': TaskReconcileExpiredAssessments;
       'reconcile-expired-asset-exclusions': TaskReconcileExpiredAssetExclusions;
@@ -205,6 +211,10 @@ export interface OrganizationSetting {
   assessment_policy_version: number;
   assessment_policy_selected_at: string;
   assessment_policy_selected_by?: (string | null) | User;
+  maturity_it_owner?: ('yes' | 'no') | null;
+  maturity_security_budget?: ('none' | 'occasional' | 'recurring') | null;
+  maturity_updated_at?: string | null;
+  maturity_updated_by?: (string | null) | User;
   offline_after_hours?: number | null;
   snapshot_before_each_scan?: boolean | null;
   snapshot_interval_days?: number | null;
@@ -380,6 +390,7 @@ export interface Asset {
     | null;
   organization?: (string | null) | Organization;
   ip?: string | null;
+  last_observed_cidr?: string | null;
   last_seen?: string | null;
   gateway_ip?: string | null;
   gateway_mac?: string | null;
@@ -705,22 +716,7 @@ export interface InventorySnapshot {
   taken_at: string;
   generated_by: 'manual' | 'scheduled' | 'pre_audit';
   triggered_by_user?: (string | null) | User;
-  risk_score: {
-    global?: number | null;
-    evaluated_percentage: number;
-    requires_attention: number;
-    excluded_assets?: number | null;
-    not_evaluable: number;
-    policy_snapshot?:
-      | {
-          [k: string]: unknown;
-        }
-      | unknown[]
-      | string
-      | number
-      | boolean
-      | null;
-  };
+  risk_score: string | RiskEvaluation;
   assessment_results_snapshot:
     | {
         [k: string]: unknown;
@@ -731,6 +727,67 @@ export interface InventorySnapshot {
     | boolean
     | null;
   assets_dump:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "risk-evaluations".
+ */
+export interface RiskEvaluation {
+  id: string;
+  organization: string | Organization;
+  office?: (string | null) | Office;
+  catalog_version: number;
+  engine_version: number;
+  policy_key: 'essential' | 'reinforced';
+  evaluated_at: string;
+  rro_raw: number;
+  rro_adjusted: number;
+  riem: number;
+  score?: number | null;
+  base_band?: ('low' | 'medium' | 'high' | 'critical') | null;
+  final_band?: ('low' | 'medium' | 'high' | 'critical') | null;
+  coverage: number;
+  unknown_percentage: number;
+  confidence: 'hidden' | 'preliminary' | 'warning' | 'usable' | 'reliable';
+  effective_confidence: 'hidden' | 'preliminary' | 'warning' | 'usable' | 'reliable';
+  counts:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  alerts:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  control_summary:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  asset_summary:
     | {
         [k: string]: unknown;
       }
@@ -768,13 +825,20 @@ export interface AssessmentInstance {
   status: 'pending' | 'in_progress' | 'completed' | 'expired' | 'superseded';
   assigned_to?: (string | null) | User;
   created_reason:
-    'initial' | 'asset_identified' | 'assessment_scope_changed' | 'policy_changed' | 'answer_expired' | 'manual_review';
+    | 'initial'
+    | 'asset_identified'
+    | 'assessment_scope_changed'
+    | 'office_changed'
+    | 'policy_changed'
+    | 'answer_expired'
+    | 'manual_review';
   opened_at: string;
   due_at: string;
   completed_at?: string | null;
   completed_by?: (string | null) | User;
   completion_summary: {
     compliant: number;
+    partially_effective: number;
     non_compliant: number;
     not_evaluable: number;
   };
@@ -791,16 +855,30 @@ export interface AssessmentAnswer {
   assessment: string | AssessmentInstance;
   question_key: string;
   question_version: number;
-  answer: 'yes' | 'no' | 'unknown' | 'not_applicable';
+  option_key: string;
+  option_snapshot:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   justification?: string | null;
   evidence_note?: string | null;
   answered_by: string | User;
   answered_at: string;
   valid_until: string;
-  evaluation_effect_snapshot: {
-    status: 'compliant' | 'non_compliant' | 'not_evaluable';
-    reason_code: string;
-  };
+  evaluation_effect_snapshot:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -835,6 +913,43 @@ export interface ComplianceResult {
     | boolean
     | null;
   supersedes?: (string | null) | ComplianceResult;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "risk-contributions".
+ */
+export interface RiskContribution {
+  id: string;
+  organization: string | Organization;
+  office?: (string | null) | Office;
+  evaluation: string | RiskEvaluation;
+  asset_key: string;
+  asset?: (string | null) | Asset;
+  manual_asset?: (string | null) | NonNetworkAsset;
+  control_key: string;
+  criticality: 'low' | 'medium' | 'high' | 'critical' | 'unknown';
+  scope_multiplier: number;
+  severity: 'low' | 'medium' | 'high' | 'critical' | 'unknown';
+  exposure: 'low' | 'medium' | 'high';
+  exposure_source?: ('scan' | 'default_unknown') | null;
+  efficacy?: number | null;
+  effect_snapshot:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  status: 'compliant' | 'partially_effective' | 'non_compliant' | 'not_evaluable';
+  inherent_risk?: number | null;
+  residual_risk?: number | null;
+  coverage_weight: number;
+  excluded: boolean;
+  reason_code: string;
   updatedAt: string;
   createdAt: string;
 }
@@ -909,6 +1024,8 @@ export interface PayloadJob {
         completedAt: string;
         taskSlug:
           | 'inline'
+          | 'recalculate-risk'
+          | 'refresh-risk'
           | 'expire-raw-scan-payloads'
           | 'reconcile-expired-assessments'
           | 'reconcile-expired-asset-exclusions';
@@ -945,11 +1062,22 @@ export interface PayloadJob {
       }[]
     | null;
   taskSlug?:
-    | ('inline' | 'expire-raw-scan-payloads' | 'reconcile-expired-assessments' | 'reconcile-expired-asset-exclusions')
+    | (
+        | 'inline'
+        | 'recalculate-risk'
+        | 'refresh-risk'
+        | 'expire-raw-scan-payloads'
+        | 'reconcile-expired-assessments'
+        | 'reconcile-expired-asset-exclusions'
+      )
     | null;
   queue?: string | null;
   waitUntil?: string | null;
   processing?: boolean | null;
+  /**
+   * Used for concurrency control. Jobs with the same key are subject to exclusive/supersedes rules.
+   */
+  concurrencyKey?: string | null;
   meta?:
     | {
         [k: string]: unknown;
@@ -1036,6 +1164,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'compliance-results';
         value: string | ComplianceResult;
+      } | null)
+    | ({
+        relationTo: 'risk-evaluations';
+        value: string | RiskEvaluation;
+      } | null)
+    | ({
+        relationTo: 'risk-contributions';
+        value: string | RiskContribution;
       } | null);
   globalSlug?: string | null;
   user:
@@ -1160,6 +1296,7 @@ export interface AssetsSelect<T extends boolean = true> {
       };
   organization?: T;
   ip?: T;
+  last_observed_cidr?: T;
   last_seen?: T;
   gateway_ip?: T;
   gateway_mac?: T;
@@ -1362,6 +1499,10 @@ export interface OrganizationSettingsSelect<T extends boolean = true> {
   assessment_policy_version?: T;
   assessment_policy_selected_at?: T;
   assessment_policy_selected_by?: T;
+  maturity_it_owner?: T;
+  maturity_security_budget?: T;
+  maturity_updated_at?: T;
+  maturity_updated_by?: T;
   offline_after_hours?: T;
   snapshot_before_each_scan?: T;
   snapshot_interval_days?: T;
@@ -1468,16 +1609,7 @@ export interface InventorySnapshotsSelect<T extends boolean = true> {
   taken_at?: T;
   generated_by?: T;
   triggered_by_user?: T;
-  risk_score?:
-    | T
-    | {
-        global?: T;
-        evaluated_percentage?: T;
-        requires_attention?: T;
-        excluded_assets?: T;
-        not_evaluable?: T;
-        policy_snapshot?: T;
-      };
+  risk_score?: T;
   assessment_results_snapshot?: T;
   assets_dump?: T;
   updatedAt?: T;
@@ -1508,6 +1640,7 @@ export interface AssessmentInstancesSelect<T extends boolean = true> {
     | T
     | {
         compliant?: T;
+        partially_effective?: T;
         non_compliant?: T;
         not_evaluable?: T;
       };
@@ -1523,18 +1656,14 @@ export interface AssessmentAnswersSelect<T extends boolean = true> {
   assessment?: T;
   question_key?: T;
   question_version?: T;
-  answer?: T;
+  option_key?: T;
+  option_snapshot?: T;
   justification?: T;
   evidence_note?: T;
   answered_by?: T;
   answered_at?: T;
   valid_until?: T;
-  evaluation_effect_snapshot?:
-    | T
-    | {
-        status?: T;
-        reason_code?: T;
-      };
+  evaluation_effect_snapshot?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -1560,6 +1689,62 @@ export interface ComplianceResultsSelect<T extends boolean = true> {
   explanation?: T;
   evidence_snapshot?: T;
   supersedes?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "risk-evaluations_select".
+ */
+export interface RiskEvaluationsSelect<T extends boolean = true> {
+  organization?: T;
+  office?: T;
+  catalog_version?: T;
+  engine_version?: T;
+  policy_key?: T;
+  evaluated_at?: T;
+  rro_raw?: T;
+  rro_adjusted?: T;
+  riem?: T;
+  score?: T;
+  base_band?: T;
+  final_band?: T;
+  coverage?: T;
+  unknown_percentage?: T;
+  confidence?: T;
+  effective_confidence?: T;
+  counts?: T;
+  alerts?: T;
+  control_summary?: T;
+  asset_summary?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "risk-contributions_select".
+ */
+export interface RiskContributionsSelect<T extends boolean = true> {
+  organization?: T;
+  office?: T;
+  evaluation?: T;
+  asset_key?: T;
+  asset?: T;
+  manual_asset?: T;
+  control_key?: T;
+  criticality?: T;
+  scope_multiplier?: T;
+  severity?: T;
+  exposure?: T;
+  exposure_source?: T;
+  efficacy?: T;
+  effect_snapshot?: T;
+  status?: T;
+  inherent_risk?: T;
+  residual_risk?: T;
+  coverage_weight?: T;
+  excluded?: T;
+  reason_code?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -1599,6 +1784,7 @@ export interface PayloadJobsSelect<T extends boolean = true> {
   queue?: T;
   waitUntil?: T;
   processing?: T;
+  concurrencyKey?: T;
   meta?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1672,6 +1858,29 @@ export interface CollectionsWidget {
     [k: string]: unknown;
   };
   width: 'full';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskRecalculate-risk".
+ */
+export interface TaskRecalculateRisk {
+  input: {
+    organization_id: string;
+    office_id?: string | null;
+  };
+  output: {
+    evaluation_id: string;
+  };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskRefresh-risk".
+ */
+export interface TaskRefreshRisk {
+  input?: unknown;
+  output: {
+    organizations: number;
+  };
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

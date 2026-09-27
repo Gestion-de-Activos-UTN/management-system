@@ -16,8 +16,8 @@ export function useUnidentifyAsset() {
         queryClient.invalidateQueries({ queryKey: ['assets'] }),
         invalidateSecurityReview(queryClient),
       ])
-      notifications.show({ color: 'green', message: 'Identification removed' })
+      notifications.show({ color: 'green', message: 'Identificación eliminada' })
     },
-    onError: error => showApiError(error, 'Could not remove identification'),
+    onError: error => showApiError(error, 'No se pudo quitar la identificación'),
   })
 }

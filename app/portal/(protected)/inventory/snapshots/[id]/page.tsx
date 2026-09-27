@@ -35,21 +35,21 @@ const networkColumns: ColumnDef<DumpedAsset, unknown>[] = [
     header: 'IP',
     cell: ({ row }) => <TechnicalText>{row.original.ip ?? '—'}</TechnicalText>,
   },
-  { accessorKey: 'hostname', header: 'Hostname' },
+  { accessorKey: 'hostname', header: 'Nombre del host' },
   {
     accessorKey: 'criticality',
-    header: 'Criticality',
+    header: 'Criticidad',
     cell: ({ row }) =>
       row.original.criticality ? CRITICALITY_LABEL[row.original.criticality] : '—',
   },
-  { accessorKey: 'status', header: 'Status (at snapshot time)' },
+  { accessorKey: 'status', header: 'Estado (al momento de la instantánea)' },
 ]
 
 const nonNetworkColumns: ColumnDef<DumpedNonNetworkAsset, unknown>[] = [
   { accessorKey: 'alias', header: 'Alias' },
   {
     accessorKey: 'asset_category',
-    header: 'Category',
+    header: 'Categoría',
     cell: ({ row }) =>
       row.original.asset_category
         ? (ASSET_CATEGORY_LABEL[row.original.asset_category] ?? row.original.asset_category)
@@ -57,11 +57,11 @@ const nonNetworkColumns: ColumnDef<DumpedNonNetworkAsset, unknown>[] = [
   },
   {
     accessorKey: 'criticality',
-    header: 'Criticality',
+    header: 'Criticidad',
     cell: ({ row }) =>
       row.original.criticality ? CRITICALITY_LABEL[row.original.criticality] : '—',
   },
-  { accessorKey: 'status', header: 'Status (at snapshot time)' },
+  { accessorKey: 'status', header: 'Estado (al momento de la instantánea)' },
 ]
 
 // Sin claim de shape estricta sobre lo que trae la DB — `assets_dump` es un campo `json` libre
@@ -87,7 +87,7 @@ export default function SnapshotDetailPage() {
   if (!snapshot) {
     return (
       <Center py="xl">
-        <Text c="dimmed">Could not load this snapshot.</Text>
+        <Text c="dimmed">No se pudo cargar esta instantánea.</Text>
       </Center>
     )
   }
@@ -95,14 +95,19 @@ export default function SnapshotDetailPage() {
   const dump = snapshot.assets_dump as { network?: unknown; non_network?: unknown } | null
   const networkAssets = dumpArray<DumpedAsset>(dump?.network)
   const nonNetworkAssets = dumpArray<DumpedNonNetworkAsset>(dump?.non_network)
+  const risk = snapshot.assessment_results_snapshot as {
+    score?: number | null
+    coverage?: number
+    excluded_assets?: number
+  }
 
   return (
     <Stack gap="lg">
-      <BackButton href={backHref} label="Back to Snapshot History" />
+      <BackButton href={backHref} label="Volver al Historial de instantáneas" />
 
       <PageHeader
-        title={`Snapshot — ${formatDateTime(snapshot.taken_at)}`}
-        description="Immutable snapshot — each asset's status reflects that point in time, not its current state."
+        title={`Instantánea — ${formatDateTime(snapshot.taken_at)}`}
+        description="Instantánea inmutable: el estado de cada activo refleja ese momento, no su estado actual."
       />
 
       <Card withBorder padding="lg">
@@ -110,22 +115,22 @@ export default function SnapshotDetailPage() {
           <RingProgress
             size={120}
             thickness={12}
-            sections={[{ value: snapshot.risk_score.global ?? 0, color: 'red' }]}
+            sections={[{ value: risk.score ?? 0, color: 'red' }]}
             label={
               <Text ta="center" fw={700}>
-                {snapshot.risk_score.global ?? '—'}
+                {risk.score == null ? '—' : Math.round(risk.score)}
               </Text>
             }
           />
           <Text c="dimmed">
-            {snapshot.risk_score.global == null
-              ? 'Risk was not evaluable at the time of this snapshot.'
-              : `Risk at this point in time. Assessment coverage was ${snapshot.risk_score.evaluated_percentage}%.`}
+            {risk.score == null
+              ? 'El riesgo no era evaluable al momento de esta instantánea.'
+              : `Riesgo en ese momento. La cobertura de la evaluación era del ${Math.round(risk.coverage ?? 0)} %.`}
           </Text>
-          {(snapshot.risk_score.excluded_assets ?? 0) > 0 && (
+          {(risk.excluded_assets ?? 0) > 0 && (
             <Text size="sm" c="dimmed">
-              {snapshot.risk_score.excluded_assets} assets were outside the security assessment
-              scope at this point in time.
+              {risk.excluded_assets} activos estaban fuera del alcance de la evaluación de seguridad
+              en ese momento.
             </Text>
           )}
         </Group>
@@ -133,15 +138,15 @@ export default function SnapshotDetailPage() {
 
       <Tabs defaultValue="network">
         <Tabs.List>
-          <Tabs.Tab value="network">Network ({networkAssets.length})</Tabs.Tab>
-          <Tabs.Tab value="non-network">Manual assets ({nonNetworkAssets.length})</Tabs.Tab>
+          <Tabs.Tab value="network">Red ({networkAssets.length})</Tabs.Tab>
+          <Tabs.Tab value="non-network">Activos manuales ({nonNetworkAssets.length})</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="network" pt="md">
           <DataTable
             columns={networkColumns}
             data={networkAssets}
-            emptyLabel="No network assets in this snapshot"
+            emptyLabel="No hay activos de red en esta instantánea"
             minWidth={720}
           />
         </Tabs.Panel>
@@ -150,7 +155,7 @@ export default function SnapshotDetailPage() {
           <DataTable
             columns={nonNetworkColumns}
             data={nonNetworkAssets}
-            emptyLabel="No manually tracked assets in this snapshot"
+            emptyLabel="No hay activos manuales en esta instantánea"
             minWidth={680}
           />
         </Tabs.Panel>

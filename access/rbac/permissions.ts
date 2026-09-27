@@ -12,6 +12,8 @@ export type CollectionSlug =
   | 'assessment-instances'
   | 'assessment-answers'
   | 'compliance-results'
+  | 'risk-evaluations'
+  | 'risk-contributions'
 export type Action = 'create' | 'read' | 'update' | 'delete'
 
 // Matriz estática — decisión explícita (documentation/01-erd-core.md nota 9): el sistema no
@@ -35,7 +37,10 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     'inventory-snapshots': ['create', 'read'],
     'assessment-instances': ['read'],
     'assessment-answers': ['read'],
+
     'compliance-results': ['read'],
+    'risk-evaluations': ['read'],
+    'risk-contributions': ['read'],
   },
   org_admin: {
     organizations: ['read'],
@@ -47,7 +52,10 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     'inventory-snapshots': ['create', 'read'],
     'assessment-instances': ['read'],
     'assessment-answers': ['read'],
+
     'compliance-results': ['read'],
+    'risk-evaluations': ['read'],
+    'risk-contributions': ['read'],
   },
   org_viewer: {
     organizations: ['read'],
@@ -58,7 +66,10 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     'inventory-snapshots': ['read'],
     'assessment-instances': ['read'],
     'assessment-answers': ['read'],
+
     'compliance-results': ['read'],
+    'risk-evaluations': ['read'],
+    'risk-contributions': ['read'],
   },
   office_manager: {
     organizations: ['read'],
@@ -69,7 +80,10 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     'inventory-snapshots': ['read'],
     'assessment-instances': ['read'],
     'assessment-answers': ['read'],
+
     'compliance-results': ['read'],
+    'risk-evaluations': ['read'],
+    'risk-contributions': ['read'],
   },
 }
 
@@ -85,4 +99,11 @@ export function canDo(
 ): boolean {
   if (!roleSlug) return false
   return MATRIX[roleSlug]?.[collection]?.includes(action) ?? false
+}
+
+// Alcance de fila por rol: org_admin/platform_admin ven toda la organización (incluidas las filas
+// org-level, office = null); office_manager y org_viewer solo sus oficinas (membership.offices).
+// Único lugar con esta regla — endpoints, access y frontend (vía /v1/session) la consultan acá.
+export function hasOrgWideScope(roleSlug: RoleSlug | null | undefined): boolean {
+  return roleSlug === 'platform_admin' || roleSlug === 'org_admin'
 }

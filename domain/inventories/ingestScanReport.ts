@@ -3,6 +3,7 @@ import type { Asset } from '../../app/types/payload-types'
 import type { AssetPayload } from '../../contracts/asset.schema'
 import type { ScanReportPayload } from '../../contracts/scan-report.schema'
 import type { AgentAuthResult } from '../../access/middleware/resolveAgentAuth'
+import { enqueueRiskRecalculation } from '../risk/enqueueRiskRecalculation'
 import { inferDeviceCategory } from '../assets/inferDeviceCategory'
 
 export interface IngestResult {
@@ -91,6 +92,7 @@ function sanitizeTechnicalBlock(
   const technical = {
     asset_id: existingDoc?.asset_id ?? asset.asset_id,
     ip: incomingIsLatest ? asset.ip : existingDoc?.ip,
+    last_observed_cidr: incomingIsLatest ? report.network : existingDoc?.last_observed_cidr,
     // El scanner manda "" cuando no pudo resolverlos (ver nota arriba) — se normaliza a `null`
     // acá, no en el scanner, para que Assets guarde exactamente lo que su propio contrato
     // documenta (`mac: string | null`, doc 05 §5.1), no un string vacío disfrazado de dato.
@@ -474,5 +476,6 @@ export async function ingestScanReport(
     processedAssetIds.push(technical.asset_id)
   }
 
+  await enqueueRiskRecalculation(payload, auth.organizationId, [auth.officeId])
   return { processedAssetIds, processedDocumentIds, rejectedAssets }
 }

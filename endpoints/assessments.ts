@@ -21,10 +21,15 @@ import {
   reconcileManualAssetAssessmentInstance,
   reconcileOrganizationAssessments,
 } from '@/domain/assessments/reconcileAssessmentInstance'
-import { POLICY_CATALOG } from '@/domain/assessments/catalog'
+import { enqueueOrganizationRiskRecalculation } from '@/domain/risk/enqueueRiskRecalculation'
+import { RISK_POLICY_KEYS } from '@/domain/risk/catalog-v2'
+import { bandVisible, scoreVisible } from '@/domain/risk/constants'
+import type { SecurityReviewSummary } from '@/modules/assessments/service'
+import type { RiskEvaluationDTO } from '@/modules/risk/service'
 import { resolveInheritedAssessmentEvidence } from '@/domain/assessments/resolveInheritedEvidence'
+import { hasOrgWideScope } from '@/access/rbac/permissions'
+import { officeQueryError } from '@/access/tenant/officeQueryError'
 import { withDerivedAssessmentStatus } from '@/domain/assessments/assessmentExpiration'
-import { getRiskSummary } from '@/domain/assessments/getRiskSummary'
 import { isAssetExcludedFromAssessments } from '@/domain/assessments/asset-assessment-scope'
 
 const json = (body: unknown, status = 200) => Response.json(body, { status })
@@ -101,11 +106,13 @@ function assessmentTargetClauses(assessment: AssessmentInstance): Where[] {
 export function buildAssessmentOfficeScope(
   officeId: string,
   currentAssetIds: string[],
-  currentManualAssetIds: string[]
+  currentManualAssetIds: string[],
+  // Organization-level cycles only belong to an office view for org-wide roles.
+  includeOrganization = true
 ): Where {
   return {
     or: [
-      { scope: { equals: 'organization' } },
+      ...(includeOrganization ? [{ scope: { equals: 'organization' } } as Where] : []),
       {
         and: [{ scope: { equals: 'office' } }, { office: { equals: officeId } }],
       },
@@ -144,12 +151,15 @@ export const assessmentsListEndpoint: Endpoint = {
       asset_id: params.get('asset_id') ?? undefined,
     })
     if (!parsed.success) return json({ error: 'invalid_query', issues: parsed.error.issues }, 400)
+    if (parsed.data.office_id) {
+      const officeError = officeQueryError(ctx, parsed.data.office_id)
+      if (officeError) return json({ error: officeError }, 403)
+    }
+    const orgWide = hasOrgWideScope(ctx.role)
     const clauses: Where[] = []
     clauses.push({ organization: { equals: ctx.organizationId } })
-    if (!ctx.isPlatformAdmin && ctx.role !== 'org_admin')
-      clauses.push({
-        or: [{ scope: { equals: 'organization' } }, { office: { in: ctx.officeIds } }],
-      })
+    // Without office_id an office-scoped role gets all of its offices, never org-level cycles.
+    if (!orgWide) clauses.push({ office: { in: ctx.officeIds } })
     if (parsed.data.scope) clauses.push({ scope: { equals: parsed.data.scope } })
     if (parsed.data.office_id) {
       const [currentAssets, currentManualAssets] = await Promise.all([
@@ -183,7 +193,12 @@ export const assessmentsListEndpoint: Endpoint = {
       const currentAssetIds = currentAssets.docs.map(asset => String(asset.id))
       const currentManualAssetIds = currentManualAssets.docs.map(asset => String(asset.id))
       clauses.push(
-        buildAssessmentOfficeScope(parsed.data.office_id, currentAssetIds, currentManualAssetIds)
+        buildAssessmentOfficeScope(
+          parsed.data.office_id,
+          currentAssetIds,
+          currentManualAssetIds,
+          orgWide
+        )
       )
     }
     if (parsed.data.asset_id) clauses.push({ asset: { equals: parsed.data.asset_id } })
@@ -228,14 +243,48 @@ export const securityReviewSummaryEndpoint: Endpoint = {
     const officeId = new URL(req.url ?? 'http://localhost', 'http://localhost').searchParams.get(
       'office_id'
     )
-    if (officeId && !ctx.officeIds.includes(officeId))
-      return json({ error: 'office_forbidden' }, 403)
-    const result = await getRiskSummary(
-      req.payload,
-      { organizationId: ctx.organizationId, officeId: officeId ?? undefined },
-      req
-    )
-    return json(result.summary)
+    const officeError = officeQueryError(ctx, officeId)
+    if (officeError) return json({ error: officeError }, 403)
+    const evaluations = await req.payload.find({
+      collection: 'risk-evaluations',
+      overrideAccess: true,
+      req,
+      depth: 0,
+      limit: 1,
+      sort: '-evaluated_at',
+      where: {
+        and: [
+          { organization: { equals: ctx.organizationId } },
+          officeId ? { office: { equals: officeId } } : { office: { exists: false } },
+        ],
+      },
+    })
+    const evaluation = evaluations.docs[0]
+    if (!evaluation)
+      return json({
+        risk_score: null,
+        evaluated_percentage: 0,
+        applicable_checks: 0,
+        not_evaluable: 0,
+        requires_attention: 0,
+        excluded_assets: 0,
+        risk_band: null,
+        unconfirmed_assets: 0,
+      } satisfies SecurityReviewSummary)
+    // Counts are persisted with the evaluation; counting contribution rows here would truncate.
+    const counts = evaluation.counts as RiskEvaluationDTO['counts']
+    return json({
+      risk_score: scoreVisible(evaluation.confidence) ? (evaluation.score ?? null) : null,
+      evaluated_percentage: evaluation.coverage,
+      applicable_checks:
+        counts.compliant + counts.partially_effective + counts.non_compliant + counts.not_evaluable,
+      not_evaluable: counts.not_evaluable,
+      requires_attention: counts.non_compliant + counts.partially_effective,
+      excluded_assets: counts.excluded_assets,
+      // Same visibility rule as the risk endpoint: no band on a preliminary result.
+      risk_band: bandVisible(evaluation.confidence) ? (evaluation.final_band ?? null) : null,
+      unconfirmed_assets: counts.unconfirmed_assets,
+    } satisfies SecurityReviewSummary)
   },
 }
 
@@ -337,7 +386,14 @@ export const assessmentDetailEndpoint: Endpoint = {
         ).docs
       }
     }
-    const effectiveEvidence = await resolveInheritedAssessmentEvidence(req.payload, assessment, req)
+    const effectiveEvidence = await resolveInheritedAssessmentEvidence(
+      req.payload,
+      assessment,
+      req,
+      {
+        includeOrganization: hasOrgWideScope(ctx.role),
+      }
+    )
     const technical = assessment.asset
       ? await req.payload.find({
           collection: 'compliance-results',
@@ -553,12 +609,7 @@ export const assessmentPolicyEndpoint: Endpoint = {
       return json({ error: 'feature_disabled' }, 403)
     const parsed = UpdateAssessmentPolicySchema.safeParse(await req.json!().catch(() => ({})))
     if (!parsed.success) return json({ error: 'invalid_policy', issues: parsed.error.issues }, 400)
-    if (
-      !POLICY_CATALOG.some(
-        policy =>
-          policy.key === parsed.data.policy_key && policy.version === parsed.data.policy_version
-      )
-    )
+    if (!RISK_POLICY_KEYS.includes(parsed.data.policy_key) || parsed.data.policy_version !== 2)
       return json({ error: 'policy_version_unavailable' }, 400)
 
     const found = await req.payload.find({
@@ -599,6 +650,7 @@ export const assessmentPolicyEndpoint: Endpoint = {
       })
       await reconcileOrganizationAssessments(req.payload, ctx.organizationId, 'policy_changed', req)
       if (ownsTransaction && transactionID) await req.payload.db.commitTransaction(transactionID)
+      await enqueueOrganizationRiskRecalculation(req.payload, ctx.organizationId)
       return json(updated)
     } catch (error) {
       if (ownsTransaction && transactionID) await req.payload.db.rollbackTransaction(transactionID)

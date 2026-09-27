@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { POLICY_KEYS } from '@/domain/assessments/catalog'
+import { MATURITY_BUDGET_VALUES, MATURITY_IT_OWNER_VALUES } from '@/domain/organizations/maturity'
 
 // Sin lectura ni escritura externa esta fase — solo lo escribe
 // domain/organizations/createOrgWithAdmin.ts vía overrideAccess. Sin AppSettings
@@ -36,9 +37,20 @@ export const OrganizationSettings: CollectionConfig = {
       required: true,
       defaultValue: 'essential',
     },
-    { name: 'assessment_policy_version', type: 'number', required: true, defaultValue: 1 },
+    { name: 'assessment_policy_version', type: 'number', required: true, defaultValue: 2 },
     { name: 'assessment_policy_selected_at', type: 'date', required: true },
     { name: 'assessment_policy_selected_by', type: 'relationship', relationTo: 'users' },
+    {
+      // Perfil de madurez (Diccionario de Madurez): sólo prioriza recomendaciones, nunca entra en
+      // el Risk Score. `null` = sin responder; el asistente debe preguntar, no asumir un nivel.
+      // Lo escribe únicamente endpoints/organizationSettings.ts (org_admin).
+      name: 'maturity_it_owner',
+      type: 'select',
+      options: [...MATURITY_IT_OWNER_VALUES],
+    },
+    { name: 'maturity_security_budget', type: 'select', options: [...MATURITY_BUDGET_VALUES] },
+    { name: 'maturity_updated_at', type: 'date' },
+    { name: 'maturity_updated_by', type: 'relationship', relationTo: 'users' },
     {
       // Umbral del job de aging (domain/inventories/agingSweep.ts) — cuánto tiempo sin aparecer en
       // un scan antes de pasar un Asset de 'active' a 'offline'. Sin override, cae a

@@ -9,16 +9,16 @@ import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
 import type { OrgMember } from '@/modules/users/service'
 
 const columns: ColumnDef<OrgMember, unknown>[] = [
-  { accessorKey: 'name', header: 'Name' },
-  { accessorKey: 'email', header: 'Email' },
-  { accessorKey: 'role', header: 'Role' },
+  { accessorKey: 'name', header: 'Nombre' },
+  { accessorKey: 'email', header: 'Correo electrónico' },
+  { accessorKey: 'role', header: 'Rol' },
   {
     accessorKey: 'status',
-    header: 'Status',
+    header: 'Estado',
     cell: ({ row }) => (
       <StatusBadge
         tone={row.original.status === 'active' ? 'success' : 'warning'}
-        label={row.original.status === 'active' ? 'Active' : 'Onboarding'}
+        label={row.original.status === 'active' ? 'Activo' : 'Incorporación'}
       />
     ),
   },
@@ -29,7 +29,7 @@ export default function AdminUsersPage() {
 
   return (
     <Stack gap="md">
-      <PageHeader title="Users" description="Members of your organization." />
+      <PageHeader title="Usuarios" description="Miembros de tu organización." />
       <DataTable columns={columns} data={members ?? []} isLoading={isPending} minWidth={760} />
     </Stack>
   )

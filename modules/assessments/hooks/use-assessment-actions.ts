@@ -15,33 +15,36 @@ export function useAssessmentActions(id: string) {
       mutationFn: (data: SaveAssessmentDraft) => saveAssessmentDraft(id, data),
       onSuccess: async () => {
         await invalidate()
-        notifications.show({ color: 'green', message: 'Draft saved' })
+        notifications.show({ color: 'green', message: 'Borrador guardado' })
       },
       onError: error =>
-        notifications.show({ color: 'red', message: error.message || 'Could not save the draft' }),
+        notifications.show({
+          color: 'red',
+          message: error.message || 'No se pudo guardar el borrador',
+        }),
     }),
     complete: useMutation({
       mutationFn: (data: SaveAssessmentDraft) => completeAssessment(id, data),
       onSuccess: async () => {
         await invalidate()
-        notifications.show({ color: 'green', message: 'Security review completed' })
+        notifications.show({ color: 'green', message: 'Revisión de seguridad completada' })
       },
       onError: error =>
         notifications.show({
           color: 'red',
-          message: error.message || 'Could not complete the review',
+          message: error.message || 'No se pudo completar la revisión',
         }),
     }),
     startNewCycle: useMutation({
       mutationFn: (reason: string) => reopenAssessment(id, reason),
       onSuccess: async () => {
         await invalidate()
-        notifications.show({ color: 'green', message: 'New review cycle created' })
+        notifications.show({ color: 'green', message: 'Nuevo ciclo de revisión creado' })
       },
       onError: error =>
         notifications.show({
           color: 'red',
-          message: error.message || 'Could not create a new review cycle',
+          message: error.message || 'No se pudo crear un nuevo ciclo de revisión',
         }),
     }),
   }

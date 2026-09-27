@@ -23,14 +23,14 @@ export default function AssetDetailPage() {
   if (isError || !asset) {
     return (
       <Stack align="center" py="xl">
-        <Text c="dimmed">Could not load this asset.</Text>
+        <Text c="dimmed">No se pudo cargar este activo.</Text>
       </Stack>
     )
   }
 
   return (
     <Stack gap="md">
-      <BackButton href={backHref} label="Back to Inventory" />
+      <BackButton href={backHref} label="Volver al inventario" />
       <AssetDetailView asset={asset} asOrganization={asOrganization} />
     </Stack>
   )

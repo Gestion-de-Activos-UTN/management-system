@@ -51,8 +51,8 @@ export default function LoginPage() {
             </Title>
           </Group>
           <Text c="pine.1" maw={320}>
-            Track assets, monitor risk, and keep every organization&apos;s inventory audit-ready
-            from one place.
+            Controla activos, supervisa riesgos y mantén el inventario de cada organización listo
+            para auditorías desde un solo lugar.
           </Text>
         </Stack>
       </Box>
@@ -90,32 +90,32 @@ export default function LoginPage() {
                   <Title order={3}>SIAM</Title>
                 </Group>
                 <Title order={2} visibleFrom="sm">
-                  Welcome back
+                  Te damos la bienvenida
                 </Title>
                 <Text c="dimmed" size="sm">
-                  Sign in to continue
+                  Inicia sesión para continuar
                 </Text>
               </Stack>
               <TextInput
-                label="Email"
+                label="Correo electrónico"
                 type="email"
                 required
                 value={email}
                 onChange={e => setEmail(e.currentTarget.value)}
               />
               <PasswordInput
-                label="Password"
+                label="Contraseña"
                 required
                 value={password}
                 onChange={e => setPassword(e.currentTarget.value)}
               />
               {login.isError && (
-                <Alert color="red" title="Login failed">
+                <Alert color="red" title="Error al iniciar sesión">
                   {login.error.message}
                 </Alert>
               )}
               <Button type="submit" loading={login.isPending} fullWidth>
-                Sign in
+                Iniciar sesión
               </Button>
             </Stack>
           </form>

@@ -30,7 +30,8 @@ const ROLES = [
     slug: 'org_viewer',
     name: 'Org Viewer',
     rank: 10,
-    scope: 'organization',
+    // Lector limitado a sus oficinas, igual que office_manager (access/rbac/permissions.ts::hasOrgWideScope).
+    scope: 'organization_office',
     is_platform_role: false,
   },
   {

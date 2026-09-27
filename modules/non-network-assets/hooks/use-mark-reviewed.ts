@@ -12,8 +12,8 @@ export function useMarkReviewed() {
     mutationFn: id => markReviewed(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['non-network-assets'] })
-      notifications.show({ color: 'green', message: 'Review confirmed' })
+      notifications.show({ color: 'green', message: 'Revisión confirmada' })
     },
-    onError: error => showApiError(error, 'Could not confirm the review'),
+    onError: error => showApiError(error, 'No se pudo confirmar la revisión'),
   })
 }

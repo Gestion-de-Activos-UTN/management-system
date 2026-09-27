@@ -1,17 +1,17 @@
-'use client';
+'use client'
 
-import { ActionIcon, useMantineColorScheme, useComputedColorScheme } from '@mantine/core';
-import { Sun, Moon } from 'lucide-react';
+import { ActionIcon, useMantineColorScheme, useComputedColorScheme } from '@mantine/core'
+import { Sun, Moon } from 'lucide-react'
 
 export function ColorSchemeToggle() {
-  const { setColorScheme } = useMantineColorScheme();
-  const computed = useComputedColorScheme('light', { getInitialValueInEffect: true });
+  const { setColorScheme } = useMantineColorScheme()
+  const computed = useComputedColorScheme('light', { getInitialValueInEffect: true })
 
   return (
     <ActionIcon
       variant="default"
       size={36}
-      aria-label="Toggle color scheme"
+      aria-label="Cambiar esquema de colores"
       onClick={() => setColorScheme(computed === 'light' ? 'dark' : 'light')}
     >
       {computed === 'light' ? (
@@ -20,5 +20,5 @@ export function ColorSchemeToggle() {
         <Sun size={20} strokeWidth={1.5} />
       )}
     </ActionIcon>
-  );
+  )
 }

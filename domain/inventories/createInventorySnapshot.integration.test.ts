@@ -5,6 +5,8 @@ import type { Payload } from 'payload'
 import config from '../../payload.config'
 import { createInventorySnapshot } from './createInventorySnapshot'
 import { relationId } from '@/lib/relationId'
+import { recalculateRisk } from '@/domain/risk/recalculateRisk'
+import { seedRiskOrganization } from '@/domain/risk/risk-integration-seed'
 
 // Integration test real contra Postgres (ver endpoints/reports.integration.test.ts para el
 // mismo criterio) — el foco acá es la garantía de copia-por-valor de assets_dump, que un mock
@@ -111,9 +113,9 @@ test('createInventorySnapshot: freezes inventory and an independently calculated
   const dump = snapshot.assets_dump as { network: unknown[]; non_network: unknown[] }
   assert.equal(dump.network.length, 2, 'debe incluir los 2 Assets de red')
   assert.equal(dump.non_network.length, 1, 'debe incluir el NonNetworkAsset manual (RF-49-54)')
-  const risk = snapshot.risk_score as { global: number | null; evaluated_percentage: number }
-  assert.equal(risk.global, null, 'sin resultados evaluables el riesgo no debe aparentar cero')
-  assert.equal(risk.evaluated_percentage, 0)
+  const risk = snapshot.assessment_results_snapshot as { score: number | null; coverage: number }
+  assert.equal(risk.score, null, 'sin resultados evaluables el riesgo no debe aparentar cero')
+  assert.equal(risk.coverage, 0)
   assert.ok(snapshot.assessment_results_snapshot)
 })
 
@@ -152,7 +154,7 @@ test('createInventorySnapshot: an unidentified asset is visible without becoming
 
   const dump = snapshot.assets_dump as { network: unknown[] }
   assert.equal(dump.network.length, 3, 'el no-identificado sigue en el dump')
-  assert.equal((snapshot.risk_score as { global: number | null }).global, null)
+  assert.equal((snapshot.assessment_results_snapshot as { score: number | null }).score, null)
 })
 
 test('createInventorySnapshot: assets_dump es una copia por valor, no una referencia viva', async () => {
@@ -197,4 +199,20 @@ test('createInventorySnapshot: assets_dump es una copia por valor, no una refere
     'active',
     'el dump no debe seguir el estado actual del NonNetworkAsset'
   )
+})
+
+test('createInventorySnapshot: calculates risk at snapshot time instead of reusing a stored result', async () => {
+  const payload = await getPayload({ config })
+  const { organization, office } = await seedRiskOrganization(payload)
+  const stored = await recalculateRisk(payload, {
+    organizationId: String(organization.id),
+    officeId: String(office.id),
+  })
+
+  const snapshot = await createInventorySnapshot(payload, String(office.id), { type: 'scheduled' })
+
+  assert.notEqual(relationId(snapshot.risk_score), String(stored.id))
+  const evaluationId = (snapshot.assessment_results_snapshot as { evaluation_id: string })
+    .evaluation_id
+  assert.equal(String(evaluationId), relationId(snapshot.risk_score))
 })

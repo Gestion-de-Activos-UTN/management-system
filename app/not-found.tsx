@@ -57,9 +57,9 @@ export default function NotFound() {
               <Title order={1} fz={{ base: 48, sm: 64 }} c="pine.7">
                 404
               </Title>
-              <Text fw={600}>Page not found</Text>
+              <Text fw={600}>Página no encontrada</Text>
               <Text size="sm" c="dimmed" ta="center">
-                The page you're looking for doesn't exist or you don't have access to it.
+                La página que buscas no existe o no tienes acceso a ella.
               </Text>
               <Button
                 mt="sm"
@@ -67,7 +67,7 @@ export default function NotFound() {
                 variant="filled"
                 onClick={() => router.back()}
               >
-                Back
+                Volver
               </Button>
             </Stack>
           </Box>

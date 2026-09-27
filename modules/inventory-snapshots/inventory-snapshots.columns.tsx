@@ -7,32 +7,35 @@ import { formatDateTime } from '@/lib/format-date'
 
 const GENERATED_BY_LABEL: Record<string, string> = {
   manual: 'Manual',
-  scheduled: 'Scheduled',
-  pre_audit: 'Pre-audit',
+  scheduled: 'Programada',
+  pre_audit: 'Preauditoría',
 }
 
 export const inventorySnapshotsColumns: ColumnDef<InventorySnapshot, unknown>[] = [
   {
     accessorKey: 'taken_at',
-    header: 'Date',
+    header: 'Fecha',
     cell: ({ row }) => formatDateTime(row.original.taken_at),
   },
   {
     accessorKey: 'generated_by',
-    header: 'Source',
+    header: 'Origen',
     cell: ({ row }) => GENERATED_BY_LABEL[row.original.generated_by] ?? row.original.generated_by,
   },
   {
     accessorKey: 'risk_score',
-    header: 'Risk Score',
-    cell: ({ row }) => row.original.risk_score?.global ?? 'Not evaluable',
+    header: 'Puntaje de riesgo',
+    cell: ({ row }) => {
+      const score = (row.original.assessment_results_snapshot as { score?: number | null })?.score
+      return score == null ? 'No evaluable' : Math.round(score)
+    },
   },
   {
     id: 'actions',
     header: '',
     size: 48,
     cell: ({ row }) => (
-      <Tooltip label="View snapshot">
+      <Tooltip label="Ver instantánea">
         <ActionIcon
           component={Link}
           href={`/portal/inventory/snapshots/${row.original.id}`}

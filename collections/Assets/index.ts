@@ -24,8 +24,8 @@ export const Assets: CollectionConfig = {
   },
   access: {
     create: () => false,
-    read: orgScopedAccess('assets', 'read'),
-    update: orgScopedAccess('assets', 'update'),
+    read: orgScopedAccess('assets', 'read', { kind: 'org_offices', field: 'office' }),
+    update: orgScopedAccess('assets', 'update', { kind: 'org_offices', field: 'office' }),
     delete: () => false,
   },
   hooks: {
@@ -88,6 +88,7 @@ export const Assets: CollectionConfig = {
     // index: true en ip/mac — domain/inventories/ingestScanReport.ts::findExistingAsset busca
     // por estos dos campos (acotado a `agent`) en cada ingesta, ya no por `asset_id`.
     { name: 'ip', type: 'text', index: true, access: technicalFieldAccess },
+    { name: 'last_observed_cidr', type: 'text', index: true, access: technicalFieldAccess },
     { name: 'last_seen', type: 'date', access: technicalFieldAccess },
     { name: 'gateway_ip', type: 'text', access: technicalFieldAccess },
     { name: 'gateway_mac', type: 'text', access: technicalFieldAccess },

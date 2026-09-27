@@ -58,7 +58,7 @@ function makePayload(overrides: { roleDocs?: unknown[] } = {}) {
           docs: [
             {
               assessment_policy_key: 'essential',
-              assessment_policy_version: 1,
+              assessment_policy_version: 2,
             },
           ],
         }
@@ -93,11 +93,12 @@ test('orden de creación sigue doc 04: organization -> settings+subscription -> 
   assert.equal(typeof subscription?.data.max_offices, 'number')
   assert.ok(subscription?.data.user_limits && typeof subscription.data.user_limits === 'object')
   assert.equal(settings?.data.assessment_policy_key, 'essential')
-  assert.equal(settings?.data.assessment_policy_version, 1)
+  assert.equal(settings?.data.assessment_policy_version, 2)
   assert.equal(typeof settings?.data.assessment_policy_selected_at, 'string')
   assert.deepEqual(subscription?.data.features, {
     asset_inventory: true,
     security_assessments: true,
+    risk_score: true,
   })
 
   assert.deepEqual(calls, [
