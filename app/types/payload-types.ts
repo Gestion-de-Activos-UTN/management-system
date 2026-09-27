@@ -138,6 +138,7 @@ export interface Config {
   jobs: {
     tasks: {
       'recalculate-risk': TaskRecalculateRisk;
+      'refresh-risk': TaskRefreshRisk;
       'expire-raw-scan-payloads': TaskExpireRawScanPayloads;
       'reconcile-expired-assessments': TaskReconcileExpiredAssessments;
       'reconcile-expired-asset-exclusions': TaskReconcileExpiredAssetExclusions;
@@ -1024,6 +1025,7 @@ export interface PayloadJob {
         taskSlug:
           | 'inline'
           | 'recalculate-risk'
+          | 'refresh-risk'
           | 'expire-raw-scan-payloads'
           | 'reconcile-expired-assessments'
           | 'reconcile-expired-asset-exclusions';
@@ -1063,6 +1065,7 @@ export interface PayloadJob {
     | (
         | 'inline'
         | 'recalculate-risk'
+        | 'refresh-risk'
         | 'expire-raw-scan-payloads'
         | 'reconcile-expired-assessments'
         | 'reconcile-expired-asset-exclusions'
@@ -1071,6 +1074,10 @@ export interface PayloadJob {
   queue?: string | null;
   waitUntil?: string | null;
   processing?: boolean | null;
+  /**
+   * Used for concurrency control. Jobs with the same key are subject to exclusive/supersedes rules.
+   */
+  concurrencyKey?: string | null;
   meta?:
     | {
         [k: string]: unknown;
@@ -1777,6 +1784,7 @@ export interface PayloadJobsSelect<T extends boolean = true> {
   queue?: T;
   waitUntil?: T;
   processing?: T;
+  concurrencyKey?: T;
   meta?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1862,6 +1870,16 @@ export interface TaskRecalculateRisk {
   };
   output: {
     evaluation_id: string;
+  };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskRefresh-risk".
+ */
+export interface TaskRefreshRisk {
+  input?: unknown;
+  output: {
+    organizations: number;
   };
 }
 /**

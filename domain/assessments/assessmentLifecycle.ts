@@ -10,7 +10,10 @@ import type { SaveAssessmentDraft } from '@/modules/assessments/schema'
 import { relationId } from '@/lib/relationId'
 import { evaluateAutomaticComplianceForAssessment } from './evaluateAutomaticCompliance'
 import { evaluateControlEfficacy } from '@/domain/risk/control-efficacy'
-import { enqueueRiskRecalculation } from '@/domain/risk/enqueueRiskRecalculation'
+import {
+  enqueueOrganizationRiskRecalculation,
+  enqueueRiskRecalculation,
+} from '@/domain/risk/enqueueRiskRecalculation'
 import { isAssetExcludedFromAssessments } from './asset-assessment-scope'
 
 function questionDefinition(key: string, version: number): RiskQuestionV2 {
@@ -406,10 +409,12 @@ export async function completeAssessment(
       },
     })
     if (ownsTransaction && transactionID) await payload.db.commitTransaction(transactionID)
-    await enqueueRiskRecalculation(payload, {
-      organizationId: relationId(assessment.organization),
-      officeId: assessment.office ? relationId(assessment.office) : undefined,
-    })
+    // Organization answers are inherited by every office evaluation.
+    if (assessment.office)
+      await enqueueRiskRecalculation(payload, relationId(assessment.organization), [
+        relationId(assessment.office),
+      ])
+    else await enqueueOrganizationRiskRecalculation(payload, relationId(assessment.organization))
     return completed
   } catch (error) {
     if (ownsTransaction && transactionID) await payload.db.rollbackTransaction(transactionID)

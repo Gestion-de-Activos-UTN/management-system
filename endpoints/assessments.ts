@@ -21,7 +21,7 @@ import {
   reconcileManualAssetAssessmentInstance,
   reconcileOrganizationAssessments,
 } from '@/domain/assessments/reconcileAssessmentInstance'
-import { enqueueRiskRecalculation } from '@/domain/risk/enqueueRiskRecalculation'
+import { enqueueOrganizationRiskRecalculation } from '@/domain/risk/enqueueRiskRecalculation'
 import { RISK_POLICY_KEYS } from '@/domain/risk/catalog-v2'
 import type { SecurityReviewSummary } from '@/modules/assessments/service'
 import type { RiskEvaluationDTO } from '@/modules/risk/service'
@@ -630,7 +630,7 @@ export const assessmentPolicyEndpoint: Endpoint = {
       })
       await reconcileOrganizationAssessments(req.payload, ctx.organizationId, 'policy_changed', req)
       if (ownsTransaction && transactionID) await req.payload.db.commitTransaction(transactionID)
-      await enqueueRiskRecalculation(req.payload, { organizationId: ctx.organizationId })
+      await enqueueOrganizationRiskRecalculation(req.payload, ctx.organizationId)
       return json(updated)
     } catch (error) {
       if (ownsTransaction && transactionID) await req.payload.db.rollbackTransaction(transactionID)

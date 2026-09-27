@@ -476,6 +476,6 @@ export async function ingestScanReport(
     processedAssetIds.push(technical.asset_id)
   }
 
-  await enqueueRiskRecalculation(payload, { organizationId: auth.organizationId, officeId: auth.officeId })
+  await enqueueRiskRecalculation(payload, auth.organizationId, [auth.officeId])
   return { processedAssetIds, processedDocumentIds, rejectedAssets }
 }

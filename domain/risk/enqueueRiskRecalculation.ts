@@ -1,21 +1,45 @@
 import type { Payload } from 'payload'
 
 /**
- * Queues the organization-wide evaluation and, when the change belongs to one office, that office's
- * evaluation too; otherwise the organization view would stay stale after office-level events.
+ * Queues the organization-wide evaluation plus one per affected office; otherwise the organization
+ * view would stay stale after office-level events. Callers pass every office the change touched
+ * (e.g. the previous office of a moved asset); empty and repeated ids are dropped.
  */
 export async function enqueueRiskRecalculation(
   payload: Payload,
-  input: { organizationId: string; officeId?: string }
+  organizationId: string,
+  officeIds: ReadonlyArray<string | null | undefined> = []
 ) {
   if (process.env.PAYLOAD_DISABLE_JOBS === '1' || !payload.jobs?.queue) return
-  const officeIds = input.officeId ? [undefined, input.officeId] : [undefined]
-  for (const officeId of officeIds) {
-    // Duplicate jobs are safe: each run appends a new evaluation and never rewrites history.
+  const offices = [...new Set(officeIds.filter((id): id is string => Boolean(id)))]
+  for (const officeId of [undefined, ...offices]) {
+    // The task's concurrency key (payload.config.ts) supersedes pending jobs for the same scope, so
+    // a burst of events collapses into one pending run instead of piling up.
     await payload.jobs.queue({
       task: 'recalculate-risk',
       queue: 'risk',
-      input: { organization_id: input.organizationId, office_id: officeId },
+      input: { organization_id: organizationId, office_id: officeId },
     })
   }
+}
+
+/** Organization-level events (policy, organization answers) change every office evaluation. */
+export async function enqueueOrganizationRiskRecalculation(
+  payload: Payload,
+  organizationId: string
+) {
+  if (process.env.PAYLOAD_DISABLE_JOBS === '1' || !payload.jobs?.queue) return
+  const offices = await payload.find({
+    collection: 'offices',
+    where: { organization: { equals: organizationId } },
+    overrideAccess: true,
+    depth: 0,
+    pagination: false,
+    select: {},
+  })
+  await enqueueRiskRecalculation(
+    payload,
+    organizationId,
+    offices.docs.map(office => String(office.id))
+  )
 }

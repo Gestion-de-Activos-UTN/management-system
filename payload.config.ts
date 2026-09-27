@@ -24,6 +24,7 @@ import { RiskEvaluations } from './collections/RiskEvaluations'
 import { RiskContributions } from './collections/RiskContributions'
 import { latestRiskEvaluationEndpoint } from './endpoints/risk'
 import { recalculateRisk } from './domain/risk/recalculateRisk'
+import { enqueueOrganizationRiskRecalculation } from './domain/risk/enqueueRiskRecalculation'
 import { reportsEndpoint } from './endpoints/reports'
 import { heartbeatEndpoint } from './endpoints/heartbeat'
 import { vendorEndpoint } from './endpoints/vendor'
@@ -134,10 +135,18 @@ export default buildConfig({
   ],
   jobs: {
     deleteJobOnComplete: true,
+    enableConcurrencyControl: true,
     tasks: [
       {
         slug: 'recalculate-risk',
         label: 'Recalculate risk',
+        // One run at a time per organization/office scope, and a new event replaces the pending
+        // run: only the latest state matters, so bursts (a scan updating every asset) collapse.
+        concurrency: {
+          key: ({ input }) => `risk:${input.organization_id}:${input.office_id || 'org'}`,
+          exclusive: true,
+          supersedes: true,
+        },
         inputSchema: [
           { name: 'organization_id', type: 'text', required: true },
           { name: 'office_id', type: 'text' },
@@ -150,6 +159,27 @@ export default buildConfig({
             req
           )
           return { output: { evaluation_id: String(evaluation.id) } }
+        },
+      },
+      {
+        // Answer expiry (valid_until) and stale agent heartbeats change risk without any event.
+        slug: 'refresh-risk',
+        label: 'Refresh risk evaluations',
+        inputSchema: [],
+        outputSchema: [{ name: 'organizations', type: 'number', required: true }],
+        schedule: [{ cron: '0 45 3 * * *', queue: 'maintenance' }],
+        handler: async ({ req }) => {
+          const organizations = await req.payload.find({
+            collection: 'organizations',
+            where: { is_active: { equals: true } },
+            overrideAccess: true,
+            depth: 0,
+            pagination: false,
+            select: {},
+          })
+          for (const organization of organizations.docs)
+            await enqueueOrganizationRiskRecalculation(req.payload, String(organization.id))
+          return { output: { organizations: organizations.docs.length } }
         },
       },
       {
@@ -195,9 +225,20 @@ export default buildConfig({
     // No requiere cron administrado, workers ni servicios externos.
     autoRun: [
       { cron: '0 * * * * *', queue: 'maintenance', limit: 1 },
-      // Risk recalculations are queued by domain events; duplicates are harmless (append-only).
+      // Risk recalculations are queued by domain events; the task's concurrency key collapses bursts.
       { cron: '*/15 * * * * *', queue: 'risk', limit: 10 },
     ],
+  },
+  // Payload does not recover jobs left `processing` by a crash, and a stuck job would block its
+  // risk concurrency key forever. Released here on boot, before autoRun picks up work.
+  // ponytail: safe only with a single app instance; with several, release by age instead.
+  onInit: async payload => {
+    await payload.update({
+      collection: 'payload-jobs',
+      where: { and: [{ queue: { equals: 'risk' } }, { processing: { equals: true } }] },
+      data: { processing: false },
+      overrideAccess: true,
+    })
   },
   typescript: {
     outputFile: path.resolve(dirname, 'app/types/payload-types.ts'),
