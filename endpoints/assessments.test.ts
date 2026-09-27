@@ -29,4 +29,13 @@ describe('assessment office filtering', () => {
     }
     assert.equal(scope.or.length, 2)
   })
+
+  it('leaves organization-level cycles out for office-scoped roles', () => {
+    const scope = buildAssessmentOfficeScope('office-2', [], [], false) as {
+      or: Array<Record<string, unknown>>
+    }
+    assert.deepEqual(scope.or, [
+      { and: [{ scope: { equals: 'office' } }, { office: { equals: 'office-2' } }] },
+    ])
+  })
 })

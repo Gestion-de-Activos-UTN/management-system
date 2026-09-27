@@ -27,6 +27,8 @@ import { bandVisible, scoreVisible } from '@/domain/risk/constants'
 import type { SecurityReviewSummary } from '@/modules/assessments/service'
 import type { RiskEvaluationDTO } from '@/modules/risk/service'
 import { resolveInheritedAssessmentEvidence } from '@/domain/assessments/resolveInheritedEvidence'
+import { hasOrgWideScope } from '@/access/rbac/permissions'
+import { officeQueryError } from '@/access/tenant/officeQueryError'
 import { withDerivedAssessmentStatus } from '@/domain/assessments/assessmentExpiration'
 import { isAssetExcludedFromAssessments } from '@/domain/assessments/asset-assessment-scope'
 
@@ -104,11 +106,13 @@ function assessmentTargetClauses(assessment: AssessmentInstance): Where[] {
 export function buildAssessmentOfficeScope(
   officeId: string,
   currentAssetIds: string[],
-  currentManualAssetIds: string[]
+  currentManualAssetIds: string[],
+  // Organization-level cycles only belong to an office view for org-wide roles.
+  includeOrganization = true
 ): Where {
   return {
     or: [
-      { scope: { equals: 'organization' } },
+      ...(includeOrganization ? [{ scope: { equals: 'organization' } } as Where] : []),
       {
         and: [{ scope: { equals: 'office' } }, { office: { equals: officeId } }],
       },
@@ -147,12 +151,15 @@ export const assessmentsListEndpoint: Endpoint = {
       asset_id: params.get('asset_id') ?? undefined,
     })
     if (!parsed.success) return json({ error: 'invalid_query', issues: parsed.error.issues }, 400)
+    if (parsed.data.office_id) {
+      const officeError = officeQueryError(ctx, parsed.data.office_id)
+      if (officeError) return json({ error: officeError }, 403)
+    }
+    const orgWide = hasOrgWideScope(ctx.role)
     const clauses: Where[] = []
     clauses.push({ organization: { equals: ctx.organizationId } })
-    if (!ctx.isPlatformAdmin && ctx.role !== 'org_admin')
-      clauses.push({
-        or: [{ scope: { equals: 'organization' } }, { office: { in: ctx.officeIds } }],
-      })
+    // Without office_id an office-scoped role gets all of its offices, never org-level cycles.
+    if (!orgWide) clauses.push({ office: { in: ctx.officeIds } })
     if (parsed.data.scope) clauses.push({ scope: { equals: parsed.data.scope } })
     if (parsed.data.office_id) {
       const [currentAssets, currentManualAssets] = await Promise.all([
@@ -186,7 +193,12 @@ export const assessmentsListEndpoint: Endpoint = {
       const currentAssetIds = currentAssets.docs.map(asset => String(asset.id))
       const currentManualAssetIds = currentManualAssets.docs.map(asset => String(asset.id))
       clauses.push(
-        buildAssessmentOfficeScope(parsed.data.office_id, currentAssetIds, currentManualAssetIds)
+        buildAssessmentOfficeScope(
+          parsed.data.office_id,
+          currentAssetIds,
+          currentManualAssetIds,
+          orgWide
+        )
       )
     }
     if (parsed.data.asset_id) clauses.push({ asset: { equals: parsed.data.asset_id } })
@@ -231,8 +243,8 @@ export const securityReviewSummaryEndpoint: Endpoint = {
     const officeId = new URL(req.url ?? 'http://localhost', 'http://localhost').searchParams.get(
       'office_id'
     )
-    if (officeId && !ctx.officeIds.includes(officeId))
-      return json({ error: 'office_forbidden' }, 403)
+    const officeError = officeQueryError(ctx, officeId)
+    if (officeError) return json({ error: officeError }, 403)
     const evaluations = await req.payload.find({
       collection: 'risk-evaluations',
       overrideAccess: true,
@@ -374,7 +386,14 @@ export const assessmentDetailEndpoint: Endpoint = {
         ).docs
       }
     }
-    const effectiveEvidence = await resolveInheritedAssessmentEvidence(req.payload, assessment, req)
+    const effectiveEvidence = await resolveInheritedAssessmentEvidence(
+      req.payload,
+      assessment,
+      req,
+      {
+        includeOrganization: hasOrgWideScope(ctx.role),
+      }
+    )
     const technical = assessment.asset
       ? await req.payload.find({
           collection: 'compliance-results',

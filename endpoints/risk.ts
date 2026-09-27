@@ -5,6 +5,7 @@ import type { AssetRiskScore } from '@/domain/risk/engine'
 import { bandVisible, scoreVisible } from '@/domain/risk/constants'
 import { getTenantContext } from '@/access/tenant/resolveTenantContext'
 import { canDo } from '@/access/rbac/permissions'
+import { officeQueryError } from '@/access/tenant/officeQueryError'
 import type {
   LatestRiskResponse,
   RiskContributionDTO,
@@ -181,8 +182,9 @@ export const latestRiskEvaluationEndpoint: Endpoint = {
     })
     if (!query.success) return json({ error: 'invalid_query' }, 400)
     const { office_id: officeId, page } = query.data
-    if (officeId && !ctx.officeIds.includes(officeId))
-      return json({ error: 'office_forbidden' }, 403)
+    // Office-scoped roles never read the organization-wide evaluation (other offices' assets).
+    const officeError = officeQueryError(ctx, officeId)
+    if (officeError) return json({ error: officeError }, 403)
 
     const where: Where = {
       and: [

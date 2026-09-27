@@ -1,13 +1,14 @@
 import type { AssessmentInstance, Asset, NonNetworkAsset } from '@/app/types/payload-types'
 import type { TenantContext } from '@/access/tenant/resolveTenantContext'
 import { relationId } from '@/lib/relationId'
+import { hasOrgWideScope } from '@/access/rbac/permissions'
 
 export function canReadAssessment(ctx: TenantContext, assessment: AssessmentInstance): boolean {
   if (ctx.isPlatformAdmin)
     return !ctx.organizationId || relationId(assessment.organization) === ctx.organizationId
   if (!ctx.organizationId || relationId(assessment.organization) !== ctx.organizationId)
     return false
-  if (assessment.scope === 'organization') return true
+  if (assessment.scope === 'organization') return hasOrgWideScope(ctx.role)
   return Boolean(assessment.office && ctx.officeIds.includes(relationId(assessment.office)))
 }
 

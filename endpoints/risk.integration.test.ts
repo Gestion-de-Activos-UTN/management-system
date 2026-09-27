@@ -177,3 +177,19 @@ test('risk endpoint and REST: a hidden evaluation never exposes numbers', async 
   assert.equal(contributions.docs.length, 1)
   assert.equal(contributions.docs[0].residual_risk, undefined)
 })
+
+test('risk endpoint: office-scoped roles must name one of their offices', async () => {
+  const payload = await getPayload({ config })
+  const a = await seedRiskOrganization(payload)
+  const organizationId = String(a.organization.id)
+  const officeId = String(a.office.id)
+  await recalculateRisk(payload, { organizationId })
+  for (const slug of ['office_manager', 'org_viewer'] as const) {
+    const scoped = await member(payload, organizationId, [officeId], slug)
+    const { status, body } = await call(payload, scoped)
+    assert.equal(status, 403)
+    assert.deepEqual(body, { error: 'office_required' })
+  }
+  const admin = await member(payload, organizationId, [officeId], 'org_admin')
+  assert.equal((await call(payload, admin)).status, 200)
+})
