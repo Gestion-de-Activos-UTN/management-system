@@ -1,17 +1,27 @@
 import type { Payload, Where } from 'payload'
 import { relationId } from '@/lib/relationId'
 import { recalculateRisk } from '@/domain/risk/recalculateRisk'
+import { scoreVisible } from '@/domain/risk/constants'
 
 export type SnapshotTrigger =
-  | { type: 'manual'; userId: string }
-  | { type: 'scheduled' }
-  | { type: 'pre_audit' }
+  { type: 'manual'; userId: string } | { type: 'scheduled' } | { type: 'pre_audit' }
 
-async function allDocs(payload: Payload, collection: 'assets' | 'non-network-assets', where: Where) {
+async function allDocs(
+  payload: Payload,
+  collection: 'assets' | 'non-network-assets',
+  where: Where
+) {
   const docs: unknown[] = []
   let page = 1
   while (true) {
-    const result = await payload.find({ collection, where, overrideAccess: true, depth: 0, limit: 100, page })
+    const result = await payload.find({
+      collection,
+      where,
+      overrideAccess: true,
+      depth: 0,
+      limit: 100,
+      page,
+    })
     docs.push(...result.docs)
     if (!result.hasNextPage) return docs
     page += 1
@@ -23,22 +33,24 @@ export async function createInventorySnapshot(
   officeId: string,
   triggeredBy: SnapshotTrigger
 ) {
-  const office = await payload.findByID({ collection: 'offices', id: officeId, overrideAccess: true, depth: 0 })
+  const office = await payload.findByID({
+    collection: 'offices',
+    id: officeId,
+    overrideAccess: true,
+    depth: 0,
+  })
   const organizationId = relationId(office.organization)
-  const [network, nonNetwork, latest] = await Promise.all([
+  const [network, nonNetwork] = await Promise.all([
     allDocs(payload, 'assets', { office: { equals: officeId } }),
     allDocs(payload, 'non-network-assets', { office: { equals: officeId } }),
-    payload.find({
-      collection: 'risk-evaluations', overrideAccess: true, depth: 0, limit: 1,
-      sort: '-evaluated_at',
-      where: { and: [{ organization: { equals: organizationId } }, { office: { equals: officeId } }] },
-    }),
   ])
-  // A snapshot always references a concrete result; if none exists yet, calculate before writing.
-  const riskEvaluation = latest.docs[0] ?? await recalculateRisk(payload, { organizationId, officeId })
+  // Always calculated now, never the latest stored result: a queued recalculation may still be
+  // pending, and the snapshot must pair the asset dump with the risk of that same moment.
+  const riskEvaluation = await recalculateRisk(payload, { organizationId, officeId })
   // AUDIT: immutable inventory snapshot references the exact immutable risk evaluation shown with it.
   return payload.create({
-    collection: 'inventory-snapshots', overrideAccess: true,
+    collection: 'inventory-snapshots',
+    overrideAccess: true,
     data: {
       organization: organizationId,
       office: officeId,
@@ -48,7 +60,8 @@ export async function createInventorySnapshot(
       risk_score: riskEvaluation.id,
       assessment_results_snapshot: {
         evaluation_id: riskEvaluation.id,
-        score: riskEvaluation.score,
+        // Same visibility rule as the risk endpoint; the raw value stays behind evaluation_id.
+        score: scoreVisible(riskEvaluation.confidence) ? riskEvaluation.score : null,
         coverage: riskEvaluation.coverage,
         unknown_percentage: riskEvaluation.unknown_percentage,
         evaluated_at: riskEvaluation.evaluated_at,

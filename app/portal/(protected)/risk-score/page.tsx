@@ -26,6 +26,7 @@ import { riskContributionsColumns } from '@/modules/risk/risk.columns'
 import { RiskAlerts } from '@/modules/risk/components/RiskAlerts'
 import { TopRiskAssets } from '@/modules/risk/components/TopRiskAssets'
 import { RISK_BAND_COLOR, RISK_SCORE_MEANING, RISK_SCORE_SCALE } from '@/modules/risk/risk-labels'
+import { bandVisible, scoreVisible } from '@/domain/risk/constants'
 
 export default function RiskScorePage() {
   const asOrganization = useSearchParams().get('asOrganization') ?? undefined
@@ -54,13 +55,13 @@ export default function RiskScorePage() {
         </Alert>
       ) : (
         <>
-          {data.score === null && data.coverage < 20 && (
+          {!scoreVisible(data.confidence) && (
             <Alert color="orange" title="Datos insuficientes">
               Complete las revisiones pendientes, identifique dispositivos y mantenga activo el
               agente para poder mostrar el puntaje.
             </Alert>
           )}
-          {data.coverage >= 20 && data.coverage < 40 && (
+          {scoreVisible(data.confidence) && !bandVisible(data.confidence) && (
             <Alert color="yellow" title="Resultado preliminar">
               La cobertura es baja: el puntaje se muestra como orientación, sin clasificación.
             </Alert>

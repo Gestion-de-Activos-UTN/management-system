@@ -23,6 +23,7 @@ import {
 } from '@/domain/assessments/reconcileAssessmentInstance'
 import { enqueueOrganizationRiskRecalculation } from '@/domain/risk/enqueueRiskRecalculation'
 import { RISK_POLICY_KEYS } from '@/domain/risk/catalog-v2'
+import { bandVisible, scoreVisible } from '@/domain/risk/constants'
 import type { SecurityReviewSummary } from '@/modules/assessments/service'
 import type { RiskEvaluationDTO } from '@/modules/risk/service'
 import { resolveInheritedAssessmentEvidence } from '@/domain/assessments/resolveInheritedEvidence'
@@ -261,7 +262,7 @@ export const securityReviewSummaryEndpoint: Endpoint = {
     // Counts are persisted with the evaluation; counting contribution rows here would truncate.
     const counts = evaluation.counts as RiskEvaluationDTO['counts']
     return json({
-      risk_score: evaluation.coverage < 20 ? null : (evaluation.score ?? null),
+      risk_score: scoreVisible(evaluation.confidence) ? (evaluation.score ?? null) : null,
       evaluated_percentage: evaluation.coverage,
       applicable_checks:
         counts.compliant + counts.partially_effective + counts.non_compliant + counts.not_evaluable,
@@ -269,7 +270,7 @@ export const securityReviewSummaryEndpoint: Endpoint = {
       requires_attention: counts.non_compliant + counts.partially_effective,
       excluded_assets: counts.excluded_assets,
       // Same visibility rule as the risk endpoint: no band on a preliminary result.
-      risk_band: evaluation.coverage < 40 ? null : (evaluation.final_band ?? null),
+      risk_band: bandVisible(evaluation.confidence) ? (evaluation.final_band ?? null) : null,
       unconfirmed_assets: counts.unconfirmed_assets,
     } satisfies SecurityReviewSummary)
   },

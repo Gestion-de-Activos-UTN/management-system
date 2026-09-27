@@ -2,6 +2,7 @@ import type { Endpoint, PayloadRequest, Where } from 'payload'
 import { z } from 'zod'
 import type { RiskContribution, RiskEvaluation } from '@/app/types/payload-types'
 import type { AssetRiskScore } from '@/domain/risk/engine'
+import { bandVisible, scoreVisible } from '@/domain/risk/constants'
 import { getTenantContext } from '@/access/tenant/resolveTenantContext'
 import { canDo } from '@/access/rbac/permissions'
 import type {
@@ -81,16 +82,18 @@ const label = (labels: Labels, key: string) => labels.get(key) ?? 'Activo no dis
 
 const evaluationDTO = (row: RiskEvaluation, labels: Labels): RiskEvaluationDTO => {
   const alerts = row.alerts as StoredAlerts
+  const showScore = scoreVisible(row.confidence)
+  const showBand = bandVisible(row.confidence)
   return {
     id: String(row.id),
     evaluated_at: row.evaluated_at,
     engine_version: row.engine_version,
     catalog_version: row.catalog_version,
     policy_key: row.policy_key,
-    // Plan §3.8: below 20% coverage the score is never exposed, not only hidden by the UI.
-    score: row.coverage < 20 ? null : (row.score ?? null),
-    base_band: row.coverage < 40 ? null : (row.base_band ?? null),
-    final_band: row.coverage < 40 ? null : (row.final_band ?? null),
+    // Plan §3.8: a hidden score is never exposed, not only hidden by the UI.
+    score: showScore ? (row.score ?? null) : null,
+    base_band: showBand ? (row.base_band ?? null) : null,
+    final_band: showBand ? (row.final_band ?? null) : null,
     coverage: row.coverage,
     unknown_percentage: row.unknown_percentage,
     confidence: row.confidence,
@@ -107,17 +110,23 @@ const evaluationDTO = (row: RiskEvaluation, labels: Labels): RiskEvaluationDTO =
         asset_label: label(labels, item.asset_id),
       })),
     },
-    controls: row.control_summary as RiskEvaluationDTO['controls'],
-    // Per-asset bands follow the same visibility rule as the global band.
-    top_assets: topAssets(row).map(item => ({
-      ...item,
-      band: row.coverage < 40 ? null : item.band,
-      asset_label: label(labels, item.asset_id),
-    })),
+    // Per-control and per-asset numbers follow the same visibility rule as the global score.
+    controls: showScore ? (row.control_summary as RiskEvaluationDTO['controls']) : [],
+    top_assets: showScore
+      ? topAssets(row).map(item => ({
+          ...item,
+          band: showBand ? item.band : null,
+          asset_label: label(labels, item.asset_id),
+        }))
+      : [],
   }
 }
 
-const contributionDTO = (row: RiskContribution, labels: Labels): RiskContributionDTO => ({
+const contributionDTO = (
+  row: RiskContribution,
+  labels: Labels,
+  showScore: boolean
+): RiskContributionDTO => ({
   id: String(row.id),
   asset_key: row.asset_key,
   asset_label: label(labels, row.asset_key),
@@ -129,8 +138,8 @@ const contributionDTO = (row: RiskContribution, labels: Labels): RiskContributio
   exposure_source: row.exposure_source ?? null,
   scope_multiplier: row.scope_multiplier,
   efficacy: row.efficacy ?? null,
-  inherent_risk: row.inherent_risk ?? null,
-  residual_risk: row.residual_risk ?? null,
+  inherent_risk: showScore ? (row.inherent_risk ?? null) : null,
+  residual_risk: showScore ? (row.residual_risk ?? null) : null,
   excluded: row.excluded,
   reason_code: row.reason_code,
 })
@@ -222,7 +231,9 @@ export const latestRiskEvaluationEndpoint: Endpoint = {
     ])
     return json({
       evaluation: evaluationDTO(evaluation, labels),
-      contributions: contributions.docs.map(row => contributionDTO(row, labels)),
+      contributions: contributions.docs.map(row =>
+        contributionDTO(row, labels, scoreVisible(evaluation.confidence))
+      ),
       pagination: {
         page,
         totalPages: contributions.totalPages,

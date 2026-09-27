@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { orgScopedAccess } from '@/access/rbac/orgScopedAccess'
+import { whenEvaluationScoreVisible } from '../RiskEvaluations/scoreFieldAccess'
 
 /** Immutable, auditable per asset/control inputs and outputs for one RiskEvaluation. */
 export const RiskContributions: CollectionConfig = {
@@ -53,8 +54,8 @@ export const RiskContributions: CollectionConfig = {
       options: ['compliant', 'partially_effective', 'non_compliant', 'not_evaluable'],
       required: true,
     },
-    { name: 'inherent_risk', type: 'number' },
-    { name: 'residual_risk', type: 'number' },
+    { name: 'inherent_risk', type: 'number', access: { read: whenEvaluationScoreVisible } },
+    { name: 'residual_risk', type: 'number', access: { read: whenEvaluationScoreVisible } },
     { name: 'coverage_weight', type: 'number', required: true },
     { name: 'excluded', type: 'checkbox', required: true },
     { name: 'reason_code', type: 'text', required: true },

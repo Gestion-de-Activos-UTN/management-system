@@ -40,3 +40,10 @@ export type Exposure = keyof typeof EXPOSURE_WEIGHTS
 export type RiskBand = 'low' | 'medium' | 'high' | 'critical'
 export type ConfidenceBand = 'hidden' | 'preliminary' | 'warning' | 'usable' | 'reliable'
 export type PairStatus = 'compliant' | 'partially_effective' | 'non_compliant' | 'not_evaluable'
+
+// Plan §3.8 visibility, keyed on the persisted coverage confidence (confidenceForCoverage): below
+// COVERAGE_THRESHOLDS.visible no number is exposed, below .warning no band. The one rule every API,
+// snapshot and page applies, so a threshold change never leaves a caller behind.
+export const scoreVisible = (confidence: ConfidenceBand) => confidence !== 'hidden'
+export const bandVisible = (confidence: ConfidenceBand) =>
+  scoreVisible(confidence) && confidence !== 'preliminary'

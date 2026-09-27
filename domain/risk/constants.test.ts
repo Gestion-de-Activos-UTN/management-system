@@ -10,6 +10,8 @@ import {
   SEVERITY_WEIGHTS,
   SCOPE_MULTIPLIERS,
   UNKNOWN_THRESHOLDS,
+  bandVisible,
+  scoreVisible,
 } from './constants'
 
 describe('risk engine v2 constants', () => {
@@ -43,5 +45,15 @@ describe('risk engine v2 constants', () => {
     })
     assert.deepEqual(UNKNOWN_THRESHOLDS, { warning: 5, degradeConfidence: 15 })
     assert.deepEqual(SCORE_THRESHOLDS, { medium: 25, high: 50, critical: 75 })
+  })
+
+  it('hides the score below the visible threshold and the band while preliminary', () => {
+    assert.equal(scoreVisible('hidden'), false)
+    assert.equal(scoreVisible('preliminary'), true)
+    assert.equal(bandVisible('preliminary'), false)
+    for (const confidence of ['warning', 'usable', 'reliable'] as const) {
+      assert.equal(scoreVisible(confidence), true)
+      assert.equal(bandVisible(confidence), true)
+    }
   })
 })
