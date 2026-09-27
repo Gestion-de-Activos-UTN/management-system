@@ -21,9 +21,15 @@ export const NonNetworkAssets: CollectionConfig = {
     // `create` no admite filtro de fila (todavía no hay fila): el binding al tenant lo hace el
     // beforeChange, que valida `office` contra ctx.officeIds y deriva `organization` de ahí.
     create: canDoAccess('non-network-assets', 'create'),
-    read: orgScopedAccess('non-network-assets', 'read'),
-    update: orgScopedAccess('non-network-assets', 'update'),
-    delete: orgScopedAccess('non-network-assets', 'delete'),
+    read: orgScopedAccess('non-network-assets', 'read', { kind: 'org_offices', field: 'office' }),
+    update: orgScopedAccess('non-network-assets', 'update', {
+      kind: 'org_offices',
+      field: 'office',
+    }),
+    delete: orgScopedAccess('non-network-assets', 'delete', {
+      kind: 'org_offices',
+      field: 'office',
+    }),
   },
   hooks: {
     beforeChange: [resolveTenantAndReview, validateAssetAssessmentScope],

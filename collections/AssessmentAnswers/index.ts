@@ -7,7 +7,10 @@ export const AssessmentAnswers: CollectionConfig = {
   admin: { useAsTitle: 'question_key' },
   access: {
     create: () => false,
-    read: orgScopedAccess('assessment-answers', 'read'),
+    read: orgScopedAccess('assessment-answers', 'read', {
+      kind: 'org_offices',
+      field: 'assessment.office',
+    }),
     update: () => false,
     delete: () => false,
   },

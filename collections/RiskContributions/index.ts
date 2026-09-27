@@ -7,7 +7,7 @@ export const RiskContributions: CollectionConfig = {
   slug: 'risk-contributions',
   access: {
     create: () => false,
-    read: orgScopedAccess('risk-contributions', 'read'),
+    read: orgScopedAccess('risk-contributions', 'read', { kind: 'org_offices', field: 'office' }),
     update: () => false,
     delete: () => false,
   },

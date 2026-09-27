@@ -8,7 +8,7 @@ export const AssessmentInstances: CollectionConfig = {
   admin: { useAsTitle: 'id' },
   access: {
     create: () => false,
-    read: orgScopedAccess('assessment-instances', 'read'),
+    read: orgScopedAccess('assessment-instances', 'read', { kind: 'org_offices', field: 'office' }),
     update: () => false,
     delete: () => false,
   },

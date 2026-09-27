@@ -100,3 +100,10 @@ export function canDo(
   if (!roleSlug) return false
   return MATRIX[roleSlug]?.[collection]?.includes(action) ?? false
 }
+
+// Alcance de fila por rol: org_admin/platform_admin ven toda la organización (incluidas las filas
+// org-level, office = null); office_manager y org_viewer solo sus oficinas (membership.offices).
+// Único lugar con esta regla — endpoints, access y frontend (vía /v1/session) la consultan acá.
+export function hasOrgWideScope(roleSlug: RoleSlug | null | undefined): boolean {
+  return roleSlug === 'platform_admin' || roleSlug === 'org_admin'
+}

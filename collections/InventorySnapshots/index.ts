@@ -12,7 +12,7 @@ export const InventorySnapshots: CollectionConfig = {
   },
   access: {
     create: () => false,
-    read: orgScopedAccess('inventory-snapshots', 'read'),
+    read: orgScopedAccess('inventory-snapshots', 'read', { kind: 'org_offices', field: 'office' }),
     update: () => false,
     delete: () => false,
   },

@@ -8,7 +8,7 @@ export const ComplianceResults: CollectionConfig = {
   admin: { useAsTitle: 'check_key' },
   access: {
     create: () => false,
-    read: orgScopedAccess('compliance-results', 'read'),
+    read: orgScopedAccess('compliance-results', 'read', { kind: 'org_offices', field: 'office' }),
     update: () => false,
     delete: () => false,
   },

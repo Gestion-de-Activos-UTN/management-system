@@ -99,6 +99,7 @@ export function manualResult(
 const ROLES = {
   org_admin: { name: 'Org Admin', rank: 1, scope: 'organization' },
   office_manager: { name: 'Office Manager', rank: 5, scope: 'organization_office' },
+  org_viewer: { name: 'Org Viewer', rank: 10, scope: 'organization_office' },
 } as const
 
 async function roleId(payload: Payload, slug: keyof typeof ROLES) {

@@ -24,8 +24,8 @@ export const Assets: CollectionConfig = {
   },
   access: {
     create: () => false,
-    read: orgScopedAccess('assets', 'read'),
-    update: orgScopedAccess('assets', 'update'),
+    read: orgScopedAccess('assets', 'read', { kind: 'org_offices', field: 'office' }),
+    update: orgScopedAccess('assets', 'update', { kind: 'org_offices', field: 'office' }),
     delete: () => false,
   },
   hooks: {

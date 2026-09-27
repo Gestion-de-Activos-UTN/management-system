@@ -11,7 +11,7 @@ export const RiskEvaluations: CollectionConfig = {
   admin: { useAsTitle: 'evaluated_at' },
   access: {
     create: () => false,
-    read: orgScopedAccess('risk-evaluations', 'read'),
+    read: orgScopedAccess('risk-evaluations', 'read', { kind: 'org_offices', field: 'office' }),
     update: () => false,
     delete: () => false,
   },
