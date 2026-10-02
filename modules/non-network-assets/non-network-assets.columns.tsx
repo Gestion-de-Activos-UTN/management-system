@@ -12,7 +12,8 @@ export function getNonNetworkAssetsColumns(
   // list request can't populate `owner` past its raw id (Payload's own access check on the
   // related collection blocks it, falling back to the id string). Resolve the display name
   // from the already-fetched org-members list instead of depending on relationship population.
-  ownerNameById: Record<string, string>
+  ownerNameById: Record<string, string>,
+  asOrganization?: string
 ): ColumnDef<NonNetworkAsset, unknown>[] {
   return [
     {
@@ -76,8 +77,10 @@ export function getNonNetworkAssetsColumns(
     {
       id: 'actions',
       header: '',
-      size: 84,
-      cell: ({ row }) => <RowActions asset={row.original} onEdit={onEdit} />,
+      size: 120,
+      cell: ({ row }) => (
+        <RowActions asset={row.original} onEdit={onEdit} asOrganization={asOrganization} />
+      ),
     },
   ]
 }

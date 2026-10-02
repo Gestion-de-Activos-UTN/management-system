@@ -13,6 +13,7 @@ import {
   ScanLine,
   ShieldCheck,
   ClipboardCheck,
+  ListTodo,
 } from 'lucide-react'
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { SidebarProfile } from '@/components/layout/SidebarProfile'
@@ -101,6 +102,15 @@ function PortalProtectedLayoutInner({ children }: { children: React.ReactNode })
             label: 'Revisión de seguridad',
             href: `/portal/security-review${suffix}`,
             icon: <ClipboardCheck size={18} strokeWidth={1.5} />,
+          },
+        ]
+      : []),
+    ...(tenantContext.data?.features.tasks
+      ? [
+          {
+            label: 'Tareas',
+            href: `/portal/tasks${suffix}`,
+            icon: <ListTodo size={18} strokeWidth={1.5} />,
           },
         ]
       : []),

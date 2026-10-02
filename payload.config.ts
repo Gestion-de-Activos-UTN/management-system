@@ -22,7 +22,9 @@ import { AssessmentAnswers } from './collections/AssessmentAnswers'
 import { ComplianceResults } from './collections/ComplianceResults'
 import { RiskEvaluations } from './collections/RiskEvaluations'
 import { RiskContributions } from './collections/RiskContributions'
+import { Tasks } from './collections/Tasks'
 import { latestRiskEvaluationEndpoint } from './endpoints/risk'
+import { taskEndpoints } from './endpoints/tasks'
 import { recalculateRisk } from './domain/risk/recalculateRisk'
 import { enqueueOrganizationRiskRecalculation } from './domain/risk/enqueueRiskRecalculation'
 import { reportsEndpoint } from './endpoints/reports'
@@ -100,6 +102,7 @@ export default buildConfig({
     ComplianceResults,
     RiskEvaluations,
     RiskContributions,
+    Tasks,
   ],
   // Servidos vía app/(payload)/api/[...slug]/route.ts (catch-all de Next que reexporta
   // REST_GET/REST_POST/... de @payloadcms/next/routes) — sin ese archivo, Payload no recibe
@@ -132,6 +135,7 @@ export default buildConfig({
     assessmentReopenEndpoint,
     assessmentPolicyEndpoint,
     latestRiskEvaluationEndpoint,
+    ...taskEndpoints,
   ],
   jobs: {
     deleteJobOnComplete: true,

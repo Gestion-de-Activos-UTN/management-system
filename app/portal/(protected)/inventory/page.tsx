@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useUiStore } from '@/lib/ui-store'
@@ -72,12 +72,16 @@ function partitionByFrozenBucket<T extends { id: string }>(
 }
 
 export default function InventoryPage() {
-  const asOrganization = useSearchParams().get('asOrganization') ?? undefined
+  const searchParams = useSearchParams()
+  const asOrganization = searchParams.get('asOrganization') ?? undefined
+  const linkedOfficeId = searchParams.get('officeId')
+  const linkedNonNetworkAssetId = searchParams.get('nonNetworkAsset')
   const { data: assets, isPending: assetsPending } = useAssetsList(asOrganization)
   const { data: nonNetworkAssets, isPending: nonNetworkAssetsPending } =
     useNonNetworkAssetsList(asOrganization)
   const { data: members } = useOrgMembers(asOrganization)
   const selectedOfficeId = useUiStore(state => state.selectedOfficeId)
+  const setSelectedOfficeId = useUiStore(state => state.setSelectedOfficeId)
 
   const ownerNameById = useMemo(
     () => Object.fromEntries((members ?? []).map(m => [m.id, m.name])),
@@ -86,6 +90,16 @@ export default function InventoryPage() {
 
   // undefined = modal closed, null = modal open in "create" mode, object = "edit" mode.
   const [editingAsset, setEditingAsset] = useState<NonNetworkAsset | null | undefined>(undefined)
+
+  useEffect(() => {
+    if (linkedOfficeId) setSelectedOfficeId(linkedOfficeId)
+  }, [linkedOfficeId, setSelectedOfficeId])
+
+  useEffect(() => {
+    if (!linkedNonNetworkAssetId || !nonNetworkAssets) return
+    const linked = nonNetworkAssets.find(asset => String(asset.id) === linkedNonNetworkAssetId)
+    if (linked) setEditingAsset(linked)
+  }, [linkedNonNetworkAssetId, nonNetworkAssets])
 
   const [assetSearch, setAssetSearch] = useState('')
   const [assetCriticality, setAssetCriticality] = useState<string>(ALL)
@@ -138,8 +152,9 @@ export default function InventoryPage() {
     [ownerNameById, selectedOfficeId]
   )
   const nonNetworkAssetsColumns = useMemo(
-    () => getNonNetworkAssetsColumns(asset => setEditingAsset(asset), ownerNameById),
-    [ownerNameById]
+    () =>
+      getNonNetworkAssetsColumns(asset => setEditingAsset(asset), ownerNameById, asOrganization),
+    [ownerNameById, asOrganization]
   )
 
   return (

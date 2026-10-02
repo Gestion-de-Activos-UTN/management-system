@@ -10,6 +10,7 @@ import { TechnicalText } from '@/components/ui/TechnicalText'
 import { useSnapshot } from '@/modules/inventory-snapshots/hooks/use-snapshot'
 import { formatDateTime } from '@/lib/format-date'
 import { ASSET_CATEGORY_LABEL, CRITICALITY_LABEL } from '@/lib/enum-labels'
+import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 
 type DumpedAsset = {
   id?: string
@@ -108,6 +109,12 @@ export default function SnapshotDetailPage() {
       <PageHeader
         title={`Instantánea — ${formatDateTime(snapshot.taken_at)}`}
         description="Instantánea inmutable: el estado de cada activo refleja ese momento, no su estado actual."
+        rightSection={
+          <CreateRelatedTaskButton
+            reference={{ relationTo: 'inventory-snapshots', value: String(snapshot.id) }}
+            asOrganization={asOrganization}
+          />
+        }
       />
 
       <Card withBorder padding="lg">

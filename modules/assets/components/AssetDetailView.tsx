@@ -45,6 +45,7 @@ import { useMarkAssetChangesViewed } from '../hooks/use-mark-asset-changes-viewe
 import { BadgeCheck, Fingerprint, Lock, Network, ScanSearch, Undo2 } from 'lucide-react'
 import { AssetIdentificationModal } from './AssetIdentificationModal'
 import { AssetSecurityReviewCard } from '@/modules/assessments/components/AssetSecurityReviewCard'
+import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 import {
   DEVICE_CATEGORY_HELP,
   DEVICE_CATEGORY_LABEL,
@@ -595,6 +596,10 @@ export function AssetDetailView({
         <PageHeader
           title={asset.hostname || asset.alias || asset.ip || asset.asset_id}
           description="Bloque técnico de solo lectura (detectado por el escáner) y campos de negocio editables."
+        />
+        <CreateRelatedTaskButton
+          reference={{ relationTo: 'assets', value: String(asset.id) }}
+          asOrganization={asOrganization}
         />
         {asset.identification_status !== 'confirmed' && (
           <Button

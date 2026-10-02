@@ -27,6 +27,7 @@ import { RiskAlerts } from '@/modules/risk/components/RiskAlerts'
 import { TopRiskAssets } from '@/modules/risk/components/TopRiskAssets'
 import { RISK_BAND_COLOR, RISK_SCORE_MEANING, RISK_SCORE_SCALE } from '@/modules/risk/risk-labels'
 import { bandVisible, scoreVisible } from '@/domain/risk/constants'
+import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 
 export default function RiskScorePage() {
   const asOrganization = useSearchParams().get('asOrganization') ?? undefined
@@ -44,6 +45,14 @@ export default function RiskScorePage() {
       <PageHeader
         title="Puntaje de riesgo"
         description="Una vista simple de los problemas de seguridad detectados y de la información que todavía falta revisar."
+        rightSection={
+          data ? (
+            <CreateRelatedTaskButton
+              reference={{ relationTo: 'risk-evaluations', value: String(data.id) }}
+              asOrganization={asOrganization}
+            />
+          ) : undefined
+        }
       />
       {query.isError && <Alert color="red">No se pudo cargar la última evaluación.</Alert>}
       {query.isPending ? (

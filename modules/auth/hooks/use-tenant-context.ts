@@ -15,6 +15,7 @@ export type TenantContext = {
   /** Row scope from access/rbac/permissions.ts::hasOrgWideScope; false = only officeIds. */
   orgWide: boolean
   features: Record<string, boolean>
+  permissions: { tasks: string[] }
 }
 
 // Only place this endpoint is queried — mirrors access/tenant/resolveTenantContext.ts's

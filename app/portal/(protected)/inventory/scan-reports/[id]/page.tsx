@@ -2,7 +2,7 @@
 
 import { useParams, useSearchParams } from 'next/navigation'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Card, Center, Loader, SimpleGrid, Stack, Tabs, Text } from '@mantine/core'
+import { Card, Center, Group, Loader, SimpleGrid, Stack, Tabs, Text } from '@mantine/core'
 import { Network, Radar, CircleCheck, CircleX } from 'lucide-react'
 import { DataTable } from '@/components/ui/DataTable'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -19,6 +19,7 @@ import {
   type RejectedAsset,
   type ReportedAsset,
 } from '@/modules/scan-reports/service'
+import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 
 const STATUS_TONE: Record<string, StatusTone> = {
   received: 'neutral',
@@ -119,7 +120,15 @@ export default function ScanReportDetailPage() {
       <PageHeader
         title={`Informe de escaneo — ${report.scan_start ? formatDateTime(report.scan_start) : report.id}`}
         description={`Enviado por el agente ${relationId(report.agent)}${report.scan_end ? ` · finalizado ${formatDateTime(report.scan_end)}` : ''}.`}
-        rightSection={<StatusBadge tone={STATUS_TONE[status] ?? 'neutral'} label={status} />}
+        rightSection={
+          <Group gap="xs">
+            <CreateRelatedTaskButton
+              reference={{ relationTo: 'scan-reports', value: String(report.id) }}
+              asOrganization={asOrganization}
+            />
+            <StatusBadge tone={STATUS_TONE[status] ?? 'neutral'} label={status} />
+          </Group>
+        }
       />
 
       <Text size="sm" c="dimmed">
