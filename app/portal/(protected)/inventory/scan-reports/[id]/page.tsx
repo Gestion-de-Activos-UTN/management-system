@@ -2,13 +2,19 @@
 
 import { useParams, useSearchParams } from 'next/navigation'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Card, Center, Group, Loader, SimpleGrid, Stack, Tabs, Text } from '@mantine/core'
+import { Center, Group, Loader, SimpleGrid, Stack, Tabs, Text } from '@mantine/core'
 import { Network, Radar, CircleCheck, CircleX } from 'lucide-react'
 import { DataTable } from '@/components/ui/DataTable'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { BackButton } from '@/components/ui/BackButton'
 import { TechnicalText } from '@/components/ui/TechnicalText'
-import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
+import { StatCard } from '@/components/ui/StatCard'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import {
+  SCAN_RUN_LABEL,
+  SCAN_REPORT_STATUS_LABEL,
+  SCAN_REPORT_STATUS_TONE,
+} from '@/modules/scan-reports/scan-report-labels'
 import { formatDateTime } from '@/lib/format-date'
 import { relationId } from '@/lib/relationId'
 import { useScanReport } from '@/modules/scan-reports/hooks/use-scan-report'
@@ -20,12 +26,6 @@ import {
   type ReportedAsset,
 } from '@/modules/scan-reports/service'
 import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
-
-const STATUS_TONE: Record<string, StatusTone> = {
-  received: 'neutral',
-  processed: 'success',
-  failed: 'danger',
-}
 
 const acceptedColumns: ColumnDef<ReportedAsset, unknown>[] = [
   {
@@ -41,7 +41,7 @@ const acceptedColumns: ColumnDef<ReportedAsset, unknown>[] = [
   {
     accessorKey: 'hostname',
     header: 'Nombre del host',
-    cell: ({ row }) => row.original.hostname || '—',
+    cell: ({ row }) => <TechnicalText>{row.original.hostname || '—'}</TechnicalText>,
   },
   {
     accessorKey: 'mac',
@@ -56,34 +56,8 @@ const rejectedColumns: ColumnDef<RejectedAsset, unknown>[] = [
     header: 'ID del activo',
     cell: ({ row }) => <TechnicalText>{row.original.asset_id}</TechnicalText>,
   },
-  { accessorKey: 'error', header: 'Reason' },
+  { accessorKey: 'error', header: 'Motivo' },
 ]
-
-function StatCard({
-  icon,
-  value,
-  label,
-}: {
-  icon: React.ReactNode
-  value: React.ReactNode
-  label: string
-}) {
-  return (
-    <Card withBorder padding="lg">
-      <Stack gap="sm">
-        {icon}
-        <Stack gap={0} style={{ minWidth: 0 }}>
-          <Text size="xl" fw={700}>
-            {value}
-          </Text>
-          <Text size="sm" c="dimmed">
-            {label}
-          </Text>
-        </Stack>
-      </Stack>
-    </Card>
-  )
-}
 
 export default function ScanReportDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -126,17 +100,21 @@ export default function ScanReportDetailPage() {
               reference={{ relationTo: 'scan-reports', value: String(report.id) }}
               asOrganization={asOrganization}
             />
-            <StatusBadge tone={STATUS_TONE[status] ?? 'neutral'} label={status} />
+            <StatusBadge
+              tone={SCAN_REPORT_STATUS_TONE[status] ?? 'neutral'}
+              label={SCAN_REPORT_STATUS_LABEL[status] ?? status}
+            />
           </Group>
         }
       />
 
       <Text size="sm" c="dimmed">
-        Ejecución: {report.execution_status ?? 'unknown'} · Cobertura de detección:{' '}
-        {typeof report.report_coverage === 'object' && report.report_coverage !== null
-          ? ((report.report_coverage as { discovery?: { status?: string } }).discovery?.status ??
-            'unknown')
-          : 'unknown'}
+        Ejecución: {SCAN_RUN_LABEL[report.execution_status ?? ''] ?? 'desconocida'} · Cobertura de
+        detección:{' '}
+        {SCAN_RUN_LABEL[
+          (report.report_coverage as { discovery?: { status?: string } } | null)?.discovery
+            ?.status ?? ''
+        ] ?? 'desconocida'}
       </Text>
 
       <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} spacing="md">

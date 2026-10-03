@@ -175,7 +175,8 @@ export default function InventoryPage() {
         }
       />
 
-      <Tabs defaultValue="network">
+      {/* ?tab=non-network: los enlaces del panel general abren directo en activos manuales. */}
+      <Tabs defaultValue={searchParams.get('tab') === 'non-network' ? 'non-network' : 'network'}>
         <Tabs.List>
           <Tabs.Tab value="network" leftSection={<Server size={16} strokeWidth={1.5} />}>
             Red
@@ -226,7 +227,7 @@ export default function InventoryPage() {
               data={activeAssets}
               isLoading={assetsPending}
               emptyLabel="Ningún activo coincide con estos filtros"
-              minWidth={980}
+              minWidth={860}
             />
             {inactiveAssets.length > 0 && (
               <>
@@ -237,7 +238,7 @@ export default function InventoryPage() {
                   columns={assetsColumns}
                   data={inactiveAssets}
                   emptyLabel="No hay activos retirados ni sin conexión"
-                  minWidth={980}
+                  minWidth={860}
                 />
               </>
             )}

@@ -16,8 +16,8 @@ import { ArrowRight, Building2, ChevronDown, Info, Monitor, type LucideIcon } fr
 import type { AssessmentInstance } from '@/app/types/payload-types'
 import type { SecurityReviewSummary as SecurityReviewSummaryData } from '@/modules/assessments/service'
 import { formatDateTime } from '@/lib/format-date'
-import { RISK_BAND_LABEL } from '@/lib/enum-labels'
-import { RISK_BAND_COLOR, RISK_SCORE_SCALE } from '@/modules/risk/risk-labels'
+import { RISK_SCORE_SCALE } from '@/modules/risk/risk-labels'
+import { RiskBandBadge } from '@/modules/risk/components/RiskBandBadge'
 import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 
 const statusMeta = {
@@ -63,7 +63,7 @@ export function SecurityReviewSummary({
           <Progress value={coverage} color="pine" radius="xl" />
           <Text size="sm" c="dimmed" mt="xs">
             Hay información vigente para {evaluated} de {applicable} comprobaciones (cada una es un
-            control revisado en un equipo). Respondé las revisiones pendientes o identificá los
+            control revisado en un equipo). Responde las revisiones pendientes o identifica los
             equipos nuevos para subirla; la información faltante no aumenta el riesgo.
           </Text>
         </Box>
@@ -88,7 +88,7 @@ export function SecurityReviewSummary({
               </Text>
               {score !== null &&
                 (band ? (
-                  <Badge color={RISK_BAND_COLOR[band]}>{RISK_BAND_LABEL[band]}</Badge>
+                  <RiskBandBadge band={band} />
                 ) : (
                   <Tooltip label="La cobertura es baja: el valor es orientativo y todavía no se clasifica.">
                     <Badge color="gray" variant="light">

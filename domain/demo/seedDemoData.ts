@@ -316,6 +316,18 @@ export function buildDemoReports(now = new Date()): ScanReportPayload[] {
           ],
         },
         {
+          key: 'main-legacy-nas',
+          ip: '10.20.10.50',
+          mac: '00:11:22:33:44:50',
+          vendor: 'Synology',
+          hostname: 'nas-legacy',
+          os: linux,
+          services: [
+            service(445, 'microsoft-ds', 'Samba', { version: '4.10' }),
+            service(5000, 'http', 'Synology DSM'),
+          ],
+        },
+        {
           key: 'main-unknown',
           ip: '10.20.10.44',
           mac: '',
@@ -523,7 +535,7 @@ async function ensureManualAsset(
   }
 ) {
   const existing = await findOne<NonNetworkAsset>(payload, 'non-network-assets', {
-    alias: { equals: input.alias },
+    and: [{ alias: { equals: input.alias } }, { organization: { equals: input.organizationId } }],
   })
   if (existing) return { doc: existing, created: false }
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {manual asset business fields}, previous hash for this organization_id)
@@ -774,6 +786,7 @@ export async function seedDemoData(
   const mainServer = await findAsset(payload, 'demo-main-server')
   const mainWorkstation = await findAsset(payload, 'demo-main-workstation')
   const mainPrinter = await findAsset(payload, 'demo-main-printer')
+  const mainLegacyNas = await findAsset(payload, 'demo-main-legacy-nas')
   const mainGateway = await findAsset(payload, 'demo-main-gateway')
   const secondaryAp = await findAsset(payload, 'demo-secondary-ap')
   const secondaryWorkstation = await findAsset(payload, 'demo-secondary-workstation')
@@ -815,6 +828,17 @@ export async function seedDemoData(
       criticality: 'critical',
       owner: adminId,
       location: 'Rack principal',
+      type_confirmed_by: adminId,
+    })) || sourceChanged
+  sourceChanged =
+    (await enrichAsset(payload, mainLegacyNas.asset_id, {
+      confirmed_type: 'server',
+      authorization_status: 'authorized',
+      alias: 'NAS legado fuera de servicio',
+      criticality: 'low',
+      owner: adminId,
+      location: 'Archivo técnico',
+      status: 'retired',
       type_confirmed_by: adminId,
     })) || sourceChanged
   sourceChanged =

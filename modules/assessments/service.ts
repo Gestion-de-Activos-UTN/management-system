@@ -1,9 +1,5 @@
 import { httpClient } from '@/lib/http-client'
-import type {
-  AssessmentAnswer,
-  AssessmentInstance,
-  ComplianceResult,
-} from '@/app/types/payload-types'
+import type { AssessmentAnswer, AssessmentInstance } from '@/app/types/payload-types'
 import type { SaveAssessmentDraft, UpdateAssessmentPolicy } from './schema'
 import type { EffectiveAnswer } from '@/domain/assessments/evaluateCompliance'
 
@@ -25,7 +21,6 @@ export type AssessmentDetailResponse = {
   previous_answers?: AssessmentAnswer[]
   assessment_history?: AssessmentInstance[]
   effective_evidence: Record<string, EffectiveAnswer>
-  technical_observations: ComplianceResult[]
 }
 
 export function listAssessments(params?: {

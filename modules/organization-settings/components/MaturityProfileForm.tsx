@@ -61,7 +61,7 @@ export function MaturityProfileForm({
               label="¿Hay alguien en la empresa que se ocupe de las computadoras, los sistemas o la seguridad, aunque no sea su única tarea?"
               value={field.value ?? null}
               onChange={field.onChange}
-              error={fieldState.error && 'Elegí una opción'}
+              error={fieldState.error && 'Elige una opción'}
             >
               <Group mt="xs">
                 <Radio value="yes" label="Sí" />
@@ -78,7 +78,7 @@ export function MaturityProfileForm({
               label="¿La empresa destina dinero a herramientas o servicios de seguridad? Por ejemplo: antivirus pago, copias en la nube o soporte técnico."
               value={field.value ?? null}
               onChange={field.onChange}
-              error={fieldState.error && 'Elegí una opción'}
+              error={fieldState.error && 'Elige una opción'}
             >
               <Stack gap="xs" mt="xs">
                 <Radio value="none" label="No" />
@@ -94,7 +94,7 @@ export function MaturityProfileForm({
           </Alert>
         ) : (
           <Text size="sm" c="dimmed">
-            Respondé las dos preguntas para ver el nivel de tu organización.
+            Responde las dos preguntas para ver el nivel de tu organización.
           </Text>
         )}
         <Group justify="space-between" wrap="wrap">

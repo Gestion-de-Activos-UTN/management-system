@@ -49,6 +49,7 @@ No duplicated logic, no duplicate component reinventions.
 - **List filters** → always inside `<FilterBar>` (`components/ui/FilterBar.tsx`): search `TextInput` (Lucide `Search`) first, then `Select`s with `placeholder` + `aria-label`, no visible `label`, `w="100%"`, and an explicit first option "Todas/Todos los …" instead of `clearable`. A boolean filter is a `Switch` wrapped in `<Group h={36}>` so it aligns with the inputs. No `SegmentedControl` for filters. Only render filters that can change the result in the current view.
 - **Tabs** → every `Tabs.Tab` carries a Lucide `leftSection` icon (same icon as the entity elsewhere, e.g. `Server` = network assets, `Package` = manual assets); counts go in the label as `Nombre (n)`. Content goes in `Tabs.Panel pt="md"` (or a sibling `Stack gap="md"` when every tab shares one view).
 - **Status-like badges** → `StatusBadge` with a `tone` map in the domain's `*-labels.ts`; never ad-hoc `Badge` colors.
+- **Event dates in tables** → `DateTimeCell` (date-time + relative "hace 3 días"). **Detail-page summaries** → a `SimpleGrid {base:1, xs:2, lg:4}` of `StatCard`s. Any entity that can be a task reference gets `CreateRelatedTaskButton compact` in its row actions and the full button in its detail header.
 - **Icons** → Lucide `size={16} strokeWidth={1.5}` (14 in menus/dense text).
 - **Forms with context fixed by the caller** → show the fixed value as a read-only summary, never as a disabled input. If choosing an option implies a second required choice (entity type → entity), validate it; never drop it silently.
 

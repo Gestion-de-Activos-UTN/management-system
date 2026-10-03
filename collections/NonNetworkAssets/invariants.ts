@@ -61,6 +61,23 @@ export function computeNextReviewAt(interval: ReviewInterval, now: Date): string
   return next.toISOString()
 }
 
+// Única regla de cuándo se recalcula `next_review_at` (beforeChange). Se recalcula desde `now` al
+// crear, al cambiar el intervalo o al confirmar una revisión; cualquier otra edición conserva la
+// cuenta atrás. Sin el caso `reviewConfirmed`, el hook pisaba la fecha nueva del endpoint de
+// revisión con la anterior y el activo seguía vencido tras "Revisión confirmada".
+export function deriveNextReviewAt(params: {
+  interval: ReviewInterval
+  previous: string | null | undefined
+  isCreate: boolean
+  intervalChanged: boolean
+  reviewConfirmed: boolean
+  now: Date
+}): string | null {
+  const { interval, previous, isCreate, intervalChanged, reviewConfirmed, now } = params
+  if (isCreate || intervalChanged || reviewConfirmed) return computeNextReviewAt(interval, now)
+  return previous ?? null
+}
+
 // Cuántas horas antes del vencimiento se habilita el botón "Mark reviewed" — tabla fija acordada
 // con el usuario (intervalos cortos abren su ventana el mismo día, los largos con más antelación).
 const EARLY_WINDOW_HOURS: Record<Exclude<ReviewInterval, 'never'>, number> = {

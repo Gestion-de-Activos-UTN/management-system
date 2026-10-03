@@ -6,7 +6,19 @@ export interface DashboardMetrics {
   total_assets: number
   active_offices: number
   online_scanners: number
+  total_scanners: number
+  // Activos manuales activos cuya próxima revisión ya pasó (mismo criterio que review_status).
+  overdue_manual_reviews: number
   last_scan_at: string | null
+}
+
+const EMPTY: DashboardMetrics = {
+  total_assets: 0,
+  active_offices: 0,
+  online_scanners: 0,
+  total_scanners: 0,
+  overdue_manual_reviews: 0,
+  last_scan_at: null,
 }
 
 function json(body: unknown, status = 200) {
@@ -31,9 +43,7 @@ export const dashboardMetricsEndpoint: Endpoint = {
       return json({ error: 'office_forbidden' }, 403)
     }
     const officeIds = officeId ? [officeId] : ctx.officeIds
-    if (officeIds.length === 0) {
-      return json({ total_assets: 0, active_offices: 0, online_scanners: 0, last_scan_at: null })
-    }
+    if (officeIds.length === 0) return json(EMPTY)
 
     const officeWhere: Where = {
       and: [{ organization: { equals: ctx.organizationId } }, { id: { in: officeIds } }],
@@ -47,11 +57,9 @@ export const dashboardMetricsEndpoint: Endpoint = {
       limit: 1000,
     })
     const scopedOfficeIds = offices.docs.map(office => String(office.id))
-    if (scopedOfficeIds.length === 0) {
-      return json({ total_assets: 0, active_offices: 0, online_scanners: 0, last_scan_at: null })
-    }
+    if (scopedOfficeIds.length === 0) return json(EMPTY)
 
-    const [assets, scans, agents] = await Promise.all([
+    const [assets, scans, agents, overdueReviews] = await Promise.all([
       req.payload.find({
         collection: 'assets',
         where: { office: { in: scopedOfficeIds } },
@@ -79,12 +87,26 @@ export const dashboardMetricsEndpoint: Endpoint = {
         depth: 0,
         limit: 5000,
       }),
+      req.payload.count({
+        collection: 'non-network-assets',
+        where: {
+          and: [
+            { office: { in: scopedOfficeIds } },
+            { status: { equals: 'active' } },
+            { next_review_at: { less_than: new Date().toISOString() } },
+          ],
+        },
+        overrideAccess: true,
+        req,
+      }),
     ])
 
     return json({
       total_assets: assets.totalDocs,
       active_offices: offices.docs.filter(office => office.is_active).length,
       online_scanners: agents.docs.filter(agent => isOnline(agent.last_heartbeat_at)).length,
+      total_scanners: agents.docs.length,
+      overdue_manual_reviews: overdueReviews.totalDocs,
       last_scan_at: scans.docs[0]?.processed_at ?? null,
     } satisfies DashboardMetrics)
   },

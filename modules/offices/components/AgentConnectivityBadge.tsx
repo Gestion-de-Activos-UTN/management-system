@@ -3,7 +3,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 type Connectivity = 'online' | 'offline' | 'pending' | 'revoked'
 type RevocationReason = 'manual' | 'auto_lockout_abuse' | null | undefined
 
-// Mismo patrón que ReviewStatusBadge.tsx: wrapper de dominio sobre el StatusBadge genérico, para
+// Wrapper de dominio sobre el StatusBadge genérico, para
 // que online/offline/pending/revoked tengan tono propio en vez de un Badge crudo sin color.
 export function AgentConnectivityBadge({
   connectivity,

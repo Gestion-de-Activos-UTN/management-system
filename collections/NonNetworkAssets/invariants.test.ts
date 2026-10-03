@@ -5,6 +5,7 @@ import {
   canReviewNow,
   computeNextReviewAt,
   computeReviewStatus,
+  deriveNextReviewAt,
   MissingOfficeError,
   OfficeOutOfScopeError,
 } from './invariants'
@@ -124,5 +125,24 @@ test('review_status: fecha pasada es overdue', () => {
   assert.equal(
     computeReviewStatus('2025-12-01T00:00:00.000Z', new Date('2026-01-01T00:00:00.000Z')),
     'overdue'
+  )
+})
+
+test('next_review_at: confirmar una revisión reinicia la cuenta desde ahora', () => {
+  const now = new Date('2026-10-03T12:00:00.000Z')
+  const base = { interval: '1m' as const, previous: '2026-09-30T00:00:00.000Z', now }
+  assert.equal(
+    deriveNextReviewAt({ ...base, isCreate: false, intervalChanged: false, reviewConfirmed: true }),
+    computeNextReviewAt('1m', now)
+  )
+  // Una edición común (alias, criticidad) no toca la cuenta atrás.
+  assert.equal(
+    deriveNextReviewAt({
+      ...base,
+      isCreate: false,
+      intervalChanged: false,
+      reviewConfirmed: false,
+    }),
+    base.previous
   )
 })

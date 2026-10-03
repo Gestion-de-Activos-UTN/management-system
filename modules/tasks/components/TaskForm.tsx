@@ -140,10 +140,14 @@ export function TaskForm({
     value: String(office.id),
     label: office.name,
   }))
-  const scopeLocked = Boolean(reference)
-  const scopeLabel = selectedReference?.office_id
-    ? `Oficina ${officeOptions.find(o => o.value === selectedReference.office_id)?.label ?? ''}`
-    : 'Toda la organización'
+  // Si la tarea nace desde una entidad (tipo fijo), el alcance siempre lo define esa entidad:
+  // nunca se ofrece "Tarea global" ni elegir oficinas, aunque todavía no haya entidad elegida.
+  const scopeLocked = Boolean(reference) || Boolean(initialReference)
+  const scopeLabel = !selectedReference
+    ? 'se define al elegir la entidad'
+    : selectedReference.office_id
+      ? `Oficina ${officeOptions.find(o => o.value === selectedReference.office_id)?.label ?? ''}`
+      : 'Toda la organización'
 
   const referenceSelect = (
     <Controller

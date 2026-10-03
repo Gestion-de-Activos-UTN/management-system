@@ -599,38 +599,45 @@ export function AssetDetailView({
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between" align="flex-end" wrap="wrap">
-        <PageHeader
-          title={asset.hostname || asset.alias || asset.ip || asset.asset_id}
-          description="Bloque técnico de solo lectura (detectado por el escáner) y campos de negocio editables."
-        />
-        <CreateRelatedTaskButton
-          reference={{ relationTo: 'assets', value: String(asset.id) }}
-          asOrganization={asOrganization}
-        />
-        {asset.identification_status !== 'confirmed' && (
-          <Button
-            variant="filled"
-            color="pine"
-            leftSection={<BadgeCheck size={16} strokeWidth={1.5} />}
-            onClick={() => setIdentificationOpen(true)}
-            w={{ base: '100%', sm: 'auto' }}
-          >
-            Identificar activo
-          </Button>
-        )}
-        {asset.identification_status === 'confirmed' && (
-          <Button
-            variant="subtle"
-            color="red"
-            leftSection={<Undo2 size={16} strokeWidth={1.5} />}
-            onClick={() => setUnidentifyConfirmOpen(true)}
-            w={{ base: '100%', sm: 'auto' }}
-          >
-            Quitar identificación
-          </Button>
-        )}
-      </Group>
+      <PageHeader
+        // Mismo nombre que la celda "Equipo" del inventario: alias confirmado, hostname o IP.
+        title={
+          (asset.identification_status === 'confirmed' && asset.alias) ||
+          asset.hostname ||
+          asset.ip ||
+          asset.asset_id
+        }
+        description="Bloque técnico de solo lectura (detectado por el escáner) y campos de negocio editables."
+        rightSection={
+          <Group gap="sm" wrap="wrap">
+            <CreateRelatedTaskButton
+              reference={{ relationTo: 'assets', value: String(asset.id) }}
+              asOrganization={asOrganization}
+            />
+            {asset.identification_status !== 'confirmed' ? (
+              <Button
+                variant="filled"
+                color="pine"
+                leftSection={<BadgeCheck size={16} strokeWidth={1.5} />}
+                onClick={() => setIdentificationOpen(true)}
+                w={{ base: '100%', sm: 'auto' }}
+              >
+                Identificar activo
+              </Button>
+            ) : (
+              <Button
+                variant="subtle"
+                color="red"
+                leftSection={<Undo2 size={16} strokeWidth={1.5} />}
+                onClick={() => setUnidentifyConfirmOpen(true)}
+                w={{ base: '100%', sm: 'auto' }}
+              >
+                Quitar identificación
+              </Button>
+            )}
+          </Group>
+        }
+      />
 
       <AssetIdentificationModal
         asset={asset}

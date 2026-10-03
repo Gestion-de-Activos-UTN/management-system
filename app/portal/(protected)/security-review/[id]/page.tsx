@@ -164,7 +164,6 @@ export default function AssessmentDetailPage() {
         savedAnswers={data.answers}
         previousAnswers={data.previous_answers ?? []}
         effectiveEvidence={data.effective_evidence ?? {}}
-        technicalObservations={data.technical_observations ?? []}
         readOnly={readOnly}
         saving={actions.saveDraft.isPending}
         completing={actions.complete.isPending}

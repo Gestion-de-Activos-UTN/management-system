@@ -1,6 +1,6 @@
 import type { CollectionBeforeChangeHook, PayloadRequest } from 'payload'
 import { getTenantContext } from '@/access/tenant/resolveTenantContext'
-import { assertOfficeInScope, computeNextReviewAt, type ReviewInterval } from '../invariants'
+import { assertOfficeInScope, deriveNextReviewAt, type ReviewInterval } from '../invariants'
 import { relationId } from '@/lib/relationId'
 import { assertOwnerCoversOffice } from '@/access/tenant/assertOwnerCoversOffice'
 
@@ -64,10 +64,16 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
   const requestedNow = req.context.seedEffectiveNow
   const parsedNow = requestedNow ? new Date(String(requestedNow)) : new Date()
   const effectiveNow = Number.isFinite(parsedNow.getTime()) ? parsedNow : new Date()
-  const nextReviewAt =
-    !originalDoc || intervalChanged
-      ? computeNextReviewAt(interval, effectiveNow)
-      : originalDoc.next_review_at
+  // `reviewConfirmed` sólo lo setea endpoints/nonNetworkAssetReview.ts vía req.context (el input
+  // HTTP público no llega a req.context), igual que `seedEffectiveNow`.
+  const nextReviewAt = deriveNextReviewAt({
+    interval,
+    previous: originalDoc?.next_review_at,
+    isCreate: !originalDoc,
+    intervalChanged,
+    reviewConfirmed: req.context.reviewConfirmed === true,
+    now: effectiveNow,
+  })
 
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {id, office, organization,
   // asset_category, criticality, owner, status, assessment scope and exclusion}, previous hash for this organization_id)

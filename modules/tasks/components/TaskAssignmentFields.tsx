@@ -32,7 +32,6 @@ export function TaskAssignmentFields({
       <Select
         label="Asignación"
         description={KIND_DESCRIPTIONS[kind]}
-        allowDeselect={false}
         data={[
           { value: 'open_pool', label: 'Pool abierto' },
           { value: 'role', label: 'Rol' },

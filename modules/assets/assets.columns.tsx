@@ -1,23 +1,22 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { Badge, Group, Tooltip } from '@mantine/core'
+import { Badge, Group, Stack, Text, Tooltip } from '@mantine/core'
 import type { Asset } from '@/app/types/payload-types'
 import { TechnicalText } from '@/components/ui/TechnicalText'
-import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
+import { OneLineText } from '@/components/ui/OneLineText'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { ASSET_STATUS_LABEL, CRITICALITY_LABEL } from '@/lib/enum-labels'
 import { RowActions } from './components/RowActions'
 
-const STATUS_TONE: Record<string, StatusTone> = {
-  active: 'success',
-  offline: 'warning',
-  retired: 'neutral',
+// Sólo los estados no activos se muestran (badge en la celda "Equipo").
+const STATUS_COLOR: Record<string, string> = {
+  offline: 'yellow',
+  retired: 'gray',
 }
 
-// El input permite hasta 120 caracteres (modules/assets/schema.ts) — en la tabla se muestra la
-// mitad: más que eso empuja el resto de columnas sin agregar información útil de un vistazo.
-const ALIAS_TRUNCATE_AT = 50
-
-function truncateChars(value: string, max: number): string {
-  return value.length > max ? `${value.slice(0, max)}…` : value
+// El alias sólo cuenta una vez confirmada la identificación; antes, hostname y luego IP.
+function deviceName(asset: Asset): string | null {
+  const alias = asset.identification_status === 'confirmed' ? asset.alias : null
+  return alias || asset.hostname || asset.ip || null
 }
 
 // Users.read is () => false by design (see modules/users/service.ts) — a plain `depth=1` list
@@ -30,57 +29,77 @@ export function getAssetsColumns(
 ): ColumnDef<Asset, unknown>[] {
   return [
     {
-      accessorKey: 'alias',
-      header: 'Alias',
-      size: 200,
-      // Los badges "New"/"Changed" viven DENTRO de la celda de Alias en vez de en su propia
+      id: 'device',
+      header: 'Equipo',
+      size: 260,
+      // Alias, IP y hostname en una sola celda: se leen como una unidad y liberan dos columnas.
+      // Ordena por el mismo texto que muestra la primera línea.
+      accessorFn: asset => deviceName(asset) ?? '',
+      // Los badges "Nuevo"/"Modificado" viven DENTRO de esta celda en vez de en su propia
       // columna — así cuando desaparecen (AssetDetailView marca first_viewed_at/limpia
-      // technical_changed_at al entrar al detalle) el alias pasa a ocupar todo el ancho en vez de
-      // dejar una columna vacía al lado. Mutuamente excluyentes: "Changed" solo aplica a un asset
-      // ya visto (ingestScanReport.ts no lo marca si first_viewed_at es null), así que nunca se
-      // muestran los dos juntos.
+      // technical_changed_at al entrar al detalle) el nombre ocupa todo el ancho en vez de
+      // dejar una columna vacía al lado. Mutuamente excluyentes: "Modificado" solo aplica a un
+      // asset ya visto (ingestScanReport.ts no lo marca si first_viewed_at es null).
       cell: ({ row }) => {
-        const alias =
-          row.original.identification_status === 'confirmed' ? (row.original.alias ?? '') : ''
-        const isOverflowing = alias.length > ALIAS_TRUNCATE_AT
-        const label = <span>{alias ? truncateChars(alias, ALIAS_TRUNCATE_AT) : '—'}</span>
+        const asset = row.original
+        const name = deviceName(asset)
+        const status = asset.status ?? 'active'
+        // Lo que ya es el nombre principal no se repite en la línea técnica.
+        const technical = [asset.ip, asset.hostname]
+          .filter(value => value && value !== name)
+          .join(' · ')
         return (
-          <Group gap="xs" wrap="nowrap">
-            {row.original.first_viewed_at == null ? (
-              // flexShrink: 0 — sin esto el Group (flex row) encoge el badge junto con todo lo demás
-              // cuando falta espacio, y Mantine trunca su label con ellipsis interno ("New" → "N..").
-              <Badge size="sm" color="pine" variant="filled" style={{ flexShrink: 0 }}>
-                Nuevo
-              </Badge>
-            ) : (
-              row.original.technical_changed_at != null && (
-                <Badge size="sm" color="orange" variant="filled" style={{ flexShrink: 0 }}>
-                  Modificado
+          <Stack gap={2} miw={0}>
+            <Group gap="xs" wrap="nowrap" miw={0}>
+              {asset.first_viewed_at == null ? (
+                // flexShrink: 0 — sin esto el Group encoge el badge y Mantine trunca su label.
+                <Badge size="sm" color="pine" variant="filled" style={{ flexShrink: 0 }}>
+                  Nuevo
                 </Badge>
-              )
+              ) : (
+                asset.technical_changed_at != null && (
+                  <Badge size="sm" color="orange" variant="filled" style={{ flexShrink: 0 }}>
+                    Modificado
+                  </Badge>
+                )
+              )}
+              <Tooltip label={name} disabled={!name} openDelay={400}>
+                <Text
+                  size="sm"
+                  fw={600}
+                  truncate
+                  c={name ? undefined : 'dimmed'}
+                  ff={name && name !== asset.alias ? 'monospace' : undefined}
+                >
+                  {name ?? 'Sin nombre'}
+                </Text>
+              </Tooltip>
+              {/* La tabla de activos sólo agrupa activos al cargar (useFrozenBucket): una fila
+                  que cambió de estado después, y la tabla de retirados, lo indican acá. */}
+              {status !== 'active' && (
+                <Badge
+                  size="sm"
+                  color={STATUS_COLOR[status] ?? 'gray'}
+                  variant="light"
+                  style={{ flexShrink: 0 }}
+                >
+                  {ASSET_STATUS_LABEL[status] ?? status}
+                </Badge>
+              )}
+              {asset.assessment_scope === 'excluded' && (
+                <Badge size="sm" color="gray" variant="light" style={{ flexShrink: 0 }}>
+                  Fuera de alcance
+                </Badge>
+              )}
+            </Group>
+            {technical && (
+              <TechnicalText size="xs" c="dimmed" truncate>
+                {technical}
+              </TechnicalText>
             )}
-            {isOverflowing ? <Tooltip label={alias}>{label}</Tooltip> : label}
-            {row.original.assessment_scope === 'excluded' && (
-              <Badge size="sm" color="gray" variant="light" style={{ flexShrink: 0 }}>
-                Fuera de alcance
-              </Badge>
-            )}
-          </Group>
+          </Stack>
         )
       },
-    },
-    {
-      accessorKey: 'ip',
-      header: 'IP',
-      size: 140,
-      cell: ({ row }) => row.original.ip && <TechnicalText>{row.original.ip}</TechnicalText>,
-    },
-    {
-      accessorKey: 'hostname',
-      header: 'Nombre del host',
-      size: 220,
-      cell: ({ row }) =>
-        row.original.hostname && <TechnicalText truncate>{row.original.hostname}</TechnicalText>,
     },
     {
       accessorKey: 'criticality',
@@ -98,51 +117,42 @@ export function getAssetsColumns(
           size: 180,
           cell: ({ row }) => {
             const office = row.original.office
-            return typeof office === 'object' && office ? office.name : '—'
+            return (
+              <OneLineText>{typeof office === 'object' && office ? office.name : null}</OneLineText>
+            )
           },
         }
       : {
           accessorKey: 'location',
           header: 'Ubicación',
           size: 180,
-          cell: ({ row }) =>
-            row.original.identification_status === 'confirmed' ? row.original.location || '—' : '—',
+          cell: ({ row }) => (
+            <OneLineText>
+              {row.original.identification_status === 'confirmed' ? row.original.location : null}
+            </OneLineText>
+          ),
         },
-    {
-      accessorKey: 'status',
-      header: 'Estado',
-      size: 120,
-      meta: { align: 'center' },
-      cell: ({ row }) => {
-        const status = row.original.status ?? 'active'
-        return (
-          <StatusBadge
-            tone={STATUS_TONE[status] ?? 'neutral'}
-            label={ASSET_STATUS_LABEL[status] ?? status}
-          />
-        )
-      },
-    },
     {
       accessorKey: 'owner',
       header: 'Responsable',
       cell: ({ row }) => {
-        if (row.original.identification_status !== 'confirmed') return '—'
+        if (row.original.identification_status !== 'confirmed')
+          return <OneLineText>{null}</OneLineText>
         const owner = row.original.owner
-        if (typeof owner === 'object' && owner) return owner.name
-        return (owner && ownerNameById[owner]) || '—'
+        if (typeof owner === 'object' && owner) return <OneLineText>{owner.name}</OneLineText>
+        return <OneLineText>{owner ? ownerNameById[owner] : null}</OneLineText>
       },
     },
     {
       accessorKey: 'identification_status',
-      header: 'Identification',
-      size: 130,
+      header: 'Identificación',
+      size: 160,
       meta: { align: 'center' },
       cell: ({ row }) =>
         row.original.identification_status === 'confirmed' ? (
-          <StatusBadge tone="success" label="Identified" />
+          <StatusBadge tone="success" label="Identificado" />
         ) : row.original.identification_status === 'needs_review' ? (
-          <StatusBadge tone="warning" label="Requiere revisión" />
+          <StatusBadge tone="warning" label="A revisar" />
         ) : (
           <StatusBadge tone="warning" label="No identificado" />
         ),

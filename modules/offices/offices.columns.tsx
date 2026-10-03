@@ -1,7 +1,6 @@
 import type { ColumnDef } from '@tanstack/react-table'
 import type { Office } from '@/app/types/payload-types'
 import { activeStatusColumn } from '@/components/ui/activeStatusColumn'
-import { TechnicalText } from '@/components/ui/TechnicalText'
 import { Badge, Button, Tooltip } from '@mantine/core'
 import { Download, Settings2 } from 'lucide-react'
 import { getOfficeScannerStatus, type OfficeAgentSummary } from '@/endpoints/officeAgentSummary'
@@ -25,14 +24,6 @@ export function getOfficesColumns(
       header: 'Organización',
       cell: ({ row }) => organizationLabel(row.original),
     },
-    {
-      accessorKey: 'county_fips',
-      header: 'Código FIPS del condado',
-      size: 150,
-      cell: ({ row }) =>
-        row.original.county_fips && <TechnicalText>{row.original.county_fips}</TechnicalText>,
-    },
-    activeStatusColumn<Office>(office => Boolean(office.is_active)),
     {
       id: 'scanner',
       header: 'Escáner',
