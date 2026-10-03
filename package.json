@@ -13,6 +13,7 @@
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,scss,md}\"",
     "prepare": "husky",
     "seed:navigation": "cross-env NODE_OPTIONS=--no-deprecation node --import tsx scripts/seed-navigation.ts",
+    "seed:demo": "cross-env NODE_OPTIONS=--no-deprecation node --import tsx scripts/seed-demo.ts",
     "generate:contracts": "node --import tsx scripts/generate-contracts.ts",
     "spell-check": "cspell \"**/*\" --config cspell.json --exclude \".git/**\" --exclude \"node_modules/**\" --exclude \".next/**\""
   },

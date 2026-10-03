@@ -58,9 +58,15 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
     'never') as ReviewInterval
   const intervalChanged =
     'review_interval' in (data ?? {}) && data?.review_interval !== originalDoc?.review_interval
+  // Internal callers may replay a historical event with its original clock. Public HTTP input
+  // cannot set req.context; the demo seed uses this seam to create genuinely overdue records
+  // through the same derivation used by the frontend instead of writing next_review_at directly.
+  const requestedNow = req.context.seedEffectiveNow
+  const parsedNow = requestedNow ? new Date(String(requestedNow)) : new Date()
+  const effectiveNow = Number.isFinite(parsedNow.getTime()) ? parsedNow : new Date()
   const nextReviewAt =
     !originalDoc || intervalChanged
-      ? computeNextReviewAt(interval, new Date())
+      ? computeNextReviewAt(interval, effectiveNow)
       : originalDoc.next_review_at
 
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {id, office, organization,
@@ -71,6 +77,6 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
     office: officeId,
     organization: organizationId,
     next_review_at: nextReviewAt,
-    last_updated_at: new Date().toISOString(),
+    last_updated_at: effectiveNow.toISOString(),
   }
 }
