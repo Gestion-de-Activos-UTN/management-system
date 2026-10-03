@@ -89,7 +89,7 @@ export function getOfficesColumns(
     },
     {
       id: 'actions',
-      header: '',
+      header: 'Acciones',
       size: 120,
       meta: { align: 'center' },
       cell: ({ row }) => {

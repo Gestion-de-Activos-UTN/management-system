@@ -152,20 +152,24 @@ export default function ScanReportDetailPage() {
         />
         <StatCard
           icon={<CircleCheck size={20} strokeWidth={1.5} />}
-          value={payloadArchived ? 'Archived' : `${accepted.length} / ${total}`}
-          label="Accepted"
+          value={payloadArchived ? 'Archivado' : `${accepted.length} / ${total}`}
+          label="Aceptados"
         />
         <StatCard
           icon={<CircleX size={20} strokeWidth={1.5} />}
           value={rejected.length}
-          label="Rejected"
+          label="Rechazados"
         />
       </SimpleGrid>
 
       <Tabs defaultValue="accepted">
         <Tabs.List>
-          <Tabs.Tab value="accepted">Aceptados ({accepted.length})</Tabs.Tab>
-          <Tabs.Tab value="rejected">Rechazados ({rejected.length})</Tabs.Tab>
+          <Tabs.Tab value="accepted" leftSection={<CircleCheck size={16} strokeWidth={1.5} />}>
+            Aceptados ({accepted.length})
+          </Tabs.Tab>
+          <Tabs.Tab value="rejected" leftSection={<CircleX size={16} strokeWidth={1.5} />}>
+            Rechazados ({rejected.length})
+          </Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="accepted" pt="md">

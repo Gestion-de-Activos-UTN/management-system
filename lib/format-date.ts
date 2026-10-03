@@ -20,6 +20,11 @@ export function formatDateInput(value: string | Date): string {
   return local.toISOString().slice(0, 10)
 }
 
+// Una fecha elegida como inicio comienza al principio de ese día en el huso del usuario.
+export function localDateStartToISOString(value: string): string {
+  return new Date(`${value}T00:00:00.000`).toISOString()
+}
+
 // A chosen end date remains effective for that entire calendar day in the user's timezone.
 export function localDateEndToISOString(value: string): string {
   const date = new Date(`${value}T23:59:59.999`)

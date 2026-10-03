@@ -18,6 +18,7 @@ import type { SecurityReviewSummary as SecurityReviewSummaryData } from '@/modul
 import { formatDateTime } from '@/lib/format-date'
 import { RISK_BAND_LABEL } from '@/lib/enum-labels'
 import { RISK_BAND_COLOR, RISK_SCORE_SCALE } from '@/modules/risk/risk-labels'
+import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 
 const statusMeta = {
   pending: ['Sin iniciar', 'gray'],
@@ -127,9 +128,11 @@ function Stat({ label, value, hint }: { label: string; value: number; hint: stri
 export function SecurityReviewList({
   assessments,
   suffix = '',
+  asOrganization,
 }: {
   assessments: AssessmentInstance[]
   suffix?: string
+  asOrganization?: string
 }) {
   const groups = groupAssessments(assessments)
   const primary = groups.filter(group => group.scope !== 'asset')
@@ -144,6 +147,7 @@ export function SecurityReviewList({
           icon={Building2}
           groups={primary}
           suffix={suffix}
+          asOrganization={asOrganization}
           initiallyOpen
         />
       )}
@@ -154,6 +158,7 @@ export function SecurityReviewList({
           icon={Monitor}
           groups={devices}
           suffix={suffix}
+          asOrganization={asOrganization}
         />
       )}
       {!groups.length && (
@@ -174,6 +179,7 @@ function AssessmentSection({
   icon: Icon,
   groups,
   suffix,
+  asOrganization,
   initiallyOpen = false,
 }: {
   title: string
@@ -181,6 +187,7 @@ function AssessmentSection({
   icon: LucideIcon
   groups: AssessmentGroup[]
   suffix: string
+  asOrganization?: string
   initiallyOpen?: boolean
 }) {
   return (
@@ -201,7 +208,13 @@ function AssessmentSection({
       </Box>
       <Stack gap={0} mt="md">
         {groups.map((group, index) => (
-          <AssessmentGroup key={group.key} group={group} suffix={suffix} divider={index > 0} />
+          <AssessmentGroup
+            key={group.key}
+            group={group}
+            suffix={suffix}
+            asOrganization={asOrganization}
+            divider={index > 0}
+          />
         ))}
       </Stack>
     </Card>
@@ -265,10 +278,12 @@ function groupAssessments(assessments: AssessmentInstance[]): AssessmentGroup[] 
 function AssessmentGroup({
   group,
   suffix,
+  asOrganization,
   divider,
 }: {
   group: AssessmentGroup
   suffix: string
+  asOrganization?: string
   divider: boolean
 }) {
   const latest = group.cycles[0]
@@ -298,14 +313,21 @@ function AssessmentGroup({
             · {group.cycles.length} {group.cycles.length === 1 ? 'cycle' : 'cycles'}
           </Text>
         </div>
-        <Button
-          component={Link}
-          href={'/portal/security-review/' + latest.id + suffix}
-          variant="subtle"
-          rightSection={<ArrowRight size={16} />}
-        >
-          Abrir actual
-        </Button>
+        <Group gap="xs">
+          <CreateRelatedTaskButton
+            compact
+            reference={{ relationTo: 'assessment-instances', value: String(latest.id) }}
+            asOrganization={asOrganization}
+          />
+          <Button
+            component={Link}
+            href={'/portal/security-review/' + latest.id + suffix}
+            variant="subtle"
+            rightSection={<ArrowRight size={16} />}
+          >
+            Abrir actual
+          </Button>
+        </Group>
       </Group>
       {group.cycles.length > 1 && (
         <Box mt="sm" style={{ overflowX: 'auto' }}>

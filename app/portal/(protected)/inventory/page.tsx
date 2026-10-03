@@ -4,18 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useUiStore } from '@/lib/ui-store'
-import {
-  Button,
-  Divider,
-  Group,
-  Modal,
-  Select,
-  SimpleGrid,
-  Stack,
-  Tabs,
-  TextInput,
-} from '@mantine/core'
-import { History, Plus, Search } from 'lucide-react'
+import { Button, Divider, Group, Modal, Select, Stack, Tabs, TextInput } from '@mantine/core'
+import { History, Package, Plus, Search, Server } from 'lucide-react'
+import { FilterBar } from '@/components/ui/FilterBar'
 import { DataTable } from '@/components/ui/DataTable'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useAssetsList } from '@/modules/assets/hooks/use-assets'
@@ -30,6 +21,7 @@ import {
   CRITICALITY_OPTIONS,
 } from '@/lib/enum-labels'
 import type { Asset, NonNetworkAsset } from '@/app/types/payload-types'
+import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 
 const ALL = ''
 
@@ -163,27 +155,39 @@ export default function InventoryPage() {
         title="Inventario"
         description="Activos detectados en tus oficinas y activos registrados manualmente."
         rightSection={
-          <Button
-            component={Link}
-            href={`/portal/inventory/snapshots${asOrganization ? `?asOrganization=${asOrganization}` : ''}`}
-            variant="light"
-            leftSection={<History size={16} strokeWidth={1.5} />}
-            w={{ base: '100%', sm: 'auto' }}
-          >
-            Historial de instantáneas
-          </Button>
+          <Group gap="sm" wrap="wrap">
+            <CreateRelatedTaskButton
+              reference={{ relationTo: 'offices', value: selectedOfficeId }}
+              asOrganization={asOrganization}
+              editable
+              label="Tarea de inventario"
+            />
+            <Button
+              component={Link}
+              href={`/portal/inventory/snapshots${asOrganization ? `?asOrganization=${asOrganization}` : ''}`}
+              variant="light"
+              leftSection={<History size={16} strokeWidth={1.5} />}
+              w={{ base: '100%', sm: 'auto' }}
+            >
+              Historial de instantáneas
+            </Button>
+          </Group>
         }
       />
 
       <Tabs defaultValue="network">
         <Tabs.List>
-          <Tabs.Tab value="network">Red</Tabs.Tab>
-          <Tabs.Tab value="non-network">Activos manuales</Tabs.Tab>
+          <Tabs.Tab value="network" leftSection={<Server size={16} strokeWidth={1.5} />}>
+            Red
+          </Tabs.Tab>
+          <Tabs.Tab value="non-network" leftSection={<Package size={16} strokeWidth={1.5} />}>
+            Activos manuales
+          </Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="network" pt="md">
           <Stack gap="sm">
-            <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm">
+            <FilterBar>
               <TextInput
                 placeholder="Buscar alias, nombre de host o IP..."
                 leftSection={<Search size={16} strokeWidth={1.5} />}
@@ -206,17 +210,17 @@ export default function InventoryPage() {
                 w="100%"
               />
               <Select
-                placeholder="Identified"
+                placeholder="Identificación"
                 data={[
                   { value: ALL, label: 'Todos los estados de identificación' },
-                  { value: 'true', label: 'Identified' },
+                  { value: 'true', label: 'Identificado' },
                   { value: 'false', label: 'No identificado' },
                 ]}
                 value={assetIdentified}
                 onChange={v => setAssetIdentified(v ?? ALL)}
                 w="100%"
               />
-            </SimpleGrid>
+            </FilterBar>
             <DataTable
               columns={assetsColumns}
               data={activeAssets}
@@ -243,7 +247,7 @@ export default function InventoryPage() {
         <Tabs.Panel value="non-network" pt="md">
           <Stack gap="sm">
             <Group justify="space-between" align="flex-end" wrap="wrap">
-              <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm" style={{ flex: 1 }}>
+              <FilterBar>
                 <TextInput
                   placeholder="Buscar alias..."
                   leftSection={<Search size={16} strokeWidth={1.5} />}
@@ -278,7 +282,7 @@ export default function InventoryPage() {
                   onChange={v => setNnaReviewStatus(v ?? ALL)}
                   w="100%"
                 />
-              </SimpleGrid>
+              </FilterBar>
               <Button
                 leftSection={<Plus size={16} strokeWidth={1.5} />}
                 onClick={() => setEditingAsset(null)}

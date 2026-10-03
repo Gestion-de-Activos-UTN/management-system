@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Button, Group, Select, SimpleGrid, Stack, Tooltip } from '@mantine/core'
+import { Button, Group, Select, Stack, Tooltip } from '@mantine/core'
 import { Camera } from 'lucide-react'
+import { FilterBar } from '@/components/ui/FilterBar'
 import { DataTable } from '@/components/ui/DataTable'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useUiStore } from '@/lib/ui-store'
@@ -70,7 +71,7 @@ export default function InventorySnapshotsPage() {
           </Tooltip>
         }
       />
-      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm">
+      <FilterBar>
         <Select
           placeholder="Origen"
           data={GENERATED_BY_OPTIONS}
@@ -78,7 +79,7 @@ export default function InventorySnapshotsPage() {
           onChange={v => setGeneratedBy(v ?? ALL)}
           w="100%"
         />
-      </SimpleGrid>
+      </FilterBar>
       <DataTable
         columns={inventorySnapshotsColumns}
         data={filteredSnapshots}

@@ -7,6 +7,7 @@ import {
   type RoleSlug,
 } from '@/access/rbac/permissions'
 import { relationId } from '@/lib/relationId'
+import { formatDate, formatDateTime } from '@/lib/format-date'
 import type { TaskReferenceInput } from '@/modules/tasks/schema'
 import { TaskDomainError } from './task-error'
 
@@ -30,6 +31,53 @@ const REFERENCE_COLLECTION_PERMISSIONS: Record<TaskReferenceInput['relationTo'],
 
 function text(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value : fallback
+}
+
+async function assessmentTargetLabel(
+  req: PayloadRequest,
+  doc: Record<string, unknown>
+): Promise<string> {
+  if (doc.scope === 'organization') {
+    const organization = await req.payload.findByID({
+      collection: 'organizations',
+      id: relationId(doc.organization),
+      overrideAccess: true,
+      req,
+      depth: 0,
+    })
+    return organization.name
+  }
+  if (doc.scope === 'office' && doc.office) {
+    const office = await req.payload.findByID({
+      collection: 'offices',
+      id: relationId(doc.office),
+      overrideAccess: true,
+      req,
+      depth: 0,
+    })
+    return office.name
+  }
+  if (doc.manual_asset) {
+    const asset = await req.payload.findByID({
+      collection: 'non-network-assets',
+      id: relationId(doc.manual_asset),
+      overrideAccess: true,
+      req,
+      depth: 0,
+    })
+    return asset.alias
+  }
+  if (doc.asset) {
+    const asset = await req.payload.findByID({
+      collection: 'assets',
+      id: relationId(doc.asset),
+      overrideAccess: true,
+      req,
+      depth: 0,
+    })
+    return asset.alias || asset.hostname || asset.ip || `Activo ${asset.id}`
+  }
+  return 'alcance sin nombre'
 }
 
 export async function resolveTaskReference(
@@ -58,7 +106,7 @@ export async function resolveTaskReference(
     case 'offices':
       organizationId = relationId(doc.organization)
       officeId = String(doc.id)
-      label = `Inventario · ${text(doc.name, 'Oficina')}`
+      label = text(doc.name, 'Oficina')
       break
     case 'assets':
       label = text(doc.alias, text(doc.hostname, text(doc.ip, `Activo ${doc.id}`)))
@@ -66,35 +114,46 @@ export async function resolveTaskReference(
     case 'non-network-assets':
       label = text(doc.alias, `Activo ${doc.id}`)
       break
-    case 'assessment-instances':
-      label = `Revisión de seguridad · ${String(doc.id)}`
-      break
-    case 'compliance-results':
-      label = text(doc.check_key, `Resultado ${doc.id}`)
-      break
-    case 'inventory-snapshots':
-      label = `Instantánea · ${text(doc.taken_at, String(doc.id))}`
-      break
-    case 'scan-reports': {
-      label = `Escaneo · ${String(doc.id)}`
-      if (!organizationId && officeId) {
-        const office = await req.payload.findByID({
-          collection: 'offices',
-          id: officeId,
-          overrideAccess: true,
-          req,
-          depth: 0,
-        })
-        organizationId = relationId(office.organization)
-      }
+    case 'assessment-instances': {
+      const target = await assessmentTargetLabel(req, doc)
+      const opened = doc.opened_at ? formatDate(String(doc.opened_at)) : String(doc.id)
+      label = `${target} · ciclo del ${opened} · ${text(doc.policy_key, 'política')} v${String(doc.policy_version ?? '—')}`
       break
     }
+    case 'compliance-results':
+      label = `${text(doc.control_key, 'Control sin identificar')} · ${text(doc.check_key, `resultado ${doc.id}`)}`
+      break
+    // El tipo de entidad se muestra aparte en la UI; acá sólo va lo que la distingue de sus pares.
+    case 'inventory-snapshots':
+      label = doc.taken_at ? formatDateTime(String(doc.taken_at)) : `Instantánea ${doc.id}`
+      break
+    case 'scan-reports':
+      label = doc.scan_start ? formatDateTime(String(doc.scan_start)) : `Escaneo ${doc.id}`
+      break
     case 'risk-evaluations':
-      label = `Evaluación de riesgo · ${text(doc.evaluated_at, String(doc.id))}`
+      label = doc.evaluated_at ? formatDateTime(String(doc.evaluated_at)) : `Evaluación ${doc.id}`
+      if (!officeId) label = `${label} · Toda la organización`
       break
     case 'agents':
-      label = `Agente · ${String(doc.id)}`
+      // Una oficina puede tener agentes revocados; el prefijo corto del id los distingue.
+      label = `Agente ${String(doc.id).slice(0, 8)}`
       break
+  }
+
+  if (
+    officeId &&
+    reference.relationTo !== 'offices' &&
+    reference.relationTo !== 'assessment-instances'
+  ) {
+    const office = await req.payload.findByID({
+      collection: 'offices',
+      id: officeId,
+      overrideAccess: true,
+      req,
+      depth: 0,
+    })
+    if (!organizationId) organizationId = relationId(office.organization)
+    label = `${label} · ${office.name}`
   }
 
   if (!organizationId) {

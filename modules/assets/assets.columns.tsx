@@ -149,8 +149,9 @@ export function getAssetsColumns(
     },
     {
       id: 'actions',
-      header: '',
-      size: 84,
+      header: 'Acciones',
+      size: 100,
+      meta: { align: 'center' },
       cell: ({ row }) => <RowActions asset={row.original} />,
     },
   ]

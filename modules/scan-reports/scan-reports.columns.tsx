@@ -52,7 +52,8 @@ export const scanReportsColumns: ColumnDef<ScanReport, unknown>[] = [
   },
   {
     id: 'actions',
-    header: '',
+    header: 'Acciones',
+    meta: { align: 'center' },
     size: 48,
     cell: ({ row }) => (
       <Tooltip label="Ver informe">

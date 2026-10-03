@@ -17,34 +17,38 @@ import {
 } from '@mantine/core'
 import { useOfficesList } from '@/modules/offices/hooks/use-offices'
 import {
+  formatDateInput,
+  localDateEndToISOString,
+  localDateStartToISOString,
+} from '@/lib/format-date'
+import {
   CreateTasksSchema,
   TASK_REFERENCE_COLLECTIONS,
   type CreateTasksInput,
   type TaskReferenceInput,
 } from '../schema'
-import { TASK_REFERENCE_LABELS } from '../task-labels'
+import {
+  TASK_REFERENCE_HELP,
+  TASK_REFERENCE_LABELS,
+  TASK_REFERENCE_TYPE_LABELS,
+} from '../task-labels'
 import { useCreateTasks } from '../hooks/use-task-actions'
 import { useTaskAssignmentOptions, useTaskReferenceOptions } from '../hooks/use-task-options'
+import { TaskAssignmentFields } from './TaskAssignmentFields'
+import { TaskReferenceSummary } from './TaskReferenceSummary'
 
 const ALL_OFFICES = '__all_offices__'
-
-function localDateTimeValue(iso?: string): string {
-  const date = iso ? new Date(iso) : new Date()
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)
-  return local.toISOString().slice(0, 16)
-}
-
-function inputDateToIso(value: string): string | undefined {
-  return value ? new Date(value).toISOString() : undefined
-}
 
 export function TaskForm({
   asOrganization,
   initialReference,
+  referenceEditable = false,
   onSaved,
 }: {
   asOrganization?: string
-  initialReference?: TaskReferenceInput
+  /** Fija el tipo de entidad. Con `value` y sin `referenceEditable`, fija también la entidad. */
+  initialReference?: { relationTo: TaskReferenceInput['relationTo']; value?: string }
+  referenceEditable?: boolean
   onSaved?: () => void
 }) {
   const create = useCreateTasks()
@@ -57,6 +61,8 @@ export function TaskForm({
     handleSubmit,
     watch,
     setValue,
+    setError,
+    clearErrors,
     formState: { errors },
   } = useForm<CreateTasksInput>({
     resolver: zodResolver(CreateTasksSchema),
@@ -64,23 +70,28 @@ export function TaskForm({
       title: '',
       description: '',
       priority: 'normal',
-      start_at: new Date().toISOString(),
+      start_at: undefined,
       due_at: undefined,
       global: true,
       office_ids: [],
       assignment_kind: 'open_pool',
-      related_entity: initialReference,
+      related_entity: initialReference?.value
+        ? { relationTo: initialReference.relationTo, value: initialReference.value }
+        : undefined,
     },
   })
   const global = watch('global')
   const officeIds = watch('office_ids')
   const assignmentKind = watch('assignment_kind')
+  const assignedRole = watch('assigned_role')
+  const assignedUser = watch('assigned_user')
   const reference = watch('related_entity')
+  const referenceLocked = Boolean(initialReference?.value) && !referenceEditable
   const referenceOptions = useTaskReferenceOptions(
     referenceType,
     null,
     asOrganization,
-    initialReference?.value
+    referenceLocked ? initialReference?.value : undefined
   )
   const assignmentOptions = useTaskAssignmentOptions(officeIds, reference, asOrganization)
 
@@ -100,19 +111,97 @@ export function TaskForm({
     }
   }, [selectedReference, setValue])
 
+  useEffect(() => {
+    if (!assignmentOptions.data || assignmentOptions.isFetching) return
+    if (
+      assignmentKind === 'role' &&
+      assignedRole &&
+      !assignmentOptions.data.roles.some(role => role.id === assignedRole)
+    ) {
+      setValue('assigned_role', undefined)
+    }
+    if (
+      assignmentKind === 'user' &&
+      assignedUser &&
+      !assignmentOptions.data.users.some(user => user.id === assignedUser)
+    ) {
+      setValue('assigned_user', undefined)
+    }
+  }, [
+    assignedRole,
+    assignedUser,
+    assignmentKind,
+    assignmentOptions.data,
+    assignmentOptions.isFetching,
+    setValue,
+  ])
+
   const officeOptions = (offices ?? []).map(office => ({
     value: String(office.id),
     label: office.name,
   }))
   const scopeLocked = Boolean(reference)
+  const scopeLabel = selectedReference?.office_id
+    ? `Oficina ${officeOptions.find(o => o.value === selectedReference.office_id)?.label ?? ''}`
+    : 'Toda la organización'
+
+  const referenceSelect = (
+    <Controller
+      name="related_entity"
+      control={control}
+      render={({ field }) => (
+        <Select
+          label={
+            initialReference
+              ? TASK_REFERENCE_TYPE_LABELS[initialReference.relationTo]
+              : 'Entidad relacionada'
+          }
+          description={
+            initialReference ? TASK_REFERENCE_HELP[initialReference.relationTo] : undefined
+          }
+          required={Boolean(referenceType)}
+          placeholder={referenceType ? 'Selecciona una entidad' : 'Sin relación'}
+          disabled={!referenceType}
+          searchable
+          clearable={!initialReference}
+          nothingFoundMessage="Sin resultados"
+          error={errors.related_entity?.message}
+          data={(referenceOptions.data ?? []).map(option => ({
+            value: option.value,
+            label: option.label,
+          }))}
+          value={field.value?.value ?? null}
+          onChange={value => {
+            field.onChange(
+              value && referenceType ? { relationTo: referenceType, value } : undefined
+            )
+            clearErrors('related_entity')
+          }}
+        />
+      )}
+    />
+  )
 
   const submit = handleSubmit(values => {
+    // Elegir un tipo sin entidad crearía la tarea sin vínculo, en silencio. Se exige completar
+    // la entidad o quitar el tipo.
+    if (referenceType && !values.related_entity) {
+      setError('related_entity', { message: 'Selecciona una entidad.' })
+      return
+    }
     create.mutate(values, { onSuccess: onSaved })
   })
 
   return (
     <form onSubmit={submit} noValidate>
       <Stack gap="md">
+        {referenceLocked && initialReference && (
+          <TaskReferenceSummary
+            relationTo={initialReference.relationTo}
+            label={selectedReference?.label ?? (referenceOptions.isPending ? 'Cargando…' : null)}
+          />
+        )}
+        {initialReference && !referenceLocked && referenceSelect}
         <Controller
           name="title"
           control={control}
@@ -166,11 +255,16 @@ export function TaskForm({
             control={control}
             render={({ field }) => (
               <TextInput
-                type="datetime-local"
+                type="date"
                 label="Inicio"
-                description="Vacío usa la fecha actual"
-                value={field.value ? localDateTimeValue(field.value) : ''}
-                onChange={event => field.onChange(inputDateToIso(event.currentTarget.value))}
+                value={field.value ? formatDateInput(field.value) : ''}
+                onChange={event =>
+                  field.onChange(
+                    event.currentTarget.value
+                      ? localDateStartToISOString(event.currentTarget.value)
+                      : undefined
+                  )
+                }
                 error={errors.start_at?.message}
               />
             )}
@@ -180,167 +274,135 @@ export function TaskForm({
             control={control}
             render={({ field }) => (
               <TextInput
-                type="datetime-local"
+                type="date"
                 label="Vencimiento"
-                value={field.value ? localDateTimeValue(field.value) : ''}
-                onChange={event => field.onChange(inputDateToIso(event.currentTarget.value))}
+                value={field.value ? formatDateInput(field.value) : ''}
+                onChange={event =>
+                  field.onChange(
+                    event.currentTarget.value
+                      ? localDateEndToISOString(event.currentTarget.value)
+                      : undefined
+                  )
+                }
                 error={errors.due_at?.message}
               />
             )}
           />
         </SimpleGrid>
+        <Text size="xs" c="dimmed" mt={-8}>
+          Si dejas Inicio vacío, la tarea comenzará hoy. El vencimiento incluye todo el día
+          seleccionado.
+        </Text>
 
-        <SimpleGrid cols={{ base: 1, sm: 2 }}>
-          <Select
-            label="Tipo de entidad relacionada"
-            clearable={!initialReference}
-            disabled={Boolean(initialReference)}
-            data={TASK_REFERENCE_COLLECTIONS.map(value => ({
-              value,
-              label: TASK_REFERENCE_LABELS[value],
-            }))}
-            value={referenceType}
-            onChange={value => {
-              setReferenceType(value as TaskReferenceInput['relationTo'] | null)
-              setValue('related_entity', undefined)
-            }}
-          />
-          <Controller
-            name="related_entity"
-            control={control}
-            render={({ field }) => (
+        {!initialReference && (
+          <>
+            <SimpleGrid cols={{ base: 1, sm: 2 }}>
               <Select
-                label="Entidad relacionada"
-                placeholder={referenceType ? 'Selecciona una entidad' : 'Sin relación'}
-                disabled={!referenceType || Boolean(initialReference)}
-                searchable
-                clearable={!initialReference}
-                data={(referenceOptions.data ?? []).map(option => ({
-                  value: option.value,
-                  label: option.label,
+                label="Tipo de entidad relacionada"
+                clearable
+                data={TASK_REFERENCE_COLLECTIONS.map(value => ({
+                  value,
+                  label: TASK_REFERENCE_LABELS[value],
                 }))}
-                value={field.value?.value ?? null}
-                onChange={value =>
-                  field.onChange(
-                    value && referenceType ? { relationTo: referenceType, value } : undefined
-                  )
-                }
-              />
-            )}
-          />
-        </SimpleGrid>
-
-        <Controller
-          name="global"
-          control={control}
-          render={({ field }) => (
-            <Switch
-              label="Tarea global"
-              description="Se aplica una vez a toda la organización"
-              checked={field.value}
-              disabled={scopeLocked}
-              onChange={event => {
-                field.onChange(event.currentTarget.checked)
-                if (event.currentTarget.checked) setValue('office_ids', [])
-              }}
-            />
-          )}
-        />
-        {!global && (
-          <Controller
-            name="office_ids"
-            control={control}
-            render={({ field }) => (
-              <MultiSelect
-                label="Oficinas"
-                required
-                searchable
-                disabled={scopeLocked}
-                data={[
-                  {
-                    value: ALL_OFFICES,
-                    label: `Todas las oficinas actuales (${officeOptions.length})`,
-                  },
-                  ...officeOptions,
-                ]}
-                value={field.value}
-                onChange={values =>
-                  field.onChange(
-                    values.includes(ALL_OFFICES) ? officeOptions.map(o => o.value) : values
-                  )
-                }
-                error={errors.office_ids?.message}
-              />
-            )}
-          />
-        )}
-        {!global && officeIds.length > 1 && (
-          <Text size="sm" c="dimmed">
-            Se crearán {officeIds.length} tareas independientes.
-          </Text>
-        )}
-
-        <SimpleGrid cols={{ base: 1, sm: 2 }}>
-          <Controller
-            name="assignment_kind"
-            control={control}
-            render={({ field }) => (
-              <Select
-                label="Asignación"
-                data={[
-                  { value: 'open_pool', label: 'Pool abierto' },
-                  { value: 'role', label: 'Rol' },
-                  { value: 'user', label: 'Usuario' },
-                ]}
-                value={field.value}
+                value={referenceType}
                 onChange={value => {
-                  field.onChange(value ?? 'open_pool')
-                  setValue('assigned_role', undefined)
-                  setValue('assigned_user', undefined)
+                  setReferenceType(value as TaskReferenceInput['relationTo'] | null)
+                  setValue('related_entity', undefined)
+                  clearErrors('related_entity')
                 }}
               />
+              {referenceSelect}
+            </SimpleGrid>
+            {referenceType && (
+              <Text size="xs" c="dimmed" mt={-8}>
+                {TASK_REFERENCE_HELP[referenceType]}
+              </Text>
             )}
-          />
-          {assignmentKind === 'role' && (
+          </>
+        )}
+
+        {scopeLocked ? (
+          <Text size="sm" c="dimmed">
+            Alcance: <b>{scopeLabel}</b> (lo define la entidad relacionada)
+          </Text>
+        ) : (
+          <>
             <Controller
-              name="assigned_role"
+              name="global"
               control={control}
               render={({ field }) => (
-                <Select
-                  label="Rol asignado"
-                  required
-                  data={(assignmentOptions.data?.roles ?? []).map(role => ({
-                    value: role.id,
-                    label: role.slug,
-                  }))}
-                  value={field.value ?? null}
-                  onChange={field.onChange}
-                  error={'assigned_role' in errors ? errors.assigned_role?.message : undefined}
+                <Switch
+                  label="Tarea global"
+                  description="Se aplica una vez a toda la organización"
+                  checked={field.value}
+                  onChange={event => {
+                    field.onChange(event.currentTarget.checked)
+                    if (event.currentTarget.checked) setValue('office_ids', [])
+                  }}
                 />
               )}
             />
-          )}
-          {assignmentKind === 'user' && (
-            <Controller
-              name="assigned_user"
-              control={control}
-              render={({ field }) => (
-                <Select
-                  label="Usuario asignado"
-                  required
-                  searchable
-                  data={(assignmentOptions.data?.users ?? []).map(user => ({
-                    value: user.id,
-                    label: user.name || user.email,
-                  }))}
-                  value={field.value ?? null}
-                  onChange={field.onChange}
-                  error={'assigned_user' in errors ? errors.assigned_user?.message : undefined}
-                />
-              )}
-            />
-          )}
-        </SimpleGrid>
+            {!global && (
+              <Controller
+                name="office_ids"
+                control={control}
+                render={({ field }) => (
+                  <MultiSelect
+                    label="Oficinas"
+                    required
+                    searchable
+                    data={[
+                      {
+                        value: ALL_OFFICES,
+                        label: `Todas las oficinas actuales (${officeOptions.length})`,
+                      },
+                      ...officeOptions,
+                    ]}
+                    value={field.value}
+                    onChange={values =>
+                      field.onChange(
+                        values.includes(ALL_OFFICES) ? officeOptions.map(o => o.value) : values
+                      )
+                    }
+                    error={errors.office_ids?.message}
+                  />
+                )}
+              />
+            )}
+            {!global && officeIds.length > 1 && (
+              <Text size="sm" c="dimmed">
+                Se crearán {officeIds.length} tareas independientes.
+              </Text>
+            )}
+          </>
+        )}
+
+        <TaskAssignmentFields
+          kind={assignmentKind}
+          target={(assignmentKind === 'role' ? assignedRole : assignedUser) ?? null}
+          options={assignmentOptions.data}
+          targetError={
+            'assigned_role' in errors
+              ? errors.assigned_role?.message
+              : 'assigned_user' in errors
+                ? errors.assigned_user?.message
+                : undefined
+          }
+          onKindChange={kind => {
+            setValue('assignment_kind', kind)
+            setValue('assigned_role', undefined)
+            setValue('assigned_user', undefined)
+          }}
+          onTargetChange={target =>
+            setValue(
+              assignmentKind === 'role' ? 'assigned_role' : 'assigned_user',
+              target ?? undefined,
+              {
+                shouldValidate: true,
+              }
+            )
+          }
+        />
         <Group justify="flex-end">
           <Button type="submit" loading={create.isPending}>
             {officeIds.length > 1 ? `Crear ${officeIds.length} tareas` : 'Crear tarea'}

@@ -32,7 +32,8 @@ export const inventorySnapshotsColumns: ColumnDef<InventorySnapshot, unknown>[] 
   },
   {
     id: 'actions',
-    header: '',
+    header: 'Acciones',
+    meta: { align: 'center' },
     size: 48,
     cell: ({ row }) => (
       <Tooltip label="Ver instantánea">

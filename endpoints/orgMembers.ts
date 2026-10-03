@@ -22,7 +22,11 @@ export const orgMembersEndpoint: Endpoint = {
 
     const memberships = await req.payload.find({
       collection: 'organization-memberships',
-      where: { organization: { equals: ctx.organizationId }, is_active: { equals: true } },
+      where: {
+        organization: { equals: ctx.organizationId },
+        is_active: { equals: true },
+        status: { equals: 'active' },
+      },
       overrideAccess: true,
       req,
       depth: 2,
@@ -51,6 +55,7 @@ export const orgMembersEndpoint: Endpoint = {
         name: user.name,
         email: user.email,
         role: roleSlug(m),
+        office_ids: (m.offices ?? []).map(relationId),
         status: m.status,
       }
     })

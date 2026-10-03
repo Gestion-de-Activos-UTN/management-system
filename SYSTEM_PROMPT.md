@@ -42,6 +42,16 @@ No duplicated logic, no duplicate component reinventions.
 - `components/ui/` = generic, zero domain knowledge, reusable everywhere. `modules/<domain>/components/` = domain-specific presentation. Never put domain logic in `components/ui/`, never put a generic reusable widget only in a domain module.
 - Before writing a new component/hook/util, check `components/ui/`, `lib/`, and the relevant `modules/<domain>/` for an existing one. Reuse or extend before creating.
 
+**UI patterns (use these, don't re-invent them):**
+- **Picking a person** → `MemberSelect` (`modules/users/components/MemberSelect.tsx`). The caller decides eligibility (`memberCoversOffice`, or a server endpoint such as task assignment-options); the component owns search + the `orgMemberOptionLabel` format (name · role · email). "Unassigned" is an explicit `emptyOption` with a sentinel value, never an empty string. Wording: **Responsable** = owner of an entity (asset); **Persona asignada** = who must execute a task.
+- **Showing a linked entity** → type (Lucide icon + short type name) shown separately from a human label. Never show a raw UUID or ISO timestamp to the user; format dates with `lib/format-date.ts`.
+- **Row actions** → `modules/<domain>/components/RowActions.tsx`, `<Group gap={6} wrap="wrap" justify="center">`, each action an `ActionIcon variant="light" size="md"` with `Tooltip` + `aria-label`. Up to 3 actions inline; beyond that, primary ones inline and the rest in a `Menu` (`…`). Actions that need extra input (edit, reassign, cancel with reason) live in the detail view/modal.
+- **List filters** → always inside `<FilterBar>` (`components/ui/FilterBar.tsx`): search `TextInput` (Lucide `Search`) first, then `Select`s with `placeholder` + `aria-label`, no visible `label`, `w="100%"`, and an explicit first option "Todas/Todos los …" instead of `clearable`. A boolean filter is a `Switch` wrapped in `<Group h={36}>` so it aligns with the inputs. No `SegmentedControl` for filters. Only render filters that can change the result in the current view.
+- **Tabs** → every `Tabs.Tab` carries a Lucide `leftSection` icon (same icon as the entity elsewhere, e.g. `Server` = network assets, `Package` = manual assets); counts go in the label as `Nombre (n)`. Content goes in `Tabs.Panel pt="md"` (or a sibling `Stack gap="md"` when every tab shares one view).
+- **Status-like badges** → `StatusBadge` with a `tone` map in the domain's `*-labels.ts`; never ad-hoc `Badge` colors.
+- **Icons** → Lucide `size={16} strokeWidth={1.5}` (14 in menus/dense text).
+- **Forms with context fixed by the caller** → show the fixed value as a read-only summary, never as a disabled input. If choosing an option implies a second required choice (entity type → entity), validate it; never drop it silently.
+
 ## 4. State management (mandatory separation)
 
 **One owner per piece of data, never two.**

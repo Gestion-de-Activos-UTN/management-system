@@ -6,12 +6,11 @@ import { Button, Group, Select, SimpleGrid, Stack, Textarea, TextInput } from '@
 import type { TaskDTO } from '../service'
 import { EditTaskSchema, type EditTaskInput } from '../schema'
 import { useEditTask } from '../hooks/use-task-actions'
-
-function localValue(iso?: string | null): string {
-  if (!iso) return ''
-  const date = new Date(iso)
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
-}
+import {
+  formatDateInput,
+  localDateEndToISOString,
+  localDateStartToISOString,
+} from '@/lib/format-date'
 
 export function TaskEditForm({ task, onSaved }: { task: TaskDTO; onSaved: () => void }) {
   const edit = useEditTask(task.id)
@@ -82,13 +81,13 @@ export function TaskEditForm({ task, onSaved }: { task: TaskDTO; onSaved: () => 
             control={control}
             render={({ field }) => (
               <TextInput
-                type="datetime-local"
+                type="date"
                 label="Inicio"
-                value={localValue(field.value)}
+                value={field.value ? formatDateInput(field.value) : ''}
                 onChange={event =>
                   field.onChange(
                     event.currentTarget.value
-                      ? new Date(event.currentTarget.value).toISOString()
+                      ? localDateStartToISOString(event.currentTarget.value)
                       : undefined
                   )
                 }
@@ -101,13 +100,13 @@ export function TaskEditForm({ task, onSaved }: { task: TaskDTO; onSaved: () => 
             control={control}
             render={({ field }) => (
               <TextInput
-                type="datetime-local"
+                type="date"
                 label="Vencimiento"
-                value={localValue(field.value)}
+                value={field.value ? formatDateInput(field.value) : ''}
                 onChange={event =>
                   field.onChange(
                     event.currentTarget.value
-                      ? new Date(event.currentTarget.value).toISOString()
+                      ? localDateEndToISOString(event.currentTarget.value)
                       : null
                   )
                 }

@@ -1,32 +1,22 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
 import {
   Alert,
+  Badge,
   Button,
   Card,
   Divider,
   Group,
   Modal,
-  Select,
   SimpleGrid,
   Stack,
   Text,
   Textarea,
 } from '@mantine/core'
-import {
-  Archive,
-  Check,
-  ExternalLink,
-  Hand,
-  Pencil,
-  RotateCcw,
-  Trash2,
-  XCircle,
-} from 'lucide-react'
+import { Archive, Check, Hand, Pencil, RotateCcw, Trash2, XCircle } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { formatDateTime } from '@/lib/format-date'
+import { formatDate, formatDateTime } from '@/lib/format-date'
 import { relationId } from '@/lib/relationId'
 import type { ReassignTaskInput } from '../schema'
 import type { TaskAction, TaskDTO } from '../service'
@@ -35,6 +25,8 @@ import { getTaskReferenceHref } from '../task-reference-link'
 import { useTaskCommand } from '../hooks/use-task-actions'
 import { useTaskAssignmentOptions } from '../hooks/use-task-options'
 import { TaskEditForm } from './TaskEditForm'
+import { TaskAssignmentFields, type TaskAssignmentKind } from './TaskAssignmentFields'
+import { TaskReferenceSummary } from './TaskReferenceSummary'
 
 export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganization?: string }) {
   const command = useTaskCommand(task.id)
@@ -42,7 +34,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
   const [reassignOpened, setReassignOpened] = useState(false)
   const [cancelOpened, setCancelOpened] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
-  const [assignmentKind, setAssignmentKind] = useState<'open_pool' | 'role' | 'user'>('open_pool')
+  const [assignmentKind, setAssignmentKind] = useState<TaskAssignmentKind>('open_pool')
   const [assignmentTarget, setAssignmentTarget] = useState<string | null>(null)
   const reference = task.related_entity_info
     ? { relationTo: task.related_entity_info.relationTo, value: task.related_entity_info.value }
@@ -80,10 +72,17 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             Creada {formatDateTime(task.createdAt)}
           </Text>
         </div>
-        <StatusBadge
-          tone={TASK_STATUS_TONES[task.effective_status]}
-          label={TASK_STATUS_LABELS[task.effective_status]}
-        />
+        <Group gap="xs">
+          <StatusBadge
+            tone={TASK_STATUS_TONES[task.effective_status]}
+            label={TASK_STATUS_LABELS[task.effective_status]}
+          />
+          {task.archived_at && (
+            <Badge color="gray" variant="outline">
+              Archivada
+            </Badge>
+          )}
+        </Group>
       </Group>
       {task.is_overdue && (
         <Alert color="red">
@@ -110,36 +109,21 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
               <Text size="xs" c="dimmed">
                 Inicio
               </Text>
-              <Text>{formatDateTime(task.start_at)}</Text>
+              <Text>{formatDate(task.start_at)}</Text>
             </div>
             <div>
               <Text size="xs" c="dimmed">
                 Vencimiento
               </Text>
-              <Text>{task.due_at ? formatDateTime(task.due_at) : 'Sin vencimiento'}</Text>
+              <Text>{task.due_at ? formatDate(task.due_at) : 'Sin vencimiento'}</Text>
             </div>
           </SimpleGrid>
           {task.related_entity_info && (
-            <Card withBorder padding="md">
-              <Group justify="space-between">
-                <div>
-                  <Text size="xs" c="dimmed">
-                    Relacionado con
-                  </Text>
-                  <Text fw={600}>{task.related_entity_info.label ?? 'Entidad no disponible'}</Text>
-                </div>
-                {referenceHref && (
-                  <Button
-                    component={Link}
-                    href={referenceHref}
-                    variant="light"
-                    rightSection={<ExternalLink size={15} />}
-                  >
-                    Abrir entidad
-                  </Button>
-                )}
-              </Group>
-            </Card>
+            <TaskReferenceSummary
+              relationTo={task.related_entity_info.relationTo}
+              label={task.related_entity_info.label}
+              href={referenceHref}
+            />
           )}
         </Stack>
       </Card>
@@ -147,7 +131,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
         {has('edit') && (
           <Button
             variant="default"
-            leftSection={<Pencil size={16} />}
+            leftSection={<Pencil size={16} strokeWidth={1.5} />}
             onClick={() => setEditOpened(true)}
           >
             Editar
@@ -155,7 +139,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
         )}
         {has('claim') && (
           <Button
-            leftSection={<Hand size={16} />}
+            leftSection={<Hand size={16} strokeWidth={1.5} />}
             loading={command.isPending}
             onClick={() => run('claim')}
           >
@@ -165,7 +149,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
         {has('release') && (
           <Button
             variant="light"
-            leftSection={<RotateCcw size={16} />}
+            leftSection={<RotateCcw size={16} strokeWidth={1.5} />}
             loading={command.isPending}
             onClick={() => run('release')}
           >
@@ -180,7 +164,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
         {has('complete') && (
           <Button
             color="green"
-            leftSection={<Check size={16} />}
+            leftSection={<Check size={16} strokeWidth={1.5} />}
             loading={command.isPending}
             onClick={() => run('complete')}
           >
@@ -191,7 +175,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
           <Button
             color="red"
             variant="light"
-            leftSection={<XCircle size={16} />}
+            leftSection={<XCircle size={16} strokeWidth={1.5} />}
             onClick={() => setCancelOpened(true)}
           >
             Cancelar tarea
@@ -200,7 +184,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
         {has('archive') && (
           <Button
             variant="light"
-            leftSection={<Archive size={16} />}
+            leftSection={<Archive size={16} strokeWidth={1.5} />}
             loading={command.isPending}
             onClick={() => run('archive')}
           >
@@ -211,7 +195,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
           <Button
             color="red"
             variant="subtle"
-            leftSection={<Trash2 size={16} />}
+            leftSection={<Trash2 size={16} strokeWidth={1.5} />}
             loading={command.isPending}
             onClick={() => window.confirm('¿Eliminar esta tarea pendiente?') && run('delete')}
           >
@@ -232,46 +216,19 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
         opened={reassignOpened}
         onClose={() => setReassignOpened(false)}
         title="Reasignar tarea"
+        size="lg"
       >
         <Stack>
-          <Select
-            label="Asignación"
-            data={[
-              { value: 'open_pool', label: 'Pool abierto' },
-              { value: 'role', label: 'Rol' },
-              { value: 'user', label: 'Usuario' },
-            ]}
-            value={assignmentKind}
-            onChange={value => {
-              setAssignmentKind((value ?? 'open_pool') as typeof assignmentKind)
+          <TaskAssignmentFields
+            kind={assignmentKind}
+            target={assignmentTarget}
+            options={assignmentOptions.data}
+            onKindChange={kind => {
+              setAssignmentKind(kind)
               setAssignmentTarget(null)
             }}
+            onTargetChange={setAssignmentTarget}
           />
-          {assignmentKind === 'role' && (
-            <Select
-              label="Rol"
-              required
-              value={assignmentTarget}
-              onChange={setAssignmentTarget}
-              data={(assignmentOptions.data?.roles ?? []).map(role => ({
-                value: role.id,
-                label: role.slug,
-              }))}
-            />
-          )}
-          {assignmentKind === 'user' && (
-            <Select
-              label="Usuario"
-              required
-              searchable
-              value={assignmentTarget}
-              onChange={setAssignmentTarget}
-              data={(assignmentOptions.data?.users ?? []).map(user => ({
-                value: user.id,
-                label: user.name || user.email,
-              }))}
-            />
-          )}
           <Group justify="flex-end">
             <Button
               onClick={reassign}

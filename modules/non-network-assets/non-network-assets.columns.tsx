@@ -76,8 +76,9 @@ export function getNonNetworkAssetsColumns(
     },
     {
       id: 'actions',
-      header: '',
+      header: 'Acciones',
       size: 120,
+      meta: { align: 'center' },
       cell: ({ row }) => (
         <RowActions asset={row.original} onEdit={onEdit} asOrganization={asOrganization} />
       ),

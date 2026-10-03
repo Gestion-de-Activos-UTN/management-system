@@ -2,6 +2,7 @@
 
 import { useParams, useSearchParams } from 'next/navigation'
 import { Card, Center, Group, Loader, RingProgress, Stack, Tabs, Text } from '@mantine/core'
+import { Package, Server } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '@/components/ui/DataTable'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -145,8 +146,12 @@ export default function SnapshotDetailPage() {
 
       <Tabs defaultValue="network">
         <Tabs.List>
-          <Tabs.Tab value="network">Red ({networkAssets.length})</Tabs.Tab>
-          <Tabs.Tab value="non-network">Activos manuales ({nonNetworkAssets.length})</Tabs.Tab>
+          <Tabs.Tab value="network" leftSection={<Server size={16} strokeWidth={1.5} />}>
+            Red ({networkAssets.length})
+          </Tabs.Tab>
+          <Tabs.Tab value="non-network" leftSection={<Package size={16} strokeWidth={1.5} />}>
+            Activos manuales ({nonNetworkAssets.length})
+          </Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="network" pt="md">

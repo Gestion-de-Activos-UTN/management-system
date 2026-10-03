@@ -26,6 +26,8 @@ import {
 import { PageHeader } from '@/components/ui/PageHeader'
 import { TechnicalText } from '@/components/ui/TechnicalText'
 import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
+import { memberCoversOffice } from '@/modules/users/service'
+import { MemberSelect } from '@/modules/users/components/MemberSelect'
 import {
   ASSESSMENT_EXCLUSION_REASON_OPTIONS,
   CRITICALITY_OPTIONS,
@@ -469,6 +471,11 @@ export function AssetDetailView({
   asOrganization?: string
 }) {
   const { data: members } = useOrgMembers(asOrganization)
+  const assetOfficeId =
+    typeof asset.office === 'string' ? asset.office : asset.office ? String(asset.office.id) : ''
+  const eligibleOwnerMembers = assetOfficeId
+    ? (members ?? []).filter(member => memberCoversOffice(member, assetOfficeId))
+    : []
   const updateAsset = useUpdateAsset(asset.id)
   const unidentifyAsset = useUnidentifyAsset()
   const markViewed = useMarkAssetViewed(asset.id)
@@ -627,7 +634,7 @@ export function AssetDetailView({
 
       <AssetIdentificationModal
         asset={asset}
-        members={members ?? []}
+        members={eligibleOwnerMembers}
         opened={identificationOpen}
         onClose={() => setIdentificationOpen(false)}
       />
@@ -861,15 +868,13 @@ export function AssetDetailView({
               name="owner"
               control={control}
               render={({ field }) => (
-                <Select
+                <MemberSelect
                   label="Responsable"
-                  data={[
-                    { value: UNKNOWN_IDENTIFICATION_VALUE, label: 'Sin asignar o desconocido' },
-                    ...(members ?? []).map(m => ({
-                      value: m.id,
-                      label: m.name || m.email,
-                    })),
-                  ]}
+                  members={eligibleOwnerMembers}
+                  emptyOption={{
+                    value: UNKNOWN_IDENTIFICATION_VALUE,
+                    label: 'Sin asignar o desconocido',
+                  }}
                   disabled={
                     asset.identification_status !== 'confirmed' ||
                     authorizationStatus !== 'authorized'
@@ -878,7 +883,6 @@ export function AssetDetailView({
                   onChange={value =>
                     field.onChange(value === UNKNOWN_IDENTIFICATION_VALUE ? null : value)
                   }
-                  searchable
                   error={errors.owner?.message}
                 />
               )}
