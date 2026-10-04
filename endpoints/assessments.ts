@@ -34,14 +34,17 @@ import { isAssetExcludedFromAssessments } from '@/domain/assessments/asset-asses
 
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 
-async function authenticated(req: PayloadRequest): Promise<TenantContext | Response> {
+export async function authenticated(req: PayloadRequest): Promise<TenantContext | Response> {
   const ctx = await getTenantContext(req)
   if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
   if (!ctx.isPlatformAdmin && !ctx.organizationId) return json({ error: 'forbidden' }, 403)
   return ctx
 }
 
-async function featureEnabled(req: PayloadRequest, organizationId: string): Promise<boolean> {
+export async function featureEnabled(
+  req: PayloadRequest,
+  organizationId: string
+): Promise<boolean> {
   const result = await req.payload.find({
     collection: 'subscriptions',
     where: { organization: { equals: organizationId } },

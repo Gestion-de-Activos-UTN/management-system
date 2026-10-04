@@ -251,7 +251,8 @@ export async function completeAssessment(
   assessmentId: string,
   command: SaveAssessmentDraft,
   actorId: string,
-  request: PayloadRequest
+  request: PayloadRequest,
+  options: { enqueueRisk?: boolean } = {}
 ) {
   const ownsTransaction = !request.transactionID
   const transactionID = request.transactionID ?? (await payload.db.beginTransaction())
@@ -410,11 +411,13 @@ export async function completeAssessment(
     })
     if (ownsTransaction && transactionID) await payload.db.commitTransaction(transactionID)
     // Organization answers are inherited by every office evaluation.
-    if (assessment.office)
-      await enqueueRiskRecalculation(payload, relationId(assessment.organization), [
-        relationId(assessment.office),
-      ])
-    else await enqueueOrganizationRiskRecalculation(payload, relationId(assessment.organization))
+    if (options.enqueueRisk !== false) {
+      if (assessment.office)
+        await enqueueRiskRecalculation(payload, relationId(assessment.organization), [
+          relationId(assessment.office),
+        ])
+      else await enqueueOrganizationRiskRecalculation(payload, relationId(assessment.organization))
+    }
     return completed
   } catch (error) {
     if (ownsTransaction && transactionID) await payload.db.rollbackTransaction(transactionID)

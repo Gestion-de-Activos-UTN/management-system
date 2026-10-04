@@ -11,6 +11,7 @@ import {
   assessmentDetailEndpoint,
   assessmentsListEndpoint,
 } from './assessments'
+import { bulkAssessmentCompleteEndpoint, bulkAssessmentPreviewEndpoint } from './bulkAssessments'
 
 function request(
   payload: Payload,
@@ -303,3 +304,168 @@ test('Security Review hides organization-level cycles and answers from office-sc
     )
   }
 })
+
+test('bulk assessment completion overwrites open drafts and preserves closed cycles', async () => {
+  const payload = await getPayload({ config })
+  const {
+    organization,
+    mainOffice,
+    user,
+    asset: completedAsset,
+  } = await seedManualComputerFlow(payload)
+  await completeLatestCycle(payload, String(user.id), String(completedAsset.id))
+  const completedCycle = (
+    await payload.find({
+      collection: 'assessment-instances',
+      where: { manual_asset: { equals: completedAsset.id } },
+      overrideAccess: true,
+      sort: '-createdAt',
+      limit: 1,
+    })
+  ).docs[0]
+  const completedAnswersBefore = await payload.find({
+    collection: 'assessment-answers',
+    where: { assessment: { equals: completedCycle.id } },
+    overrideAccess: true,
+    depth: 0,
+    limit: 100,
+  })
+
+  const openAsset = await payload.create({
+    collection: 'non-network-assets',
+    overrideAccess: true,
+    data: {
+      alias: 'Second workstation',
+      asset_category: 'computer',
+      criticality: 'medium',
+      owner: user.id,
+      office: mainOffice.id,
+      organization: organization.id,
+      status: 'active',
+      review_interval: 'never',
+    },
+  })
+  const openCycle = await openCycleForManualAsset(payload, String(openAsset.id))
+  const firstQuestion = (
+    openCycle.question_set_snapshot as Array<{ key: string; version: number }>
+  )[0]
+  const draftOption = RISK_QUESTIONS_V2.find(question => question.key === firstQuestion.key)!
+    .options.filter(option => option.efficacy !== null)
+    .at(-1)!
+  await payload.create({
+    collection: 'assessment-answers',
+    overrideAccess: true,
+    data: {
+      organization: organization.id,
+      assessment: openCycle.id,
+      question_key: firstQuestion.key,
+      question_version: firstQuestion.version,
+      option_key: draftOption.key,
+      option_snapshot: draftOption,
+      answered_by: user.id,
+      answered_at: new Date().toISOString(),
+      valid_until: new Date(Date.now() + 86_400_000).toISOString(),
+      evaluation_effect_snapshot: {},
+    },
+  })
+  await payload.update({
+    collection: 'assessment-instances',
+    id: openCycle.id,
+    overrideAccess: true,
+    data: { status: 'in_progress' },
+  })
+
+  const selector = { mode: 'organization', risk_asset_type: 'workstation' } as const
+  const previewResponse = await bulkAssessmentPreviewEndpoint.handler(
+    request(payload, String(user.id), { body: { selector } })
+  )
+  assert.equal(previewResponse.status, 200)
+  const preview = (await previewResponse.json()) as {
+    question_set_signature: string
+    applicable: Array<{ assessment_id: string; has_draft: boolean }>
+    preserved_completed: Array<{ assessment_id: string }>
+    representative_assessment: { question_set_snapshot: Array<{ key: string; version: number }> }
+  }
+  assert.deepEqual(
+    preview.applicable.map(item => item.assessment_id),
+    [String(openCycle.id)]
+  )
+  assert.equal(preview.applicable[0].has_draft, true)
+  assert.deepEqual(
+    preview.preserved_completed.map(item => item.assessment_id),
+    [String(completedCycle.id)]
+  )
+
+  const answers = preview.representative_assessment.question_set_snapshot.map(item => ({
+    question_key: item.key,
+    question_version: item.version,
+    option_key: RISK_QUESTIONS_V2.find(question => question.key === item.key)!.options.find(
+      option => option.efficacy === 1
+    )!.key,
+  }))
+  const completeResponse = await bulkAssessmentCompleteEndpoint.handler(
+    request(payload, String(user.id), {
+      body: {
+        selector,
+        assessment_ids: [String(openCycle.id)],
+        question_set_signature: preview.question_set_signature,
+        answers,
+      },
+    })
+  )
+  assert.equal(completeResponse.status, 200)
+  assert.deepEqual(await completeResponse.json(), {
+    completed: 1,
+    preserved_completed: 0,
+    affected_office_ids: [String(mainOffice.id)],
+  })
+  const updatedOpenCycle = await payload.findByID({
+    collection: 'assessment-instances',
+    id: openCycle.id,
+    overrideAccess: true,
+  })
+  assert.equal(updatedOpenCycle.status, 'completed')
+  const overwritten = (
+    await payload.find({
+      collection: 'assessment-answers',
+      where: {
+        and: [
+          { assessment: { equals: openCycle.id } },
+          { question_key: { equals: firstQuestion.key } },
+        ],
+      },
+      overrideAccess: true,
+      limit: 1,
+    })
+  ).docs[0]
+  assert.notEqual(overwritten.option_key, draftOption.key)
+  const completedAnswersAfter = await payload.find({
+    collection: 'assessment-answers',
+    where: { assessment: { equals: completedCycle.id } },
+    overrideAccess: true,
+    depth: 0,
+    limit: 100,
+  })
+  assert.deepEqual(
+    completedAnswersAfter.docs.map(answer => [answer.id, answer.answered_at]),
+    completedAnswersBefore.docs.map(answer => [answer.id, answer.answered_at])
+  )
+})
+
+async function openCycleForManualAsset(payload: Payload, assetId: string) {
+  const cycle = (
+    await payload.find({
+      collection: 'assessment-instances',
+      where: {
+        and: [
+          { manual_asset: { equals: assetId } },
+          { status: { in: ['pending', 'in_progress'] } },
+        ],
+      },
+      overrideAccess: true,
+      limit: 1,
+    })
+  ).docs[0]
+  assert.ok(cycle)
+  return cycle
+}

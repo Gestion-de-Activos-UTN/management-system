@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { RISK_ASSET_TYPES } from '@/domain/risk/catalog-v2'
 
 export const AssessmentScopeSchema = z.enum(['organization', 'office', 'asset'])
 
@@ -41,5 +42,39 @@ export const UpdateAssessmentPolicySchema = z.object({
   policy_version: z.number().int().positive(),
 })
 
+export const BulkAssessmentSelectorSchema = z.discriminatedUnion('mode', [
+  z.object({
+    mode: z.literal('owner'),
+    risk_asset_type: z.enum(RISK_ASSET_TYPES),
+    owner_id: z.string().min(1),
+  }),
+  z.object({
+    mode: z.literal('office'),
+    risk_asset_type: z.enum(RISK_ASSET_TYPES),
+    office_id: z.string().min(1),
+  }),
+  z.object({
+    mode: z.literal('organization'),
+    risk_asset_type: z.enum(RISK_ASSET_TYPES),
+  }),
+])
+
+export const BulkAssessmentPreviewSchema = z.object({
+  selector: BulkAssessmentSelectorSchema,
+})
+
+export const BulkAssessmentCompleteSchema = z.object({
+  selector: BulkAssessmentSelectorSchema,
+  assessment_ids: z
+    .array(z.string().min(1))
+    .min(1)
+    .max(100)
+    .refine(ids => new Set(ids).size === ids.length, 'Assessment IDs must be unique'),
+  question_set_signature: z.string().min(1).max(4000),
+  answers: z.array(AssessmentAnswerDraftSchema).max(100),
+})
+
 export type SaveAssessmentDraft = z.infer<typeof SaveAssessmentDraftSchema>
 export type UpdateAssessmentPolicy = z.infer<typeof UpdateAssessmentPolicySchema>
+export type BulkAssessmentSelector = z.infer<typeof BulkAssessmentSelectorSchema>
+export type BulkAssessmentComplete = z.infer<typeof BulkAssessmentCompleteSchema>
