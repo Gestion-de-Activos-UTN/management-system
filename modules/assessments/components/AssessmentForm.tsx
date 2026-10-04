@@ -39,6 +39,10 @@ export function AssessmentForm(props: {
   completing: boolean
   onSave: (data: SaveAssessmentDraft) => void
   onComplete: (data: SaveAssessmentDraft) => void
+  showSaveDraft?: boolean
+  completeLabel?: string
+  confirmationTitle?: string
+  confirmationDescription?: string
 }) {
   const snapshot = Array.isArray(props.assessment.question_set_snapshot)
     ? props.assessment.question_set_snapshot
@@ -204,27 +208,29 @@ export function AssessmentForm(props: {
           catálogo. Los textos ya están en domain/assessments/network-explanations.ts. */}
       {!props.readOnly && (
         <Group justify="flex-end">
-          <Button
-            variant="default"
-            leftSection={<Save size={16} />}
-            loading={props.saving}
-            onClick={handleSubmit(data => props.onSave(command(data)))}
-          >
-            Guardar borrador
-          </Button>
+          {props.showSaveDraft !== false && (
+            <Button
+              variant="default"
+              leftSection={<Save size={16} />}
+              loading={props.saving}
+              onClick={handleSubmit(data => props.onSave(command(data)))}
+            >
+              Guardar borrador
+            </Button>
+          )}
           <Button
             color="pine"
             loading={props.completing}
             onClick={handleSubmit(data => setCompletionCommand(command(data)))}
           >
-            Completar revisión
+            {props.completeLabel ?? 'Completar revisión'}
           </Button>
         </Group>
       )}
       <Modal
         opened={completionCommand !== null}
         onClose={() => setCompletionCommand(null)}
-        title="¿Completar esta revisión?"
+        title={props.confirmationTitle ?? '¿Completar esta revisión?'}
         centered
       >
         <Stack gap="md">
@@ -240,8 +246,8 @@ export function AssessmentForm(props: {
             </Badge>
           </Group>
           <Text size="sm" c="dimmed">
-            Las respuestas desconocidas y las que no aplican reducen la cobertura, pero no agregan
-            riesgo.
+            {props.confirmationDescription ??
+              'Las respuestas desconocidas y las que no aplican reducen la cobertura, pero no agregan riesgo.'}
             {completionCounts?.unanswered
               ? ' Responde todas las preguntas antes de completar la revisión.'
               : ''}

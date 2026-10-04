@@ -59,6 +59,10 @@ import {
   assessmentsListEndpoint,
   securityReviewSummaryEndpoint,
 } from './endpoints/assessments'
+import {
+  bulkAssessmentCompleteEndpoint,
+  bulkAssessmentPreviewEndpoint,
+} from './endpoints/bulkAssessments'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
@@ -127,6 +131,9 @@ export default buildConfig({
     officeAgentSummaryEndpoint,
     dashboardMetricsEndpoint,
     agentRevokeEndpoint,
+    // Specific bulk routes must precede /v1/assessments/:id/* or Payload treats "bulk" as an id.
+    bulkAssessmentPreviewEndpoint,
+    bulkAssessmentCompleteEndpoint,
     assessmentsListEndpoint,
     securityReviewSummaryEndpoint,
     assessmentDetailEndpoint,
