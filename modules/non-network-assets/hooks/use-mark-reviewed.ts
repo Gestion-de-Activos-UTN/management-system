@@ -10,8 +10,9 @@ export function useMarkReviewed() {
   const queryClient = useQueryClient()
   return useMutation<unknown, HttpError, string>({
     mutationFn: id => markReviewed(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['non-network-assets'] })
+    // Espera el refetch: el botón sigue en loading hasta que la fila muestra la fecha nueva.
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['non-network-assets'] })
       notifications.show({ color: 'green', message: 'Revisión confirmada' })
     },
     onError: error => showApiError(error, 'No se pudo confirmar la revisión'),

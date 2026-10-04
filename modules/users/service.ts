@@ -1,11 +1,29 @@
 import { httpClient } from '@/lib/http-client'
+import type { RoleSlug } from '@/access/rbac/permissions'
+import { roleSlugLabel } from '@/lib/role-labels'
 
 export type OrgMember = {
   id: string
   name: string
   email: string
-  role: string
+  role: RoleSlug
+  office_ids: string[]
   status: 'onboarding' | 'active'
+}
+
+export function memberCoversOffice(member: OrgMember, officeId: string): boolean {
+  return (
+    member.role === 'org_admin' ||
+    member.role === 'platform_admin' ||
+    member.office_ids.includes(officeId)
+  )
+}
+
+// Formato único para identificar a una persona en cualquier selector: nombre · rol · email.
+export function orgMemberOptionLabel(
+  member: Pick<OrgMember, 'name' | 'email'> & { role: string }
+): string {
+  return `${member.name || member.email} · ${roleSlugLabel(member.role)}${member.name ? ` · ${member.email}` : ''}`
 }
 
 // Deliberadamente NO usa /api/users (Users.read es () => false hoy, ver el ponytail: en

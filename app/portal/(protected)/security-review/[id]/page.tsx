@@ -13,6 +13,7 @@ import { AssessmentForm } from '@/modules/assessments/components/AssessmentForm'
 import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
 import { relationId } from '@/lib/relationId'
 import { formatDateTime } from '@/lib/format-date'
+import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 
 export default function AssessmentDetailPage() {
   const [historyOpened, { open: openHistory, close: closeHistory }] = useDisclosure(false)
@@ -59,6 +60,12 @@ export default function AssessmentDetailPage() {
       <PageHeader
         title="Revisa las rutinas cotidianas de seguridad"
         description="Elige Sí solo cuando la rutina se cumpla de forma constante. Si se cumple solo algunas veces, elige No."
+        rightSection={
+          <CreateRelatedTaskButton
+            reference={{ relationTo: 'assessment-instances', value: String(data.assessment.id) }}
+            asOrganization={asOrganization}
+          />
+        }
       />
       {(history.length > 1 || data.assessment.status === 'completed') && (
         <Group justify="space-between" gap="md" wrap="wrap">
@@ -157,7 +164,6 @@ export default function AssessmentDetailPage() {
         savedAnswers={data.answers}
         previousAnswers={data.previous_answers ?? []}
         effectiveEvidence={data.effective_evidence ?? {}}
-        technicalObservations={data.technical_observations ?? []}
         readOnly={readOnly}
         saving={actions.saveDraft.isPending}
         completing={actions.complete.isPending}

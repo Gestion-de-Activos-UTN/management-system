@@ -132,12 +132,17 @@ export default function AdminSettingsPage() {
                   <Text size="sm" c="dimmed" my="sm">
                     {option.detail}
                   </Text>
+                  {/* mt="auto": Card ya es flex-column; ancla el botón al pie aunque las
+                      descripciones tengan distinto largo. */}
                   <Button
+                    mt="auto"
                     variant={settings.assessment_policy_key === option.key ? 'light' : 'default'}
                     disabled={settings.assessment_policy_key === option.key}
                     onClick={() => setPendingPolicy(option.key)}
                   >
-                    Elegir {option.name}
+                    {settings.assessment_policy_key === option.key
+                      ? 'Política actual'
+                      : `Elegir ${option.name}`}
                   </Button>
                 </Card>
               ))}

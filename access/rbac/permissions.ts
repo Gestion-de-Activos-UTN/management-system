@@ -14,7 +14,20 @@ export type CollectionSlug =
   | 'compliance-results'
   | 'risk-evaluations'
   | 'risk-contributions'
-export type Action = 'create' | 'read' | 'update' | 'delete'
+  | 'tasks'
+export type Action =
+  | 'create'
+  | 'read'
+  | 'update'
+  | 'delete'
+  | 'edit'
+  | 'claim'
+  | 'release'
+  | 'assign'
+  | 'reassign'
+  | 'complete'
+  | 'cancel'
+  | 'archive'
 
 // Matriz estática — decisión explícita (documentation/01-erd-core.md nota 9): el sistema no
 // tiene hoy suficientes funcionalidades como para justificar overrides dinámicos por
@@ -41,6 +54,7 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     'compliance-results': ['read'],
     'risk-evaluations': ['read'],
     'risk-contributions': ['read'],
+    tasks: ['read'],
   },
   org_admin: {
     organizations: ['read'],
@@ -56,6 +70,19 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     'compliance-results': ['read'],
     'risk-evaluations': ['read'],
     'risk-contributions': ['read'],
+    tasks: [
+      'create',
+      'read',
+      'edit',
+      'claim',
+      'release',
+      'assign',
+      'reassign',
+      'complete',
+      'cancel',
+      'archive',
+      'delete',
+    ],
   },
   org_viewer: {
     organizations: ['read'],
@@ -70,6 +97,7 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     'compliance-results': ['read'],
     'risk-evaluations': ['read'],
     'risk-contributions': ['read'],
+    tasks: ['read', 'claim', 'release', 'complete'],
   },
   office_manager: {
     organizations: ['read'],
@@ -84,6 +112,19 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     'compliance-results': ['read'],
     'risk-evaluations': ['read'],
     'risk-contributions': ['read'],
+    tasks: [
+      'create',
+      'read',
+      'edit',
+      'claim',
+      'release',
+      'assign',
+      'reassign',
+      'complete',
+      'cancel',
+      'archive',
+      'delete',
+    ],
   },
 }
 

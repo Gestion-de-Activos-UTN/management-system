@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
@@ -15,6 +16,8 @@ import {
 } from '@mantine/core'
 import { useOfficesList } from '@/modules/offices/hooks/use-offices'
 import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
+import { memberCoversOffice } from '@/modules/users/service'
+import { MemberSelect } from '@/modules/users/components/MemberSelect'
 import {
   CRITICALITY_OPTIONS,
   NON_NETWORK_ASSET_STATUS_OPTIONS,
@@ -49,6 +52,7 @@ export function NonNetworkAssetForm({
     control,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<NonNetworkAssetFormValues>({
     resolver: zodResolver(NonNetworkAssetSchema),
@@ -69,6 +73,18 @@ export function NonNetworkAssetForm({
   })
   const assessmentScope = watch('assessment_scope')
   const exclusionReason = watch('assessment_exclusion_reason')
+  const selectedOffice = watch('office')
+  const selectedOwner = watch('owner')
+  const eligibleOwners = selectedOffice
+    ? (members ?? []).filter(member => memberCoversOffice(member, selectedOffice))
+    : []
+
+  useEffect(() => {
+    if (!members || !selectedOwner || !selectedOffice) return
+    if (!eligibleOwners.some(member => member.id === selectedOwner)) {
+      setValue('owner', '', { shouldDirty: true, shouldValidate: true })
+    }
+  }, [eligibleOwners, members, selectedOffice, selectedOwner, setValue])
 
   const onSubmit = handleSubmit(values => {
     save.mutate(values, { onSuccess: onSaved })
@@ -133,22 +149,6 @@ export function NonNetworkAssetForm({
             )}
           />
           <Controller
-            name="owner"
-            control={control}
-            render={({ field }) => (
-              <Select
-                label="Responsable"
-                required
-                placeholder="Selecciona un responsable"
-                data={(members ?? []).map(m => ({ value: m.id, label: m.name || m.email }))}
-                value={field.value || null}
-                onChange={field.onChange}
-                searchable
-                error={errors.owner?.message}
-              />
-            )}
-          />
-          <Controller
             name="office"
             control={control}
             render={({ field }) => (
@@ -159,6 +159,26 @@ export function NonNetworkAssetForm({
                 value={field.value || null}
                 onChange={field.onChange}
                 error={errors.office?.message}
+              />
+            )}
+          />
+          <Controller
+            name="owner"
+            control={control}
+            render={({ field }) => (
+              <MemberSelect
+                label="Responsable"
+                members={eligibleOwners}
+                required
+                placeholder={
+                  selectedOffice
+                    ? 'Selecciona un responsable de esta oficina'
+                    : 'Selecciona primero una oficina'
+                }
+                value={field.value || null}
+                onChange={field.onChange}
+                disabled={!selectedOffice}
+                error={errors.owner?.message}
               />
             )}
           />

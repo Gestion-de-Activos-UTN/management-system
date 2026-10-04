@@ -1,6 +1,7 @@
 import type { ScannedAssetType } from '@/domain/assets/asset-types'
 import { NETWORK_BASELINE, type NetworkBaselineRule } from './catalog'
 import type { CheckEvaluation } from './evaluateCompliance'
+import { networkExplanation } from './network-explanations'
 
 type ObservedService = {
   port?: number | null
@@ -39,8 +40,10 @@ export function evaluateNetworkBaseline(input: {
           status: 'not_evaluable' as const,
           severity: 'medium' as const,
           reason_code: 'technical_coverage_insufficient',
-          explanation:
-            'SIAM observed a network function, but the scan did not have enough coverage to verify it safely.',
+          explanation: networkExplanation({
+            check_key: '',
+            reason_code: 'technical_coverage_insufficient',
+          })!,
           evidence: service,
         },
       ]
@@ -62,8 +65,10 @@ export function evaluateNetworkBaseline(input: {
           status: 'not_evaluable' as const,
           severity: 'medium' as const,
           reason_code: rule ? 'service_confidence_insufficient' : 'service_unclassified',
-          explanation:
-            'SIAM found a network function but could not identify its purpose with enough confidence. Ask whoever maintains this device to review it.',
+          explanation: networkExplanation({
+            check_key: '',
+            reason_code: rule ? 'service_confidence_insufficient' : 'service_unclassified',
+          })!,
           evidence: service,
         },
       ]

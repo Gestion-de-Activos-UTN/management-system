@@ -1,3 +1,4 @@
+import { networkExplanation } from './network-explanations'
 import type { Payload, PayloadRequest } from 'payload'
 import type { Agent, Asset, AssessmentInstance } from '@/app/types/payload-types'
 import { relationId } from '@/lib/relationId'
@@ -38,8 +39,8 @@ export function evaluateAssetFacts(
       severity: 'medium',
       reason_code: inventoryComplete ? 'inventory_fields_current' : 'inventory_fields_missing',
       explanation: inventoryComplete
-        ? 'This device is identified and has the basic business details needed to manage it.'
-        : 'SIAM needs the device owner, importance and authorization status before it can evaluate the inventory record.',
+        ? 'El equipo está identificado y tiene los datos de negocio necesarios para gestionarlo.'
+        : 'Falta indicar el responsable, la importancia y si el equipo está autorizado para poder evaluarlo.',
       evidence: {
         identified: asset.identified,
         owner: Boolean(asset.owner),
@@ -54,8 +55,8 @@ export function evaluateAssetFacts(
       severity: 'medium',
       reason_code: asset.criticality ? 'criticality_recorded' : 'criticality_missing',
       explanation: asset.criticality
-        ? 'The importance of this device to the business is recorded.'
-        : 'The importance of this device has not been confirmed yet.',
+        ? 'La importancia del equipo para el negocio está registrada.'
+        : 'Todavía no se confirmó la importancia del equipo para el negocio.',
       evidence: { criticality: asset.criticality },
     },
     {
@@ -71,10 +72,10 @@ export function evaluateAssetFacts(
             : 'authorization_unknown',
       explanation:
         authorizationStatus === 'compliant'
-          ? 'The company recognizes and authorizes this device.'
+          ? 'La empresa reconoce y autoriza este equipo.'
           : authorizationStatus === 'non_compliant'
-            ? 'The company marked this device as unauthorized and it requires attention.'
-            : 'The company has not confirmed whether this device is authorized.',
+            ? 'La empresa marcó este equipo como no autorizado: requiere atención.'
+            : 'La empresa todavía no confirmó si este equipo está autorizado.',
       evidence: { authorization_status: asset.authorization_status },
     },
   ]
@@ -102,10 +103,10 @@ export function evaluateOfficeMonitoring(
         ? 'agent_reporting'
         : 'agent_not_reporting',
     explanation: !activeAgents.length
-      ? 'SIAM cannot verify monitoring because this office has no active scanner.'
+      ? 'No se puede verificar el monitoreo porque la oficina no tiene un escáner activo.'
       : online
-        ? 'The office scanner is reporting normally.'
-        : 'The office scanner has stopped reporting and monitoring requires attention.',
+        ? 'El escáner de la oficina está reportando con normalidad.'
+        : 'El escáner de la oficina dejó de reportar: el monitoreo requiere atención.',
     evidence: {
       agents: activeAgents.map(agent => ({
         id: agent.id,
@@ -225,7 +226,10 @@ export async function evaluateAutomaticComplianceForAssessment(
               status: 'compliant',
               severity: result.severity,
               reason_code: 'service_no_longer_observed',
-              explanation: 'A complete scan no longer found this network function on the device.',
+              explanation: networkExplanation({
+                check_key: result.check_key,
+                reason_code: 'service_no_longer_observed',
+              })!,
               evidence: { previous_result_id: result.id, coverage: 'complete' },
             })
           }

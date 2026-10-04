@@ -20,13 +20,15 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { DataTable } from '@/components/ui/DataTable'
 import { useConcreteOfficeId } from '@/modules/offices/hooks/use-concrete-office-id'
 import { formatDateTime } from '@/lib/format-date'
-import { RISK_BAND_LABEL, RISK_CONFIDENCE_LABEL } from '@/lib/enum-labels'
+import { RISK_CONFIDENCE_LABEL } from '@/lib/enum-labels'
 import { useLatestRisk } from '@/modules/risk/hooks/use-latest-risk'
 import { riskContributionsColumns } from '@/modules/risk/risk.columns'
 import { RiskAlerts } from '@/modules/risk/components/RiskAlerts'
 import { TopRiskAssets } from '@/modules/risk/components/TopRiskAssets'
+import { RiskBandBadge } from '@/modules/risk/components/RiskBandBadge'
 import { RISK_BAND_COLOR, RISK_SCORE_MEANING, RISK_SCORE_SCALE } from '@/modules/risk/risk-labels'
 import { bandVisible, scoreVisible } from '@/domain/risk/constants'
+import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 
 export default function RiskScorePage() {
   const asOrganization = useSearchParams().get('asOrganization') ?? undefined
@@ -44,6 +46,14 @@ export default function RiskScorePage() {
       <PageHeader
         title="Puntaje de riesgo"
         description="Una vista simple de los problemas de seguridad detectados y de la información que todavía falta revisar."
+        rightSection={
+          data ? (
+            <CreateRelatedTaskButton
+              reference={{ relationTo: 'risk-evaluations', value: String(data.id) }}
+              asOrganization={asOrganization}
+            />
+          ) : undefined
+        }
       />
       {query.isError && <Alert color="red">No se pudo cargar la última evaluación.</Alert>}
       {query.isPending ? (
@@ -87,11 +97,7 @@ export default function RiskScorePage() {
                 />
                 <Stack gap={4}>
                   <Text fw={750}>Riesgo actual</Text>
-                  {data.final_band && (
-                    <Badge color={RISK_BAND_COLOR[data.final_band]}>
-                      {RISK_BAND_LABEL[data.final_band]}
-                    </Badge>
-                  )}
+                  {data.final_band && <RiskBandBadge band={data.final_band} />}
                   {data.final_band && data.base_band !== data.final_band && (
                     <Text size="xs" c="dimmed">
                       El nivel subió porque varios problemas importantes se concentran en pocos

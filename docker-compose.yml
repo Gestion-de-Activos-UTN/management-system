@@ -53,11 +53,11 @@ services:
       - ../scanner-prototype:/scanner-prototype:ro
     # Sin migraciones: el deploy de este proyecto recrea la imagen/DB desde cero cada vez, no
     # las necesita. Payload sincroniza el schema solo con NODE_ENV=development (pushDevSchema).
-    # DEV ONLY — no copiar a un compose de producción sin sacar `pnpm seed:navigation`:
+    # DEV ONLY — no copiar a un compose de producción sin sacar `pnpm seed:navigation` y `pnpm seed:demo`:
     # `seed:navigation` crea los 4 Roles base + la única organización demo (Org/Office/Settings/
     # Subscription) + un admin/org_admin/org_viewer/office_manager de demo con credenciales fijas;
     # El agente solo se vincula desde Administration > Offices > Install scanner.
-    command: sh -c "pnpm seed:navigation && pnpm run dev"
+    command: sh -c "pnpm seed:navigation && pnpm seed:demo && pnpm run dev"
 
 volumes:
   postgres_data:

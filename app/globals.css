@@ -35,12 +35,14 @@ body {
    close in luminance to read. Force the label/icon to full-contrast text on
    hover too, since NavLink's own inactive styling dims them by design. */
 [data-mantine-color-scheme='light'] .mantine-NavLink-root:hover,
-[data-mantine-color-scheme='light'] .sidebar-profile-trigger:hover {
+[data-mantine-color-scheme='light'] .sidebar-profile-trigger:hover,
+[data-mantine-color-scheme='light'] .attention-row:hover {
   background-color: var(--mantine-color-pine-1);
 }
 
 [data-mantine-color-scheme='dark'] .mantine-NavLink-root:hover,
-[data-mantine-color-scheme='dark'] .sidebar-profile-trigger:hover {
+[data-mantine-color-scheme='dark'] .sidebar-profile-trigger:hover,
+[data-mantine-color-scheme='dark'] .attention-row:hover {
   background-color: var(--mantine-color-dark-5);
 }
 
@@ -143,4 +145,130 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background-color: var(--mantine-color-pine-5);
+}
+
+/* Mascota del panel general (modules/risk/components/RiskRobot.tsx). Los LED usan --robot-led,
+   que el componente fija según el nivel de riesgo. */
+.risk-robot .robot-shell {
+  /* Siempre blanco, en modo claro y oscuro: es la identidad del robot, no una superficie. */
+  fill: #ffffff;
+  stroke: var(--mantine-color-bone-3);
+  stroke-width: 2.5;
+}
+.risk-robot .robot-metal {
+  fill: var(--mantine-color-bone-3);
+}
+.risk-robot .robot-metal-stroke {
+  stroke: var(--mantine-color-bone-3);
+}
+.risk-robot .robot-visor {
+  fill: var(--mantine-color-dark-8);
+}
+.risk-robot .robot-led-stroke {
+  stroke: var(--robot-led);
+  filter: drop-shadow(0 0 2px var(--robot-led));
+}
+.risk-robot .robot-led-fill {
+  fill: var(--robot-led);
+  stroke: none;
+}
+
+.risk-robot-body {
+  animation: robot-float 4s ease-in-out infinite;
+}
+.risk-robot .robot-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: robot-blink 5s infinite;
+}
+.risk-robot .robot-antenna,
+.risk-robot .robot-core {
+  animation: robot-pulse 2.4s ease-in-out infinite;
+}
+.risk-robot--critical .risk-robot-body {
+  animation: robot-shake 0.5s ease-in-out infinite;
+}
+.risk-robot--critical .robot-antenna,
+.risk-robot--critical .robot-core {
+  animation-duration: 0.8s;
+}
+.risk-robot--standby .robot-eyes,
+.risk-robot--standby .robot-antenna,
+.risk-robot--standby .robot-core {
+  animation: none;
+  opacity: 0.5;
+}
+.risk-robot .robot-thinking circle {
+  animation: robot-pulse 1.2s ease-in-out infinite;
+}
+.risk-robot .robot-thinking circle:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.risk-robot .robot-thinking circle:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes robot-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+@keyframes robot-blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.1);
+  }
+}
+@keyframes robot-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes robot-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-1.5px);
+  }
+  75% {
+    transform: translateX(1.5px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .risk-robot *,
+  .risk-robot-body {
+    animation: none !important;
+  }
+}
+
+/* Globo de diálogo del robot: piquito a la izquierda, hacia la mascota. */
+.robot-bubble {
+  position: relative;
+}
+.robot-bubble::before {
+  content: '';
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  background: inherit;
+  border-left: 1px solid var(--mantine-color-default-border);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  transform: translateY(-50%) rotate(45deg);
 }

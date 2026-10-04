@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import {
-  Accordion,
   Alert,
   Badge,
   Box,
@@ -18,11 +17,7 @@ import {
   Textarea,
 } from '@mantine/core'
 import { Save } from 'lucide-react'
-import type {
-  AssessmentAnswer,
-  AssessmentInstance,
-  ComplianceResult,
-} from '@/app/types/payload-types'
+import type { AssessmentAnswer, AssessmentInstance } from '@/app/types/payload-types'
 import { RISK_QUESTIONS_V2, type RiskQuestionV2 } from '@/domain/risk/catalog-v2'
 import type { SaveAssessmentDraft } from '../schema'
 import type { EffectiveAnswer } from '@/domain/assessments/evaluateCompliance'
@@ -39,7 +34,6 @@ export function AssessmentForm(props: {
   savedAnswers: AssessmentAnswer[]
   previousAnswers?: AssessmentAnswer[]
   effectiveEvidence: Record<string, EffectiveAnswer>
-  technicalObservations: ComplianceResult[]
   readOnly: boolean
   saving: boolean
   completing: boolean
@@ -200,43 +194,14 @@ export function AssessmentForm(props: {
           ))}
         </Stack>
       </Card>
-      {props.technicalObservations.length > 0 && (
-        <Card withBorder radius="lg" p="lg">
-          <Text fw={700}>Observaciones técnicas</Text>
-          <Text size="sm" c="dimmed" mb="md">
-            Generado automáticamente. No necesitas explicar puertos ni servicios de red.
-          </Text>
-          <Stack gap="sm">
-            {props.technicalObservations.map(result => (
-              <Alert
-                key={result.id}
-                color={
-                  result.status === 'non_compliant'
-                    ? 'red'
-                    : result.status === 'compliant'
-                      ? 'green'
-                      : 'gray'
-                }
-                title={
-                  result.status === 'non_compliant'
-                    ? 'Requiere atención'
-                    : result.status === 'compliant'
-                      ? 'Protegido'
-                      : 'No se pudo verificar la seguridad'
-                }
-              >
-                {result.explanation}
-                <Accordion mt="xs">
-                  <Accordion.Item value={String(result.id)}>
-                    <Accordion.Control>Detalles técnicos</Accordion.Control>
-                    <Accordion.Panel>{result.service_key}</Accordion.Panel>
-                  </Accordion.Item>
-                </Accordion>
-              </Alert>
-            ))}
-          </Stack>
-        </Card>
-      )}
+      {/* TODO(observaciones-de-red): acá se mostraban los servicios de red detectados por el
+          escáner (A.8.21). Se quitó porque sólo informaba: el usuario no podía hacer nada con eso.
+          Idea a retomar: convertir cada hallazgo "para revisar" (RDP, SMB) en preguntas simples
+          sobre el uso del equipo ("¿alguien lo usa a distancia?", "¿pide algo más que la
+          contraseña?"), condicionadas a lo detectado, cuya respuesta cierre el par A.8.21 en el
+          motor; y ofrecer una tarea con el detalle técnico sólo para "No lo sé" o servicios
+          prohibidos. Requiere condición por servicio detectado en catalog-v2 y versionar el
+          catálogo. Los textos ya están en domain/assessments/network-explanations.ts. */}
       {!props.readOnly && (
         <Group justify="flex-end">
           <Button

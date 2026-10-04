@@ -2,13 +2,19 @@
 
 import { useParams, useSearchParams } from 'next/navigation'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Card, Center, Loader, SimpleGrid, Stack, Tabs, Text } from '@mantine/core'
+import { Center, Group, Loader, SimpleGrid, Stack, Tabs, Text } from '@mantine/core'
 import { Network, Radar, CircleCheck, CircleX } from 'lucide-react'
 import { DataTable } from '@/components/ui/DataTable'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { BackButton } from '@/components/ui/BackButton'
 import { TechnicalText } from '@/components/ui/TechnicalText'
-import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
+import { StatCard } from '@/components/ui/StatCard'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import {
+  SCAN_RUN_LABEL,
+  SCAN_REPORT_STATUS_LABEL,
+  SCAN_REPORT_STATUS_TONE,
+} from '@/modules/scan-reports/scan-report-labels'
 import { formatDateTime } from '@/lib/format-date'
 import { relationId } from '@/lib/relationId'
 import { useScanReport } from '@/modules/scan-reports/hooks/use-scan-report'
@@ -19,12 +25,7 @@ import {
   type RejectedAsset,
   type ReportedAsset,
 } from '@/modules/scan-reports/service'
-
-const STATUS_TONE: Record<string, StatusTone> = {
-  received: 'neutral',
-  processed: 'success',
-  failed: 'danger',
-}
+import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 
 const acceptedColumns: ColumnDef<ReportedAsset, unknown>[] = [
   {
@@ -40,7 +41,7 @@ const acceptedColumns: ColumnDef<ReportedAsset, unknown>[] = [
   {
     accessorKey: 'hostname',
     header: 'Nombre del host',
-    cell: ({ row }) => row.original.hostname || '—',
+    cell: ({ row }) => <TechnicalText>{row.original.hostname || '—'}</TechnicalText>,
   },
   {
     accessorKey: 'mac',
@@ -55,34 +56,8 @@ const rejectedColumns: ColumnDef<RejectedAsset, unknown>[] = [
     header: 'ID del activo',
     cell: ({ row }) => <TechnicalText>{row.original.asset_id}</TechnicalText>,
   },
-  { accessorKey: 'error', header: 'Reason' },
+  { accessorKey: 'error', header: 'Motivo' },
 ]
-
-function StatCard({
-  icon,
-  value,
-  label,
-}: {
-  icon: React.ReactNode
-  value: React.ReactNode
-  label: string
-}) {
-  return (
-    <Card withBorder padding="lg">
-      <Stack gap="sm">
-        {icon}
-        <Stack gap={0} style={{ minWidth: 0 }}>
-          <Text size="xl" fw={700}>
-            {value}
-          </Text>
-          <Text size="sm" c="dimmed">
-            {label}
-          </Text>
-        </Stack>
-      </Stack>
-    </Card>
-  )
-}
 
 export default function ScanReportDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -119,15 +94,27 @@ export default function ScanReportDetailPage() {
       <PageHeader
         title={`Informe de escaneo — ${report.scan_start ? formatDateTime(report.scan_start) : report.id}`}
         description={`Enviado por el agente ${relationId(report.agent)}${report.scan_end ? ` · finalizado ${formatDateTime(report.scan_end)}` : ''}.`}
-        rightSection={<StatusBadge tone={STATUS_TONE[status] ?? 'neutral'} label={status} />}
+        rightSection={
+          <Group gap="xs">
+            <CreateRelatedTaskButton
+              reference={{ relationTo: 'scan-reports', value: String(report.id) }}
+              asOrganization={asOrganization}
+            />
+            <StatusBadge
+              tone={SCAN_REPORT_STATUS_TONE[status] ?? 'neutral'}
+              label={SCAN_REPORT_STATUS_LABEL[status] ?? status}
+            />
+          </Group>
+        }
       />
 
       <Text size="sm" c="dimmed">
-        Ejecución: {report.execution_status ?? 'unknown'} · Cobertura de detección:{' '}
-        {typeof report.report_coverage === 'object' && report.report_coverage !== null
-          ? ((report.report_coverage as { discovery?: { status?: string } }).discovery?.status ??
-            'unknown')
-          : 'unknown'}
+        Ejecución: {SCAN_RUN_LABEL[report.execution_status ?? ''] ?? 'desconocida'} · Cobertura de
+        detección:{' '}
+        {SCAN_RUN_LABEL[
+          (report.report_coverage as { discovery?: { status?: string } } | null)?.discovery
+            ?.status ?? ''
+        ] ?? 'desconocida'}
       </Text>
 
       <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} spacing="md">
@@ -143,20 +130,24 @@ export default function ScanReportDetailPage() {
         />
         <StatCard
           icon={<CircleCheck size={20} strokeWidth={1.5} />}
-          value={payloadArchived ? 'Archived' : `${accepted.length} / ${total}`}
-          label="Accepted"
+          value={payloadArchived ? 'Archivado' : `${accepted.length} / ${total}`}
+          label="Aceptados"
         />
         <StatCard
           icon={<CircleX size={20} strokeWidth={1.5} />}
           value={rejected.length}
-          label="Rejected"
+          label="Rechazados"
         />
       </SimpleGrid>
 
       <Tabs defaultValue="accepted">
         <Tabs.List>
-          <Tabs.Tab value="accepted">Aceptados ({accepted.length})</Tabs.Tab>
-          <Tabs.Tab value="rejected">Rechazados ({rejected.length})</Tabs.Tab>
+          <Tabs.Tab value="accepted" leftSection={<CircleCheck size={16} strokeWidth={1.5} />}>
+            Aceptados ({accepted.length})
+          </Tabs.Tab>
+          <Tabs.Tab value="rejected" leftSection={<CircleX size={16} strokeWidth={1.5} />}>
+            Rechazados ({rejected.length})
+          </Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="accepted" pt="md">

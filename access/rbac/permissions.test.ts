@@ -96,3 +96,26 @@ test('assessment collections are read through RBAC but never written directly', 
     }
   }
 })
+
+test('tasks: org_admin y office_manager administran; viewer ejecuta sólo las elegibles', () => {
+  for (const role of ['org_admin', 'office_manager'] as const) {
+    for (const action of [
+      'create',
+      'read',
+      'edit',
+      'claim',
+      'reassign',
+      'complete',
+      'cancel',
+      'archive',
+      'delete',
+    ] as const) {
+      assert.equal(canDo(role, 'tasks', action, 'org-1'), true, `${role}:${action}`)
+    }
+  }
+  assert.equal(canDo('org_viewer', 'tasks', 'read', 'org-1'), true)
+  assert.equal(canDo('org_viewer', 'tasks', 'claim', 'org-1'), true)
+  assert.equal(canDo('org_viewer', 'tasks', 'complete', 'org-1'), true)
+  assert.equal(canDo('org_viewer', 'tasks', 'create', 'org-1'), false)
+  assert.equal(canDo('org_viewer', 'tasks', 'reassign', 'org-1'), false)
+})

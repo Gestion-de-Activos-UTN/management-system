@@ -68,7 +68,9 @@ const TOP_ASSETS = 10
 
 const topAssets = (row: RiskEvaluation) =>
   [...(row.asset_summary as AssetRiskScore[])]
-    .sort((a, b) => b.residual_risk - a.residual_risk)
+    // Ordena por el % sin tratar que muestra la UI (TopRiskAssets); el riesgo residual absoluto
+    // sólo desempata. Sin score (preliminar) va al final.
+    .sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || b.residual_risk - a.residual_risk)
     .slice(0, TOP_ASSETS)
 
 type StoredAlerts = {

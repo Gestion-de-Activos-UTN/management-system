@@ -10,7 +10,9 @@ import { TopBar } from './TopBar'
 function shouldHideBreadcrumbs(pathname: string): boolean {
   return (
     /^\/portal\/inventory\/[^/]+$/.test(pathname) &&
-    !/^\/portal\/inventory\/(snapshots|scan-reports)\/[^/]+$/.test(pathname)
+    // Sólo el detalle de un activo (/portal/inventory/<assetId>) oculta el trail. Las
+    // subsecciones de instantáneas e informes de escaneo, lista y detalle, lo conservan.
+    !/^\/portal\/inventory\/(snapshots|scan-reports)(\/|$)/.test(pathname)
   )
 }
 

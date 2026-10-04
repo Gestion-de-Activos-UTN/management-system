@@ -87,6 +87,7 @@ export interface Config {
     'compliance-results': ComplianceResult;
     'risk-evaluations': RiskEvaluation;
     'risk-contributions': RiskContribution;
+    tasks: Task;
     'payload-kv': PayloadKv;
     'payload-jobs': PayloadJob;
     'payload-locked-documents': PayloadLockedDocument;
@@ -114,6 +115,7 @@ export interface Config {
     'compliance-results': ComplianceResultsSelect<false> | ComplianceResultsSelect<true>;
     'risk-evaluations': RiskEvaluationsSelect<false> | RiskEvaluationsSelect<true>;
     'risk-contributions': RiskContributionsSelect<false> | RiskContributionsSelect<true>;
+    tasks: TasksSelect<false> | TasksSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-jobs': PayloadJobsSelect<false> | PayloadJobsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -955,6 +957,77 @@ export interface RiskContribution {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tasks".
+ */
+export interface Task {
+  id: string;
+  title: string;
+  description?: string | null;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  start_at: string;
+  due_at?: string | null;
+  initial_due_at?: string | null;
+  effective_status?: string | null;
+  is_overdue?: boolean | null;
+  assignment_kind: 'open_pool' | 'role' | 'user';
+  assigned_role?: (string | null) | Role;
+  assigned_user?: (string | null) | User;
+  claimed_by?: (string | null) | User;
+  claimed_at?: string | null;
+  completed_by?: (string | null) | User;
+  completed_at?: string | null;
+  cancelled_by?: (string | null) | User;
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
+  archived_by?: (string | null) | User;
+  archived_at?: string | null;
+  related_entity?:
+    | ({
+        relationTo: 'offices';
+        value: string | Office;
+      } | null)
+    | ({
+        relationTo: 'assets';
+        value: string | Asset;
+      } | null)
+    | ({
+        relationTo: 'non-network-assets';
+        value: string | NonNetworkAsset;
+      } | null)
+    | ({
+        relationTo: 'assessment-instances';
+        value: string | AssessmentInstance;
+      } | null)
+    | ({
+        relationTo: 'compliance-results';
+        value: string | ComplianceResult;
+      } | null)
+    | ({
+        relationTo: 'inventory-snapshots';
+        value: string | InventorySnapshot;
+      } | null)
+    | ({
+        relationTo: 'scan-reports';
+        value: string | ScanReport;
+      } | null)
+    | ({
+        relationTo: 'risk-evaluations';
+        value: string | RiskEvaluation;
+      } | null)
+    | ({
+        relationTo: 'agents';
+        value: string | Agent;
+      } | null);
+  organization: string | Organization;
+  office?: (string | null) | Office;
+  created_by: string | User;
+  creation_batch_id?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -1172,6 +1245,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'risk-contributions';
         value: string | RiskContribution;
+      } | null)
+    | ({
+        relationTo: 'tasks';
+        value: string | Task;
       } | null);
   globalSlug?: string | null;
   user:
@@ -1745,6 +1822,40 @@ export interface RiskContributionsSelect<T extends boolean = true> {
   coverage_weight?: T;
   excluded?: T;
   reason_code?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tasks_select".
+ */
+export interface TasksSelect<T extends boolean = true> {
+  title?: T;
+  description?: T;
+  priority?: T;
+  status?: T;
+  start_at?: T;
+  due_at?: T;
+  initial_due_at?: T;
+  effective_status?: T;
+  is_overdue?: T;
+  assignment_kind?: T;
+  assigned_role?: T;
+  assigned_user?: T;
+  claimed_by?: T;
+  claimed_at?: T;
+  completed_by?: T;
+  completed_at?: T;
+  cancelled_by?: T;
+  cancelled_at?: T;
+  cancellation_reason?: T;
+  archived_by?: T;
+  archived_at?: T;
+  related_entity?: T;
+  organization?: T;
+  office?: T;
+  created_by?: T;
+  creation_batch_id?: T;
   updatedAt?: T;
   createdAt?: T;
 }

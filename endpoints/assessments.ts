@@ -394,36 +394,12 @@ export const assessmentDetailEndpoint: Endpoint = {
         includeOrganization: hasOrgWideScope(ctx.role),
       }
     )
-    const technical = assessment.asset
-      ? await req.payload.find({
-          collection: 'compliance-results',
-          where: {
-            and: [
-              { asset: { equals: relationId(assessment.asset) } },
-              { service_key: { exists: true } },
-            ],
-          },
-          overrideAccess: true,
-          req,
-          depth: 0,
-          limit: 200,
-          sort: '-evaluated_at',
-        })
-      : { docs: [] }
-    const seenTechnical = new Set<string>()
-    const technicalObservations = technical.docs.filter(result => {
-      const key = `${result.check_key}:${result.service_key ?? ''}`
-      if (seenTechnical.has(key)) return false
-      seenTechnical.add(key)
-      return true
-    })
     return json({
       assessment: withDerivedAssessmentStatus(assessment),
       answers: answers.docs,
       previous_answers: previousAnswers,
       assessment_history: assessmentHistory.docs.map(item => withDerivedAssessmentStatus(item)),
       effective_evidence: effectiveEvidence,
-      technical_observations: technicalObservations,
     })
   },
 }

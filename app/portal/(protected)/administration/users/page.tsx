@@ -7,11 +7,16 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
 import type { OrgMember } from '@/modules/users/service'
+import { roleSlugLabel } from '@/lib/role-labels'
 
 const columns: ColumnDef<OrgMember, unknown>[] = [
   { accessorKey: 'name', header: 'Nombre' },
   { accessorKey: 'email', header: 'Correo electrónico' },
-  { accessorKey: 'role', header: 'Rol' },
+  {
+    accessorKey: 'role',
+    header: 'Rol',
+    cell: ({ row }) => roleSlugLabel(row.original.role),
+  },
   {
     accessorKey: 'status',
     header: 'Estado',

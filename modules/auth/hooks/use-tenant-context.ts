@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { httpClient } from '@/lib/http-client'
+import { roleSlugLabel } from '@/lib/role-labels'
 import { useSession } from '@/lib/use-session'
 
 export type TenantContext = {
@@ -15,6 +16,7 @@ export type TenantContext = {
   /** Row scope from access/rbac/permissions.ts::hasOrgWideScope; false = only officeIds. */
   orgWide: boolean
   features: Record<string, boolean>
+  permissions: { tasks: string[] }
 }
 
 // Only place this endpoint is queried — mirrors access/tenant/resolveTenantContext.ts's
@@ -40,17 +42,10 @@ export function isEffectiveOrgAdmin(ctx: TenantContext | null | undefined): bool
   return ctx?.role === 'org_admin' || Boolean(ctx?.isPlatformAdmin && ctx?.organizationId)
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  platform_admin: 'Administrador de plataforma',
-  org_admin: 'Administrador de la organización',
-  org_viewer: 'Observador de la organización',
-  office_manager: 'Responsable de oficina',
-}
-
 // Display-only — a platform admin visiting an org reads as "Org Admin" here too,
 // same as isEffectiveOrgAdmin's nav gating (the backend keeps the real role).
 export function roleLabel(ctx: TenantContext | null | undefined): string {
   if (!ctx) return ''
   if (isEffectiveOrgAdmin(ctx)) return 'Administrador de la organización'
-  return ROLE_LABELS[ctx.role ?? ''] ?? ''
+  return ctx.role ? roleSlugLabel(ctx.role) : ''
 }

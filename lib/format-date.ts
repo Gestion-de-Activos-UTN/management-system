@@ -20,8 +20,25 @@ export function formatDateInput(value: string | Date): string {
   return local.toISOString().slice(0, 10)
 }
 
+// Una fecha elegida como inicio comienza al principio de ese día en el huso del usuario.
+export function localDateStartToISOString(value: string): string {
+  return new Date(`${value}T00:00:00.000`).toISOString()
+}
+
 // A chosen end date remains effective for that entire calendar day in the user's timezone.
 export function localDateEndToISOString(value: string): string {
   const date = new Date(`${value}T23:59:59.999`)
   return date.toISOString()
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
+const relativeDays = new Intl.RelativeTimeFormat('es-AR', { numeric: 'auto' })
+
+// "hoy", "mañana", "en 30 días", "hace 3 días" — por días de calendario locales, no por horas.
+export function formatRelativeDays(value: string | Date, now: Date = new Date()): string {
+  const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const days = Math.round(
+    (startOfDay(new Date(value)).getTime() - startOfDay(now).getTime()) / DAY_MS
+  )
+  return relativeDays.format(days, 'day')
 }

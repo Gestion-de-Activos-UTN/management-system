@@ -5,17 +5,13 @@ import {
   createPayloadAgentAuthDeps,
   AgentAuthError,
 } from '../access/middleware/resolveAgentAuth'
-import { ingestScanReport } from '../domain/inventories/ingestScanReport'
-import { maybeCreateAutoSnapshot } from '../domain/inventories/autoSnapshot'
-import { reevaluateComplianceAfterScan } from '../domain/assessments/evaluateAutomaticCompliance'
+import { processScanReport } from '../domain/inventories/processScanReport'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
 }
 
 const MAX_REPORT_BYTES = 5 * 1024 * 1024
-const RAW_PAYLOAD_RETENTION_DAYS = 30
-
 // AUDIT: la ingesta de un ScanReport es una escritura sensible (crea/actualiza Assets de una organización).
 // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent una vez exista el write path de AuditLogs.
 export const reportsEndpoint: Endpoint = {
@@ -63,81 +59,11 @@ export const reportsEndpoint: Endpoint = {
       return json({ error: 'asset agent_id mismatch' }, 400)
     }
 
-    const existing = await req.payload.find({
-      collection: 'scan-reports',
-      where: { id: { equals: body.report_id } },
-      overrideAccess: true,
-      limit: 1,
-      depth: 0,
-    })
-    const existingReport = existing.docs[0]
-
-    // Idempotencia (doc 08.6): reintento con el mismo report_id ya procesado/fallido no reprocesa.
-    if (existingReport && existingReport.status !== 'received') {
-      return json({ report_id: body.report_id, status: existingReport.status }, 200)
-    }
-
-    if (!existingReport) {
-      await req.payload.create({
-        collection: 'scan-reports',
-        overrideAccess: true,
-        data: {
-          id: body.report_id,
-          agent: auth.agentId,
-          office: auth.officeId,
-          network: body.network,
-          scan_start: body.scan_start,
-          scan_end: body.scan_end,
-          hosts_up: body.hosts_up,
-          execution_status: body.execution_status,
-          report_coverage: body.report_coverage,
-          scanner_interfaces: body.scanner_interfaces,
-          gateway_ip: body.gateway_ip,
-          gateway_mac: body.gateway_mac,
-          raw_payload: body,
-          raw_payload_expires_at: new Date(
-            Date.now() + RAW_PAYLOAD_RETENTION_DAYS * 24 * 60 * 60 * 1000
-          ).toISOString(),
-          status: 'received',
-        },
-      })
-    }
-
-    // Antes de aplicar el reporte, no después — el snapshot debe reflejar el estado previo a
-    // este scan, no el que el scan está a punto de escribir. No bloquea el ingest si falla
-    // (ver catch): tomar un snapshot es secundario al trabajo principal del endpoint.
-    try {
-      await maybeCreateAutoSnapshot(req.payload, auth.officeId, auth.organizationId)
-    } catch {
-      // ponytail: sin logging estructurado en el repo todavía — un snapshot perdido no debe
-      // tumbar la ingesta real. Revisar si esto se vuelve frecuente en prod.
-    }
-
-    const result = await ingestScanReport(req.payload, body, auth)
-
-    await reevaluateComplianceAfterScan(
-      req.payload,
-      auth.organizationId,
-      auth.officeId,
-      result.processedDocumentIds,
-      req,
-      new Date(body.scan_end)
-    )
-
-    await req.payload.update({
-      collection: 'scan-reports',
-      id: body.report_id,
-      overrideAccess: true,
-      data: {
-        status: 'processed',
-        processed_at: new Date().toISOString(),
-        error: result.rejectedAssets.length > 0 ? JSON.stringify(result.rejectedAssets) : null,
-      },
-    })
+    const result = await processScanReport(req.payload, body, auth, req)
 
     return json({
       report_id: body.report_id,
-      status: 'processed',
+      status: result.status,
       processed: result.processedAssetIds.length,
       rejected: result.rejectedAssets,
     })

@@ -14,6 +14,9 @@ import {
 } from '../schema'
 import { useIdentifyAsset } from '../hooks/use-identify-asset'
 import { SCANNED_ASSET_TYPE_OPTIONS } from '@/domain/assets/asset-types'
+import { memberCoversOffice, type OrgMember } from '@/modules/users/service'
+import { MemberSelect } from '@/modules/users/components/MemberSelect'
+import { relationId } from '@/lib/relationId'
 
 export function AssetIdentificationModal({
   asset,
@@ -22,7 +25,7 @@ export function AssetIdentificationModal({
   onClose,
 }: {
   asset: Asset
-  members: Array<{ id: string; name: string; email: string }>
+  members: OrgMember[]
   opened: boolean
   onClose: () => void
 }) {
@@ -53,6 +56,8 @@ export function AssetIdentificationModal({
     },
   })
   const authorizationStatus = watch('authorization_status')
+  const officeId = relationId(asset.office)
+  const eligibleOwners = members.filter(member => memberCoversOffice(member, officeId))
   const suggestionMessage = asset.is_scanner_host
     ? 'Evidencia de clasificación: este dispositivo aloja el escáner de SIAM.'
     : asset.inferred_type === 'gateway'
@@ -132,19 +137,13 @@ export function AssetIdentificationModal({
                   name="owner"
                   control={control}
                   render={({ field }) => (
-                    <Select
+                    <MemberSelect
                       label="Responsable del activo"
-                      searchable
-                      data={[
-                        {
-                          value: UNKNOWN_IDENTIFICATION_VALUE,
-                          label: 'Sin asignar o desconocido',
-                        },
-                        ...members.map(member => ({
-                          value: member.id,
-                          label: member.name || member.email,
-                        })),
-                      ]}
+                      members={eligibleOwners}
+                      emptyOption={{
+                        value: UNKNOWN_IDENTIFICATION_VALUE,
+                        label: 'Sin asignar o desconocido',
+                      }}
                       value={field.value ?? UNKNOWN_IDENTIFICATION_VALUE}
                       onChange={field.onChange}
                       error={errors.owner?.message}

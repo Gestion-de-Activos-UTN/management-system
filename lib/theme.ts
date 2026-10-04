@@ -1,6 +1,7 @@
 import {
   Card,
   Modal,
+  Select,
   createTheme,
   defaultVariantColorsResolver,
   parseThemeColor,
@@ -112,5 +113,9 @@ export const theme = createTheme({
     // instead of flat outlined boxes (hover lift itself lives in globals.css).
     Card: Card.extend({ defaultProps: { shadow: 'sm' } }),
     Modal: Modal.extend({ defaultProps: { shadow: 'lg' } }),
+    // Mantine deselecciona al volver a clickear la opción elegida: un campo obligatorio quedaba
+    // vacío sin aviso (p. ej. la oficina preseleccionada de una tarea de inventario). Para
+    // vaciar un campo opcional está `clearable`; los filtros tienen su opción "Todas/Todos".
+    Select: Select.extend({ defaultProps: { allowDeselect: false } }),
   },
 })

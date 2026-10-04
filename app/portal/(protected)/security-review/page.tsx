@@ -1,6 +1,7 @@
 'use client'
 
-import { Center, Group, Loader, Select, Stack, Text } from '@mantine/core'
+import { Center, Loader, Select, Stack, Text } from '@mantine/core'
+import { FilterBar } from '@/components/ui/FilterBar'
 import { useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -53,8 +54,9 @@ export default function SecurityReviewPage() {
         />
       )}
       <Stack gap="sm">
-        <Group align="flex-end">
+        <FilterBar>
           <Select
+            placeholder="Estado de revisión"
             aria-label="Filtrar por estado de revisión"
             value={status}
             onChange={value => setStatus(value ?? 'current')}
@@ -66,19 +68,20 @@ export default function SecurityReviewPage() {
               { value: 'expired', label: 'Revisión vencida' },
               { value: 'all', label: 'Historial completo' },
             ]}
-            w={{ base: '100%', sm: 240 }}
+            w="100%"
           />
           <Select
-            label="Asignación"
+            placeholder="Asignación"
+            aria-label="Filtrar por asignación"
             value={assignment}
             onChange={value => setAssignment(value ?? 'all')}
             data={[
               { value: 'all', label: 'Todas las personas' },
               { value: 'mine', label: 'Asignadas a mí' },
             ]}
-            w={{ base: '100%', sm: 220 }}
+            w="100%"
           />
-        </Group>
+        </FilterBar>
       </Stack>
       {query.isPending ? (
         <Center py="xl">
@@ -87,7 +90,7 @@ export default function SecurityReviewPage() {
       ) : query.isError ? (
         <Text c="red">No se pudieron cargar las revisiones de seguridad.</Text>
       ) : (
-        <SecurityReviewList assessments={rows} suffix={suffix} />
+        <SecurityReviewList assessments={rows} suffix={suffix} asOrganization={asOrganization} />
       )}
     </Stack>
   )

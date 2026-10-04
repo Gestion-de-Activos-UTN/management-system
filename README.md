@@ -24,7 +24,7 @@ Andamiaje inicial, basado en la arquitectura de SafeLink (multi-tenant, RBAC, ri
    docker compose up
    ```
 
-La app queda en `http://localhost:3001`, Postgres en `localhost:5433` (user/pass/db: `payload`). El contenedor `app` ya corre `pnpm seed:navigation && pnpm dev` solo — sin migraciones: el deploy de este proyecto recrea imagen y DB desde cero, así que Payload sincroniza el schema directo contra Postgres en cada arranque (dev-only, requiere `NODE_ENV=development`).
+La app queda en `http://localhost:3001`, Postgres en `localhost:5433` (user/pass/db: `payload`). El contenedor `app` ya corre `pnpm seed:navigation && pnpm seed:demo && pnpm dev` solo — sin migraciones: el deploy de este proyecto recrea imagen y DB desde cero, así que Payload sincroniza el schema directo contra Postgres en cada arranque (dev-only, requiere `NODE_ENV=development`). La segunda semilla completa el escenario funcional con agentes, escaneos, inventario, revisiones, riesgo, snapshots y tareas. Es idempotente y no reemplaza cambios realizados después desde el frontend.
 
 3. Bajar el stack cuando termines:
 
@@ -37,7 +37,7 @@ Ver [COMMANDS.md](./COMMANDS.md) para el resto de los comandos (tests, lint, see
 
 ## Login del frontend (Admin Portal / Portal de Organización)
 
-`docker compose up` corre `pnpm seed:navigation` en el arranque, que siembra los 4 `Roles` base y un usuario de demo por rol — email/password fijos a propósito (seed de navegación, no producción), idempotente:
+`docker compose up` corre las semillas de navegación y datos funcionales en el arranque. La primera siembra los 4 `Roles` base y un usuario de demo por rol; la segunda agrega un escenario integral realista. Los email/password son fijos a propósito (demo, no producción):
 
 ```bash
 docker compose logs app | grep -A3 "Credenciales de navegación"
