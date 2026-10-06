@@ -145,8 +145,8 @@ export default function InventoryPage() {
   return (
     <Stack gap="md">
       <PageHeader
-        title="Inventory"
-        description="Assets discovered across your offices, and manually tracked assets."
+        title="Inventario"
+        description="Activos detectados en tus oficinas y activos registrados manualmente."
         rightSection={
           <Button
             component={Link}
@@ -155,37 +155,37 @@ export default function InventoryPage() {
             leftSection={<History size={16} strokeWidth={1.5} />}
             w={{ base: '100%', sm: 'auto' }}
           >
-            Snapshot History
+            Historial de instantáneas
           </Button>
         }
       />
 
       <Tabs defaultValue="network">
         <Tabs.List>
-          <Tabs.Tab value="network">Network</Tabs.Tab>
-          <Tabs.Tab value="non-network">Manual assets</Tabs.Tab>
+          <Tabs.Tab value="network">Red</Tabs.Tab>
+          <Tabs.Tab value="non-network">Activos manuales</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="network" pt="md">
           <Stack gap="sm">
             <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm">
               <TextInput
-                placeholder="Search alias, hostname, IP..."
+                placeholder="Buscar alias, nombre de host o IP..."
                 leftSection={<Search size={16} strokeWidth={1.5} />}
                 value={assetSearch}
                 onChange={e => setAssetSearch(e.currentTarget.value)}
                 w="100%"
               />
               <Select
-                placeholder="Criticality"
-                data={[{ value: ALL, label: 'All criticalities' }, ...CRITICALITY_OPTIONS]}
+                placeholder="Criticidad"
+                data={[{ value: ALL, label: 'Todas las criticidades' }, ...CRITICALITY_OPTIONS]}
                 value={assetCriticality}
                 onChange={v => setAssetCriticality(v ?? ALL)}
                 w="100%"
               />
               <Select
-                placeholder="Status"
-                data={[{ value: ALL, label: 'All statuses' }, ...ASSET_STATUS_OPTIONS]}
+                placeholder="Estado"
+                data={[{ value: ALL, label: 'Todos los estados' }, ...ASSET_STATUS_OPTIONS]}
                 value={assetStatus}
                 onChange={v => setAssetStatus(v ?? ALL)}
                 w="100%"
@@ -193,9 +193,9 @@ export default function InventoryPage() {
               <Select
                 placeholder="Identified"
                 data={[
-                  { value: ALL, label: 'All identification statuses' },
+                  { value: ALL, label: 'Todos los estados de identificación' },
                   { value: 'true', label: 'Identified' },
-                  { value: 'false', label: 'Not identified' },
+                  { value: 'false', label: 'No identificado' },
                 ]}
                 value={assetIdentified}
                 onChange={v => setAssetIdentified(v ?? ALL)}
@@ -206,18 +206,18 @@ export default function InventoryPage() {
               columns={assetsColumns}
               data={activeAssets}
               isLoading={assetsPending}
-              emptyLabel="No assets match these filters"
+              emptyLabel="Ningún activo coincide con estos filtros"
               minWidth={980}
             />
             {inactiveAssets.length > 0 && (
               <>
                 {/* Fila congelada al momento en que se detectó (ver useFrozenBucket) — un asset
                     retirado/offline no salta acá solo, hace falta recargar la página. */}
-                <Divider label="Retired & Offline" labelPosition="left" mt="md" />
+                <Divider label="Retirados y sin conexión" labelPosition="left" mt="md" />
                 <DataTable
                   columns={assetsColumns}
                   data={inactiveAssets}
-                  emptyLabel="No retired or offline assets"
+                  emptyLabel="No hay activos retirados ni sin conexión"
                   minWidth={980}
                 />
               </>
@@ -230,34 +230,34 @@ export default function InventoryPage() {
             <Group justify="space-between" align="flex-end" wrap="wrap">
               <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="sm" style={{ flex: 1 }}>
                 <TextInput
-                  placeholder="Search alias..."
+                  placeholder="Buscar alias..."
                   leftSection={<Search size={16} strokeWidth={1.5} />}
                   value={nnaSearch}
                   onChange={e => setNnaSearch(e.currentTarget.value)}
                   w="100%"
                 />
                 <Select
-                  placeholder="Category"
+                  placeholder="Categoría"
                   searchable
-                  nothingFoundMessage="No category found"
-                  data={[{ value: ALL, label: 'All categories' }, ...ASSET_CATEGORY_OPTIONS]}
+                  nothingFoundMessage="No se encontró ninguna categoría"
+                  data={[{ value: ALL, label: 'Todas las categorías' }, ...ASSET_CATEGORY_OPTIONS]}
                   value={nnaCategory}
                   onChange={v => setNnaCategory(v ?? ALL)}
                   w="100%"
                 />
                 <Select
-                  placeholder="Criticality"
-                  data={[{ value: ALL, label: 'All criticalities' }, ...CRITICALITY_OPTIONS]}
+                  placeholder="Criticidad"
+                  data={[{ value: ALL, label: 'Todas las criticidades' }, ...CRITICALITY_OPTIONS]}
                   value={nnaCriticality}
                   onChange={v => setNnaCriticality(v ?? ALL)}
                   w="100%"
                 />
                 <Select
-                  placeholder="Review"
+                  placeholder="Revisión"
                   data={[
-                    { value: ALL, label: 'All review statuses' },
-                    { value: 'ok', label: 'Up to date' },
-                    { value: 'overdue', label: 'Review overdue' },
+                    { value: ALL, label: 'Todos los estados de revisión' },
+                    { value: 'ok', label: 'Al día' },
+                    { value: 'overdue', label: 'Revisión vencida' },
                   ]}
                   value={nnaReviewStatus}
                   onChange={v => setNnaReviewStatus(v ?? ALL)}
@@ -269,23 +269,23 @@ export default function InventoryPage() {
                 onClick={() => setEditingAsset(null)}
                 w={{ base: '100%', sm: 'auto' }}
               >
-                New asset
+                Nuevo activo
               </Button>
             </Group>
             <DataTable
               columns={nonNetworkAssetsColumns}
               data={activeNonNetworkAssets}
               isLoading={nonNetworkAssetsPending}
-              emptyLabel="No manually tracked assets match these filters"
+              emptyLabel="Ningún activo manual coincide con estos filtros"
               minWidth={880}
             />
             {inactiveNonNetworkAssets.length > 0 && (
               <>
-                <Divider label="Retired" labelPosition="left" mt="md" />
+                <Divider label="Retirado" labelPosition="left" mt="md" />
                 <DataTable
                   columns={nonNetworkAssetsColumns}
                   data={inactiveNonNetworkAssets}
-                  emptyLabel="No retired assets"
+                  emptyLabel="No hay activos retirados"
                   minWidth={880}
                 />
               </>
@@ -297,7 +297,7 @@ export default function InventoryPage() {
       <Modal
         opened={editingAsset !== undefined}
         onClose={() => setEditingAsset(undefined)}
-        title={editingAsset ? 'Edit asset' : 'New asset'}
+        title={editingAsset ? 'Editar activo' : 'Nuevo activo'}
         size="lg"
         centered
       >

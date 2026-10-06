@@ -1,18 +1,36 @@
 import type { Access, Where } from 'payload'
-import { canDo, type Action, type CollectionSlug } from './permissions'
+import {
+  canDo,
+  hasOrgWideScope,
+  type Action,
+  type CollectionSlug,
+  type RoleSlug,
+} from './permissions'
 import { getTenantContext } from '../tenant/resolveTenantContext'
 
 type OrgScope =
   | { kind: 'self' } // la propia fila es la organización (ej. Organizations.id)
   | { kind: 'organization'; field: string } // filtra por un campo `organization` de la fila
   | { kind: 'offices'; field: string } // filtra por un campo relación a Offices, vía ctx.officeIds
+  // organización + oficina según el rol (hasOrgWideScope): los roles de oficina además quedan
+  // limitados a `field in ctx.officeIds`, lo que excluye también las filas org-level (office null)
+  | { kind: 'org_offices'; field: string }
 
-type TenantCtxForScope = { organizationId: string | null; officeIds: string[] }
+type TenantCtxForScope = {
+  organizationId: string | null
+  officeIds: string[]
+  role: RoleSlug | null
+}
 
-function scopeWhere(scope: OrgScope, ctx: TenantCtxForScope): Where | false {
+export function scopeWhere(scope: OrgScope, ctx: TenantCtxForScope): Where | false {
   if (scope.kind === 'offices') return { [scope.field]: { in: ctx.officeIds } }
   if (!ctx.organizationId) return false
   if (scope.kind === 'self') return { id: { equals: ctx.organizationId } }
+  if (scope.kind === 'org_offices') {
+    const organization: Where = { organization: { equals: ctx.organizationId } }
+    if (hasOrgWideScope(ctx.role)) return organization
+    return { and: [organization, { [scope.field]: { in: ctx.officeIds } }] }
+  }
   return { [scope.field]: { equals: ctx.organizationId } }
 }
 

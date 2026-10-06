@@ -4,6 +4,8 @@ import { resolveTenantAndReview } from './hooks/resolveTenant'
 import { computeReviewStatus, canReviewNow, type ReviewInterval } from './invariants'
 import { MANUAL_ASSET_CATEGORY_OPTIONS } from '../../domain/assets/asset-types'
 import { reconcileAssessmentApplicability } from './hooks/reconcileAssessmentApplicability'
+import { assessmentScopeFields } from '../../domain/assessments/asset-assessment-scope'
+import { validateAssetAssessmentScope } from '../../domain/assessments/validateAssetAssessmentScope'
 
 const resolvedFieldAccess = {
   create: () => false,
@@ -19,12 +21,18 @@ export const NonNetworkAssets: CollectionConfig = {
     // `create` no admite filtro de fila (todavía no hay fila): el binding al tenant lo hace el
     // beforeChange, que valida `office` contra ctx.officeIds y deriva `organization` de ahí.
     create: canDoAccess('non-network-assets', 'create'),
-    read: orgScopedAccess('non-network-assets', 'read'),
-    update: orgScopedAccess('non-network-assets', 'update'),
-    delete: orgScopedAccess('non-network-assets', 'delete'),
+    read: orgScopedAccess('non-network-assets', 'read', { kind: 'org_offices', field: 'office' }),
+    update: orgScopedAccess('non-network-assets', 'update', {
+      kind: 'org_offices',
+      field: 'office',
+    }),
+    delete: orgScopedAccess('non-network-assets', 'delete', {
+      kind: 'org_offices',
+      field: 'office',
+    }),
   },
   hooks: {
-    beforeChange: [resolveTenantAndReview],
+    beforeChange: [resolveTenantAndReview, validateAssetAssessmentScope],
     afterChange: [reconcileAssessmentApplicability],
   },
   fields: [
@@ -85,6 +93,7 @@ export const NonNetworkAssets: CollectionConfig = {
       required: true, // RF-51a
     },
     { name: 'location', type: 'text', maxLength: 200 },
+    ...assessmentScopeFields(),
     {
       name: 'status',
       type: 'select',

@@ -6,7 +6,17 @@ import type {
 } from '@/app/types/payload-types'
 import type { SaveAssessmentDraft, UpdateAssessmentPolicy } from './schema'
 import type { EffectiveAnswer } from '@/domain/assessments/evaluateCompliance'
-import type { RiskSummary } from '@/domain/assessments/computeRiskSummary'
+
+export type SecurityReviewSummary = {
+  risk_score: number | null
+  evaluated_percentage: number
+  applicable_checks: number
+  not_evaluable: number
+  requires_attention: number
+  excluded_assets: number
+  risk_band: 'low' | 'medium' | 'high' | 'critical' | null
+  unconfirmed_assets: number
+}
 
 export type AssessmentListResponse = { docs: AssessmentInstance[]; totalDocs: number }
 export type AssessmentDetailResponse = {
@@ -36,7 +46,7 @@ export function getSecurityReviewSummary(params?: {
   officeId?: string | null
   asOrganization?: string
 }) {
-  return httpClient.get<RiskSummary>('/api/v1/security-review/summary', {
+  return httpClient.get<SecurityReviewSummary>('/api/v1/security-review/summary', {
     office_id: params?.officeId ?? undefined,
     asOrganization: params?.asOrganization,
   })

@@ -13,12 +13,12 @@ export default function OrganizationsPage() {
 
   return (
     <Stack gap="md">
-      <PageHeader title="Organizations" description="Every tenant on the platform." />
+      <PageHeader title="Organizaciones" description="Cada organización de la plataforma." />
       <DataTable
         columns={organizationsColumns}
         data={data ?? []}
         isLoading={isPending}
-        emptyLabel="No organizations"
+        emptyLabel="No hay organizaciones"
         minWidth={720}
       />
     </Stack>

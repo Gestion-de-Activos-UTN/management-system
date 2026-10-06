@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import type { AssessmentInstance, Asset } from '@/app/types/payload-types'
 import type { TenantContext } from '@/access/tenant/resolveTenantContext'
-import { canAnswerAssessment } from './assessmentAccess'
+import { canAnswerAssessment, canReadAssessment } from './assessmentAccess'
 
 const assessment = {
   organization: 'org-1',
@@ -39,5 +39,24 @@ describe('assessment write access', () => {
 
   it('keeps platform visits read-only', () => {
     assert.equal(canAnswerAssessment(ctx('platform_admin'), assessment), false)
+  })
+})
+
+describe('assessment read access', () => {
+  const organizationCycle = {
+    organization: 'org-1',
+    office: null,
+    scope: 'organization',
+  } as AssessmentInstance
+
+  it('shows organization-level cycles only to org-wide roles', () => {
+    assert.equal(canReadAssessment(ctx('org_admin'), organizationCycle), true)
+    assert.equal(canReadAssessment(ctx('office_manager'), organizationCycle), false)
+    assert.equal(canReadAssessment(ctx('org_viewer'), organizationCycle), false)
+  })
+
+  it('keeps office and asset cycles readable inside the caller offices', () => {
+    assert.equal(canReadAssessment(ctx('org_viewer'), assessment), true)
+    assert.equal(canReadAssessment(ctx('office_manager', ['office-2']), assessment), false)
   })
 })

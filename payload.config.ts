@@ -20,6 +20,11 @@ import { InventorySnapshots } from './collections/InventorySnapshots'
 import { AssessmentInstances } from './collections/AssessmentInstances'
 import { AssessmentAnswers } from './collections/AssessmentAnswers'
 import { ComplianceResults } from './collections/ComplianceResults'
+import { RiskEvaluations } from './collections/RiskEvaluations'
+import { RiskContributions } from './collections/RiskContributions'
+import { latestRiskEvaluationEndpoint } from './endpoints/risk'
+import { recalculateRisk } from './domain/risk/recalculateRisk'
+import { enqueueOrganizationRiskRecalculation } from './domain/risk/enqueueRiskRecalculation'
 import { reportsEndpoint } from './endpoints/reports'
 import { heartbeatEndpoint } from './endpoints/heartbeat'
 import { vendorEndpoint } from './endpoints/vendor'
@@ -35,6 +40,7 @@ import { softwareSuggestionsEndpoint } from './endpoints/softwareSuggestions'
 import {
   organizationSettingsGetEndpoint,
   organizationSettingsUpdateEndpoint,
+  organizationMaturityUpdateEndpoint,
 } from './endpoints/organizationSettings'
 import { agentProvisioningEndpoint } from './endpoints/agentProvisioning'
 import { officeAgentSummaryEndpoint } from './endpoints/officeAgentSummary'
@@ -42,6 +48,7 @@ import { dashboardMetricsEndpoint } from './endpoints/dashboardMetrics'
 import { agentRevokeEndpoint } from './endpoints/agentRevoke'
 import { expireRawScanPayloads } from './domain/inventories/expireRawScanPayloads'
 import { reconcileExpiredAssessments } from './domain/assessments/reconcileExpiredAssessments'
+import { reconcileExpiredAssetExclusions } from './domain/assessments/reconcileExpiredAssetExclusions'
 import {
   assessmentCompleteEndpoint,
   assessmentDetailEndpoint,
@@ -92,6 +99,8 @@ export default buildConfig({
     AssessmentInstances,
     AssessmentAnswers,
     ComplianceResults,
+    RiskEvaluations,
+    RiskContributions,
   ],
   // Servidos vía app/(payload)/api/[...slug]/route.ts (catch-all de Next que reexporta
   // REST_GET/REST_POST/... de @payloadcms/next/routes) — sin ese archivo, Payload no recibe
@@ -112,6 +121,7 @@ export default buildConfig({
     softwareSuggestionsEndpoint,
     organizationSettingsGetEndpoint,
     organizationSettingsUpdateEndpoint,
+    organizationMaturityUpdateEndpoint,
     agentProvisioningEndpoint,
     officeAgentSummaryEndpoint,
     dashboardMetricsEndpoint,
@@ -123,10 +133,57 @@ export default buildConfig({
     assessmentCompleteEndpoint,
     assessmentReopenEndpoint,
     assessmentPolicyEndpoint,
+    latestRiskEvaluationEndpoint,
   ],
   jobs: {
     deleteJobOnComplete: true,
+    enableConcurrencyControl: true,
     tasks: [
+      {
+        slug: 'recalculate-risk',
+        label: 'Recalculate risk',
+        // One run at a time per organization/office scope, and a new event replaces the pending
+        // run: only the latest state matters, so bursts (a scan updating every asset) collapse.
+        concurrency: {
+          key: ({ input }) => `risk:${input.organization_id}:${input.office_id || 'org'}`,
+          exclusive: true,
+          supersedes: true,
+        },
+        inputSchema: [
+          { name: 'organization_id', type: 'text', required: true },
+          { name: 'office_id', type: 'text' },
+        ],
+        outputSchema: [{ name: 'evaluation_id', type: 'text', required: true }],
+        handler: async ({ input, req }) => {
+          const evaluation = await recalculateRisk(
+            req.payload,
+            { organizationId: input.organization_id, officeId: input.office_id || undefined },
+            req
+          )
+          return { output: { evaluation_id: String(evaluation.id) } }
+        },
+      },
+      {
+        // Answer expiry (valid_until) and stale agent heartbeats change risk without any event.
+        slug: 'refresh-risk',
+        label: 'Refresh risk evaluations',
+        inputSchema: [],
+        outputSchema: [{ name: 'organizations', type: 'number', required: true }],
+        schedule: [{ cron: '0 45 3 * * *', queue: 'maintenance' }],
+        handler: async ({ req }) => {
+          const organizations = await req.payload.find({
+            collection: 'organizations',
+            where: { is_active: { equals: true } },
+            overrideAccess: true,
+            depth: 0,
+            pagination: false,
+            select: {},
+          })
+          for (const organization of organizations.docs)
+            await enqueueOrganizationRiskRecalculation(req.payload, String(organization.id))
+          return { output: { organizations: organizations.docs.length } }
+        },
+      },
       {
         slug: 'expire-raw-scan-payloads',
         label: 'Expire raw scan payloads',
@@ -152,10 +209,38 @@ export default buildConfig({
           output: await reconcileExpiredAssessments(req.payload),
         }),
       },
+      {
+        slug: 'reconcile-expired-asset-exclusions',
+        label: 'Reinclude assets with expired assessment exclusions',
+        inputSchema: [],
+        outputSchema: [
+          { name: 'network_assets_reincluded', type: 'number', required: true },
+          { name: 'manual_assets_reincluded', type: 'number', required: true },
+        ],
+        schedule: [{ cron: '0 0 * * * *', queue: 'maintenance' }],
+        handler: async ({ req }) => ({
+          output: await reconcileExpiredAssetExclusions(req.payload),
+        }),
+      },
     ],
     // Payload agenda y ejecuta localmente la tarea diaria dentro del proceso de la aplicación.
     // No requiere cron administrado, workers ni servicios externos.
-    autoRun: [{ cron: '0 * * * * *', queue: 'maintenance', limit: 1 }],
+    autoRun: [
+      { cron: '0 * * * * *', queue: 'maintenance', limit: 1 },
+      // Risk recalculations are queued by domain events; the task's concurrency key collapses bursts.
+      { cron: '*/15 * * * * *', queue: 'risk', limit: 10 },
+    ],
+  },
+  // Payload does not recover jobs left `processing` by a crash, and a stuck job would block its
+  // risk concurrency key forever. Released here on boot, before autoRun picks up work.
+  // ponytail: safe only with a single app instance; with several, release by age instead.
+  onInit: async payload => {
+    await payload.update({
+      collection: 'payload-jobs',
+      where: { and: [{ queue: { equals: 'risk' } }, { processing: { equals: true } }] },
+      data: { processing: false },
+      overrideAccess: true,
+    })
   },
   typescript: {
     outputFile: path.resolve(dirname, 'app/types/payload-types.ts'),

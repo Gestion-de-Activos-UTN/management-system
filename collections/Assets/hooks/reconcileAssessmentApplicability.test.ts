@@ -28,7 +28,18 @@ describe('scanned asset assessment applicability changes', () => {
     )
   })
 
-  it('reacts only to confirmed category and retirement changes', () => {
+  it('reacts to an office move so the open cycle is re-homed', () => {
+    assert.equal(
+      assetAssessmentApplicabilityChanged(
+        { ...workstation, office: 'office-2' },
+        workstation,
+        'update'
+      ),
+      true
+    )
+  })
+
+  it('reacts to confirmed category, retirement and assessment-scope changes', () => {
     assert.equal(
       assetAssessmentApplicabilityChanged(
         { ...workstation, confirmed_type: 'gateway' },
@@ -47,6 +58,14 @@ describe('scanned asset assessment applicability changes', () => {
     )
     assert.equal(
       assetAssessmentApplicabilityChanged(
+        { ...workstation, assessment_scope: 'excluded' },
+        workstation,
+        'update'
+      ),
+      true
+    )
+    assert.equal(
+      assetAssessmentApplicabilityChanged(
         { ...workstation, status: 'offline' },
         workstation,
         'update'
@@ -56,14 +75,6 @@ describe('scanned asset assessment applicability changes', () => {
     assert.equal(
       assetAssessmentApplicabilityChanged(
         { ...workstation, identification_status: 'needs_review' },
-        workstation,
-        'update'
-      ),
-      false
-    )
-    assert.equal(
-      assetAssessmentApplicabilityChanged(
-        { ...workstation, office: 'office-2' },
         workstation,
         'update'
       ),

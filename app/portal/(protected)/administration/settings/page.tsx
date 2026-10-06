@@ -19,6 +19,9 @@ import { useSaveOrganizationSettings } from '@/modules/organization-settings/hoo
 import { OrganizationSettingsFormSchema } from '@/modules/organization-settings/schema'
 import type { OrganizationSettingsFormValues } from '@/modules/organization-settings/service'
 import { useUpdateAssessmentPolicy } from '@/modules/assessments/hooks/use-update-assessment-policy'
+import { useSaveOrganizationMaturity } from '@/modules/organization-settings/hooks/use-save-organization-maturity'
+import { MaturityProfileForm } from '@/modules/organization-settings/components/MaturityProfileForm'
+import { RISK_CATALOG_V2 } from '@/domain/risk/catalog-v2'
 import { useState } from 'react'
 import { Badge, Modal, SimpleGrid } from '@mantine/core'
 
@@ -42,11 +45,15 @@ export default function AdminSettingsPage() {
   const { data: settings, isPending } = useOrganizationSettings()
   const save = useSaveOrganizationSettings()
   const policy = useUpdateAssessmentPolicy()
+  const maturity = useSaveOrganizationMaturity()
   const [pendingPolicy, setPendingPolicy] = useState<'essential' | 'reinforced' | null>(null)
 
   return (
     <Stack gap="md">
-      <PageHeader title="Settings" description="Inventory settings for your organization." />
+      <PageHeader
+        title="Configuración"
+        description="Configuración del inventario y del perfil de tu organización."
+      />
       <Card withBorder padding="lg" w="100%">
         {isPending || !settings ? (
           <Stack gap="sm">
@@ -68,27 +75,41 @@ export default function AdminSettingsPage() {
       </Card>
       {settings && (
         <Card withBorder padding="lg" w="100%">
+          <MaturityProfileForm
+            initial={{
+              maturity_it_owner: settings.maturity_it_owner ?? undefined,
+              maturity_security_budget: settings.maturity_security_budget ?? undefined,
+            }}
+            updatedAt={settings.maturity_updated_at}
+            onSave={values => maturity.mutate(values)}
+            saving={maturity.isPending}
+          />
+        </Card>
+      )}
+      {settings && (
+        <Card withBorder padding="lg" w="100%">
           <Stack gap="md">
             <div>
-              <Text fw={700}>Security review policy</Text>
+              <Text fw={700}>Política de revisión de seguridad</Text>
               <Text size="sm" c="dimmed">
-                Choose how often the company revisits its everyday security routines.
+                Elige cada cuánto la empresa revisará sus rutinas cotidianas de seguridad.
               </Text>
             </div>
             <SimpleGrid cols={{ base: 1, md: 2 }}>
               {[
                 {
                   key: 'essential' as const,
-                  name: 'Essential',
-                  cadence: 'Yearly',
+                  name: 'Esencial',
+                  cadence: 'Anual',
                   detail:
-                    'A shorter review covering the routines every small business should know.',
+                    'Una revisión breve de las rutinas que toda pequeña empresa debería conocer.',
                 },
                 {
                   key: 'reinforced' as const,
-                  name: 'Reinforced',
-                  cadence: 'Every 6 months',
-                  detail: 'Adds access reviews, recovery tests and closer network organization.',
+                  name: 'Reforzada',
+                  cadence: 'Cada 6 meses',
+                  detail:
+                    'Agrega revisiones de acceso, pruebas de recuperación y una organización más detallada de la red.',
                 },
               ].map(option => (
                 <Card
@@ -116,7 +137,7 @@ export default function AdminSettingsPage() {
                     disabled={settings.assessment_policy_key === option.key}
                     onClick={() => setPendingPolicy(option.key)}
                   >
-                    Choose {option.name}
+                    Elegir {option.name}
                   </Button>
                 </Card>
               ))}
@@ -127,17 +148,17 @@ export default function AdminSettingsPage() {
       <Modal
         opened={pendingPolicy !== null}
         onClose={() => setPendingPolicy(null)}
-        title="Change review policy?"
+        title="¿Cambiar la política de revisión?"
         centered
       >
         <Stack>
           <Text size="sm">
-            This opens new review cycles under the selected policy. Completed reviews remain
-            unchanged.
+            Esto abre nuevos ciclos de revisión con la política seleccionada. Las revisiones
+            completadas no se modifican.
           </Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setPendingPolicy(null)}>
-              Cancel
+              Cancelar
             </Button>
             <Button
               color="pine"
@@ -145,12 +166,12 @@ export default function AdminSettingsPage() {
               onClick={() =>
                 pendingPolicy &&
                 policy.mutate(
-                  { policy_key: pendingPolicy, policy_version: 1 },
+                  { policy_key: pendingPolicy, policy_version: RISK_CATALOG_V2.version },
                   { onSuccess: () => setPendingPolicy(null) }
                 )
               }
             >
-              Confirm change
+              Confirmar cambio
             </Button>
           </Group>
         </Stack>
@@ -194,7 +215,7 @@ function SettingsForm({
     <form onSubmit={handleSubmit(onSave)} noValidate>
       <Stack gap="md">
         <Text size="sm" fw={600}>
-          Aging
+          Antigüedad
         </Text>
         <Controller
           name="offline_after_hours"
@@ -202,9 +223,9 @@ function SettingsForm({
           render={({ field }) => (
             <Stack gap={4}>
               <Select
-                label="Offline threshold"
-                description="An active asset not seen in a scan for this long is marked offline."
-                placeholder="Platform default"
+                label="Umbral sin conexión"
+                description="Un activo que no aparezca en un escaneo durante este período se marcará como sin conexión."
+                placeholder="Valor predeterminado de la plataforma"
                 data={OFFLINE_AFTER_HOURS_OPTIONS}
                 value={field.value != null ? String(field.value) : null}
                 onChange={v => field.onChange(v ? Number(v) : null)}
@@ -212,7 +233,7 @@ function SettingsForm({
               />
               {field.value == null && (
                 <Text size="xs" c="dimmed">
-                  Using the platform default (72hs).
+                  Se usa el valor predeterminado de la plataforma (72 h).
                 </Text>
               )}
             </Stack>
@@ -222,15 +243,15 @@ function SettingsForm({
         <Divider />
 
         <Text size="sm" fw={600}>
-          Snapshots
+          Instantáneas
         </Text>
         <Controller
           name="snapshot_before_each_scan"
           control={control}
           render={({ field }) => (
             <Checkbox
-              label="Take a snapshot before every scan"
-              description="When on, ignores the interval below and takes a snapshot on every processed scan."
+              label="Tomar una instantánea antes de cada escaneo"
+              description="Al activarlo, se ignora el intervalo siguiente y se toma una instantánea en cada escaneo procesado."
               checked={field.value}
               onChange={e => field.onChange(e.currentTarget.checked)}
             />
@@ -242,9 +263,9 @@ function SettingsForm({
           render={({ field }) => (
             <Stack gap={4}>
               <Select
-                label="Snapshot interval"
-                description="Minimum time between automatic snapshots."
-                placeholder="Platform default"
+                label="Intervalo entre instantáneas"
+                description="Tiempo mínimo entre instantáneas automáticas."
+                placeholder="Valor predeterminado de la plataforma"
                 data={SNAPSHOT_INTERVAL_DAYS_OPTIONS}
                 disabled={beforeEachScan}
                 value={field.value != null ? String(field.value) : null}
@@ -253,14 +274,14 @@ function SettingsForm({
               />
               {field.value == null && !beforeEachScan && (
                 <Text size="xs" c="dimmed">
-                  Using the platform default (7 days).
+                  Se usa el valor predeterminado de la plataforma (7 días).
                 </Text>
               )}
             </Stack>
           )}
         />
         <Text size="xs" c="dimmed">
-          These apply to every office in this organization.
+          Estas opciones se aplican a todas las oficinas de la organización.
         </Text>
         <Group justify="flex-end" wrap="wrap">
           <Button
@@ -271,10 +292,10 @@ function SettingsForm({
             onClick={restoreDefaults}
             w={{ base: '100%', sm: 'auto' }}
           >
-            Restore defaults
+            Restaurar valores predeterminados
           </Button>
           <Button type="submit" loading={saving} w={{ base: '100%', sm: 'auto' }}>
-            Save changes
+            Guardar cambios
           </Button>
         </Group>
       </Stack>

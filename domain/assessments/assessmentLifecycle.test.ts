@@ -14,9 +14,12 @@ function makeLifecyclePayload() {
     organization: 'org-1',
     scope: 'organization',
     policy_key: 'essential',
-    policy_version: 1,
+    policy_version: 2,
     status: 'pending',
-    question_set_snapshot: [{ key: 'access.individual_accounts', version: 1 }],
+    question_set_snapshot: [
+      { key: 'A.5.15.individual_accounts', version: 2 },
+      { key: 'A.5.15.access_revocation', version: 2 },
+    ],
   }
   const answers: Array<Record<string, unknown>> = []
   const results: Array<Record<string, unknown>> = []
@@ -36,8 +39,21 @@ function makeLifecyclePayload() {
       if (collection === 'assessment-instances') return { ...assessment }
       throw new Error('not found')
     },
-    async find({ collection }: { collection: string }) {
-      if (collection === 'assessment-answers') return { docs: answers.map(item => ({ ...item })) }
+    async find({
+      collection,
+      where,
+    }: {
+      collection: string
+      where?: { and?: Array<Record<string, { equals?: string }>> }
+    }) {
+      if (collection === 'assessment-answers') {
+        const key = where?.and?.find(clause => 'question_key' in clause)?.question_key?.equals
+        return {
+          docs: answers
+            .filter(item => !key || item.question_key === key)
+            .map(item => ({ ...item })),
+        }
+      }
       return { docs: [] }
     },
     async create({ collection, data }: { collection: string; data: Record<string, unknown> }) {
@@ -76,7 +92,8 @@ function makeLifecyclePayload() {
 
 const command = {
   answers: [
-    { question_key: 'access.individual_accounts', question_version: 1, answer: 'yes' as const },
+    { question_key: 'A.5.15.individual_accounts', question_version: 2, option_key: 'yes' as const },
+    { question_key: 'A.5.15.access_revocation', question_version: 2, option_key: 'yes' as const },
   ],
 }
 
@@ -85,21 +102,25 @@ describe('assessment lifecycle', () => {
     const copied = buildCopiedAssessmentDraft(
       [
         {
-          question_key: 'access.individual_accounts',
-          question_version: 1,
-          answer: 'yes',
+          question_key: 'A.5.15.individual_accounts',
+          question_version: 2,
+          option_key: 'yes',
           justification: null,
           evidence_note: 'Checked accounts',
         } as AssessmentAnswer,
-        { question_key: 'removed.question', question_version: 1, answer: 'no' } as AssessmentAnswer,
+        {
+          question_key: 'removed.question',
+          question_version: 2,
+          option_key: 'no',
+        } as AssessmentAnswer,
       ],
-      [{ key: 'access.individual_accounts', version: 2 }]
+      [{ key: 'A.5.15.individual_accounts', version: 2 }]
     )
     assert.deepEqual(copied.answers, [
       {
-        question_key: 'access.individual_accounts',
+        question_key: 'A.5.15.individual_accounts',
         question_version: 2,
-        answer: 'yes',
+        option_key: 'yes',
         justification: undefined,
         evidence_note: 'Checked accounts',
       },
@@ -111,7 +132,7 @@ describe('assessment lifecycle', () => {
     const req = { context: {} } as PayloadRequest
     await saveAssessmentDraft(setup.payload, 'assessment-1', command, 'user-1', req)
     await saveAssessmentDraft(setup.payload, 'assessment-1', command, 'user-1', req)
-    assert.equal(setup.answers.length, 1)
+    assert.equal(setup.answers.length, 2)
   })
 
   it('completes atomically and a retry creates no duplicate result', async () => {

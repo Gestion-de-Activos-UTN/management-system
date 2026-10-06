@@ -8,22 +8,22 @@ import { PageHeader } from '@/components/ui/PageHeader'
 
 const HUB_ITEMS = [
   {
-    label: 'Users',
+    label: 'Usuarios',
     href: '/portal/administration/users',
     icon: Users,
-    description: 'Members of your organization',
+    description: 'Miembros de tu organización',
   },
   {
-    label: 'Offices',
+    label: 'Oficinas',
     href: '/portal/administration/offices',
     icon: MapPin,
-    description: 'Offices in your organization',
+    description: 'Oficinas de tu organización',
   },
   {
-    label: 'Settings',
+    label: 'Configuración',
     href: '/portal/administration/settings',
     icon: Settings,
-    description: 'Organization-level settings',
+    description: 'Configuración de la organización',
   },
 ]
 
@@ -34,8 +34,8 @@ export default function PortalAdminHub() {
   return (
     <Stack gap="md">
       <PageHeader
-        title="Administration"
-        description="Manage your organization's users, offices and settings."
+        title="Administración"
+        description="Administra los usuarios, las oficinas y la configuración de tu organización."
       />
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
         {HUB_ITEMS.map(item => (

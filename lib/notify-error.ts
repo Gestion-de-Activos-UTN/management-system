@@ -13,7 +13,7 @@ export function showApiError(error: unknown, fallback: string) {
 
   notifications.show({
     color: isValidation ? 'orange' : 'red',
-    title: isValidation ? undefined : 'Something went wrong',
+    title: isValidation ? undefined : 'Ocurrió un error',
     message,
     autoClose: isValidation ? 5000 : false,
   })

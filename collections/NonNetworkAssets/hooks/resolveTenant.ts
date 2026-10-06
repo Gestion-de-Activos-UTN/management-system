@@ -9,7 +9,7 @@ import {
   type ReviewInterval,
 } from '../invariants'
 import { relationId } from '@/lib/relationId'
-import { assertOwnerBelongsToOrganization } from '@/access/tenant/assertOwnerBelongsToOrganization'
+import { assertOwnerCoversOffice } from '@/access/tenant/assertOwnerCoversOffice'
 
 async function findOrganizationOfOffice(req: PayloadRequest, officeId: string): Promise<string> {
   const office = await req.payload.findByID({
@@ -54,7 +54,7 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
       ? relationId(originalDoc.owner)
       : null
   if (ownerId) {
-    await assertOwnerBelongsToOrganization(req, ownerId, organizationId)
+    await assertOwnerCoversOffice(req, ownerId, organizationId, officeId)
   }
 
   // next_review_at se deriva de review_interval: en creación siempre se calcula; en edición
@@ -87,8 +87,7 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
   if (hasSoftware) assertSoftwareIdentityComplete(identity.vendor, identity.product)
 
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {id, office, organization,
-  // asset_category, criticality, owner, status, software_vendor, software_product,
-  // software_version, cpe_candidate}, previous hash for this organization_id)
+  // asset_category, criticality, owner, status, assessment scope and exclusion}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   return {
     ...data,

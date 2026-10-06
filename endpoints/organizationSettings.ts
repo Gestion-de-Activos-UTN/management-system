@@ -1,5 +1,9 @@
 import type { Endpoint } from 'payload'
 import { getTenantContext } from '../access/tenant/resolveTenantContext'
+import {
+  OrganizationMaturitySchema,
+  OrganizationSettingsFormSchema,
+} from '../modules/organization-settings/schema'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
@@ -12,7 +16,8 @@ function json(body: unknown, status = 200) {
 // tendrá su endpoint dedicado; no se modifica desde este comando genérico de settings.
 // El portal ya oculta /admin a quien no es org_admin (client-side, ver admin/layout.tsx) — acá se
 // repite la validación server-side, que es la que realmente cuenta.
-type LoadResult = { ok: false; response: Response } | { ok: true; doc: { id: string | number } }
+type LoadResult =
+  { ok: false; response: Response } | { ok: true; doc: { id: string | number }; userId: string }
 
 async function loadSettings(req: Parameters<Endpoint['handler']>[0]): Promise<LoadResult> {
   const ctx = await getTenantContext(req)
@@ -32,7 +37,7 @@ async function loadSettings(req: Parameters<Endpoint['handler']>[0]): Promise<Lo
   const doc = result.docs[0]
   if (!doc) return { ok: false, response: json({ error: 'not_found' }, 404) }
 
-  return { ok: true, doc }
+  return { ok: true, doc, userId: ctx.userId }
 }
 
 export const organizationSettingsGetEndpoint: Endpoint = {
@@ -59,24 +64,53 @@ export const organizationSettingsUpdateEndpoint: Endpoint = {
     const loaded = await loadSettings(req)
     if (!loaded.ok) return loaded.response
 
-    const body = (await req.json!()) as {
-      snapshot_before_each_scan?: boolean
-      snapshot_interval_days?: number | null
-      offline_after_hours?: number | null
-    }
+    const parsed = OrganizationSettingsFormSchema.safeParse(await req.json!().catch(() => ({})))
+    if (!parsed.success)
+      return json({ error: 'invalid_settings', issues: parsed.error.issues }, 400)
 
+    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {organization settings: offline_after_hours, snapshot_before_each_scan, snapshot_interval_days}, previous hash for this organization_id)
+    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
     const updated = await req.payload.update({
       collection: 'organization-settings',
       id: loaded.doc.id,
       overrideAccess: true,
       req,
-      data: {
-        snapshot_before_each_scan: body.snapshot_before_each_scan,
-        snapshot_interval_days: body.snapshot_interval_days,
-        offline_after_hours: body.offline_after_hours,
-      },
+      // Relations stay as ids: the response must not embed user documents.
+      depth: 0,
+      data: parsed.data,
     })
 
+    return json(updated)
+  },
+}
+
+// Maturity profile: business context for remediation advice, editable only by org_admin
+// (loadSettings). It is kept out of the generic settings command so it records who answered.
+export const organizationMaturityUpdateEndpoint: Endpoint = {
+  path: '/v1/organization-settings/maturity',
+  method: 'patch',
+  handler: async req => {
+    const loaded = await loadSettings(req)
+    if (!loaded.ok) return loaded.response
+    const parsed = OrganizationMaturitySchema.safeParse(await req.json!().catch(() => ({})))
+    if (!parsed.success)
+      return json({ error: 'invalid_maturity', issues: parsed.error.issues }, 400)
+
+    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {maturity_it_owner, maturity_security_budget}, previous hash for this organization_id)
+    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+    const updated = await req.payload.update({
+      collection: 'organization-settings',
+      id: loaded.doc.id,
+      overrideAccess: true,
+      req,
+      // Relations stay as ids: the response must not embed user documents.
+      depth: 0,
+      data: {
+        ...parsed.data,
+        maturity_updated_at: new Date().toISOString(),
+        maturity_updated_by: loaded.userId,
+      },
+    })
     return json(updated)
   },
 }

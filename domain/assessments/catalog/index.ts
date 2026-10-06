@@ -1,24 +1,25 @@
-import { CONTROL_CATALOG } from './control-catalog'
+import type { NetworkBaselineRule } from './catalog-types'
 import { NETWORK_BASELINE } from './network-baseline'
-import { POLICY_CATALOG } from './policy-catalog'
-import { QUESTION_CATALOG } from './question-catalog'
-import type { AssessmentCatalog } from './catalog-types'
-import { validateAssessmentCatalog } from './validate-catalog'
 
-export const ASSESSMENT_CATALOG = {
-  catalog_version: 1,
-  controls: CONTROL_CATALOG,
-  questions: QUESTION_CATALOG,
-  policies: POLICY_CATALOG,
-  network_rules: NETWORK_BASELINE,
-} as const satisfies AssessmentCatalog
+export function validateNetworkBaseline(rules: readonly NetworkBaselineRule[]): void {
+  const keys = new Set<string>()
+  for (const rule of rules) {
+    if (keys.has(rule.key)) throw new Error(`Network rule ${rule.key} is duplicated`)
+    keys.add(rule.key)
+    if (rule.control_key !== 'A.8.21')
+      throw new Error(`Network rule ${rule.key} must belong to A.8.21`)
+    if (rule.minimum_confidence < 0 || rule.minimum_confidence > 10)
+      throw new Error(`Network rule ${rule.key} has invalid confidence`)
+    if (
+      !rule.ports.length ||
+      rule.ports.some(port => !Number.isInteger(port) || port < 0 || port > 65535)
+    )
+      throw new Error(`Network rule ${rule.key} has invalid ports`)
+  }
+}
 
-// Catalog errors are deployment errors: fail fast instead of running with ambiguous compliance rules.
-validateAssessmentCatalog(ASSESSMENT_CATALOG)
+// Catalog errors are deployment errors: fail fast instead of classifying services ambiguously.
+validateNetworkBaseline(NETWORK_BASELINE)
 
 export * from './catalog-types'
-export * from './control-catalog'
 export * from './network-baseline'
-export * from './policy-catalog'
-export * from './question-catalog'
-export * from './validate-catalog'

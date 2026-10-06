@@ -1,63 +1,126 @@
 import Link from 'next/link'
-import { Badge, Box, Button, Card, Divider, Group, Progress, Stack, Text } from '@mantine/core'
-import { ArrowRight, Building2, ChevronDown, Monitor, type LucideIcon } from 'lucide-react'
+import {
+  Anchor,
+  Badge,
+  Box,
+  Button,
+  Card,
+  Divider,
+  Group,
+  Progress,
+  Stack,
+  Text,
+  Tooltip,
+} from '@mantine/core'
+import { ArrowRight, Building2, ChevronDown, Info, Monitor, type LucideIcon } from 'lucide-react'
 import type { AssessmentInstance } from '@/app/types/payload-types'
-import type { RiskSummary } from '@/domain/assessments/computeRiskSummary'
+import type { SecurityReviewSummary as SecurityReviewSummaryData } from '@/modules/assessments/service'
 import { formatDateTime } from '@/lib/format-date'
+import { RISK_BAND_LABEL } from '@/lib/enum-labels'
+import { RISK_BAND_COLOR, RISK_SCORE_SCALE } from '@/modules/risk/risk-labels'
 
 const statusMeta = {
-  pending: ['Not started', 'gray'],
-  in_progress: ['In progress', 'blue'],
-  completed: ['Completed', 'green'],
-  expired: ['Review due', 'orange'],
-  superseded: ['Replaced', 'gray'],
+  pending: ['Sin iniciar', 'gray'],
+  in_progress: ['En curso', 'blue'],
+  completed: ['Completada', 'green'],
+  expired: ['Revisión vencida', 'orange'],
+  superseded: ['Reemplazada', 'gray'],
 } as const
 
 export function SecurityReviewSummary({
   assessments,
   riskSummary,
+  riskHref,
 }: {
   assessments: AssessmentInstance[]
-  riskSummary?: RiskSummary
+  riskSummary?: SecurityReviewSummaryData
+  riskHref: string
 }) {
   const open = assessments.filter(item => ['pending', 'in_progress'].includes(item.status))
   const coverage = riskSummary?.evaluated_percentage ?? 0
   const applicable = riskSummary?.applicable_checks ?? 0
   const evaluated = Math.max(0, applicable - (riskSummary?.not_evaluable ?? 0))
+  const score = riskSummary?.risk_score ?? null
+  const band = riskSummary?.risk_band ?? null
   return (
     <Card withBorder radius="lg" p="lg">
       <Group justify="space-between" align="flex-start" wrap="wrap" gap="xl">
         <Box style={{ flex: 1 }} miw={220}>
           <Group justify="space-between" mb="xs">
-            <Text fw={700}>Evidence coverage</Text>
-            <Text fw={750}>{coverage}%</Text>
+            <Group gap={6}>
+              <Text fw={700}>Cobertura de evidencia</Text>
+              <Tooltip
+                multiline
+                w={280}
+                label="Cuánto de lo que corresponde revisar tiene información vigente. Los equipos más importantes para el negocio pesan más."
+              >
+                <Info size={14} aria-label="Qué es la cobertura" />
+              </Tooltip>
+            </Group>
+            <Text fw={750}>{Math.round(coverage)}%</Text>
           </Group>
           <Progress value={coverage} color="pine" radius="xl" />
           <Text size="sm" c="dimmed" mt="xs">
-            {evaluated} of {applicable} current checks are evaluable. Missing, unknown or
-            inconclusive information affects coverage, not risk.
+            Hay información vigente para {evaluated} de {applicable} comprobaciones (cada una es un
+            control revisado en un equipo). Respondé las revisiones pendientes o identificá los
+            equipos nuevos para subirla; la información faltante no aumenta el riesgo.
           </Text>
         </Box>
-        <Group gap="xl">
+        <Group gap="xl" align="flex-start">
+          <Stat
+            label="Revisiones por responder"
+            value={open.length}
+            hint="Revisiones sin completar en esta vista."
+          />
+          <Stat
+            label="Equipos excluidos"
+            value={riskSummary?.excluded_assets ?? 0}
+            hint="Excluidos temporalmente de las preguntas; los controles automáticos siguen corriendo."
+          />
           <div>
             <Text size="xs" c="dimmed">
-              Waiting
+              Riesgo sin tratar
             </Text>
-            <Text fz={28} fw={750}>
-              {open.length}
+            <Group gap={6} align="baseline">
+              <Text fz={28} fw={750}>
+                {score === null ? '—' : `${Math.round(score)} %`}
+              </Text>
+              {score !== null &&
+                (band ? (
+                  <Badge color={RISK_BAND_COLOR[band]}>{RISK_BAND_LABEL[band]}</Badge>
+                ) : (
+                  <Tooltip label="La cobertura es baja: el valor es orientativo y todavía no se clasifica.">
+                    <Badge color="gray" variant="light">
+                      Preliminar
+                    </Badge>
+                  </Tooltip>
+                ))}
+            </Group>
+            <Text size="xs" c="dimmed" maw={220}>
+              {score === null ? 'Falta información para calcularlo.' : RISK_SCORE_SCALE}
             </Text>
-          </div>
-          <div>
-            <Text size="xs" c="dimmed">
-              Risk
-            </Text>
-            <Text fz={28} fw={750}>
-              {riskSummary?.risk_score ?? '—'}
-            </Text>
+            <Anchor component={Link} href={riskHref} size="xs">
+              Ver detalle del riesgo
+            </Anchor>
           </div>
         </Group>
       </Group>
     </Card>
+  )
+}
+
+function Stat({ label, value, hint }: { label: string; value: number; hint: string }) {
+  return (
+    <Tooltip multiline w={240} label={hint}>
+      <div>
+        <Text size="xs" c="dimmed">
+          {label}
+        </Text>
+        <Text fz={28} fw={750}>
+          {value}
+        </Text>
+      </div>
+    </Tooltip>
   )
 }
 
@@ -76,8 +139,8 @@ export function SecurityReviewList({
     <Stack gap="xl">
       {primary.length > 0 && (
         <AssessmentSection
-          title="Company and offices"
-          description={`${primary.length} ${primary.length === 1 ? 'review' : 'reviews'} · company-wide and office routines`}
+          title="Empresa y oficinas"
+          description={`${primary.length} ${primary.length === 1 ? 'revisión' : 'revisiones'} · rutinas de toda la empresa y de las oficinas`}
           icon={Building2}
           groups={primary}
           suffix={suffix}
@@ -86,8 +149,8 @@ export function SecurityReviewList({
       )}
       {devices.length > 0 && (
         <AssessmentSection
-          title="Device reviews"
-          description={`${devices.length} ${devices.length === 1 ? 'device' : 'devices'} · expand only when you need the detail`}
+          title="Revisiones de dispositivos"
+          description={`${devices.length} ${devices.length === 1 ? 'dispositivo' : 'dispositivos'} · expande solo cuando necesites el detalle`}
           icon={Monitor}
           groups={devices}
           suffix={suffix}
@@ -95,9 +158,9 @@ export function SecurityReviewList({
       )}
       {!groups.length && (
         <Card withBorder p="xl" ta="center">
-          <Text fw={600}>No reviews in this view</Text>
+          <Text fw={600}>No hay revisiones en esta vista</Text>
           <Text size="sm" c="dimmed">
-            Try another status or assignment.
+            Prueba con otro estado o asignación.
           </Text>
         </Card>
       )}
@@ -171,16 +234,16 @@ function groupAssessments(assessments: AssessmentInstance[]): AssessmentGroup[] 
       item.scope === 'organization'
         ? item.organization && typeof item.organization === 'object'
           ? item.organization.name
-          : 'Company'
+          : 'Empresa'
         : item.scope === 'office'
           ? item.office && typeof item.office === 'object'
             ? item.office.name
-            : 'Office'
+            : 'Oficina'
           : item.manual_asset && typeof item.manual_asset === 'object'
-            ? item.manual_asset.alias || 'Computer'
+            ? item.manual_asset.alias || 'Computadora'
             : item.asset && typeof item.asset === 'object'
-              ? item.asset.alias || item.asset.hostname || item.asset.ip || 'Device'
-              : 'Device'
+              ? item.asset.alias || item.asset.hostname || item.asset.ip || 'Dispositivo'
+              : 'Dispositivo'
     const group = groups.get(key) ?? {
       key,
       target,
@@ -228,10 +291,10 @@ function AssessmentGroup({
           </Group>
           <Text size="xs" c="dimmed">
             {group.scope === 'organization'
-              ? 'Company-wide review'
+              ? 'Revisión de toda la empresa'
               : group.scope === 'office'
-                ? 'Office review'
-                : 'Device review'}{' '}
+                ? 'Revisión de oficina'
+                : 'Revisión de dispositivo'}{' '}
             · {group.cycles.length} {group.cycles.length === 1 ? 'cycle' : 'cycles'}
           </Text>
         </div>
@@ -241,14 +304,14 @@ function AssessmentGroup({
           variant="subtle"
           rightSection={<ArrowRight size={16} />}
         >
-          Open current
+          Abrir actual
         </Button>
       </Group>
       {group.cycles.length > 1 && (
         <Box mt="sm" style={{ overflowX: 'auto' }}>
           <Group gap="xs" wrap="nowrap">
             <Text size="xs" c="dimmed" fw={650} mr={4} style={{ whiteSpace: 'nowrap' }}>
-              History
+              Historial
             </Text>
             {group.cycles.slice(1, 3).map((cycle, index) => (
               <Badge
@@ -258,7 +321,7 @@ function AssessmentGroup({
                 radius="sm"
                 style={{ whiteSpace: 'nowrap' }}
               >
-                Cycle {group.cycles.length - index - 1} · {formatDateTime(cycle.opened_at)}
+                Ciclo {group.cycles.length - index - 1} · {formatDateTime(cycle.opened_at)}
               </Badge>
             ))}
             {group.cycles.length > 3 && (

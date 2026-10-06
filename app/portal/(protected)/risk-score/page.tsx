@@ -1,11 +1,15 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import {
   Alert,
+  Anchor,
+  Badge,
   Card,
-  Divider,
   Group,
+  Pagination,
   Progress,
   RingProgress,
   Skeleton,
@@ -13,90 +17,159 @@ import {
   Text,
 } from '@mantine/core'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { useUiStore } from '@/lib/ui-store'
+import { DataTable } from '@/components/ui/DataTable'
+import { useConcreteOfficeId } from '@/modules/offices/hooks/use-concrete-office-id'
 import { formatDateTime } from '@/lib/format-date'
-import { useRiskSummary } from '@/modules/assessments/hooks/use-risk-summary'
+import { RISK_BAND_LABEL, RISK_CONFIDENCE_LABEL } from '@/lib/enum-labels'
+import { useLatestRisk } from '@/modules/risk/hooks/use-latest-risk'
+import { riskContributionsColumns } from '@/modules/risk/risk.columns'
+import { RiskAlerts } from '@/modules/risk/components/RiskAlerts'
+import { TopRiskAssets } from '@/modules/risk/components/TopRiskAssets'
+import { RISK_BAND_COLOR, RISK_SCORE_MEANING, RISK_SCORE_SCALE } from '@/modules/risk/risk-labels'
+import { bandVisible, scoreVisible } from '@/domain/risk/constants'
 
 export default function RiskScorePage() {
   const asOrganization = useSearchParams().get('asOrganization') ?? undefined
-  const officeId = useUiStore(state => state.selectedOfficeId)
-  const { data, isPending, isError } = useRiskSummary({ officeId, asOrganization })
+  const { officeId, ready } = useConcreteOfficeId(asOrganization)
+  const [page, setPage] = useState(1)
+  // A different office or organization has its own evaluation: start again from the first page.
+  useEffect(() => setPage(1), [officeId, asOrganization])
+  const query = useLatestRisk({ officeId, asOrganization, page, enabled: ready })
+  const data = query.data?.evaluation
+  const pagination = query.data?.pagination
+  const inventoryHref = `/portal/inventory${asOrganization ? `?asOrganization=${asOrganization}` : ''}`
 
   return (
     <Stack gap="xl">
       <PageHeader
-        title="Risk Score"
-        description="Confirmed issues determine risk. Missing or expired information is shown separately as coverage."
+        title="Puntaje de riesgo"
+        description="Una vista simple de los problemas de seguridad detectados y de la información que todavía falta revisar."
       />
-      {isError && <Alert color="red">Could not calculate the current security summary.</Alert>}
-      <Card withBorder radius="lg" p={{ base: 'lg', sm: 'xl' }}>
-        <Group align="center" justify="space-between" wrap="wrap" gap="xl">
-          <div>
-            <Text size="xs" tt="uppercase" fw={800} c="dimmed" mb="lg">
-              Current risk
-            </Text>
-            {isPending ? (
-              <Skeleton height={144} circle />
-            ) : (
-              <Group align="center" gap="xl">
+      {query.isError && <Alert color="red">No se pudo cargar la última evaluación.</Alert>}
+      {query.isPending ? (
+        <Skeleton height={260} />
+      ) : !data ? (
+        <Alert color="blue">
+          Todavía no existe una evaluación. El cálculo se ejecutará después del próxima revisión o
+          ingreso de evidencia.
+        </Alert>
+      ) : (
+        <>
+          {!scoreVisible(data.confidence) && (
+            <Alert color="orange" title="Datos insuficientes">
+              Complete las revisiones pendientes, identifique dispositivos y mantenga activo el
+              agente para poder mostrar el puntaje.
+            </Alert>
+          )}
+          {scoreVisible(data.confidence) && !bandVisible(data.confidence) && (
+            <Alert color="yellow" title="Resultado preliminar">
+              La cobertura es baja: el puntaje se muestra como orientación, sin clasificación.
+            </Alert>
+          )}
+          <Card withBorder radius="lg" p="xl">
+            <Group justify="space-between" align="center" wrap="wrap">
+              <Group>
                 <RingProgress
                   size={144}
                   thickness={14}
-                  sections={[{ value: data?.risk_score ?? 0, color: 'red' }]}
+                  // Without a band (preliminary result) the ring stays neutral instead of alarming.
+                  sections={[
+                    {
+                      value: data.score ?? 0,
+                      color: data.final_band ? RISK_BAND_COLOR[data.final_band] : 'gray',
+                    },
+                  ]}
                   label={
-                    <Text ta="center" fw={800} fz={data?.risk_score === null ? 20 : 32}>
-                      {data?.risk_score ?? '—'}
+                    <Text ta="center" fw={800} fz={30}>
+                      {data.score === null ? '—' : `${Math.round(data.score)} %`}
                     </Text>
                   }
                 />
-                <div>
-                  <Text fw={700} fz="lg">
-                    {data?.risk_score === null ? 'Not evaluable yet' : 'Weighted Risk Score'}
+                <Stack gap={4}>
+                  <Text fw={750}>Riesgo actual</Text>
+                  {data.final_band && (
+                    <Badge color={RISK_BAND_COLOR[data.final_band]}>
+                      {RISK_BAND_LABEL[data.final_band]}
+                    </Badge>
+                  )}
+                  {data.final_band && data.base_band !== data.final_band && (
+                    <Text size="xs" c="dimmed">
+                      El nivel subió porque varios problemas importantes se concentran en pocos
+                      controles.
+                    </Text>
+                  )}
+                  {data.score !== null && !data.final_band && (
+                    <Badge color="gray" variant="light">
+                      Preliminar
+                    </Badge>
+                  )}
+                  <Text size="sm">
+                    {data.score === null
+                      ? 'Todavía no hay información suficiente para calcularlo.'
+                      : `El ${Math.round(data.score)} % ${RISK_SCORE_MEANING}.`}
                   </Text>
-                  <Text size="sm" c="dimmed" maw={300}>
-                    Only current checks that require attention increase this number.
+                  <Text size="xs" c="dimmed">
+                    {RISK_SCORE_SCALE}. Cuanto más alto, mayor es la prioridad de mejora.
                   </Text>
-                </div>
+                </Stack>
+              </Group>
+              <Stack miw={280}>
+                <Group justify="space-between">
+                  <Text fw={700}>Cobertura</Text>
+                  <Text>{Math.round(data.coverage)}%</Text>
+                </Group>
+                <Progress value={data.coverage} color="pine" />
+                <Group justify="space-between">
+                  <Text fw={700}>Dispositivos sin identificar</Text>
+                  <Text>{data.counts.unconfirmed_assets}</Text>
+                </Group>
+                {data.counts.unconfirmed_assets > 0 && (
+                  <Anchor component={Link} href={inventoryHref} size="sm">
+                    Identificarlos en el inventario
+                  </Anchor>
+                )}
+                <Text size="sm">
+                  Confiabilidad del resultado: {RISK_CONFIDENCE_LABEL[data.effective_confidence]}
+                </Text>
+                <Text size="xs" c="dimmed">
+                  {data.counts.not_evaluable} comprobaciones sin información suficiente
+                  {data.counts.excluded_assets > 0 &&
+                    ` · ${data.counts.excluded_assets} dispositivos fuera de la revisión`}
+                </Text>
+              </Stack>
+            </Group>
+          </Card>
+          <RiskAlerts alerts={data.alerts} inventoryHref={inventoryHref} />
+          <TopRiskAssets assets={data.top_assets} />
+          <Card withBorder radius="lg" p="lg">
+            <Text fw={750} mb="md">
+              Qué necesita atención
+            </Text>
+            <Text size="sm" c="dimmed" mb="md">
+              Cada fila muestra qué se revisó, dónde se encontró y qué significa el resultado.
+              Empieza por los elementos marcados como &quot;Requiere atención&quot;.
+            </Text>
+            <DataTable
+              columns={riskContributionsColumns}
+              data={query.data?.contributions ?? []}
+              isLoading={query.isFetching}
+              emptyLabel="Sin comprobaciones aplicables"
+              minWidth={720}
+            />
+            {pagination && pagination.totalPages > 1 && (
+              <Group justify="space-between" mt="md">
+                <Text size="sm" c="dimmed">
+                  {pagination.totalDocs} comprobaciones
+                </Text>
+                <Pagination total={pagination.totalPages} value={page} onChange={setPage} />
               </Group>
             )}
-          </div>
-          <Stack gap="xs" miw={260} style={{ flex: 1 }} maw={420}>
-            <Group justify="space-between">
-              <Text fw={700}>Evidence coverage</Text>
-              <Text fw={800}>{data?.evaluated_percentage ?? 0}%</Text>
-            </Group>
-            <Progress value={data?.evaluated_percentage ?? 0} color="pine" size="lg" radius="xl" />
-            <Text size="sm" c="dimmed">
-              {(data?.applicable_checks ?? 0) - (data?.not_evaluable ?? 0)} of{' '}
-              {data?.applicable_checks ?? 0} current checks are evaluable. Unknown, missing, expired
-              or inconclusive checks lower coverage without adding risk.
-            </Text>
-          </Stack>
-        </Group>
-        <Divider my="xl" />
-        <Group gap="xl" wrap="wrap">
-          <Metric value={data?.requires_attention ?? 0} label="Require attention" />
-          <Metric value={data?.not_evaluable ?? 0} label="Not evaluable" />
-          <Metric value={data?.pending_asset_identifications ?? 0} label="Devices to identify" />
-        </Group>
-      </Card>
-      <Text size="sm" c="dimmed">
-        Policy: {data?.policy.key ?? '—'} v{data?.policy.version ?? '—'} · Last valid scan:{' '}
-        {data?.last_valid_scan_at ? formatDateTime(data.last_valid_scan_at) : 'none available'}
-      </Text>
+          </Card>
+          <Text size="sm" c="dimmed">
+            Último cálculo: {formatDateTime(data.evaluated_at)}
+          </Text>
+        </>
+      )}
     </Stack>
-  )
-}
-
-function Metric(props: { value: number; label: string }) {
-  return (
-    <div>
-      <Text fw={750} fz="xl">
-        {props.value}
-      </Text>
-      <Text size="sm" c="dimmed">
-        {props.label}
-      </Text>
-    </div>
   )
 }

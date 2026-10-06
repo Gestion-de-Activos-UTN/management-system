@@ -1,37 +1,41 @@
 import { z } from 'zod'
-import { categoryHasSoftware, MANUAL_ASSET_CATEGORY_VALUES } from '@/domain/assets/asset-types'
+import { MANUAL_ASSET_CATEGORY_VALUES } from '@/domain/assets/asset-types'
+import { ASSESSMENT_EXCLUSION_REASON_VALUES } from '@/domain/assessments/asset-assessment-scope'
 
 export const NonNetworkAssetSchema = z
   .object({
-    alias: z.string().trim().min(1, 'Alias is required').max(120),
+    alias: z.string().trim().min(1, 'El alias es obligatorio').max(120),
     asset_category: z.enum(MANUAL_ASSET_CATEGORY_VALUES),
     criticality: z.enum(['low', 'medium', 'high', 'critical']),
-    owner: z.string().min(1, 'Owner is required'),
+    owner: z.string().min(1, 'El responsable es obligatorio'),
     location: z.string().trim().max(200).nullable(),
     status: z.enum(['active', 'retired']),
-    office: z.string().min(1, 'Office is required'),
-    // Topes espejados de collections/NonNetworkAssets/index.ts, que a su vez los toma de
-    // contracts/asset.schema.ts. Nullable y no optional: el form siempre los manda, en null
-    // cuando la categoría no tiene software.
-    software_vendor: z.string().trim().max(120).nullable(),
-    software_product: z.string().trim().max(240).nullable(),
-    software_version: z.string().trim().max(120).nullable(),
+    office: z.string().min(1, 'La oficina es obligatoria'),
     // next_review_at ya no se edita a mano — se deriva de este intervalo (ver
     // collections/NonNetworkAssets/hooks/resolveTenant.ts).
     review_interval: z.enum(['never', '1d', '3d', '1w', '1m', '6m', '1y']),
+    assessment_scope: z.enum(['included', 'excluded']),
+    assessment_exclusion_reason: z.enum(ASSESSMENT_EXCLUSION_REASON_VALUES).nullable(),
+    assessment_exclusion_note: z.string().trim().max(1000).nullable(),
+    assessment_excluded_until: z.iso.datetime().nullable(),
   })
-  // Mismo criterio que assertSoftwareIdentityComplete en el beforeChange del server, incluida la
-  // guarda por categoría — SYSTEM_PROMPT.md #5: la validación de cliente y la de servidor no
-  // pueden divergir. Acá es UX (marca el input); la autoridad sigue siendo el hook.
-  .superRefine((asset, ctx) => {
-    if (!categoryHasSoftware(asset.asset_category)) return
-    const blank = (value: string | null) => !value || !value.trim()
-    if (blank(asset.software_vendor) === blank(asset.software_product)) return
-    ctx.addIssue({
-      code: 'custom',
-      path: [blank(asset.software_vendor) ? 'software_vendor' : 'software_product'],
-      message: 'Vendor and product must be filled in together.',
-    })
+  .superRefine((value, ctx) => {
+    if (value.assessment_scope === 'excluded' && !value.assessment_exclusion_reason)
+      ctx.addIssue({
+        code: 'custom',
+        path: ['assessment_exclusion_reason'],
+        message: 'Selecciona un motivo',
+      })
+    if (
+      value.assessment_scope === 'excluded' &&
+      value.assessment_exclusion_reason === 'other' &&
+      !value.assessment_exclusion_note
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['assessment_exclusion_note'],
+        message: 'Agrega una breve explicación',
+      })
   })
 
 export type NonNetworkAssetFormValues = z.infer<typeof NonNetworkAssetSchema>

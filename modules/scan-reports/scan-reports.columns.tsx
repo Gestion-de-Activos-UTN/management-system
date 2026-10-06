@@ -16,16 +16,16 @@ const STATUS_TONE: Record<string, StatusTone> = {
 export const scanReportsColumns: ColumnDef<ScanReport, unknown>[] = [
   {
     accessorKey: 'scan_start',
-    header: 'Date',
+    header: 'Fecha',
     cell: ({ row }) => (row.original.scan_start ? formatDateTime(row.original.scan_start) : '—'),
   },
-  { accessorKey: 'network', header: 'Network' },
+  { accessorKey: 'network', header: 'Red' },
   {
     accessorKey: 'gateway_ip',
     header: 'Gateway',
     cell: ({ row }) => row.original.gateway_ip ?? '—',
   },
-  { accessorKey: 'hosts_up', header: 'Hosts detected' },
+  { accessorKey: 'hosts_up', header: 'Hosts detectados' },
   {
     id: 'processed',
     header: 'Processed',
@@ -43,7 +43,7 @@ export const scanReportsColumns: ColumnDef<ScanReport, unknown>[] = [
   },
   {
     accessorKey: 'status',
-    header: 'Status',
+    header: 'Estado',
     meta: { align: 'center' },
     cell: ({ row }) => {
       const status = row.original.status ?? 'received'
@@ -55,7 +55,7 @@ export const scanReportsColumns: ColumnDef<ScanReport, unknown>[] = [
     header: '',
     size: 48,
     cell: ({ row }) => (
-      <Tooltip label="View report">
+      <Tooltip label="Ver informe">
         <ActionIcon
           component={Link}
           href={`/portal/inventory/scan-reports/${row.original.id}`}

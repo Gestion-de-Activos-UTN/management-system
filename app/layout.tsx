@@ -8,7 +8,7 @@ import { Providers } from '@/lib/providers'
 
 export const metadata: Metadata = {
   title: 'SIAM',
-  description: 'Multi-tenant compliance/inventory platform',
+  description: 'Plataforma multiempresa de cumplimiento e inventario',
 }
 
 export const viewport: Viewport = {

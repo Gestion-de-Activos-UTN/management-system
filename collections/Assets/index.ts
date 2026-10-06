@@ -6,6 +6,8 @@ import { rejectBusinessEditsBeforeIdentified } from './hooks/rejectBusinessEdits
 import { enforceAuthorizationInvariant } from './hooks/enforceAuthorizationInvariant'
 import { reconcileAssessmentApplicability } from './hooks/reconcileAssessmentApplicability'
 import { SCANNED_ASSET_TYPE_OPTIONS } from '../../domain/assets/asset-types'
+import { assessmentScopeFields } from '../../domain/assessments/asset-assessment-scope'
+import { validateAssetAssessmentScope } from '../../domain/assessments/validateAssetAssessmentScope'
 
 const technicalFieldAccess = {
   // Bloque técnico: solo lo escribe el upsert de ingesta (domain/inventories/ingestScanReport.ts), nunca un humano.
@@ -22,8 +24,8 @@ export const Assets: CollectionConfig = {
   },
   access: {
     create: () => false,
-    read: orgScopedAccess('assets', 'read'),
-    update: orgScopedAccess('assets', 'update'),
+    read: orgScopedAccess('assets', 'read', { kind: 'org_offices', field: 'office' }),
+    update: orgScopedAccess('assets', 'update', { kind: 'org_offices', field: 'office' }),
     delete: () => false,
   },
   hooks: {
@@ -32,6 +34,7 @@ export const Assets: CollectionConfig = {
       rejectManualOfflineStatus,
       rejectBusinessEditsBeforeIdentified,
       enforceAuthorizationInvariant,
+      validateAssetAssessmentScope,
     ],
     afterChange: [reconcileAssessmentApplicability],
   },
@@ -85,6 +88,7 @@ export const Assets: CollectionConfig = {
     // index: true en ip/mac — domain/inventories/ingestScanReport.ts::findExistingAsset busca
     // por estos dos campos (acotado a `agent`) en cada ingesta, ya no por `asset_id`.
     { name: 'ip', type: 'text', index: true, access: technicalFieldAccess },
+    { name: 'last_observed_cidr', type: 'text', index: true, access: technicalFieldAccess },
     { name: 'last_seen', type: 'date', access: technicalFieldAccess },
     { name: 'gateway_ip', type: 'text', access: technicalFieldAccess },
     { name: 'gateway_mac', type: 'text', access: technicalFieldAccess },
@@ -371,6 +375,7 @@ export const Assets: CollectionConfig = {
       // el filtro de fila (RBAC) no alcanza para validar el *valor* de una FK a otra colección.
     },
     { name: 'location', type: 'text', maxLength: 200 },
+    ...assessmentScopeFields(),
     {
       name: 'status',
       type: 'select',

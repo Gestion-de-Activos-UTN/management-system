@@ -35,7 +35,7 @@ describe('manual asset assessment applicability changes', () => {
     )
   })
 
-  it('reacts only to category and retirement changes', () => {
+  it('reacts to category, retirement and assessment-scope changes', () => {
     assert.equal(
       manualAssessmentApplicabilityChanged(
         { ...computer, asset_category: 'mobile_device' },
@@ -49,8 +49,16 @@ describe('manual asset assessment applicability changes', () => {
       true
     )
     assert.equal(
+      manualAssessmentApplicabilityChanged(
+        { ...computer, assessment_scope: 'excluded' },
+        computer,
+        'update'
+      ),
+      true
+    )
+    assert.equal(
       manualAssessmentApplicabilityChanged({ ...computer, office: 'office-2' }, computer, 'update'),
-      false
+      true // the open cycle moves with the asset to its new office
     )
   })
 })

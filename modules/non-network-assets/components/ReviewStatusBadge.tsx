@@ -4,7 +4,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge'
 // collections/NonNetworkAssets/index.ts) viene 'overdue' — sin job, se computa al leer.
 export function ReviewStatusBadge({ reviewStatus }: { reviewStatus: string | null | undefined }) {
   if (reviewStatus === 'overdue') {
-    return <StatusBadge tone="danger" label="Review Overdue" />
+    return <StatusBadge tone="danger" label="Revisión vencida" />
   }
-  return <StatusBadge tone="success" label="Up to date" />
+  return <StatusBadge tone="success" label="Al día" />
 }

@@ -21,9 +21,9 @@ export default function PortalAdminLayout({ children }: { children: React.ReactN
     return (
       <Center h="60vh">
         <Stack align="center" gap="sm">
-          <Text c="dimmed">Couldn't load your organization context.</Text>
+          <Text c="dimmed">No se pudo cargar el contexto de tu organización.</Text>
           <Button variant="light" onClick={() => tenantContext.refetch()}>
-            Retry
+            Reintentar
           </Button>
         </Stack>
       </Center>

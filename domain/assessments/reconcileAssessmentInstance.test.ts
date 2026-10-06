@@ -34,7 +34,7 @@ function makePayload(openDocs: Array<Record<string, unknown>> = []) {
   const payload = {
     async find({ collection }: { collection: string }) {
       if (collection === 'organization-settings') {
-        return { docs: [{ assessment_policy_key: 'essential', assessment_policy_version: 1 }] }
+        return { docs: [{ assessment_policy_key: 'essential', assessment_policy_version: 2 }] }
       }
       if (collection === 'subscriptions') {
         return { docs: [{ features: { security_assessments: true } }] }
@@ -59,18 +59,29 @@ describe('asset assessment reconciliation', () => {
     const result = await reconcileAssetAssessmentInstance(payload, workstation, 'asset_identified')
     assert.equal(result.action, 'created')
     const snapshot = creates[0].question_set_snapshot as Array<{ key: string }>
-    assert.equal(snapshot.length, 7)
+    assert.equal(snapshot.length, 9)
     assert.equal(
       snapshot.some(question => question.key.startsWith('network.')),
       false
     )
   })
 
-  it('does not create questions for a confirmed gateway', async () => {
+  it('creates the gateway questions from the v2 applicability table', async () => {
     const { payload, creates } = makePayload()
     const result = await reconcileAssetAssessmentInstance(
       payload,
       { ...workstation, confirmed_type: 'gateway' } as Asset,
+      'asset_identified'
+    )
+    assert.equal(result.action, 'created')
+    assert.equal((creates[0].question_set_snapshot as unknown[]).length, 3)
+  })
+
+  it('does not create questions for an excluded workstation', async () => {
+    const { payload, creates } = makePayload()
+    const result = await reconcileAssetAssessmentInstance(
+      payload,
+      { ...workstation, assessment_scope: 'excluded' } as Asset,
       'asset_identified'
     )
     assert.equal(result.action, 'none')
@@ -79,20 +90,22 @@ describe('asset assessment reconciliation', () => {
 
   it('preserves an identical open cycle and supersedes an inapplicable one', async () => {
     const question_set_snapshot = [
-      'endpoint.authorized_users',
-      'endpoint.unlock_authentication',
-      'endpoint.automatic_lock',
-      'malware.protection_active',
-      'malware.protection_current',
-      'backup.endpoint_covered',
-      'software.install_restricted',
-    ].map(key => ({ key, version: 1 }))
+      'A.7.9.physical_protection',
+      'A.7.9.remote_actions',
+      'A.8.1.exclusive_use',
+      'A.8.5.unlock',
+      'A.8.5.idle_lock',
+      'A.8.7.protection_active',
+      'A.8.7.protection_updates',
+      'A.8.13.backup',
+      'A.8.19.software_installation',
+    ].map(key => ({ key, version: 2 }))
     const existing = {
       id: 'assessment-1',
       organization: 'org-1',
       office: 'office-1',
       policy_key: 'essential',
-      policy_version: 1,
+      policy_version: 2,
       question_set_snapshot,
     }
     const preserved = makePayload([existing])
@@ -117,7 +130,7 @@ describe('asset assessment reconciliation', () => {
     const setup = makePayload()
     setup.payload.find = (async ({ collection }: { collection: string }) =>
       collection === 'organization-settings'
-        ? { docs: [{ assessment_policy_key: 'essential', assessment_policy_version: 1 }] }
+        ? { docs: [{ assessment_policy_key: 'essential', assessment_policy_version: 2 }] }
         : collection === 'subscriptions'
           ? { docs: [{ features: { security_assessments: false } }] }
           : { docs: [] }) as Payload['find']
@@ -143,18 +156,29 @@ describe('manually entered computer assessment reconciliation', () => {
     assert.equal(creates[0].asset, null)
     assert.equal(creates[0].assigned_to, 'user-1')
     const snapshot = creates[0].question_set_snapshot as Array<{ key: string }>
-    assert.equal(snapshot.length, 7)
+    assert.equal(snapshot.length, 9)
     assert.equal(
       snapshot.some(question => question.key.startsWith('network.')),
       false
     )
   })
 
-  it('does not create a review for other manual categories', async () => {
+  it('creates the applicable v2 review for a manual mobile device', async () => {
     const { payload, creates } = makePayload()
     const result = await reconcileManualAssetAssessmentInstance(
       payload,
       { ...manualComputer, asset_category: 'mobile_device' } as NonNetworkAsset,
+      'asset_identified'
+    )
+    assert.equal(result.action, 'created')
+    assert.equal((creates[0].question_set_snapshot as unknown[]).length, 9)
+  })
+
+  it('does not create a review for an excluded manual computer', async () => {
+    const { payload, creates } = makePayload()
+    const result = await reconcileManualAssetAssessmentInstance(
+      payload,
+      { ...manualComputer, assessment_scope: 'excluded' } as NonNetworkAsset,
       'asset_identified'
     )
     assert.equal(result.action, 'none')
@@ -165,8 +189,8 @@ describe('manually entered computer assessment reconciliation', () => {
     const existing = {
       id: 'assessment-1',
       policy_key: 'essential',
-      policy_version: 1,
-      question_set_snapshot: [{ key: 'endpoint.authorized_users', version: 1 }],
+      policy_version: 2,
+      question_set_snapshot: [{ key: 'endpoint.authorized_users', version: 2 }],
     }
     const { payload, updates } = makePayload([existing])
     const result = await reconcileManualAssetAssessmentInstance(

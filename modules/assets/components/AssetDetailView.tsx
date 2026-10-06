@@ -19,14 +19,19 @@ import {
   Table,
   Text,
   TextInput,
+  Textarea,
   ThemeIcon,
   Tooltip,
 } from '@mantine/core'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { TechnicalText } from '@/components/ui/TechnicalText'
 import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
-import { CRITICALITY_OPTIONS, MANUAL_ASSET_STATUS_OPTIONS } from '@/lib/enum-labels'
-import { formatDateTime } from '@/lib/format-date'
+import {
+  ASSESSMENT_EXCLUSION_REASON_OPTIONS,
+  CRITICALITY_OPTIONS,
+  MANUAL_ASSET_STATUS_OPTIONS,
+} from '@/lib/enum-labels'
+import { formatDateInput, formatDateTime, localDateEndToISOString } from '@/lib/format-date'
 import type { Asset } from '@/app/types/payload-types'
 import {
   AssetBusinessFieldsSchema,
@@ -57,9 +62,10 @@ function IdentificationHelpCard({ asset }: { asset: Asset }) {
     return (
       <Card withBorder padding="lg">
         <Stack gap="sm">
-          <Text fw={600}>Identification help</Text>
+          <Text fw={600}>Ayuda para la identificación</Text>
           <Text size="sm" c="dimmed">
-            Not enough technical data to guess a device type. General steps to identify it manually:
+            No hay suficientes datos técnicos para inferir un tipo de dispositivo. Pasos generales
+            para identificarlo manualmente:
           </Text>
           <List size="sm" spacing={4}>
             {GENERIC_IDENTIFICATION_HELP.map(step => (
@@ -76,13 +82,14 @@ function IdentificationHelpCard({ asset }: { asset: Asset }) {
     <Card withBorder padding="lg">
       <Stack gap="sm">
         <Group gap="xs">
-          <Text fw={600}>Identification help</Text>
+          <Text fw={600}>Ayuda para la identificación</Text>
           <Badge variant="filled" color={tier === 'likely' ? 'pine' : 'gray'}>
             {tier === 'likely' ? 'Likely' : 'Possible'}: {DEVICE_CATEGORY_LABEL[category]}
           </Badge>
         </Group>
         <Text size="xs" c="dimmed">
-          Based on {signals.join(', ')} — a guess, not a fact. Verify with the steps below.
+          Basado en {signals.join(', ')} — una estimación, no un hecho. Verifícala con los pasos
+          siguientes.
         </Text>
         <List size="sm" spacing={4}>
           {DEVICE_CATEGORY_HELP[category].map(step => (
@@ -157,8 +164,8 @@ function TechnicalSection({
 const COVERAGE_LABELS = {
   complete: 'Complete',
   partial: 'Partial',
-  not_attempted: 'Not attempted',
-  unknown: 'Unknown',
+  not_attempted: 'No intentado',
+  unknown: 'Desconocido',
 } as const
 
 function coverageColor(status: string | null | undefined): string {
@@ -169,14 +176,14 @@ function coverageColor(status: string | null | undefined): string {
 
 function CoverageRow({ coverage }: { coverage: Asset['asset_coverage'] }) {
   const items = [
-    ['Ports', coverage?.port_scan],
-    ['Services', coverage?.service_detection],
-    ['Operating system', coverage?.os_detection],
-    ['Names', coverage?.name_resolution],
+    ['Puertos', coverage?.port_scan],
+    ['Servicios', coverage?.service_detection],
+    ['Sistema operativo', coverage?.os_detection],
+    ['Nombres', coverage?.name_resolution],
   ] as const
 
   return (
-    <TechnicalContentRow label="Scan coverage">
+    <TechnicalContentRow label="Cobertura del escaneo">
       <Group gap={6} wrap="wrap">
         {items.map(([label, status]) => (
           <Badge key={label} variant="filled" color={coverageColor(status)} size="sm" tt="none">
@@ -190,7 +197,7 @@ function CoverageRow({ coverage }: { coverage: Asset['asset_coverage'] }) {
 
 function ObservedNamesRow({ names }: { names: Asset['names'] }) {
   return (
-    <TechnicalContentRow label="Observed names">
+    <TechnicalContentRow label="Nombres observados">
       {(names ?? []).length > 0 ? (
         <Group gap={6} wrap="wrap">
           {(names ?? []).map((name, index) => (
@@ -206,7 +213,7 @@ function ObservedNamesRow({ names }: { names: Asset['names'] }) {
         </Group>
       ) : (
         <Text size="sm" c="dimmed">
-          No names observed
+          No se observaron nombres
         </Text>
       )}
     </TechnicalContentRow>
@@ -242,7 +249,7 @@ function OsCandidatesRow({ candidates }: { candidates: Asset['os_candidates'] })
   return (
     <Group justify="space-between" align="flex-start" wrap="wrap" gap="xs">
       <Text size="sm" c="dimmed">
-        OS candidates
+        Sistemas operativos posibles
       </Text>
       <List
         size="sm"
@@ -253,7 +260,7 @@ function OsCandidatesRow({ candidates }: { candidates: Asset['os_candidates'] })
         {list.map((candidate: OsCandidate, i: number) => (
           <List.Item key={candidate.id ?? i}>
             <TechnicalText>
-              {candidate.name || 'Unknown'} ({candidate.accuracy ?? 0}%)
+              {candidate.name || 'Desconocido'} ({candidate.accuracy ?? 0}%)
             </TechnicalText>
           </List.Item>
         ))}
@@ -266,8 +273,8 @@ function OsCandidatesRow({ candidates }: { candidates: Asset['os_candidates'] })
 // lo que aparece en la práctica; lo desconocido cae al nombre crudo, no rompe nada.
 const SERVICE_NAME_LABEL: Record<string, string> = {
   domain: 'DNS',
-  dhcps: 'DHCP (server)',
-  dhcpc: 'DHCP (client)',
+  dhcps: 'DHCP (servidor)',
+  dhcpc: 'DHCP (cliente)',
   ntp: 'NTP',
   http: 'HTTP',
   https: 'HTTPS',
@@ -288,7 +295,7 @@ function fixKnownCasing(text: string): string {
 function serviceDescription(service: Service): string {
   if (service.product) return fixKnownCasing(service.product)
   if (service.name) return SERVICE_NAME_LABEL[service.name.toLowerCase()] ?? service.name
-  return 'Unknown service'
+  return 'Servicio desconocido'
 }
 
 const SERVICE_CHIPS_VISIBLE = 3
@@ -305,10 +312,10 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
     return (
       <Group justify="space-between" wrap="wrap" gap="xs">
         <Text size="sm" c="dimmed">
-          Services
+          Servicios
         </Text>
         <Text size="sm" c="dimmed">
-          No port observations
+          No se observaron puertos
         </Text>
       </Group>
     )
@@ -324,7 +331,7 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
           una sola línea de chips — center los alinea por su punto medio en vez de por el tope. */}
       <Group justify="space-between" wrap="wrap" align="center" gap="xs">
         <Text size="sm" c="dimmed">
-          Services
+          Servicios
         </Text>
         <Group
           gap={6}
@@ -367,7 +374,7 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
               }}
             >
               <Badge variant="outline" color="pine" size="sm" style={{ cursor: 'pointer' }}>
-                +{overflowCount} more
+                +{overflowCount} más
               </Badge>
             </button>
           )}
@@ -377,7 +384,7 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
       <Modal
         opened={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={`Observed ports (${list.length})`}
+        title={`Puertos observados (${list.length})`}
         size="lg"
         centered
       >
@@ -385,13 +392,13 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
           <Table>
             <Table.Thead>
               <Table.Tr>
-                <Table.Th>Port</Table.Th>
-                <Table.Th>Protocol</Table.Th>
-                <Table.Th>State</Table.Th>
-                <Table.Th>Service</Table.Th>
-                <Table.Th>Version</Table.Th>
-                <Table.Th>Detection</Table.Th>
-                <Table.Th>Confidence</Table.Th>
+                <Table.Th>Puerto</Table.Th>
+                <Table.Th>Protocolo</Table.Th>
+                <Table.Th>Estado</Table.Th>
+                <Table.Th>Servicio</Table.Th>
+                <Table.Th>Versión</Table.Th>
+                <Table.Th>Detección</Table.Th>
+                <Table.Th>Confianza</Table.Th>
                 <Table.Th>Scripts</Table.Th>
               </Table.Tr>
             </Table.Thead>
@@ -417,7 +424,7 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
                           {service.detection_method || 'table'}
                         </Badge>
                         {service.tunnel === 'ssl' && (
-                          <Tooltip label="Runs over an encrypted (SSL/TLS) tunnel">
+                          <Tooltip label="Funciona mediante un túnel cifrado (SSL/TLS)">
                             <Lock size={14} strokeWidth={1.5} />
                           </Tooltip>
                         )}
@@ -430,7 +437,7 @@ function ServicesRow({ services }: { services: Asset['services'] }) {
                     </Table.Td>
                     <Table.Td>
                       {scripts ? (
-                        <Spoiler maxHeight={0} showLabel="View" hideLabel="Hide">
+                        <Spoiler maxHeight={0} showLabel="Ver" hideLabel="Ocultar">
                           <TechnicalText style={{ whiteSpace: 'pre-wrap' }}>
                             {scripts}
                           </TechnicalText>
@@ -499,6 +506,7 @@ export function AssetDetailView({
     control,
     handleSubmit,
     reset,
+    setValue,
     watch,
     formState: { isDirty, dirtyFields, errors },
   } = useForm<AssetBusinessFields>({
@@ -511,9 +519,29 @@ export function AssetDetailView({
       owner: typeof asset.owner === 'string' ? asset.owner : (asset.owner?.id ?? null),
       location: asset.location ?? null,
       status: asset.status ?? 'active',
+      assessment_scope: asset.assessment_scope ?? 'included',
+      assessment_exclusion_reason: asset.assessment_exclusion_reason ?? null,
+      assessment_exclusion_note: asset.assessment_exclusion_note ?? null,
+      assessment_excluded_until: asset.assessment_excluded_until ?? null,
     },
   })
   const authorizationStatus = watch('authorization_status')
+  const assessmentScope = watch('assessment_scope')
+  const exclusionReason = watch('assessment_exclusion_reason')
+  const [confirmUnauthorizedExclusion, setConfirmUnauthorizedExclusion] = useState(false)
+  const warnedUnauthorizedExclusion = useRef(
+    asset.authorization_status === 'unauthorized' && asset.assessment_scope === 'excluded'
+  )
+  useEffect(() => {
+    if (authorizationStatus === 'unauthorized' && assessmentScope === 'excluded') {
+      if (!warnedUnauthorizedExclusion.current) {
+        warnedUnauthorizedExclusion.current = true
+        setConfirmUnauthorizedExclusion(true)
+      }
+    } else {
+      warnedUnauthorizedExclusion.current = false
+    }
+  }, [authorizationStatus, assessmentScope])
 
   // `defaultValues` se fija una sola vez al montar y no se resincroniza sola si `asset` cambia
   // después (ej. el modal de identificación guarda, o llega un re-scan mientras la página está
@@ -529,6 +557,10 @@ export function AssetDetailView({
       owner: typeof asset.owner === 'string' ? asset.owner : (asset.owner?.id ?? null),
       location: asset.location ?? null,
       status: asset.status ?? 'active',
+      assessment_scope: asset.assessment_scope ?? 'included',
+      assessment_exclusion_reason: asset.assessment_exclusion_reason ?? null,
+      assessment_exclusion_note: asset.assessment_exclusion_note ?? null,
+      assessment_excluded_until: asset.assessment_excluded_until ?? null,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -538,6 +570,10 @@ export function AssetDetailView({
     asset.owner,
     asset.location,
     asset.status,
+    asset.assessment_scope,
+    asset.assessment_exclusion_reason,
+    asset.assessment_exclusion_note,
+    asset.assessment_excluded_until,
   ])
 
   // Solo los campos que el usuario tocó, nunca el objeto completo: mandar todo el formulario
@@ -550,7 +586,7 @@ export function AssetDetailView({
     const changed = Object.fromEntries(
       dirtyKeys.map(key => [key, data[key]])
     ) as Partial<AssetBusinessFields>
-    updateAsset.mutate(changed)
+    updateAsset.mutate(changed, { onSuccess: () => reset(data) })
   })
 
   return (
@@ -558,7 +594,7 @@ export function AssetDetailView({
       <Group justify="space-between" align="flex-end" wrap="wrap">
         <PageHeader
           title={asset.hostname || asset.alias || asset.ip || asset.asset_id}
-          description="Read-only technical block (discovered by the scanner) plus editable business fields."
+          description="Bloque técnico de solo lectura (detectado por el escáner) y campos de negocio editables."
         />
         {asset.identification_status !== 'confirmed' && (
           <Button
@@ -568,7 +604,7 @@ export function AssetDetailView({
             onClick={() => setIdentificationOpen(true)}
             w={{ base: '100%', sm: 'auto' }}
           >
-            Identify asset
+            Identificar activo
           </Button>
         )}
         {asset.identification_status === 'confirmed' && (
@@ -579,7 +615,7 @@ export function AssetDetailView({
             onClick={() => setUnidentifyConfirmOpen(true)}
             w={{ base: '100%', sm: 'auto' }}
           >
-            Remove identification
+            Quitar identificación
           </Button>
         )}
       </Group>
@@ -594,18 +630,18 @@ export function AssetDetailView({
       <Modal
         opened={unidentifyConfirmOpen}
         onClose={() => setUnidentifyConfirmOpen(false)}
-        title="Remove identification"
+        title="Quitar identificación"
         centered
       >
         <Stack gap="md">
           <Text size="sm">
-            This asset will go back to &quot;not identified&quot;. Owner, criticality, alias and
-            location stay saved (so they prepopulate if you identify it again), but they will stop
-            counting in risk calculations until then.
+            Este activo volverá a estar &quot;no identificado&quot;. El responsable, la criticidad,
+            el alias y la ubicación quedarán guardados para completar el formulario si vuelves a
+            identificarlo, pero dejarán de contar en los cálculos de riesgo hasta entonces.
           </Text>
           <Group justify="flex-end">
             <Button variant="default" onClick={() => setUnidentifyConfirmOpen(false)}>
-              Cancel
+              Cancelar
             </Button>
             <Button
               color="red"
@@ -617,7 +653,7 @@ export function AssetDetailView({
                 )
               }
             >
-              Remove identification
+              Quitar identificación
             </Button>
           </Group>
         </Stack>
@@ -625,28 +661,31 @@ export function AssetDetailView({
 
       <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
         <TechnicalSection
-          title="Identity"
-          description="Identifiers and names observed on the network"
+          title="Identidad"
+          description="Identificadores y nombres observados en la red"
           icon={<Fingerprint size={20} strokeWidth={1.7} />}
         >
-          <TechnicalRow label="Asset ID" value={asset.asset_id} />
-          <TechnicalRow label="Hostname" value={asset.hostname} />
+          <TechnicalRow label="ID del activo" value={asset.asset_id} />
+          <TechnicalRow label="Nombre del host" value={asset.hostname} />
           <ObservedNamesRow names={asset.names} />
-          <TechnicalRow label="Vendor" value={asset.vendor} />
-          <TechnicalRow label="MAC type" value={asset.mac_metadata?.kind?.replaceAll('_', ' ')} />
+          <TechnicalRow label="Fabricante" value={asset.vendor} />
+          <TechnicalRow
+            label="Tipo de MAC"
+            value={asset.mac_metadata?.kind?.replaceAll('_', ' ')}
+          />
         </TechnicalSection>
 
         <TechnicalSection
-          title="Network position"
-          description="Addressing, route context and scanner relationship"
+          title="Posición en la red"
+          description="Direccionamiento, contexto de ruta y relación con el escáner"
           icon={<Network size={20} strokeWidth={1.7} />}
         >
-          <TechnicalRow label="IP address" value={asset.ip} />
-          <TechnicalRow label="MAC address" value={asset.mac} />
-          <TechnicalRow label="Discovery reason" value={asset.state_reason} />
-          <TechnicalRow label="Gateway IP" value={asset.gateway_ip} />
-          <TechnicalRow label="Gateway MAC" value={asset.gateway_mac} />
-          <TechnicalContentRow label="Scanner host">
+          <TechnicalRow label="Dirección IP" value={asset.ip} />
+          <TechnicalRow label="Dirección MAC" value={asset.mac} />
+          <TechnicalRow label="Motivo de detección" value={asset.state_reason} />
+          <TechnicalRow label="IP de la puerta de enlace" value={asset.gateway_ip} />
+          <TechnicalRow label="MAC de la puerta de enlace" value={asset.gateway_mac} />
+          <TechnicalContentRow label="Host del escáner">
             <Badge
               variant="light"
               tt="none"
@@ -659,25 +698,25 @@ export function AssetDetailView({
               }
             >
               {asset.is_scanner_host
-                ? `Detected · ${asset.scanner_host_match ?? 'unknown'}`
+                ? `Detectado · ${asset.scanner_host_match ?? 'desconocido'}`
                 : asset.scanner_host_match === 'conflict'
-                  ? 'Conflicting evidence'
-                  : 'Not detected'}
+                  ? 'Evidencia contradictoria'
+                  : 'No detectado'}
             </Badge>
           </TechnicalContentRow>
         </TechnicalSection>
       </SimpleGrid>
 
       <TechnicalSection
-        title="Scan observations"
-        description="What the latest scan could inspect and how complete the result is"
+        title="Observaciones del escaneo"
+        description="Qué pudo inspeccionar el último escaneo y qué tan completo es el resultado"
         icon={<ScanSearch size={20} strokeWidth={1.7} />}
       >
         <TechnicalRow
-          label="Operating system"
+          label="Sistema operativo"
           value={
             asset.os_status === 'indeterminate'
-              ? 'Indeterminate'
+              ? 'Indeterminado'
               : asset.os?.name
                 ? `${asset.os.name}${asset.os.accuracy != null ? ` (${asset.os.accuracy}%)` : ''}`
                 : null
@@ -686,7 +725,7 @@ export function AssetDetailView({
         <OsCandidatesRow candidates={asset.os_candidates} />
         <CoverageRow coverage={asset.asset_coverage} />
         {(asset.scan_issues ?? []).length > 0 ? (
-          <Alert color="yellow" variant="light" title="Scan limitations">
+          <Alert color="yellow" variant="light" title="Limitaciones del escaneo">
             <Group gap={6} wrap="wrap">
               {(asset.scan_issues ?? []).map((issue, index) => (
                 <Badge
@@ -701,7 +740,7 @@ export function AssetDetailView({
           </Alert>
         ) : (
           <Text size="sm" c="dimmed">
-            No scan limitations reported.
+            No se informaron limitaciones del escaneo.
           </Text>
         )}
         <Divider />
@@ -709,12 +748,12 @@ export function AssetDetailView({
         {scriptsText(asset.host_scripts) && (
           <Group justify="space-between" align="flex-start" wrap="wrap" gap="xs">
             <Text size="sm" c="dimmed">
-              Host scripts
+              Scripts del host
             </Text>
             <Spoiler
               maxHeight={0}
-              showLabel="View"
-              hideLabel="Hide"
+              showLabel="Ver"
+              hideLabel="Ocultar"
               style={{ flex: '1 1 220px', textAlign: 'right' }}
             >
               <TechnicalText style={{ whiteSpace: 'pre-wrap' }}>
@@ -724,21 +763,29 @@ export function AssetDetailView({
           </Group>
         )}
         <TechnicalRow
-          label="Last seen"
+          label="Visto por última vez"
           value={asset.last_seen ? formatDateTime(asset.last_seen) : null}
         />
       </TechnicalSection>
 
       <IdentificationHelpCard asset={asset} />
 
-      <AssetSecurityReviewCard assetId={String(asset.id)} asOrganization={asOrganization} />
+      <AssetSecurityReviewCard
+        assetId={String(asset.id)}
+        asOrganization={asOrganization}
+        excluded={
+          asset.assessment_scope === 'excluded' &&
+          (!asset.assessment_excluded_until ||
+            Date.parse(asset.assessment_excluded_until) > Date.now())
+        }
+      />
 
-      <Divider label="Business data" />
+      <Divider label="Datos de negocio" />
 
       {asset.identification_status !== 'confirmed' && (
         <Alert color="yellow" variant="light">
-          This asset hasn&apos;t been identified yet. Confirm it as identified to edit its business
-          fields.
+          Este activo aún no fue identificado. Confírmalo como identificado para editar sus datos de
+          negocio.
         </Alert>
       )}
 
@@ -754,10 +801,10 @@ export function AssetDetailView({
               control={control}
               render={({ field }) => (
                 <Select
-                  label="Authorization status"
+                  label="Estado de autorización"
                   data={[
-                    { value: 'authorized', label: 'Authorized' },
-                    { value: 'unauthorized', label: 'Not authorized' },
+                    { value: 'authorized', label: 'Autorizado' },
+                    { value: 'unauthorized', label: 'No autorizado' },
                   ]}
                   disabled={asset.identification_status !== 'confirmed'}
                   value={field.value}
@@ -788,9 +835,9 @@ export function AssetDetailView({
               control={control}
               render={({ field }) => (
                 <Select
-                  label="Criticality"
+                  label="Criticidad"
                   data={[
-                    { value: UNKNOWN_IDENTIFICATION_VALUE, label: 'Not yet assessed' },
+                    { value: UNKNOWN_IDENTIFICATION_VALUE, label: 'Aún no evaluado' },
                     ...CRITICALITY_OPTIONS,
                   ]}
                   disabled={
@@ -810,9 +857,9 @@ export function AssetDetailView({
               control={control}
               render={({ field }) => (
                 <Select
-                  label="Owner"
+                  label="Responsable"
                   data={[
-                    { value: UNKNOWN_IDENTIFICATION_VALUE, label: 'Unassigned or unknown' },
+                    { value: UNKNOWN_IDENTIFICATION_VALUE, label: 'Sin asignar o desconocido' },
                     ...(members ?? []).map(m => ({
                       value: m.id,
                       label: m.name || m.email,
@@ -836,7 +883,7 @@ export function AssetDetailView({
               control={control}
               render={({ field }) => (
                 <TextInput
-                  label="Location"
+                  label="Ubicación"
                   maxLength={200}
                   disabled={asset.identification_status !== 'confirmed'}
                   value={field.value ?? ''}
@@ -850,14 +897,14 @@ export function AssetDetailView({
               control={control}
               render={({ field }) => (
                 <Select
-                  label="Status"
+                  label="Estado"
                   disabled={asset.identification_status !== 'confirmed'}
                   // 'offline' nunca es una opción elegible a mano (RF-37); si el asset ya está
                   // offline se muestra deshabilitada para no ocultar el estado real.
                   data={
                     field.value === 'offline'
                       ? [
-                          { value: 'offline', label: 'Offline (auto)', disabled: true },
+                          { value: 'offline', label: 'Sin conexión (automático)', disabled: true },
                           ...MANUAL_ASSET_STATUS_OPTIONS,
                         ]
                       : MANUAL_ASSET_STATUS_OPTIONS
@@ -869,6 +916,88 @@ export function AssetDetailView({
               )}
             />
           </SimpleGrid>
+          <Divider label="Alcance de la evaluación de seguridad" labelPosition="left" />
+          <Text size="sm" c="dimmed">
+            Los activos excluidos permanecen visibles y continúan escaneándose, pero no afectan las
+            revisiones ni el puntaje de riesgo.
+          </Text>
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <Controller
+              name="assessment_scope"
+              control={control}
+              render={({ field }) => (
+                <Select
+                  label="Alcance de la evaluación de seguridad"
+                  data={[
+                    { value: 'included', label: 'Incluido' },
+                    { value: 'excluded', label: 'Excluido' },
+                  ]}
+                  value={field.value}
+                  onChange={value => {
+                    if (value === 'excluded' && authorizationStatus === 'unauthorized') {
+                      warnedUnauthorizedExclusion.current = true
+                      setConfirmUnauthorizedExclusion(true)
+                      return
+                    }
+                    field.onChange(value ?? 'included')
+                  }}
+                />
+              )}
+            />
+            {assessmentScope === 'excluded' && (
+              <Controller
+                name="assessment_exclusion_reason"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    label="Motivo de exclusión"
+                    required
+                    data={[...ASSESSMENT_EXCLUSION_REASON_OPTIONS]}
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={errors.assessment_exclusion_reason?.message}
+                  />
+                )}
+              />
+            )}
+            {assessmentScope === 'excluded' && (
+              <Controller
+                name="assessment_excluded_until"
+                control={control}
+                render={({ field }) => (
+                  <TextInput
+                    type="date"
+                    label="Excluido hasta"
+                    description="Déjalo vacío para una exclusión sin vencimiento."
+                    value={field.value ? formatDateInput(field.value) : ''}
+                    onChange={event =>
+                      field.onChange(
+                        event.currentTarget.value
+                          ? localDateEndToISOString(event.currentTarget.value)
+                          : null
+                      )
+                    }
+                  />
+                )}
+              />
+            )}
+          </SimpleGrid>
+          {assessmentScope === 'excluded' && (
+            <Controller
+              name="assessment_exclusion_note"
+              control={control}
+              render={({ field }) => (
+                <Textarea
+                  label="Nota de exclusión"
+                  description="Agrega contexto para quienes revisen cuando sea útil."
+                  required={exclusionReason === 'other'}
+                  value={field.value ?? ''}
+                  onChange={field.onChange}
+                  error={errors.assessment_exclusion_note?.message}
+                />
+              )}
+            />
+          )}
           <Group justify="flex-end">
             <Button
               type="submit"
@@ -876,11 +1005,46 @@ export function AssetDetailView({
               disabled={!isDirty}
               w={{ base: '100%', sm: 'auto' }}
             >
-              Save changes
+              Guardar cambios
             </Button>
           </Group>
         </Stack>
       </form>
+      <Modal
+        opened={confirmUnauthorizedExclusion}
+        onClose={() => setConfirmUnauthorizedExclusion(false)}
+        title="¿Excluir un dispositivo no autorizado?"
+        centered
+      >
+        <Stack>
+          <Alert color="orange">
+            SIAM recomienda mantener dentro del alcance los dispositivos no autorizados porque
+            representan un hallazgo de seguridad. Aun así, puedes excluir este dispositivo si esa es
+            la decisión de tu organización.
+          </Alert>
+          <Group justify="flex-end">
+            <Button
+              variant="default"
+              onClick={() => {
+                setValue('assessment_scope', 'included', { shouldDirty: true })
+                setConfirmUnauthorizedExclusion(false)
+              }}
+            >
+              Mantener incluido
+            </Button>
+            <Button
+              color="orange"
+              onClick={() => {
+                warnedUnauthorizedExclusion.current = true
+                setValue('assessment_scope', 'excluded', { shouldDirty: true })
+                setConfirmUnauthorizedExclusion(false)
+              }}
+            >
+              Excluir de todos modos
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </Stack>
   )
 }

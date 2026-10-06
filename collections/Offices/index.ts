@@ -10,7 +10,7 @@ export const Offices: CollectionConfig = {
   },
   access: {
     create: () => false,
-    read: orgScopedAccess('offices', 'read'),
+    read: orgScopedAccess('offices', 'read', { kind: 'org_offices', field: 'id' }),
     update: () => false,
     delete: () => false,
   },

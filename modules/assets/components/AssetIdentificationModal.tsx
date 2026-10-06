@@ -54,12 +54,12 @@ export function AssetIdentificationModal({
   })
   const authorizationStatus = watch('authorization_status')
   const suggestionMessage = asset.is_scanner_host
-    ? 'Classification evidence: this device hosts the SIAM scanner.'
+    ? 'Evidencia de clasificación: este dispositivo aloja el escáner de SIAM.'
     : asset.inferred_type === 'gateway'
-      ? 'Classification evidence: this device matches the network gateway.'
+      ? 'Evidencia de clasificación: este dispositivo coincide con la puerta de enlace de la red.'
       : asset.inference_confidence === 'unknown'
-        ? 'The scan did not provide enough evidence to suggest a device type.'
-        : `Suggested classification: ${suggestedType ?? 'not determined'} (${asset.inference_confidence ?? 'unknown'} confidence).`
+        ? 'El escaneo no aportó evidencia suficiente para sugerir un tipo de dispositivo.'
+        : `Clasificación sugerida: ${suggestedType ?? 'no determinada'} (confianza ${asset.inference_confidence ?? 'desconocida'}).`
 
   useEffect(() => {
     if (!opened) reset()
@@ -77,8 +77,8 @@ export function AssetIdentificationModal({
       title={
         <Text component="span" size="lg" fw={700}>
           {asset.identification_status === 'confirmed'
-            ? 'Edit asset identification'
-            : 'Asset identification'}
+            ? 'Editar identificación del activo'
+            : 'Identificación del activo'}
         </Text>
       }
       centered
@@ -87,13 +87,13 @@ export function AssetIdentificationModal({
       <form onSubmit={submit} noValidate>
         <Stack gap="md">
           <Text size="sm" c="dimmed">
-            {suggestionMessage} Review the classification and complete the available business
-            information.
+            {suggestionMessage} Revisa la clasificación y completa la información de negocio
+            disponible.
           </Text>
           {authorizationStatus === 'unauthorized' && (
             <Text size="sm" c="orange.8">
-              An unauthorized device has no assigned owner or business criticality. Those fields
-              will be cleared when you save.
+              Un dispositivo no autorizado no tiene responsable ni criticidad de negocio asignados.
+              Esos campos se borrarán al guardar.
             </Text>
           )}
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
@@ -102,7 +102,7 @@ export function AssetIdentificationModal({
               control={control}
               render={({ field }) => (
                 <Select
-                  label="Device type"
+                  label="Tipo de dispositivo"
                   data={[...SCANNED_ASSET_TYPE_OPTIONS]}
                   value={field.value}
                   onChange={field.onChange}
@@ -115,10 +115,10 @@ export function AssetIdentificationModal({
               control={control}
               render={({ field }) => (
                 <Select
-                  label="Authorization status"
+                  label="Estado de autorización"
                   data={[
-                    { value: 'authorized', label: 'Authorized' },
-                    { value: 'unauthorized', label: 'Not authorized' },
+                    { value: 'authorized', label: 'Autorizado' },
+                    { value: 'unauthorized', label: 'No autorizado' },
                   ]}
                   value={field.value}
                   onChange={field.onChange}
@@ -133,12 +133,12 @@ export function AssetIdentificationModal({
                   control={control}
                   render={({ field }) => (
                     <Select
-                      label="Asset owner"
+                      label="Responsable del activo"
                       searchable
                       data={[
                         {
                           value: UNKNOWN_IDENTIFICATION_VALUE,
-                          label: 'Unassigned or unknown',
+                          label: 'Sin asignar o desconocido',
                         },
                         ...members.map(member => ({
                           value: member.id,
@@ -156,9 +156,9 @@ export function AssetIdentificationModal({
                   control={control}
                   render={({ field }) => (
                     <Select
-                      label="Business criticality"
+                      label="Criticidad de negocio"
                       data={[
-                        { value: UNKNOWN_IDENTIFICATION_VALUE, label: 'Not yet assessed' },
+                        { value: UNKNOWN_IDENTIFICATION_VALUE, label: 'Aún no evaluado' },
                         ...CRITICALITY_OPTIONS,
                       ]}
                       value={field.value ?? UNKNOWN_IDENTIFICATION_VALUE}
@@ -174,7 +174,7 @@ export function AssetIdentificationModal({
               control={control}
               render={({ field }) => (
                 <TextInput
-                  label="Alias (optional)"
+                  label="Alias (opcional)"
                   value={field.value ?? ''}
                   onChange={field.onChange}
                   error={errors.alias?.message}
@@ -186,7 +186,7 @@ export function AssetIdentificationModal({
               control={control}
               render={({ field }) => (
                 <TextInput
-                  label="Location (optional)"
+                  label="Ubicación (opcional)"
                   value={field.value ?? ''}
                   onChange={field.onChange}
                   error={errors.location?.message}
@@ -196,10 +196,10 @@ export function AssetIdentificationModal({
           </SimpleGrid>
           <Group justify="flex-end">
             <Button variant="default" onClick={onClose}>
-              Cancel
+              Cancelar
             </Button>
             <Button type="submit" loading={identify.isPending}>
-              Confirm asset
+              Confirmar activo
             </Button>
           </Group>
         </Stack>

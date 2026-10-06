@@ -118,6 +118,11 @@ Línea Base Segura y aparecen separados como observaciones técnicas.
   (180 días).
 - Política **Reinforced v1**: respuestas manuales por 180 días.
 - Evidencia técnica: 30 días.
+- Los activos de red y los cargados manualmente pueden excluirse del Security Review y del Risk
+  Score sin retirarlos del inventario. La exclusión exige un motivo y puede vencer en una fecha o
+  mantenerse sin vencimiento; el escáner continúa actualizando la evidencia técnica del activo.
+- Un activo no autorizado también puede excluirse, pero la interfaz advierte que hacerlo oculta un
+  hallazgo de seguridad del Risk Score. Los activos existentes y nuevos están incluidos por default.
 - Una respuesta ausente, desconocida o vencida es `not_evaluable`: baja la cobertura y nunca
   incrementa el Risk Score.
 - Los ciclos completados conservan historial. Una nueva versión sólo nace desde la última y copia

@@ -7,10 +7,10 @@ import { MANUAL_ASSET_CATEGORY_OPTIONS } from '@/domain/assets/asset-types'
 // (SYSTEM_PROMPT.md #3, DRY), y para poder mostrar un label con mayúscula/formato propio
 // (ej. "Antivirus / EDR") sin acoplar la UI al valor crudo del enum.
 export const CRITICALITY_LABEL: Record<string, string> = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-  critical: 'Critical',
+  low: 'Baja',
+  medium: 'Media',
+  high: 'Alta',
+  critical: 'Crítica',
 }
 
 export const CRITICALITY_OPTIONS = Object.entries(CRITICALITY_LABEL).map(([value, label]) => ({
@@ -19,9 +19,9 @@ export const CRITICALITY_OPTIONS = Object.entries(CRITICALITY_LABEL).map(([value
 }))
 
 export const ASSET_STATUS_LABEL: Record<string, string> = {
-  active: 'Active',
-  retired: 'Retired',
-  offline: 'Offline',
+  active: 'Activo',
+  retired: 'Retirado',
+  offline: 'Sin conexión',
 }
 
 export const ASSET_STATUS_OPTIONS = Object.entries(ASSET_STATUS_LABEL).map(([value, label]) => ({
@@ -50,13 +50,13 @@ export const ASSET_CATEGORY_OPTIONS = Object.entries(ASSET_CATEGORY_LABEL).map(
 )
 
 export const REVIEW_INTERVAL_LABEL: Record<string, string> = {
-  never: 'Never expires',
-  '1d': 'Every day',
-  '3d': 'Every 3 days',
-  '1w': 'Every week',
-  '1m': 'Every month',
-  '6m': 'Every 6 months',
-  '1y': 'Every year',
+  never: 'Nunca vence',
+  '1d': 'Todos los días',
+  '3d': 'Cada 3 días',
+  '1w': 'Todas las semanas',
+  '1m': 'Todos los meses',
+  '6m': 'Cada 6 meses',
+  '1y': 'Todos los años',
 }
 
 export const REVIEW_INTERVAL_OPTIONS = Object.entries(REVIEW_INTERVAL_LABEL).map(
@@ -65,3 +65,35 @@ export const REVIEW_INTERVAL_OPTIONS = Object.entries(REVIEW_INTERVAL_LABEL).map
     label,
   })
 )
+
+export const ASSESSMENT_EXCLUSION_REASON_OPTIONS = [
+  { value: 'personal_device', label: 'Dispositivo personal' },
+  { value: 'visitor_device', label: 'Dispositivo de visitante' },
+  { value: 'third_party_managed', label: 'Administrado por un tercero' },
+  { value: 'temporary_or_lab', label: 'Activo temporal o de laboratorio' },
+  { value: 'duplicate_or_misidentified', label: 'Duplicado o identificado incorrectamente' },
+  { value: 'contractually_out_of_scope', label: 'Fuera de alcance por contrato' },
+  { value: 'other', label: 'Otro' },
+] as const
+
+export const RISK_BAND_LABEL: Record<string, string> = {
+  low: 'Bajo',
+  medium: 'Medio',
+  high: 'Alto',
+  critical: 'Crítico',
+}
+
+export const RISK_CONFIDENCE_LABEL: Record<string, string> = {
+  hidden: 'Datos insuficientes',
+  preliminary: 'Preliminar',
+  warning: 'Parcial',
+  usable: 'Utilizable',
+  reliable: 'Confiable',
+}
+
+export const RISK_PAIR_STATUS_LABEL: Record<string, string> = {
+  compliant: 'Cumple',
+  partially_effective: 'Cumple parcialmente',
+  non_compliant: 'No cumple',
+  not_evaluable: 'No evaluable',
+}

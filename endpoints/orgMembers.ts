@@ -1,6 +1,7 @@
 import type { Endpoint } from 'payload'
 import { getTenantContext } from '../access/tenant/resolveTenantContext'
 import { relationId } from '../lib/relationId'
+import { hasOrgWideScope, type RoleSlug } from '../access/rbac/permissions'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
@@ -28,14 +29,28 @@ export const orgMembersEndpoint: Endpoint = {
       limit: 500,
     })
 
-    const docs = memberships.docs.map(m => {
+    const orgWide = hasOrgWideScope(ctx.role)
+    const roleSlug = (m: (typeof memberships.docs)[number]) => {
+      const role = m.role as unknown as { slug: RoleSlug } | RoleSlug
+      return typeof role === 'string' ? role : role.slug
+    }
+    // Office-scoped roles only see people who share one of their offices, plus org-wide members
+    // (who cover every office); the rest of the directory belongs to other offices.
+    const visible = orgWide
+      ? memberships.docs
+      : memberships.docs.filter(
+          m =>
+            hasOrgWideScope(roleSlug(m)) ||
+            (m.offices ?? []).some(office => ctx.officeIds.includes(relationId(office)))
+        )
+
+    const docs = visible.map(m => {
       const user = m.user as unknown as { id: string; name: string; email: string }
-      const role = m.role as unknown as { slug: string } | string
       return {
         id: relationId(user),
         name: user.name,
         email: user.email,
-        role: typeof role === 'string' ? role : role.slug,
+        role: roleSlug(m),
         status: m.status,
       }
     })

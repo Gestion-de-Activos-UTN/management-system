@@ -17,8 +17,8 @@ export function useIdentifyAsset() {
         queryClient.invalidateQueries({ queryKey: ['assets'] }),
         invalidateSecurityReview(queryClient),
       ])
-      notifications.show({ color: 'green', message: 'Asset identified' })
+      notifications.show({ color: 'green', message: 'Activo identificado' })
     },
-    onError: error => showApiError(error, 'Could not update identification status'),
+    onError: error => showApiError(error, 'No se pudo actualizar el estado de identificación'),
   })
 }

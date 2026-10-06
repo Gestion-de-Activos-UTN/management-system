@@ -1,4 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table'
+import { Badge, Group } from '@mantine/core'
 import type { NonNetworkAsset } from '@/app/types/payload-types'
 import { ASSET_CATEGORY_LABEL, CRITICALITY_LABEL } from '@/lib/enum-labels'
 import { formatDate } from '@/lib/format-date'
@@ -14,21 +15,34 @@ export function getNonNetworkAssetsColumns(
   ownerNameById: Record<string, string>
 ): ColumnDef<NonNetworkAsset, unknown>[] {
   return [
-    { accessorKey: 'alias', header: 'Alias' },
+    {
+      accessorKey: 'alias',
+      header: 'Alias',
+      cell: ({ row }) => (
+        <Group gap="xs" wrap="nowrap">
+          {row.original.alias}
+          {row.original.assessment_scope === 'excluded' && (
+            <Badge size="sm" color="gray" variant="light">
+              Fuera de alcance
+            </Badge>
+          )}
+        </Group>
+      ),
+    },
     {
       accessorKey: 'asset_category',
-      header: 'Category',
+      header: 'Categoría',
       cell: ({ row }) =>
         ASSET_CATEGORY_LABEL[row.original.asset_category] ?? row.original.asset_category,
     },
     {
       accessorKey: 'criticality',
-      header: 'Criticality',
+      header: 'Criticidad',
       cell: ({ row }) => CRITICALITY_LABEL[row.original.criticality] ?? row.original.criticality,
     },
     {
       accessorKey: 'office',
-      header: 'Office',
+      header: 'Oficina',
       cell: ({ row }) => {
         const office = row.original.office
         return typeof office === 'object' && office ? office.name : '—'
@@ -36,7 +50,7 @@ export function getNonNetworkAssetsColumns(
     },
     {
       accessorKey: 'owner',
-      header: 'Owner',
+      header: 'Responsable',
       cell: ({ row }) => {
         const owner = row.original.owner
         if (typeof owner === 'object' && owner) return owner.name
@@ -45,13 +59,13 @@ export function getNonNetworkAssetsColumns(
     },
     {
       accessorKey: 'next_review_at',
-      header: 'Next review',
+      header: 'Próxima revisión',
       cell: ({ row }) =>
         row.original.next_review_at ? formatDate(row.original.next_review_at) : '—',
     },
     {
       accessorKey: 'review_status',
-      header: 'Review',
+      header: 'Revisión',
       // Sin `size` explícito, la columna se angosta al ancho del contenido y el align:'center'
       // de DataTable no tiene espacio de sobra donde centrar — mismo motivo por el que las demás
       // columnas de badge (assets.columns.tsx) sí necesitan su propio size.

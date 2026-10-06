@@ -1,19 +1,33 @@
 import type { Payload, PayloadRequest } from 'payload'
 import type { AssessmentAnswer, AssessmentInstance } from '@/app/types/payload-types'
 import {
-  QUESTION_CATALOG,
-  type AnswerValue,
-  type PolicyKey,
-  type QuestionDefinition,
-} from './catalog'
+  RISK_CONTROLS_V2,
+  RISK_QUESTIONS_V2,
+  type RiskPolicyKey,
+  type RiskQuestionV2,
+} from '@/domain/risk/catalog-v2'
 import type { SaveAssessmentDraft } from '@/modules/assessments/schema'
 import { relationId } from '@/lib/relationId'
 import { evaluateAutomaticComplianceForAssessment } from './evaluateAutomaticCompliance'
+import { evaluateControlEfficacy } from '@/domain/risk/control-efficacy'
+import {
+  enqueueOrganizationRiskRecalculation,
+  enqueueRiskRecalculation,
+} from '@/domain/risk/enqueueRiskRecalculation'
+import { isAssetExcludedFromAssessments } from './asset-assessment-scope'
 
-function questionDefinition(key: string, version: number): QuestionDefinition {
-  const definition = QUESTION_CATALOG.find(item => item.key === key && item.version === version)
-  if (!definition) throw new Error(`Question ${key}@${version} is unavailable`)
-  return definition as QuestionDefinition
+function questionDefinition(key: string, version: number): RiskQuestionV2 {
+  const definition = RISK_QUESTIONS_V2.find(item => item.key === key && item.version === version)
+  if (!definition) throw new Error(`Question ${key} v${version} is unavailable`)
+  return definition
+}
+
+// The engine reads severity from the catalog; this only keeps the stored result consistent with it.
+function controlSeverity(controlKey: string) {
+  const severity = RISK_CONTROLS_V2.find(control => control.key === controlKey)?.severity
+  return (
+    (['low', 'medium', 'high', 'critical'] as const).find(item => item === severity) ?? 'medium'
+  )
 }
 
 function validUntil(answeredAt: string, days: number): string {
@@ -39,7 +53,7 @@ export function buildCopiedAssessmentDraft(
             {
               question_key: answer.question_key,
               question_version: version,
-              answer: answer.answer,
+              option_key: answer.option_key,
               justification: answer.justification ?? undefined,
               evidence_note: answer.evidence_note ?? undefined,
             },
@@ -49,20 +63,37 @@ export function buildCopiedAssessmentDraft(
   }
 }
 
-function assertAnswerAllowed(answer: SaveAssessmentDraft['answers'][number], policyKey: PolicyKey) {
+function assertAnswerAllowed(
+  answer: SaveAssessmentDraft['answers'][number],
+  policyKey: RiskPolicyKey
+) {
   const definition = questionDefinition(answer.question_key, answer.question_version)
-  if (answer.answer === 'not_applicable' && !answer.justification?.trim())
+  if (!definition.policies.includes(policyKey))
+    throw new Error(`Question  is not available for this policy`)
+  const option = definition.options.find(item => item.key === answer.option_key)
+  if (!option) throw new Error(`Option  is not available for `)
+  if (option.requires_justification && !answer.justification?.trim())
     throw new Error('Not applicable answers require a justification')
-  if (
-    definition.evidence_note_required_for?.includes(answer.answer as 'yes' | 'no') &&
-    !answer.evidence_note?.trim()
-  ) {
-    throw new Error(`Question ${answer.question_key} requires a short evidence note`)
-  }
+  const status =
+    option.efficacy === null
+      ? 'not_evaluable'
+      : option.efficacy === 1
+        ? 'compliant'
+        : option.efficacy === 0
+          ? 'non_compliant'
+          : 'partially_effective'
   return {
     definition,
-    effect: definition.evaluation[answer.answer as AnswerValue],
-    validityDays: definition.validity_days[policyKey],
+    option,
+    effect: {
+      status,
+      base_efficacy: option.efficacy,
+      adjusted_efficacy: option.efficacy,
+      combined_efficacy: option.efficacy,
+      applied_rules: [],
+      source: 'exact',
+    },
+    validityDays: policyKey === 'reinforced' ? 180 : 365,
   }
 }
 
@@ -78,6 +109,32 @@ async function loadAssessment(
     req,
     depth: 0,
   })
+}
+
+async function assertTargetIncluded(
+  payload: Payload,
+  assessment: AssessmentInstance,
+  req: PayloadRequest
+) {
+  const target = assessment.asset
+    ? await payload.findByID({
+        collection: 'assets',
+        id: relationId(assessment.asset),
+        overrideAccess: true,
+        req,
+        depth: 0,
+      })
+    : assessment.manual_asset
+      ? await payload.findByID({
+          collection: 'non-network-assets',
+          id: relationId(assessment.manual_asset),
+          overrideAccess: true,
+          req,
+          depth: 0,
+        })
+      : null
+  if (target && isAssetExcludedFromAssessments(target))
+    throw new Error('asset_excluded_from_assessments')
 }
 
 async function upsertAnswers(
@@ -104,7 +161,10 @@ async function upsertAnswers(
   for (const answer of command.answers) {
     if (!allowed.has(`${answer.question_key}@${answer.question_version}`))
       throw new Error(`Question ${answer.question_key} is not part of this review`)
-    const { effect, validityDays } = assertAnswerAllowed(answer, assessment.policy_key as PolicyKey)
+    const { effect, option, validityDays } = assertAnswerAllowed(
+      answer,
+      assessment.policy_key as RiskPolicyKey
+    )
     const existing = await payload.find({
       collection: 'assessment-answers',
       where: {
@@ -119,7 +179,8 @@ async function upsertAnswers(
       limit: 1,
     })
     const answerData = {
-      answer: answer.answer,
+      option_key: answer.option_key,
+      option_snapshot: { key: option.key, label: option.label, efficacy: option.efficacy },
       justification: answer.justification ?? null,
       evidence_note: answer.evidence_note ?? null,
       answered_by: actorId,
@@ -181,6 +242,7 @@ export async function saveAssessmentDraft(
   req: PayloadRequest
 ) {
   const assessment = await loadAssessment(payload, assessmentId, req)
+  await assertTargetIncluded(payload, assessment, req)
   return upsertAnswers(payload, assessment, command, actorId, req)
 }
 
@@ -196,6 +258,7 @@ export async function completeAssessment(
   const req = Object.assign(request, { transactionID })
   try {
     let assessment = await loadAssessment(payload, assessmentId, req)
+    await assertTargetIncluded(payload, assessment, req)
     if (assessment.status === 'completed') {
       if (ownsTransaction && transactionID) await payload.db.commitTransaction(transactionID)
       return assessment
@@ -219,31 +282,65 @@ export async function completeAssessment(
         : []
     )
     const answerByKey = new Map(answers.docs.map(answer => [answer.question_key, answer]))
-    const requiredKeys = snapshotKeys
-      .filter(item => {
-        const definition = questionDefinition(item.key, item.version)
-        return (definition.dependencies ?? []).every(dependency => {
-          if (dependency.type !== 'requires_question_answer') return true
-          const dependencyAnswer = answerByKey.get(dependency.question_key)?.answer
-          return Boolean(dependencyAnswer && dependency.answers.includes(dependencyAnswer))
-        })
-      })
-      .map(item => item.key)
+    const requiredKeys = snapshotKeys.map(item => item.key)
     const missing = requiredKeys.filter(key => !answerByKey.has(key))
     if (missing.length)
       throw new Error(`Every visible question must be answered: ${missing.join(', ')}`)
 
-    const counts = { compliant: 0, non_compliant: 0, not_evaluable: 0 }
+    const policyKey = assessment.policy_key as RiskPolicyKey
+    const optionKeys = Object.fromEntries(
+      answers.docs.map(answer => [answer.question_key, answer.option_key])
+    )
+    const controlKeys = [
+      ...new Set(requiredKeys.map(key => questionDefinition(key, 2).control_key)),
+    ]
+    const controlEffects = new Map(
+      controlKeys.map(controlKey => [
+        controlKey,
+        evaluateControlEfficacy(controlKey, optionKeys, policyKey),
+      ])
+    )
+    const counts = { compliant: 0, partially_effective: 0, non_compliant: 0, not_evaluable: 0 }
+    for (const result of controlEffects.values()) {
+      const status =
+        result.efficacy === null
+          ? 'not_evaluable'
+          : result.efficacy === 1
+            ? 'compliant'
+            : result.efficacy === 0
+              ? 'non_compliant'
+              : 'partially_effective'
+      counts[status] += 1
+    }
     const completedAt = new Date().toISOString()
     const validUntilDates: string[] = []
+    const persistedControls = new Set<string>()
     for (const key of requiredKeys) {
       let answer = answerByKey.get(key)!
-      const effect = answer.evaluation_effect_snapshot
-      counts[effect.status] += 1
       const definition = questionDefinition(answer.question_key, answer.question_version)
+      const combined = controlEffects.get(definition.control_key)!
+      const sub = combined.sub.find(item => item.question_key === answer.question_key)!
+      const status: keyof typeof counts =
+        combined.efficacy === null
+          ? 'not_evaluable'
+          : combined.efficacy === 1
+            ? 'compliant'
+            : combined.efficacy === 0
+              ? 'non_compliant'
+              : 'partially_effective'
+      const effect = {
+        status,
+        reason_code: combined.status,
+        base_efficacy: sub.base,
+        adjusted_efficacy: sub.adjusted,
+        combined_efficacy: combined.efficacy,
+        sub_efficacies: combined.sub,
+        applied_rules: combined.applied_rules,
+        source: 'exact',
+      }
       const frozenValidUntil = validUntil(
         completedAt,
-        definition.validity_days[assessment.policy_key as PolicyKey]
+        assessment.policy_key === 'reinforced' ? 180 : 365
       )
       validUntilDates.push(frozenValidUntil)
       // AUDIT: this action must emit an AuditLogs entry (chain_hash over {assessment answer validity}, previous hash for this organization_id)
@@ -253,8 +350,10 @@ export async function completeAssessment(
         id: answer.id,
         overrideAccess: true,
         req,
-        data: { valid_until: frozenValidUntil },
+        data: { valid_until: frozenValidUntil, evaluation_effect_snapshot: effect },
       })
+      if (persistedControls.has(definition.control_key)) continue
+      persistedControls.add(definition.control_key)
       // AUDIT: this action must emit an AuditLogs entry (chain_hash over {assessment answer result}, previous hash for this organization_id)
       // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
       await payload.create({
@@ -266,10 +365,10 @@ export async function completeAssessment(
           office: assessment.office ? relationId(assessment.office) : null,
           asset: assessment.asset ? relationId(assessment.asset) : null,
           manual_asset: assessment.manual_asset ? relationId(assessment.manual_asset) : null,
-          control_key: definition.control_keys[0],
+          control_key: definition.control_key,
           check_key: `manual:${answer.question_key}`,
-          status: effect.status,
-          severity: 'medium',
+          status: effect.status === 'partially_effective' ? 'non_compliant' : effect.status,
+          severity: controlSeverity(definition.control_key),
           policy_key: assessment.policy_key,
           policy_version: assessment.policy_version,
           evaluated_at: answer.answered_at,
@@ -286,6 +385,7 @@ export async function completeAssessment(
             answer_id: answer.id,
             question_key: answer.question_key,
             question_version: answer.question_version,
+            evaluation_effect: effect,
           },
         },
       })
@@ -309,6 +409,12 @@ export async function completeAssessment(
       },
     })
     if (ownsTransaction && transactionID) await payload.db.commitTransaction(transactionID)
+    // Organization answers are inherited by every office evaluation.
+    if (assessment.office)
+      await enqueueRiskRecalculation(payload, relationId(assessment.organization), [
+        relationId(assessment.office),
+      ])
+    else await enqueueOrganizationRiskRecalculation(payload, relationId(assessment.organization))
     return completed
   } catch (error) {
     if (ownsTransaction && transactionID) await payload.db.rollbackTransaction(transactionID)

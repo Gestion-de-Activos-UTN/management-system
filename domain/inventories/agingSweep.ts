@@ -1,4 +1,5 @@
 import type { Payload, Where } from 'payload'
+import { enqueueRiskRecalculation } from '@/domain/risk/enqueueRiskRecalculation'
 
 // Sin AppSettings singleton todavía (mismo gap que risk_score_policy) — este es el default de
 // plataforma cuando una organización no tiene override en OrganizationSettings.offline_after_hours.
@@ -41,6 +42,8 @@ async function fetchOfflineAfterHours(payload: Payload, organizationId: string):
 async function sweepActiveAssets(payload: Payload, now: number): Promise<AgingSweepSummary> {
   const offlineAfterHoursByOrg = new Map<string, number>()
   const organizationsSeen = new Set<string>()
+  // Offline assets stop counting as current network evidence; recalculate once per touched office.
+  const touchedOffices = new Map<string, Set<string>>()
   let transitioned = 0
   let cursor: string | null = null
 
@@ -84,10 +87,18 @@ async function sweepActiveAssets(payload: Payload, now: number): Promise<AgingSw
         data: { status: 'offline' },
       })
       transitioned += 1
+      if (asset.office) {
+        const offices = touchedOffices.get(organizationId) ?? new Set<string>()
+        offices.add(String(asset.office))
+        touchedOffices.set(organizationId, offices)
+      }
     }
 
     if (result.docs.length < 200) break
   }
+
+  for (const [organizationId, offices] of touchedOffices)
+    await enqueueRiskRecalculation(payload, organizationId, [...offices])
 
   return { assets_transitioned: transitioned, organizations_processed: organizationsSeen.size }
 }

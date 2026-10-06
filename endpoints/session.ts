@@ -1,5 +1,6 @@
 import type { Endpoint } from 'payload'
 import { getTenantContext } from '../access/tenant/resolveTenantContext'
+import { hasOrgWideScope } from '../access/rbac/permissions'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
@@ -31,6 +32,7 @@ export const sessionEndpoint: Endpoint = {
       rawFeatures && typeof rawFeatures === 'object' && !Array.isArray(rawFeatures)
         ? rawFeatures
         : {}
-    return json({ ...ctx, features })
+    // The frontend reads the row scope from here instead of comparing role slugs.
+    return json({ ...ctx, orgWide: hasOrgWideScope(ctx.role), features })
   },
 }

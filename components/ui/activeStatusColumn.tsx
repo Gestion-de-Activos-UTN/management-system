@@ -3,11 +3,11 @@ import { StatusBadge } from './StatusBadge'
 
 export function activeStatusColumn<T>(
   accessor: (row: T) => boolean,
-  labels: { true: string; false: string } = { true: 'Active', false: 'Inactive' }
+  labels: { true: string; false: string } = { true: 'Activo', false: 'Inactivo' }
 ): ColumnDef<T, unknown> {
   return {
     accessorKey: 'is_active',
-    header: 'Status',
+    header: 'Estado',
     size: 130,
     meta: { align: 'center' },
     cell: ({ row }) =>

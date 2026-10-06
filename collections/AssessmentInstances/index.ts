@@ -8,7 +8,7 @@ export const AssessmentInstances: CollectionConfig = {
   admin: { useAsTitle: 'id' },
   access: {
     create: () => false,
-    read: orgScopedAccess('assessment-instances', 'read'),
+    read: orgScopedAccess('assessment-instances', 'read', { kind: 'org_offices', field: 'office' }),
     update: () => false,
     delete: () => false,
   },
@@ -52,7 +52,15 @@ export const AssessmentInstances: CollectionConfig = {
     {
       name: 'created_reason',
       type: 'select',
-      options: ['initial', 'asset_identified', 'policy_changed', 'answer_expired', 'manual_review'],
+      options: [
+        'initial',
+        'asset_identified',
+        'assessment_scope_changed',
+        'office_changed',
+        'policy_changed',
+        'answer_expired',
+        'manual_review',
+      ],
       required: true,
     },
     { name: 'opened_at', type: 'date', required: true },
@@ -64,6 +72,7 @@ export const AssessmentInstances: CollectionConfig = {
       type: 'group',
       fields: [
         { name: 'compliant', type: 'number', required: true, defaultValue: 0 },
+        { name: 'partially_effective', type: 'number', required: true, defaultValue: 0 },
         { name: 'non_compliant', type: 'number', required: true, defaultValue: 0 },
         { name: 'not_evaluable', type: 'number', required: true, defaultValue: 0 },
       ],

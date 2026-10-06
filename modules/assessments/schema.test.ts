@@ -8,7 +8,7 @@ describe('assessment command schemas', () => {
       AssessmentAnswerDraftSchema.safeParse({
         question_key: 'q',
         question_version: 1,
-        answer: 'unknown',
+        option_key: 'unknown',
       }).success,
       true
     )
@@ -16,7 +16,7 @@ describe('assessment command schemas', () => {
       AssessmentAnswerDraftSchema.safeParse({
         question_key: 'q',
         question_version: 1,
-        answer: 'not_applicable',
+        option_key: 'not_applicable',
       }).success,
       false
     )
@@ -24,7 +24,7 @@ describe('assessment command schemas', () => {
       AssessmentAnswerDraftSchema.safeParse({
         question_key: 'q',
         question_version: 1,
-        answer: 'not_applicable',
+        option_key: 'not_applicable',
         justification: 'We do not keep files on this device.',
       }).success,
       true
