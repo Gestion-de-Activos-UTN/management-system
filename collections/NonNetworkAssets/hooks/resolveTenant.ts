@@ -76,13 +76,25 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
   const incoming = (key: string) =>
     data && key in data ? (data[key] as string | null) : ((originalDoc?.[key] as string) ?? null)
 
+  type ProductKey = 'software_vendor' | 'software_product' | 'software_version'
+
+  const incomingProduct = (key: ProductKey): string | null => {
+    const sent =
+      data && 'product_details' in data
+        ? (data.product_details as Partial<Record<ProductKey, string | null>> | null)
+        : undefined
+    if (sent === null) return null // el grupo entero fue limpiado explícitamente
+    if (sent && key in sent) return sent[key] ?? null
+    return (originalDoc?.product_details?.[key] as string | undefined) ?? null
+  }
+
   const category = incoming('asset_category') ?? null
   const hasSoftware = categoryHasSoftware(category)
   const identity = {
     part: incoming('software_part') ?? 'a',
-    vendor: incoming('software_vendor'),
-    product: incoming('software_product'),
-    version: incoming('software_version'),
+    vendor: incomingProduct('software_vendor'),
+    product: incomingProduct('software_product'),
+    version: incomingProduct('software_version'),
   }
   if (hasSoftware) assertSoftwareIdentityComplete(identity.vendor, identity.product)
 
@@ -100,9 +112,6 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
     ...(hasSoftware
       ? { cpe_candidate: buildCpeCandidate(identity) }
       : {
-          software_vendor: null,
-          software_product: null,
-          software_version: null,
           software_part: null,
           cpe_candidate: null,
         }),

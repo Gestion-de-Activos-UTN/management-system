@@ -6,6 +6,8 @@ import { MANUAL_ASSET_CATEGORY_OPTIONS } from '../../domain/assets/asset-types'
 import { reconcileAssessmentApplicability } from './hooks/reconcileAssessmentApplicability'
 import { assessmentScopeFields } from '../../domain/assessments/asset-assessment-scope'
 import { validateAssetAssessmentScope } from '../../domain/assessments/validateAssetAssessmentScope'
+import { categoryGroupOf, CLOUD_KIND_OPTIONS, REPOSITORY_KIND_OPTIONS } from './categoryGroups'
+import { validateCategoryGroups } from './hooks/validateCategoryGroups'
 
 const resolvedFieldAccess = {
   create: () => false,
@@ -32,7 +34,7 @@ export const NonNetworkAssets: CollectionConfig = {
     }),
   },
   hooks: {
-    beforeChange: [resolveTenantAndReview, validateAssetAssessmentScope],
+    beforeChange: [resolveTenantAndReview, validateCategoryGroups, validateAssetAssessmentScope],
     afterChange: [reconcileAssessmentApplicability],
   },
   fields: [
@@ -51,15 +53,38 @@ export const NonNetworkAssets: CollectionConfig = {
       required: true,
       options: [...MANUAL_ASSET_CATEGORY_OPTIONS],
     },
-    // Identificación declarada por el usuario, no verificada: el valor tiene la misma confianza
-    // que cualquier otro dato manual del inventario. Sin validación contra el diccionario CPE del
-    // NVD ni correlación con CVEs — fuera de alcance, y la columna derivada de abajo es el punto
-    // de enganche para cuando exista. Topes alineados con contracts/asset.schema.ts (vendor 120,
-    // product 240, version 120, cpe 500) para que los dos lados del sistema no diverjan.
-    // Visible solo en las categorías de CATEGORY_HAS_SOFTWARE (domain/assets/asset-types.ts).
-    { name: 'software_vendor', type: 'text', maxLength: 120, index: true },
-    { name: 'software_product', type: 'text', maxLength: 240, index: true },
-    { name: 'software_version', type: 'text', maxLength: 120 },
+    // Identificación declarada por el usuario, no verificada: misma confianza que cualquier otro
+    // dato manual del inventario. Sin validación contra el diccionario CPE del NVD — fuera de
+    // alcance. Topes alineados con contracts/asset.schema.ts. Visible solo en las categorías cuyo
+    // grupo es 'product_details' (collections/NonNetworkAssets/categoryGroups.ts).
+    { 
+      name: 'product_details',
+      type: 'group',
+      admin: { condition: (data) => categoryGroupOf(data?.asset_category) === 'product_details' },
+      fields: [
+        { name: 'software_vendor', type: 'text', maxLength: 120, index: true },
+        { name: 'software_product', type: 'text', maxLength: 240, index: true },
+        { name: 'software_version', type: 'text', maxLength: 120 },
+      ],
+    },
+    {
+      name: 'cloud_details',
+      type: 'group',
+      admin: { condition: (data) => categoryGroupOf(data?.asset_category) === 'cloud_details' },
+      fields: [
+        { name: 'kind', type: 'select', options: [...CLOUD_KIND_OPTIONS] },
+        { name: 'vendor', type: 'text', maxLength: 120 },
+      ],
+    },
+    {
+      name: 'repository_details',
+      type: 'group',
+      admin: {
+        condition: (data) => categoryGroupOf(data?.asset_category) === 'repository_details',
+      },
+      fields: [{ name: 'kind', type: 'select', options: [...REPOSITORY_KIND_OPTIONS] }],
+    },
+    { name: 'notes', type: 'textarea', maxLength: 1000 },
     {
       // Oculto: hoy siempre 'a'. Existe para que el identificador derivado sea compatible con CPE
       // el día que entren categorías de equipo, que son las que pueden valer 'o'.
@@ -70,9 +95,9 @@ export const NonNetworkAssets: CollectionConfig = {
       admin: { hidden: true },
     },
     {
-      // Derivado en beforeChange desde los cuatro campos de arriba — nunca un input manual, mismo
-      // patrón que next_review_at. El nombre dice 'candidate' a propósito: es un identificador sin
-      // verificar contra ningún diccionario.
+      // Derivado en beforeChange desde product_details (software_vendor, software_product, software_version) y
+      // software_part — nunca un input manual, mismo patrón que next_review_at. El nombre dice
+      // 'candidate' a propósito: es un identificador sin verificar contra ningún diccionario.
       name: 'cpe_candidate',
       type: 'text',
       maxLength: 500,

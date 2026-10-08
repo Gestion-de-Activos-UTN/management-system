@@ -21,10 +21,9 @@ type SeededAsset = {
   software_product?: string
 }
 
-// Los campos de software se escriben directo en `data`, no derivados: con overrideAccess y sin
-// `req`, resolveTenantAndReview corta en `if (!ctx) return data` y no toca nada — por eso este
-// seed (igual que el de assessments.integration.test.ts) también pasa `organization` a mano.
-// Este test cubre el endpoint; la derivación de cpe_candidate se verifica con el form real.
+// Los detalles de software se escriben directamente en el grupo de la Collection: con
+// overrideAccess y sin `req`, resolveTenantAndReview corta en `if (!ctx) return data` y no los
+// deriva — por eso este seed también pasa `organization` a mano.
 async function seedOrganization(payload: Payload, label: string, assets: SeededAsset[]) {
   const organization = await payload.create({
     collection: 'organizations',
@@ -89,8 +88,14 @@ async function seedOrganization(payload: Payload, label: string, assets: SeededA
         organization: organization.id,
         status: 'active',
         review_interval: 'never',
-        software_vendor: asset.software_vendor ?? null,
-        software_product: asset.software_product ?? null,
+        product_details:
+          asset.software_vendor || asset.software_product
+            ? {
+                software_vendor: asset.software_vendor ?? null,
+                software_product: asset.software_product ?? null,
+                software_version: null,
+              }
+            : undefined,
       },
     })
   }

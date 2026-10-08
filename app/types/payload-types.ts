@@ -571,9 +571,19 @@ export interface NonNetworkAsset {
     | 'information_repository'
     | 'physical_record'
     | 'other';
-  software_vendor?: string | null;
-  software_product?: string | null;
-  software_version?: string | null;
+  product_details?: {
+    software_vendor?: string | null;
+    software_product?: string | null;
+    software_version?: string | null;
+  };
+  cloud_details?: {
+    kind?: ('productivity_identity' | 'infrastructure' | 'domain_dns') | null;
+    vendor?: string | null;
+  };
+  repository_details?: {
+    kind?: ('source_code' | 'secrets_vault' | 'corporate_email' | 'database' | 'other_digital') | null;
+  };
+  notes?: string | null;
   software_part?: ('a' | 'o') | null;
   cpe_candidate?: string | null;
   criticality: 'low' | 'medium' | 'high' | 'critical';
@@ -1433,9 +1443,25 @@ export interface AssetsSelect<T extends boolean = true> {
 export interface NonNetworkAssetsSelect<T extends boolean = true> {
   alias?: T;
   asset_category?: T;
-  software_vendor?: T;
-  software_product?: T;
-  software_version?: T;
+  product_details?:
+    | T
+    | {
+        software_vendor?: T;
+        software_product?: T;
+        software_version?: T;
+      };
+  cloud_details?:
+    | T
+    | {
+        kind?: T;
+        vendor?: T;
+      };
+  repository_details?:
+    | T
+    | {
+        kind?: T;
+      };
+  notes?: T;
   software_part?: T;
   cpe_candidate?: T;
   criticality?: T;

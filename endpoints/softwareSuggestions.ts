@@ -40,7 +40,7 @@ export const softwareSuggestionsEndpoint: Endpoint = {
       where: {
         and: [
           { organization: { equals: ctx.organizationId } },
-          { software_vendor: { exists: true } },
+          { 'product_details.software_vendor': { exists: true } },
         ],
       },
       overrideAccess: true,
@@ -52,8 +52,9 @@ export const softwareSuggestionsEndpoint: Endpoint = {
     const vendors = new Set<string>()
     const products = new Set<string>()
     for (const asset of assets.docs) {
-      if (asset.software_vendor) vendors.add(asset.software_vendor)
-      if (asset.software_product) products.add(asset.software_product)
+      const details = asset.product_details
+      if (details?.software_vendor) vendors.add(details.software_vendor)
+      if (details?.software_product) products.add(details.software_product)
     }
 
     return json({ vendors: [...vendors].sort(), products: [...products].sort() })
