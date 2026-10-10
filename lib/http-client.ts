@@ -1,4 +1,5 @@
 import { clearSession, getSession } from './session'
+import { organizationRequestPath } from './organization-request-context'
 
 export type HttpError = { status: number; code: string; message: string }
 
@@ -35,7 +36,8 @@ function refreshSession(): Promise<boolean> {
 }
 
 async function rawRequest(method: string, path: string, body?: unknown) {
-  return fetch(path, {
+  const scopedPath = organizationRequestPath(path, typeof window === 'undefined' ? '' : window.location.search)
+  return fetch(scopedPath, {
     method,
     headers: { 'Content-Type': 'application/json' },
     // The session lives in the httpOnly `payload-token` cookie now (see collections/Users

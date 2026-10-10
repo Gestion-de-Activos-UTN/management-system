@@ -7,6 +7,7 @@ export function useTasks(params: Parameters<typeof listTasks>[0]) {
   return useQuery({
     queryKey: ['tasks', params],
     queryFn: () => listTasks(params),
+    refetchInterval: 30000,
   })
 }
 
@@ -15,5 +16,6 @@ export function useTask(id: string, asOrganization?: string) {
     queryKey: ['tasks', id, asOrganization],
     queryFn: () => getTask(id, asOrganization),
     enabled: Boolean(id),
+    refetchInterval: query => ['pending', 'in_progress'].includes(query.state.data?.status ?? '') ? 30000 : false,
   })
 }

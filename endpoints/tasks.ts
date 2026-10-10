@@ -1,3 +1,4 @@
+import { actorMatches } from '@/lib/actor-relation'
 import type { Endpoint, PayloadRequest, Where } from 'payload'
 import type { Task } from '@/app/types/payload-types'
 import { getTenantContext, type TenantContext } from '@/access/tenant/resolveTenantContext'
@@ -11,9 +12,11 @@ import {
   TASK_REFERENCE_COLLECTIONS,
   TaskListQuerySchema,
   TaskReferenceSchema,
+  TaskAssignmentOptionsQuerySchema,
 } from '@/modules/tasks/schema'
 import {
   archiveTask,
+  assignmentOptionsScope,
   availableTaskActions,
   assertCanReadTask,
   cancelTask,
@@ -145,7 +148,7 @@ const listTasksEndpoint: Endpoint = {
         req,
         depth: 0,
         sort: 'due_at,-createdAt',
-        limit: 1000,
+        pagination: false,
       })
 
       const visible = await Promise.all(
@@ -156,7 +159,7 @@ const listTasksEndpoint: Endpoint = {
             if (parsed.data.status && effective.effective_status !== parsed.data.status) return null
             if (parsed.data.view === 'mine') {
               const mine =
-                relationId(task.claimed_by) === ctx.userId ||
+                actorMatches(task.claimed_by, ctx) ||
                 relationId(task.assigned_user) === ctx.userId
               if (!mine) return null
             }
@@ -287,32 +290,31 @@ const assignmentOptionsEndpoint: Endpoint = {
     withTaskErrors(async () => {
       const ctx = await taskContext(req)
       if (ctx instanceof Response) return ctx
-      if (!canDo(ctx.role, 'tasks', 'create', ctx.organizationId))
-        return json({ error: 'forbidden' }, 403)
       const params = new URL(req.url ?? 'http://localhost', 'http://localhost').searchParams
-      const officeId = params.get('office_id')
-      const officeIds =
-        params
-          .get('office_ids')
-          ?.split(',')
-          .map(value => value.trim())
-          .filter(Boolean) ?? []
-      const rawReference = params.get('reference_type')
-        ? { relationTo: params.get('reference_type'), value: params.get('reference_id') }
-        : undefined
-      const parsedReference = rawReference ? TaskReferenceSchema.safeParse(rawReference) : null
-      if (parsedReference && !parsedReference.success)
-        return json({ error: 'invalid_reference' }, 400)
-      const reference = parsedReference?.success
-        ? await resolveTaskReference(req, parsedReference.data)
-        : undefined
-      if (reference && !tenantCanReadTaskReference(ctx, reference))
-        return json({ error: 'forbidden' }, 403)
-      const targetOffices = reference
-        ? [reference.officeId]
-        : officeIds.length
-          ? officeIds
-          : [officeId]
+      for (const key of ['office_id', 'office_ids', 'reference_type', 'reference_id', 'task_id'])
+        if (params.getAll(key).length > 1) return json({ error: 'invalid_query' }, 400)
+      const query = TaskAssignmentOptionsQuerySchema.safeParse({
+        office_id: params.get('office_id') ?? undefined,
+        office_ids: params.has('office_ids')
+          ? params
+              .get('office_ids')!
+              .split(',')
+              .map(id => id.trim())
+          : undefined,
+        task_id: params.get('task_id') ?? undefined,
+        reference_type: params.get('reference_type') ?? undefined,
+        reference_id: params.get('reference_id') ?? undefined,
+      })
+      if (!query.success) return json({ error: 'invalid_query', issues: query.error.issues }, 400)
+      const { office_id: officeId, office_ids: officeIds = [], task_id: taskId } = query.data
+      const { offices: targetOffices, reference } = await assignmentOptionsScope(req, ctx, {
+        officeIds: [...new Set(officeIds.length ? officeIds : officeId ? [officeId] : [])],
+        reference:
+          query.data.reference_type && query.data.reference_id
+            ? { relationTo: query.data.reference_type, value: query.data.reference_id }
+            : undefined,
+        taskId: taskId ?? undefined,
+      })
       const memberSets = await Promise.all(
         targetOffices.map(targetOffice =>
           listEligibleTaskMembers(req, ctx.organizationId!, targetOffice, reference)

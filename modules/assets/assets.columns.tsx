@@ -50,6 +50,7 @@ export function getAssetsColumns(
           .join(' · ')
         return (
           <Stack gap={2} miw={0}>
+            {asset.location_pending && <StatusBadge tone="warning" label="Ubicación por confirmar" />}
             <Group gap="xs" wrap="nowrap" miw={0}>
               {asset.first_viewed_at == null ? (
                 // flexShrink: 0 — sin esto el Group encoge el badge y Mantine trunca su label.

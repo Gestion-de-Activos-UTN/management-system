@@ -14,7 +14,6 @@
     },
     "network": {
       "type": "string",
-      "minLength": 1,
       "maxLength": 43
     },
     "scan_start": {
@@ -527,7 +526,6 @@
           },
           "network": {
             "type": "string",
-            "minLength": 1,
             "maxLength": 43
           },
           "is_route_to_target": {

@@ -21,10 +21,13 @@ export function useTaskReferenceOptions(
 export function useTaskAssignmentOptions(
   officeIds: string[],
   reference?: TaskReferenceInput,
-  asOrganization?: string
+  asOrganization?: string,
+  options?: { enabled?: boolean; taskId?: string }
 ) {
   return useQuery({
-    queryKey: ['task-assignment-options', officeIds, reference, asOrganization],
-    queryFn: () => getTaskAssignmentOptions({ officeIds, reference, asOrganization }),
+    queryKey: ['task-assignment-options', officeIds, reference, asOrganization, options?.taskId],
+    queryFn: () =>
+      getTaskAssignmentOptions({ officeIds, reference, asOrganization, taskId: options?.taskId }),
+    enabled: options?.enabled ?? true,
   })
 }

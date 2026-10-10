@@ -84,10 +84,10 @@ export const TASK_REFERENCE_HELP: Record<string, string> = {
   assets: 'Un equipo concreto descubierto mediante un escaneo.',
   'non-network-assets': 'Un activo concreto cargado manualmente.',
   'assessment-instances':
-    'Un ciclo específico; permanece enlazado aunque luego se abra otro ciclo.',
+    'Las tareas abiertas siguen el ciclo que lo reemplaza cuando cambia el activo; el historial conserva la referencia anterior.',
   'compliance-results': 'El resultado puntual de un control evaluado.',
-  'inventory-snapshots': 'Una copia inmutable del inventario en una fecha determinada.',
+  'inventory-snapshots': 'Conserva la evidencia de origen y permite abrir el inventario vigente de la oficina.',
   'scan-reports': 'Un reporte generado por una ejecución concreta del agente.',
-  'risk-evaluations': 'Un cálculo de riesgo correspondiente a una fecha determinada.',
+  'risk-evaluations': 'Conserva la evaluación de origen y permite abrir el puntaje vigente del mismo ámbito.',
   agents: 'La instalación del agente de escaneo de una oficina.',
 }

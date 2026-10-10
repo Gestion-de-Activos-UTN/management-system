@@ -362,7 +362,7 @@ test('bulk assessment completion overwrites open drafts and preserves closed cyc
       question_version: firstQuestion.version,
       option_key: draftOption.key,
       option_snapshot: draftOption,
-      answered_by: user.id,
+      answered_by: { relationTo: 'users', value: user.id },
       answered_at: new Date().toISOString(),
       valid_until: new Date(Date.now() + 86_400_000).toISOString(),
       evaluation_effect_snapshot: {},

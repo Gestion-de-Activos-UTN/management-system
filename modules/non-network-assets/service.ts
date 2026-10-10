@@ -9,6 +9,7 @@ export function listNonNetworkAssets(params?: {
 }) {
   return listResource<NonNetworkAsset>('/api/non-network-assets', {
     depth: '1',
+    'where[deleted_at][exists]': 'false',
     asOrganization: params?.asOrganization,
     'where[office][equals]': params?.officeId ?? undefined,
   })

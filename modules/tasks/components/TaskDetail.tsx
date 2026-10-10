@@ -21,7 +21,7 @@ import { relationId } from '@/lib/relationId'
 import type { ReassignTaskInput } from '../schema'
 import type { TaskAction, TaskDTO } from '../service'
 import { TASK_PRIORITY_LABELS, TASK_STATUS_LABELS, TASK_STATUS_TONES } from '../task-labels'
-import { getTaskReferenceHref } from '../task-reference-link'
+import { getTaskReferenceHref, getTaskCurrentReferenceHref } from '../task-reference-link'
 import { useTaskCommand } from '../hooks/use-task-actions'
 import { useTaskAssignmentOptions } from '../hooks/use-task-options'
 import { TaskEditForm } from './TaskEditForm'
@@ -42,7 +42,8 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
   const assignmentOptions = useTaskAssignmentOptions(
     task.office ? [relationId(task.office)] : [],
     reference,
-    asOrganization
+    asOrganization,
+    { taskId: task.id, enabled: reassignOpened && task.available_actions.includes('reassign') }
   )
   const referenceHref = task.related_entity_info
     ? getTaskReferenceHref(task.related_entity_info, asOrganization)
@@ -94,6 +95,23 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
           La asignación actual ya no tiene personas elegibles. Reasigna la tarea.
         </Alert>
       )}
+      {Array.isArray(task.lifecycle_history) && task.lifecycle_history.length > 0 && (
+        <Card withBorder padding="md">
+          <Stack gap="xs">
+            <Text fw={600} size="sm">
+              Cambios vinculados al activo
+            </Text>
+            {task.lifecycle_history.map((event, index) => {
+              if (!event || typeof event !== 'object' || !('reason' in event)) return null
+              return (
+                <Text key={index} size="sm">
+                  {String(event.reason)} {'at' in event ? formatDateTime(String(event.at)) : ''}
+                </Text>
+              )
+            })}
+          </Stack>
+        </Card>
+      )}
       <Card withBorder padding="lg">
         <Stack gap="md">
           <Text style={{ whiteSpace: 'pre-wrap' }}>{task.description || 'Sin descripción.'}</Text>
@@ -123,6 +141,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
               relationTo={task.related_entity_info.relationTo}
               label={task.related_entity_info.label}
               href={referenceHref}
+              currentHref={getTaskCurrentReferenceHref(task.related_entity_info, asOrganization)}
             />
           )}
         </Stack>

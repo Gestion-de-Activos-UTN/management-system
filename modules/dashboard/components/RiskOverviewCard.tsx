@@ -11,6 +11,7 @@ import {
   Stack,
   Text,
 } from '@mantine/core'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 import { ArrowRight } from 'lucide-react'
 import { RiskBandBadge } from '@/modules/risk/components/RiskBandBadge'
 import { RISK_ROBOT_MESSAGE, RiskRobot, riskRobotMood } from '@/modules/risk/components/RiskRobot'
@@ -45,6 +46,7 @@ export function RiskOverviewCard({
             <Text fw={700} c="dimmed" size="sm" tt="uppercase">
               Riesgo actual
             </Text>
+            {summary?.recalculation && summary.recalculation !== 'current' && <StatusBadge tone={summary.recalculation === 'failed' ? 'danger' : 'warning'} label={summary.recalculation === 'failed' ? 'Actualización pendiente de recuperación' : 'Actualizando riesgo'} />}
             <Group gap="sm" align="center">
               <Text fw={800} fz={44} lh={1}>
                 {score === null ? '—' : `${Math.round(score)} %`}

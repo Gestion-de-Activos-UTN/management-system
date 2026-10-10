@@ -24,6 +24,7 @@ export function getTasksColumns(asOrganization?: string): ColumnDef<TaskDTO, unk
         const Icon = reference ? TASK_REFERENCE_ICONS[reference.relationTo] : null
         return (
           <div>
+            {row.original.requires_reassignment && <StatusBadge tone="warning" label="Requiere reasignación" />}
             <Text fw={600} size="sm" lineClamp={1}>
               {row.original.title}
             </Text>

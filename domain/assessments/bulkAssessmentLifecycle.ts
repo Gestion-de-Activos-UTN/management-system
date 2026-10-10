@@ -143,7 +143,7 @@ export async function resolveBulkAssessmentPreview(
     overrideAccess: true,
     req,
     depth: 0,
-    limit: 5000,
+    pagination: false,
     sort: '-createdAt',
   })
   const instances = result.docs
@@ -195,7 +195,8 @@ export async function resolveBulkAssessmentPreview(
         overrideAccess: true,
         req,
         depth: 0,
-        limit: Math.max(100, openIds.length * 100),
+        pagination: false,
+        select: { assessment: true },
       })
     : { docs: [] }
   const assessmentsWithAnswers = new Set(
@@ -268,12 +269,12 @@ export async function completeBulkAssessments(
       completed += 1
       if (assessment.office) officeIds.add(relationId(assessment.office))
     }
+    await enqueueRiskRecalculation(payload, ctx.organizationId, [...officeIds], req)
     if (ownsTransaction && transactionID) await payload.db.commitTransaction(transactionID)
   } catch (error) {
     if (ownsTransaction && transactionID) await payload.db.rollbackTransaction(transactionID)
     throw error
   }
-  await enqueueRiskRecalculation(payload, ctx.organizationId, [...officeIds])
   // NOTIFY: this event should trigger a Notification Bell entry for {affected assessment owners}
   // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
   return {

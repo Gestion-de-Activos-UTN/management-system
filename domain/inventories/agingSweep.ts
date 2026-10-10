@@ -1,5 +1,7 @@
 import type { Payload, Where } from 'payload'
 import { enqueueRiskRecalculation } from '@/domain/risk/enqueueRiskRecalculation'
+import { lockAssetRow, withTransaction } from '@/domain/with-transaction'
+import { relationId } from '@/lib/relationId'
 
 // Sin AppSettings singleton todavía (mismo gap que risk_score_policy) — este es el default de
 // plataforma cuando una organización no tiene override en OrganizationSettings.offline_after_hours.
@@ -43,7 +45,6 @@ async function sweepActiveAssets(payload: Payload, now: number): Promise<AgingSw
   const offlineAfterHoursByOrg = new Map<string, number>()
   const organizationsSeen = new Set<string>()
   // Offline assets stop counting as current network evidence; recalculate once per touched office.
-  const touchedOffices = new Map<string, Set<string>>()
   let transitioned = 0
   let cursor: string | null = null
 
@@ -68,7 +69,7 @@ async function sweepActiveAssets(payload: Payload, now: number): Promise<AgingSw
     cursor = result.docs[result.docs.length - 1].id
 
     for (const asset of result.docs) {
-      const organizationId = String(asset.organization)
+      const organizationId = relationId(asset.organization)
       organizationsSeen.add(organizationId)
 
       let offlineAfterHours = offlineAfterHoursByOrg.get(organizationId)
@@ -79,26 +80,28 @@ async function sweepActiveAssets(payload: Payload, now: number): Promise<AgingSw
 
       if (!shouldGoOffline(asset.last_seen ?? null, offlineAfterHours, now)) continue
 
+      const changed = await withTransaction(payload, undefined, async req => {
+      await lockAssetRow(req, 'assets', asset.id)
+      const current = await payload.findByID({ collection: 'assets', id: asset.id, overrideAccess: true, req, depth: 0 })
+      if (current.status !== 'active' || !shouldGoOffline(current.last_seen ?? null, offlineAfterHours!, now)) return false
+      // AUDIT: asset became offline after rechecking the locked current observation.
+      // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
       await payload.update({
         collection: 'assets',
+        req,
         id: asset.id,
         overrideAccess: true,
         context: { systemJob: true },
         data: { status: 'offline' },
       })
-      transitioned += 1
-      if (asset.office) {
-        const offices = touchedOffices.get(organizationId) ?? new Set<string>()
-        offices.add(String(asset.office))
-        touchedOffices.set(organizationId, offices)
-      }
+      await enqueueRiskRecalculation(payload, organizationId, [current.office ? relationId(current.office) : null], req)
+      return true
+      })
+      if (changed) transitioned += 1
     }
 
     if (result.docs.length < 200) break
   }
-
-  for (const [organizationId, offices] of touchedOffices)
-    await enqueueRiskRecalculation(payload, organizationId, [...offices])
 
   return { assets_transitioned: transitioned, organizations_processed: organizationsSeen.size }
 }

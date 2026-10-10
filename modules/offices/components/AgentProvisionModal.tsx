@@ -81,7 +81,7 @@ export function AgentProvisionModal({
     })
   }
 
-  const hasAgents = (summary?.total ?? 0) > 0
+  const hasAgents = Boolean(summary && 'total' in summary && summary.total > 0)
 
   return (
     <>
@@ -108,7 +108,7 @@ export function AgentProvisionModal({
               <Text size="sm" fw={600}>
                 Escáneres existentes
               </Text>
-              {summary?.agents.map(agent => (
+              {summary && 'agents' in summary && summary.agents.map(agent => (
                 <Group key={agent.id} justify="space-between" gap="sm">
                   <Stack gap={2} style={{ minWidth: 0 }}>
                     <Text size="sm" truncate>
@@ -157,7 +157,7 @@ export function AgentProvisionModal({
               </Text>
               {quota.per_office !== null && (
                 <Text size="xs" c="dimmed">
-                  Esta oficina: {summary?.active ?? 0} of {quota.per_office} en uso
+                  Esta oficina: {summary && 'active' in summary ? summary.active : 0} of {quota.per_office} en uso
                 </Text>
               )}
             </Stack>

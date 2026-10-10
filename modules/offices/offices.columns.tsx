@@ -44,7 +44,7 @@ export function getOfficesColumns(
         if (!summary) return null
         if (status === 'inactive') {
           return (
-            <Tooltip label={`${summary.total} agente(s) aprovisionado(s), todos inactivos`}>
+            <Tooltip label={'total' in summary ? `${summary.total} agente(s) aprovisionado(s), todos inactivos` : 'El escáner está inactivo'}>
               <Badge color="gray" variant="filled">
                 Inactivo
               </Badge>
@@ -62,7 +62,7 @@ export function getOfficesColumns(
         }
         if (status === 'online') {
           return (
-            <Tooltip label={`${summary.online} de ${summary.active} agente(s) activo(s) en línea`}>
+            <Tooltip label={'agents' in summary ? `${summary.online} de ${summary.active} agente(s) activo(s) en línea` : 'El escáner está conectado'}>
               <Badge color="green" variant="filled">
                 En línea
               </Badge>
@@ -70,7 +70,7 @@ export function getOfficesColumns(
           )
         }
         return (
-          <Tooltip label={`${summary.active} agente(s) activo(s), ninguno en línea`}>
+          <Tooltip label={'active' in summary ? `${summary.active} agente(s) activo(s), ninguno en línea` : 'El escáner no está conectado'}>
             <Badge color="yellow" variant="filled">
               Sin conexión
             </Badge>
@@ -85,7 +85,7 @@ export function getOfficesColumns(
       meta: { align: 'center' },
       cell: ({ row }) => {
         const summary = summaryByOffice.get(String(row.original.id))
-        const hasAgents = (summary?.total ?? 0) > 0
+        const hasAgents = Boolean(summary && getOfficeScannerStatus(summary) !== 'not_installed')
         return (
           <Button
             size="xs"

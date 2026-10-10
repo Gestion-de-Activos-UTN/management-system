@@ -1,5 +1,6 @@
 import type { Endpoint } from 'payload'
 import { HeartbeatPayloadSchema } from '../contracts/heartbeat.schema'
+import { readBoundedJSON, RequestBodyError } from '../lib/read-bounded-json'
 import {
   resolveAgentAuth,
   createPayloadAgentAuthDeps,
@@ -14,6 +15,12 @@ export const heartbeatEndpoint: Endpoint = {
   path: '/v1/heartbeat',
   method: 'post',
   handler: async req => {
+    let rawBody: unknown
+    try { rawBody = await readBoundedJSON(req, 16 * 1024) }
+    catch (error) {
+      if (error instanceof RequestBodyError) return json({ error: error.message }, error.status)
+      throw error
+    }
     const authDeps = createPayloadAgentAuthDeps(req.payload)
     let auth
     try {
@@ -25,7 +32,6 @@ export const heartbeatEndpoint: Endpoint = {
       throw err
     }
 
-    const rawBody = await req.json!()
     const parseResult = HeartbeatPayloadSchema.safeParse(rawBody)
     if (!parseResult.success) {
       return json({ error: 'invalid payload', issues: parseResult.error.issues }, 400)

@@ -1,4 +1,7 @@
+import { reconcileAssetTasks } from '@/domain/tasks/reconcile-asset-tasks'
+import { logicalDeleteEndpoint, rejectPhysicalAssetDelete, preserveDeletedAsset } from '@/domain/assets/logical-delete'
 import type { CollectionConfig } from 'payload'
+import { readTechnicalEvidence } from '../../access/rbac/technical-evidence'
 import { orgScopedAccess } from '../../access/rbac/orgScopedAccess'
 import { validateOwnerTenant } from './hooks/validateOwnerTenant'
 import { rejectManualOfflineStatus } from './hooks/rejectManualOfflineStatus'
@@ -28,22 +31,30 @@ export const Assets: CollectionConfig = {
     update: orgScopedAccess('assets', 'update', { kind: 'org_offices', field: 'office' }),
     delete: () => false,
   },
+  endpoints: [logicalDeleteEndpoint('assets')],
   hooks: {
-    beforeChange: [
+    beforeDelete: [rejectPhysicalAssetDelete],
+    beforeChange: [preserveDeletedAsset,
       validateOwnerTenant,
       rejectManualOfflineStatus,
       rejectBusinessEditsBeforeIdentified,
       enforceAuthorizationInvariant,
       validateAssetAssessmentScope,
     ],
-    afterChange: [reconcileAssessmentApplicability],
+    afterChange: [reconcileAssessmentApplicability, reconcileAssetTasks],
   },
   fields: [
+    { name: 'location_pending', type: 'checkbox', defaultValue: false, access: technicalFieldAccess },
+    { name: 'deleted_at', type: 'date', index: true, access: { create: () => false, update: () => false } },
+    { name: 'port_scan_coverage', type: 'json', access: technicalFieldAccess },
+    { name: 'scanner_asset_id', type: 'text', index: true, access: technicalFieldAccess },
+    { name: 'identity_key', type: 'text', unique: true, index: true, access: technicalFieldAccess },
     {
       name: 'asset_id',
       type: 'text',
       required: true,
       unique: true,
+      access: technicalFieldAccess,
     },
     {
       name: 'agent',
@@ -257,7 +268,7 @@ export const Assets: CollectionConfig = {
       // Salida de scripts NSE a nivel host (ej. smb-os-discovery): id de script -> output crudo.
       name: 'host_scripts',
       type: 'json',
-      access: technicalFieldAccess,
+      access: { ...technicalFieldAccess, read: readTechnicalEvidence },
     },
     {
       name: 'services',
@@ -277,7 +288,7 @@ export const Assets: CollectionConfig = {
         { name: 'confidence', type: 'number', min: 0, max: 10 },
         { name: 'tunnel', type: 'text' },
         // Salida de scripts NSE (-sC) para este puerto: id de script -> output crudo.
-        { name: 'scripts', type: 'json' },
+        { name: 'scripts', type: 'json', access: { read: readTechnicalEvidence } },
       ],
     },
     {
@@ -351,7 +362,7 @@ export const Assets: CollectionConfig = {
     {
       name: 'type_confirmed_by',
       type: 'relationship',
-      relationTo: 'users',
+      relationTo: ['users', 'admins'],
       admin: { readOnly: true },
       access: technicalFieldAccess,
     },

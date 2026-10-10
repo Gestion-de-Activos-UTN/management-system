@@ -1,3 +1,4 @@
+import { actorRelation } from '@/lib/actor-relation'
 import type { Endpoint } from 'payload'
 import { getTenantContext } from '../access/tenant/resolveTenantContext'
 import { canDo } from '../access/rbac/permissions'
@@ -56,7 +57,7 @@ export const assetIdentifyEndpoint: Endpoint = {
         criticality: body.authorization_status === 'authorized' ? body.criticality : null,
         identified: true,
         identification_status: 'confirmed',
-        type_confirmed_by: ctx.userId,
+        type_confirmed_by: actorRelation(req, ctx.userId),
         type_confirmed_at: confirmedAt,
       },
     })

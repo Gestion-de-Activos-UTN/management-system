@@ -6,6 +6,7 @@ import type { AssetBusinessFields, AssetIdentification } from './schema'
 export function listAssets(params?: { asOrganization?: string; officeId?: string | null }) {
   return listResource<Asset>('/api/assets', {
     depth: '1',
+    'where[deleted_at][exists]': 'false',
     asOrganization: params?.asOrganization,
     'where[office][equals]': params?.officeId ?? undefined,
   })

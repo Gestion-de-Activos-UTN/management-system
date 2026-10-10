@@ -1,3 +1,4 @@
+import { relationId } from '@/lib/relationId'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { getPayload } from 'payload'
@@ -78,7 +79,7 @@ test('Tasks cubre creación multi-oficina, reclamo, reprogramación, completado 
   }
   assert.equal(replanned.status, 'pending')
   assert.equal(replanned.effective_status, 'planned')
-  assert.equal(replanned.claimed_by, null)
+  assert.equal(replanned.claimed_by ?? null, null)
 
   const earlyClaim = await endpoint('post', '/v1/tasks/:id/claim').handler(
     request(payload, viewerId, { id: firstId })
@@ -112,7 +113,7 @@ test('Tasks cubre creación multi-oficina, reclamo, reprogramación, completado 
     depth: 0,
   })
   assert.equal(completed.status, 'completed')
-  assert.equal(String(completed.completed_by), viewerId)
+  assert.equal(relationId(completed.completed_by), viewerId)
 
   const secondId = String(created.docs[1].id)
   assert.equal(

@@ -10,6 +10,7 @@ export function useRiskSummary(params?: {
 }) {
   return useQuery({
     queryKey: ['assessments', 'risk-summary', params?.asOrganization, params?.officeId],
+    refetchInterval: query => ['pending', 'processing', 'outdated'].includes(query.state.data?.recalculation ?? '') ? 3000 : 30000,
     queryFn: () => getSecurityReviewSummary(params),
     enabled: params?.enabled ?? true,
   })

@@ -111,7 +111,7 @@ test('POST /v1/reports crea assets y es idempotente por report_id', async () => 
 
   const asset = await payload.find({
     collection: 'assets',
-    where: { asset_id: { equals: body.assets[0].asset_id } },
+    where: { scanner_asset_id: { equals: body.assets[0].asset_id } },
     overrideAccess: true,
   })
   assert.equal(asset.docs.length, 1)
@@ -125,7 +125,7 @@ test('POST /v1/reports crea assets y es idempotente por report_id', async () => 
 
   const assetsAfterRetry = await payload.find({
     collection: 'assets',
-    where: { asset_id: { equals: body.assets[0].asset_id } },
+    where: { scanner_asset_id: { equals: body.assets[0].asset_id } },
     overrideAccess: true,
   })
   assert.equal(assetsAfterRetry.docs.length, 1, 'no debe duplicar el asset en el reintento')
@@ -143,6 +143,7 @@ test('POST /v1/reports reconcilia un scan degradado seguido de uno full: mismo d
   const uniqueIp = `10.${crypto.randomInt(1, 255)}.${crypto.randomInt(1, 255)}.${crypto.randomInt(1, 255)}`
 
   const degradedBody = reportPayload(agentId, {
+    network: uniqueIp.split('.').slice(0, 3).join('.') + '.0/24',
     scan_mode: 'degraded',
     scan_mode_reason: 'not running elevated',
     report_coverage: {
@@ -199,6 +200,7 @@ test('POST /v1/reports reconcilia un scan degradado seguido de uno full: mismo d
   })
 
   const fullBody = reportPayload(agentId, {
+    network: uniqueIp.split('.').slice(0, 3).join('.') + '.0/24',
     scan_mode: 'full',
     assets: [
       {
@@ -289,7 +291,7 @@ test('POST /v1/reports NO rechaza un host sin mac/vendor/hostname resueltos', as
 
   const asset = await payload.find({
     collection: 'assets',
-    where: { asset_id: { equals: body.assets[0].asset_id } },
+    where: { scanner_asset_id: { equals: body.assets[0].asset_id } },
     overrideAccess: true,
   })
   assert.equal(asset.docs.length, 1)

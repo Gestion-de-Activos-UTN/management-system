@@ -1,3 +1,4 @@
+import { actorRelation } from '@/lib/actor-relation'
 import type { Endpoint } from 'payload'
 import { getTenantContext } from '../access/tenant/resolveTenantContext'
 import {
@@ -108,7 +109,7 @@ export const organizationMaturityUpdateEndpoint: Endpoint = {
       data: {
         ...parsed.data,
         maturity_updated_at: new Date().toISOString(),
-        maturity_updated_by: loaded.userId,
+        maturity_updated_by: actorRelation(req, loaded.userId),
       },
     })
     return json(updated)

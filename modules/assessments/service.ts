@@ -13,6 +13,7 @@ import type {
 } from '@/domain/assessments/bulkAssessmentLifecycle'
 
 export type SecurityReviewSummary = {
+  recalculation?: import('@/domain/risk/recalculation-status').RecalculationStatus
   risk_score: number | null
   evaluated_percentage: number
   applicable_checks: number

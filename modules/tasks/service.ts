@@ -104,11 +104,13 @@ export function getTaskAssignmentOptions(params: {
   officeIds: string[]
   reference?: TaskReferenceInput
   asOrganization?: string
+  taskId?: string
 }) {
   return httpClient.get<TaskAssignmentOptions>('/api/v1/tasks/assignment-options', {
-    office_ids: params.officeIds.length ? params.officeIds.join(',') : undefined,
-    reference_type: params.reference?.relationTo,
-    reference_id: params.reference?.value,
+    task_id: params.taskId,
+    office_ids: !params.taskId && params.officeIds.length ? params.officeIds.join(',') : undefined,
+    reference_type: params.taskId ? undefined : params.reference?.relationTo,
+    reference_id: params.taskId ? undefined : params.reference?.value,
     asOrganization: params.asOrganization,
   })
 }

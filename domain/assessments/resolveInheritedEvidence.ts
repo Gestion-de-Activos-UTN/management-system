@@ -36,7 +36,7 @@ export async function resolveInheritedAssessmentEvidence(
     overrideAccess: true,
     req,
     depth: 0,
-    limit: 100,
+    pagination: false,
     sort: '-completed_at',
     where: { and: [{ organization: { equals: organizationId } }, { or: scopeClauses }] },
   })
@@ -47,7 +47,7 @@ export async function resolveInheritedAssessmentEvidence(
     overrideAccess: true,
     req,
     depth: 0,
-    limit: 1000,
+    pagination: false,
     sort: '-answered_at',
     where: { assessment: { in: instanceIds } },
   })

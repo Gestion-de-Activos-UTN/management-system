@@ -1,5 +1,6 @@
 import type { CollectionConfig } from 'payload'
 import { orgScopedAccess } from '../../access/rbac/orgScopedAccess'
+import { readTechnicalEvidence } from '../../access/rbac/technical-evidence'
 
 // Escritura solo vía domain/inventories/ingestScanReport.ts con overrideAccess — mismo patrón que AuditLogs (SYSTEM_PROMPT.md §2).
 export const ScanReports: CollectionConfig = {
@@ -15,6 +16,8 @@ export const ScanReports: CollectionConfig = {
     delete: () => false,
   },
   fields: [
+    { name: 'content_fingerprint', type: 'text', admin: { readOnly: true } },
+    { name: 'received_at', type: 'date', index: true, admin: { readOnly: true } },
     {
       name: 'id',
       type: 'text',
@@ -83,6 +86,7 @@ export const ScanReports: CollectionConfig = {
     {
       name: 'raw_payload',
       type: 'json',
+      access: { read: readTechnicalEvidence },
     },
     {
       name: 'raw_payload_expires_at',
@@ -102,6 +106,7 @@ export const ScanReports: CollectionConfig = {
     {
       name: 'error',
       type: 'text',
+      access: { read: readTechnicalEvidence },
     },
   ],
 }

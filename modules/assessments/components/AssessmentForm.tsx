@@ -25,6 +25,7 @@ import {
   assessmentFieldKey,
   buildAssessmentDraft,
   type AssessmentAnswerFields,
+  assessmentFormResolver,
 } from '../assessment-form-state'
 
 type FormState = { answers: Record<string, AssessmentAnswerFields> }
@@ -76,6 +77,8 @@ export function AssessmentForm(props: {
     })
   )
   const { control, handleSubmit, watch, reset } = useForm<FormState>({
+    resolver: assessmentFormResolver(questions),
+    mode: 'onChange',
     defaultValues: { answers: defaults },
   })
   useEffect(() => reset({ answers: defaults }), [props.savedAnswers, props.previousAnswers]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -151,8 +154,8 @@ export function AssessmentForm(props: {
                   defaultValue={
                     defaults[fieldKeyByQuestion.get(question.key) ?? '']?.option_key as never
                   }
-                  render={({ field }) => (
-                    <Radio.Group {...field} value={field.value ?? ''}>
+                  render={({ field, fieldState }) => (
+                    <Radio.Group {...field} value={field.value ?? ''} error={fieldState.error?.message}>
                       <Stack mt="xs" gap="xs">
                         {question.options.map(option => (
                           <Radio
@@ -175,13 +178,15 @@ export function AssessmentForm(props: {
                         '.justification') as never
                     }
                     control={control}
-                    render={({ field }) => (
+                    render={({ field, fieldState }) => (
                       <Textarea
                         {...field}
                         value={field.value ?? ''}
                         label="¿Por qué no aplica?"
                         placeholder="Una breve explicación cotidiana es suficiente."
                         required
+                        maxLength={2000}
+                        error={fieldState.error?.message}
                         disabled={props.readOnly}
                       />
                     )}

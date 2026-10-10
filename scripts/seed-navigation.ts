@@ -1,7 +1,8 @@
-import { getPayload } from 'payload'
+import { pathToFileURL } from 'node:url'
 import type { Payload, PayloadRequest } from 'payload'
 import config from '../payload.config'
 import { createOrgWithAdmin } from '../domain/organizations/createOrgWithAdmin'
+import { initializeSeedPayload } from './seed-payload'
 
 // Único script de esta fase (modo navegación de solo lectura): siembra, en una sola
 // transacción atómica, los 4 roles base, una organización demo completa (Settings +
@@ -204,9 +205,7 @@ function printCredentials() {
   }
 }
 
-async function main() {
-  const payload = await getPayload({ config })
-
+export async function seedNavigation(payload: Payload) {
   const existingOrg = await payload.find({
     collection: 'organizations',
     where: { name: { equals: ORG_NAME } },
@@ -225,7 +224,7 @@ async function main() {
     }
     console.log(`'${ORG_NAME}' ya existe — se reparó el alcance del org-admin demo.`)
     printCredentials()
-    process.exit(0)
+    return
   }
 
   const transactionID = await payload.db.beginTransaction()
@@ -359,10 +358,17 @@ async function main() {
 
   console.log('Seed de navegación OK.')
   printCredentials()
-  process.exit(0)
 }
 
-main().catch(err => {
-  console.error(err)
-  process.exit(1)
-})
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  initializeSeedPayload(config)
+    .then(async payload => {
+      await seedNavigation(payload)
+      await payload.destroy()
+      process.exit(0)
+    })
+    .catch(err => {
+      console.error(err)
+      process.exit(1)
+    })
+}

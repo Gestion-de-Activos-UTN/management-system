@@ -17,7 +17,7 @@ export const sessionEndpoint: Endpoint = {
   method: 'get',
   handler: async req => {
     const ctx = await getTenantContext(req)
-    if (!ctx) return json({ error: 'unauthenticated' }, 401)
+    if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
     const subscription = ctx.organizationId
       ? await req.payload.find({
           collection: 'subscriptions',
@@ -55,6 +55,10 @@ export const sessionEndpoint: Endpoint = {
       orgWide: hasOrgWideScope(ctx.role),
       features,
       permissions: {
+        technicalEvidence: Boolean(
+          ctx.organizationId &&
+          canDo(ctx.role, 'scan-reports', 'read_technical', ctx.organizationId)
+        ),
         tasks: taskActions.filter(action => canDo(ctx.role, 'tasks', action, ctx.organizationId)),
       },
     })

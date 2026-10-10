@@ -27,6 +27,7 @@ function makeLifecyclePayload() {
   let rolledBack = 0
   const payload = {
     db: {
+      sessions: { 'tx-1': { db: { execute: async () => undefined } } },
       beginTransaction: async () => 'tx-1',
       commitTransaction: async () => {
         committed += 1
@@ -129,7 +130,7 @@ describe('assessment lifecycle', () => {
 
   it('upserts a draft idempotently instead of duplicating answers', async () => {
     const setup = makeLifecyclePayload()
-    const req = { context: {} } as PayloadRequest
+    const req = { context: {}, payload: setup.payload } as PayloadRequest
     await saveAssessmentDraft(setup.payload, 'assessment-1', command, 'user-1', req)
     await saveAssessmentDraft(setup.payload, 'assessment-1', command, 'user-1', req)
     assert.equal(setup.answers.length, 2)
@@ -138,6 +139,7 @@ describe('assessment lifecycle', () => {
   it('completes atomically and a retry creates no duplicate result', async () => {
     const setup = makeLifecyclePayload()
     await completeAssessment(setup.payload, 'assessment-1', command, 'user-1', {
+      payload: setup.payload,
       context: {},
     } as PayloadRequest)
     assert.equal(setup.state().assessment.status, 'completed')
@@ -150,6 +152,7 @@ describe('assessment lifecycle', () => {
     )
 
     await completeAssessment(setup.payload, 'assessment-1', command, 'user-1', {
+      payload: setup.payload,
       context: {},
     } as PayloadRequest)
     assert.equal(setup.results.length, 1)
@@ -160,6 +163,7 @@ describe('assessment lifecycle', () => {
     const setup = makeLifecyclePayload()
     await assert.rejects(
       completeAssessment(setup.payload, 'assessment-1', { answers: [] }, 'user-1', {
+        payload: setup.payload,
         context: {},
       } as PayloadRequest),
       /Every visible question/

@@ -3,6 +3,7 @@ import { NETWORK_BASELINE } from './catalog/network-baseline'
 // Textos por motivo que no dependen de una regla del catálogo. Van primero: un servicio que ya
 // no se observa conserva el check_key de su regla, pero su texto es otro.
 const REASON_TEXT: Record<string, string> = {
+  service_state_unconfirmed: 'El escaneo no pudo confirmar si esta función sigue disponible. No se considera resuelta.',
   technical_coverage_insufficient:
     'Se detectó una función de red, pero el escaneo no tuvo cobertura suficiente para verificarla.',
   service_unclassified:

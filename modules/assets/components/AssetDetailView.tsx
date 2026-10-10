@@ -23,6 +23,7 @@ import {
   ThemeIcon,
   Tooltip,
 } from '@mantine/core'
+import { InventoryIncidentsPanel } from './InventoryIncidentsPanel'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { TechnicalText } from '@/components/ui/TechnicalText'
 import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
@@ -36,7 +37,7 @@ import {
 import { formatDateInput, formatDateTime, localDateEndToISOString } from '@/lib/format-date'
 import type { Asset } from '@/app/types/payload-types'
 import {
-  AssetBusinessFieldsSchema,
+  createAssetBusinessFieldsSchema,
   type AssetBusinessFields,
   UNKNOWN_IDENTIFICATION_VALUE,
 } from '../schema'
@@ -518,7 +519,8 @@ export function AssetDetailView({
     watch,
     formState: { isDirty, dirtyFields, errors },
   } = useForm<AssetBusinessFields>({
-    resolver: zodResolver(AssetBusinessFieldsSchema),
+    mode: 'onChange',
+    resolver: zodResolver(createAssetBusinessFieldsSchema(asset)),
     defaultValues: {
       authorization_status:
         asset.authorization_status === 'unauthorized' ? 'unauthorized' : 'authorized',
@@ -599,6 +601,7 @@ export function AssetDetailView({
 
   return (
     <Stack gap="lg">
+      <InventoryIncidentsPanel asOrganization={asOrganization} assetId={asset.id} />
       <PageHeader
         // Mismo nombre que la celda "Equipo" del inventario: alias confirmado, hostname o IP.
         title={
@@ -984,7 +987,9 @@ export function AssetDetailView({
                   <TextInput
                     type="date"
                     label="Excluido hasta"
-                    description="Déjalo vacío para una exclusión sin vencimiento."
+                    description="Fecha obligatoria, hasta 90 días desde hoy."
+                    required
+                    error={errors.assessment_excluded_until?.message}
                     value={field.value ? formatDateInput(field.value) : ''}
                     onChange={event =>
                       field.onChange(

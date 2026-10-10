@@ -127,3 +127,12 @@ test('isAgentPlatform: acepta los dos valores válidos y rechaza cualquier otra 
   assert.equal(isAgentPlatform(undefined), false)
   assert.equal(isAgentPlatform({ platform: 'windows' }), false)
 })
+
+test('launchers reject dependency bootstrap with elevated privileges before pip', async () => {
+  const posix = (await buildZip('posix')).file('start-agent.sh')!
+  const shell = await posix.async('string')
+  assert.ok(shell.indexOf('dependency installation cannot run as root') < shell.indexOf('-m pip install'))
+  assert.ok(shell.includes('exit 1'))
+  const powershell = await (await buildZip('windows')).file('start-agent.ps1')!.async('string')
+  assert.ok(powershell.indexOf('without Administrator privileges first') < powershell.indexOf('-m pip install'))
+})

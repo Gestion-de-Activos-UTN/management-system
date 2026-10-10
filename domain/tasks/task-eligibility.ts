@@ -38,7 +38,7 @@ export async function listEligibleTaskMembers(
     overrideAccess: true,
     req,
     depth: 2,
-    limit: 1000,
+    pagination: false,
   })
 
   return memberships.docs.flatMap(membership => {

@@ -51,9 +51,11 @@ export const reconcileAssessmentApplicability: CollectionAfterChangeHook<NonNetw
     await syncManualAssetAssessmentAssignee(req.payload, doc, req)
   }
   // The previous office loses this asset, so its evaluation must be refreshed too.
-  await enqueueRiskRecalculation(req.payload, relationId(doc.organization), [
-    relationId(doc.office),
-    previousDoc?.office ? relationId(previousDoc.office) : null,
-  ])
+  await enqueueRiskRecalculation(
+    req.payload,
+    relationId(doc.organization),
+    [relationId(doc.office), previousDoc?.office ? relationId(previousDoc.office) : null],
+    req
+  )
   return doc
 }

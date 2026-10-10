@@ -9,6 +9,7 @@ import { History, Package, Plus, Search, Server } from 'lucide-react'
 import { FilterBar } from '@/components/ui/FilterBar'
 import { DataTable } from '@/components/ui/DataTable'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { InventoryIncidentsPanel } from '@/modules/assets/components/InventoryIncidentsPanel'
 import { useAssetsList } from '@/modules/assets/hooks/use-assets'
 import { getAssetsColumns } from '@/modules/assets/assets.columns'
 import { useNonNetworkAssetsList } from '@/modules/non-network-assets/hooks/use-non-network-assets'
@@ -174,6 +175,8 @@ export default function InventoryPage() {
           </Group>
         }
       />
+
+      <InventoryIncidentsPanel asOrganization={asOrganization} />
 
       {/* ?tab=non-network: los enlaces del panel general abren directo en activos manuales. */}
       <Tabs defaultValue={searchParams.get('tab') === 'non-network' ? 'non-network' : 'network'}>

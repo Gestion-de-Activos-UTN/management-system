@@ -47,7 +47,10 @@ const TaskBusinessFieldsSchema = z.object({
   due_at: optionalDate,
 })
 
-function validateDates(value: { start_at?: string; due_at?: string | null }, ctx: z.RefinementCtx) {
+export function validateDates(
+  value: { start_at?: string; due_at?: string | null },
+  ctx: z.RefinementCtx
+) {
   if (value.start_at && value.due_at && Date.parse(value.start_at) > Date.parse(value.due_at)) {
     ctx.addIssue({
       code: 'custom',
@@ -67,7 +70,7 @@ export const CreateTasksSchema = z
     TaskAssignmentSchema
   )
   .superRefine((value, ctx) => {
-    validateDates(value, ctx)
+    validateDates({ ...value, start_at: value.start_at ?? new Date().toISOString() }, ctx)
     const uniqueOfficeIds = new Set(value.office_ids)
     if (uniqueOfficeIds.size !== value.office_ids.length) {
       ctx.addIssue({ code: 'custom', path: ['office_ids'], message: 'Hay oficinas repetidas.' })
@@ -94,6 +97,31 @@ export const EditTaskSchema = TaskBusinessFieldsSchema.partial()
 
 export const ReassignTaskSchema = TaskAssignmentSchema
 export const CancelTaskSchema = z.object({ reason: z.string().trim().min(3).max(500) })
+
+export const TaskAssignmentOptionsQuerySchema = z
+  .object({
+    office_id: z.uuid().optional(),
+    office_ids: z.array(z.uuid()).min(1).max(500).optional(),
+    task_id: z.uuid().optional(),
+    reference_type: z.enum(TASK_REFERENCE_COLLECTIONS).optional(),
+    reference_id: z.string().min(1).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (Boolean(value.reference_type) !== Boolean(value.reference_id))
+      ctx.addIssue({
+        code: 'custom',
+        path: ['reference_id'],
+        message: 'La referencia debe estar completa.',
+      })
+    if (value.task_id && (value.office_id || value.office_ids || value.reference_type))
+      ctx.addIssue({ code: 'custom', path: ['task_id'], message: 'El alcance lo define la tarea.' })
+    if (
+      value.office_id &&
+      value.office_ids &&
+      (value.office_ids.length !== 1 || value.office_ids[0] !== value.office_id)
+    )
+      ctx.addIssue({ code: 'custom', path: ['office_ids'], message: 'Los alcances no coinciden.' })
+  })
 
 export const TaskListQuerySchema = z.object({
   view: z.enum(['mine', 'pool', 'all']).default('mine'),

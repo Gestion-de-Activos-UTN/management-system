@@ -1,4 +1,5 @@
-import type { Payload, PayloadRequest, Where } from 'payload'
+import { createLocalReq, type Payload, type PayloadRequest, type Where } from 'payload'
+import { getTenantContext } from '@/access/tenant/resolveTenantContext'
 import type {
   Agent,
   Asset,
@@ -24,6 +25,13 @@ import {
   archiveTask,
 } from '@/domain/tasks/task-actions'
 import { relationId } from '@/lib/relationId'
+import { createHash } from 'node:crypto'
+import { withTransaction } from '@/domain/with-transaction'
+
+const seedKey = (organization: string, kind: string, label: string) =>
+  createHash('sha256')
+    .update(JSON.stringify([organization, kind, label]))
+    .digest('hex')
 
 const DAY = 24 * 60 * 60 * 1000
 const DEMO_ORGANIZATION = 'Demo Organization'
@@ -36,6 +44,7 @@ type DemoUsers = Record<DemoUserKey, User>
 export interface SeedDemoDataOptions {
   organizationName?: string
   now?: Date
+  profile?: 'standard' | 'expanded'
 }
 
 export interface SeedDemoDataSummary {
@@ -483,7 +492,9 @@ async function ensureAgent(
 }
 
 async function findAsset(payload: Payload, assetId: string): Promise<Asset> {
-  const found = await findOne(payload, 'assets', { asset_id: { equals: assetId } })
+  const found = await findOne(payload, 'assets', {
+    or: [{ scanner_asset_id: { equals: assetId } }, { asset_id: { equals: assetId } }],
+  })
   if (!found) throw new Error(`Demo asset '${assetId}' was not created by ingestion`)
   return found as Asset
 }
@@ -535,7 +546,7 @@ async function ensureManualAsset(
   }
 ) {
   const existing = await findOne<NonNetworkAsset>(payload, 'non-network-assets', {
-    and: [{ alias: { equals: input.alias } }, { organization: { equals: input.organizationId } }],
+    seed_key: { equals: seedKey(input.organizationId, 'manual', input.alias) },
   })
   if (existing) return { doc: existing, created: false }
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {manual asset business fields}, previous hash for this organization_id)
@@ -545,6 +556,7 @@ async function ensureManualAsset(
     overrideAccess: true,
     req,
     data: {
+      seed_key: seedKey(input.organizationId, 'manual', input.alias),
       alias: input.alias,
       asset_category: input.category,
       criticality: input.criticality,
@@ -650,44 +662,73 @@ async function ensureTask(
     dueAt?: string
     reference?: {
       relationTo:
-        'assets' | 'non-network-assets' | 'risk-evaluations' | 'inventory-snapshots' | 'agents'
+        | 'assets'
+        | 'non-network-assets'
+        | 'assessment-instances'
+        | 'risk-evaluations'
+        | 'inventory-snapshots'
+        | 'agents'
       value: string
     }
     finalState: 'pending' | 'in_progress' | 'completed' | 'cancelled' | 'archived'
-  }
+    assignedUserId?: string
+  },
+  request?: PayloadRequest
 ): Promise<boolean> {
-  const existing = await findOne(payload, 'tasks', {
-    and: [{ organization: { equals: ctx.organizationId } }, { title: { equals: input.title } }],
-  })
-  if (existing) return false
-  const created = await createTasks(humanRequest(payload, ctx.userId), ctx, {
-    title: input.title,
-    description: input.description,
-    priority: input.priority,
-    global: false,
-    office_ids: [input.officeId],
-    assignment_kind: 'open_pool',
-    start_at: input.startAt,
-    due_at: input.dueAt,
-    related_entity: input.reference,
-  })
-  const task = created[0]
-  if (input.finalState === 'pending') return true
-  await claimTask(humanRequest(payload, ctx.userId), ctx, String(task.id))
-  if (input.finalState === 'in_progress') return true
-  if (input.finalState === 'cancelled') {
-    await cancelTask(
-      humanRequest(payload, ctx.userId),
-      ctx,
-      String(task.id),
-      'El trabajo fue reemplazado por una acción correctiva de mayor alcance.'
-    )
+  return withTransaction(payload, request ?? humanRequest(payload, ctx.userId), async req => {
+    const existing = await findOne(payload, 'tasks', {
+      seed_key: { equals: seedKey(ctx.organizationId!, 'task', input.title) },
+    })
+    if (existing) return false
+    const created = await createTasks(req, ctx, {
+      title: input.title,
+      description: input.description,
+      priority: input.priority,
+      global: false,
+      office_ids: [input.officeId],
+      ...(input.assignedUserId
+        ? { assignment_kind: 'user' as const, assigned_user: input.assignedUserId }
+        : { assignment_kind: 'open_pool' as const }),
+      start_at: input.startAt,
+      due_at: input.dueAt,
+      related_entity: input.reference,
+    })
+    const task = created[0]
+    // AUDIT: persist the immutable scenario identifier alongside task creation.
+    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+    await payload.update({
+      collection: 'tasks',
+      id: task.id,
+      overrideAccess: true,
+      req,
+      data: { seed_key: seedKey(ctx.organizationId!, 'task', input.title) },
+    })
+    if (input.finalState === 'pending') return true
+    const claimReq = input.assignedUserId
+      ? await createLocalReq(
+          {
+            user: { id: input.assignedUserId, collection: 'users' } as never,
+            req: { transactionID: req.transactionID } as never,
+          },
+          payload
+        )
+      : req
+    const claimCtx = input.assignedUserId ? (await getTenantContext(claimReq))! : ctx
+    await claimTask(claimReq, claimCtx, String(task.id))
+    if (input.finalState === 'in_progress') return true
+    if (input.finalState === 'cancelled') {
+      await cancelTask(
+        req,
+        ctx,
+        String(task.id),
+        'El trabajo fue reemplazado por una acción correctiva de mayor alcance.'
+      )
+      return true
+    }
+    await completeTask(req, ctx, String(task.id))
+    if (input.finalState === 'archived') await archiveTask(req, ctx, String(task.id))
     return true
-  }
-  await completeTask(humanRequest(payload, ctx.userId), ctx, String(task.id))
-  if (input.finalState === 'archived')
-    await archiveTask(humanRequest(payload, ctx.userId), ctx, String(task.id))
-  return true
+  })
 }
 
 function snapshotContainsDemoAssets(value: unknown): boolean {
@@ -700,7 +741,9 @@ function snapshotContainsDemoAssets(value: unknown): boolean {
         row &&
         typeof row === 'object' &&
         'asset_id' in row &&
-        String(row.asset_id).startsWith('demo-')
+        String(('scanner_asset_id' in row ? row.scanner_asset_id : row.asset_id) ?? '').startsWith(
+          'demo-'
+        )
     )
   )
 }
@@ -738,7 +781,7 @@ export async function seedDemoData(
         ...(!settings.maturity_it_owner ? { maturity_it_owner: 'yes' } : {}),
         ...(!settings.maturity_security_budget ? { maturity_security_budget: 'recurring' } : {}),
         maturity_updated_at: now.toISOString(),
-        maturity_updated_by: adminId,
+        maturity_updated_by: { relationTo: 'users' as const, value: adminId },
         offline_after_hours: settings.offline_after_hours ?? 72,
         snapshot_interval_days: settings.snapshot_interval_days ?? 7,
       },
@@ -772,6 +815,12 @@ export async function seedDemoData(
   ])
   let sourceChanged = summary.agentsCreated > 0
   for (const demoReport of buildDemoReports(now)) {
+    // Scenario reports are immutable samples. Repeating the seed must not regenerate the same
+    // report id with a different clock value and impersonate a legitimate scanner retry.
+    const existing = await findOne(payload, 'scan-reports', {
+      id: { equals: demoReport.report_id },
+    })
+    if (existing && existing.status !== 'received') continue
     const result = await processScanReport(payload, demoReport, {
       agentId: demoReport.agent_id,
       officeId: officeByAgent.get(demoReport.agent_id)!,
@@ -800,7 +849,7 @@ export async function seedDemoData(
       criticality: 'critical',
       owner: adminId,
       location: 'Sala técnica — planta baja',
-      type_confirmed_by: adminId,
+      type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
     (await enrichAsset(payload, mainWorkstation.asset_id, {
@@ -810,7 +859,7 @@ export async function seedDemoData(
       criticality: 'high',
       owner: core.users.mainManager.id,
       location: 'Finanzas — puesto 4',
-      type_confirmed_by: adminId,
+      type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
     (await enrichAsset(payload, mainPrinter.asset_id, {
@@ -818,7 +867,7 @@ export async function seedDemoData(
       authorization_status: 'unauthorized',
       alias: 'Impresora recepción sin registrar',
       location: 'Recepción',
-      type_confirmed_by: adminId,
+      type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
     (await enrichAsset(payload, mainGateway.asset_id, {
@@ -828,7 +877,7 @@ export async function seedDemoData(
       criticality: 'critical',
       owner: adminId,
       location: 'Rack principal',
-      type_confirmed_by: adminId,
+      type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
     (await enrichAsset(payload, mainLegacyNas.asset_id, {
@@ -839,7 +888,7 @@ export async function seedDemoData(
       owner: adminId,
       location: 'Archivo técnico',
       status: 'retired',
-      type_confirmed_by: adminId,
+      type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
     (await enrichAsset(payload, secondaryAp.asset_id, {
@@ -849,7 +898,7 @@ export async function seedDemoData(
       criticality: 'medium',
       owner: core.users.secondaryManager.id,
       location: 'Depósito — techo norte',
-      type_confirmed_by: adminId,
+      type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
     (await enrichAsset(payload, secondaryWorkstation.asset_id, {
@@ -859,7 +908,7 @@ export async function seedDemoData(
       criticality: 'medium',
       owner: core.users.secondaryManager.id,
       location: 'Logística — puesto 2',
-      type_confirmed_by: adminId,
+      type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
     (await enrichAsset(payload, secondaryCamera.asset_id, {
@@ -869,7 +918,7 @@ export async function seedDemoData(
       criticality: 'high',
       owner: core.users.secondaryManager.id,
       location: 'Depósito — acceso',
-      type_confirmed_by: adminId,
+      type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   if (secondaryCamera.status !== 'offline') {
     // AUDIT: this action must emit an AuditLogs entry (chain_hash over {asset, status: offline}, previous hash for this organization_id)
@@ -1002,6 +1051,104 @@ export async function seedDemoData(
     }
   }
 
+  // Expanded data provides a compact, varied demo using the same contracts and write paths.
+  const expandedTasks: Array<Parameters<typeof ensureTask>[2]> = []
+  if (options.profile === 'expanded') {
+    for (const [officeIndex, officeId, agentId, managerId] of [
+      [0, mainOfficeId, DEMO_AGENT_MAIN, String(core.users.mainManager.id)],
+      [1, secondaryOfficeId, DEMO_AGENT_SECONDARY, String(core.users.secondaryManager.id)],
+    ] as const) {
+      const network = officeIndex === 0 ? '10.20.10.0/24' : '10.20.20.0/24'
+      const reportId = `demo-expanded-v1-${officeIndex}`
+      const descriptors = Array.from({ length: 6 }, (_, index) => ({
+        key: `expanded-${officeIndex}-${index.toString().padStart(3, '0')}`,
+        ip: network.replace('.0/24', `.${100 + index}`),
+        mac: `00:5A:10:${officeIndex.toString(16).padStart(2, '0')}:00:${index.toString(16).padStart(2, '0')}`,
+        vendor: 'Equipos de demostración',
+        hostname: `equipo-${officeIndex + 1}-${index + 1}`,
+        os: null,
+        services: index % 3 === 0 ? [service(22, 'ssh', 'OpenSSH')] : [],
+      }))
+      if (!(await findOne(payload, 'scan-reports', { id: { equals: reportId } }))) {
+        const expandedReport = report(now, {
+          id: reportId,
+          agentId,
+          network,
+          gatewayIp: network.replace('.0/24', '.1'),
+          gatewayMac: officeIndex === 0 ? '00:11:22:33:44:01' : '00:11:22:33:55:01',
+          offsetMs: -10 * 60 * 1000,
+          assets: descriptors,
+        })
+        await processScanReport(payload, expandedReport, {
+          agentId,
+          officeId,
+          organizationId: core.organizationId,
+        })
+        summary.reportsProcessed += 1
+        sourceChanged = true
+      }
+      for (const [index, descriptor] of descriptors.entries()) {
+        const assetId = `demo-${descriptor.key}`
+        const types = ['workstation', 'server', 'printer', 'network_device', 'iot'] as const
+        if (index % 9 !== 0)
+          sourceChanged =
+            (await enrichAsset(payload, assetId, {
+              alias: `${officeIndex === 0 ? 'Casa central' : 'Depósito'} · ${['Equipo de recepción', 'Servidor contable', 'Impresora de administración', 'Switch de oficina', 'Cámara de acceso', 'Portátil de operaciones'][index]}`,
+              confirmed_type: types[index % types.length],
+              authorization_status: index % 11 === 0 ? 'unauthorized' : 'authorized',
+              criticality: (['low', 'medium', 'high', 'critical'] as const)[index % 4],
+              owner: managerId,
+              location: `Sector ${(index % 6) + 1}`,
+              type_confirmed_by: { relationTo: 'users', value: adminId },
+            })) || sourceChanged
+        const networkAsset = await findAsset(payload, assetId)
+        expandedTasks.push({
+          title: `${officeIndex === 0 ? 'Casa central' : 'Depósito'} · ${['Identificar equipo de recepción', 'Actualizar servidor contable', 'Comprobar impresora de administración', 'Revisar switch de oficina', 'Revisar cámara de acceso', 'Preparar portátil de operaciones'][index]}`,
+          description: `Verificar el equipo del sector ${(index % 6) + 1}. Datos sintéticos para filtros y listas.`,
+          officeId,
+          priority: (['low', 'normal', 'high', 'urgent'] as const)[index % 4],
+          startAt: at(now, index % 10 === 0 ? 2 * DAY : -10 * DAY),
+          dueAt: at(now, index % 10 === 0 ? 5 * DAY : ((index % 7) - 3) * DAY),
+          reference: { relationTo: 'assets', value: String(networkAsset.id) },
+          finalState: (['pending', 'in_progress', 'completed', 'cancelled', 'archived'] as const)[
+            index % 5
+          ],
+        })
+      }
+      for (let index = 0; index < 4; index += 1) {
+        const categories = [
+          'computer',
+          'software_license',
+          'cloud_asset',
+          'provider_service',
+          'backup',
+          'information_repository',
+          'physical_record',
+          'removable_media',
+        ] as const
+        const result = await ensureManualAsset(
+          payload,
+          humanRequest(payload, adminId, at(now, -(index % 15) * DAY)),
+          {
+            organizationId: core.organizationId,
+            officeId,
+            ownerId: managerId,
+            alias: `${officeIndex === 0 ? 'Casa central' : 'Depósito'} · ${['Notebook de recepción', 'Licencia de diseño gráfico', 'Almacenamiento en la nube', 'Soporte de sistemas'][index]}`,
+            category: categories[index % categories.length],
+            criticality: (['low', 'medium', 'high', 'critical'] as const)[index % 4],
+            location: `Sector ${(index % 6) + 1}`,
+            reviewInterval: (['1d', '1w', '1m', '6m', '1y', 'never'] as const)[index % 6],
+            status: index % 13 === 0 ? 'retired' : 'active',
+          }
+        )
+        if (result.created) {
+          summary.manualAssetsCreated += 1
+          sourceChanged = true
+        }
+      }
+    }
+  }
+
   const openAssessments = await payload.find({
     collection: 'assessment-instances',
     where: {
@@ -1012,7 +1159,7 @@ export async function seedDemoData(
     },
     overrideAccess: true,
     depth: 0,
-    limit: 200,
+    pagination: false,
   })
   const organizationAssessment = openAssessments.docs.find(row => row.scope === 'organization')
   const mainOfficeAssessment = openAssessments.docs.find(
@@ -1144,8 +1291,176 @@ export async function seedDemoData(
       finalState: 'archived' as const,
     },
   ]
-  for (const input of taskInputs)
+  for (const input of [...taskInputs, ...expandedTasks])
     summary.tasksCreated += Number(await ensureTask(payload, ctx, input))
 
+  if (options.profile === 'expanded') {
+    const movingAsset = await findAsset(payload, 'demo-expanded-0-005')
+    const title = 'Revisar portátil trasladado · reasignación necesaria'
+    if (
+      !(await findOne(payload, 'tasks', {
+        seed_key: { equals: seedKey(core.organizationId, 'task', title) },
+      }))
+    ) {
+      await withTransaction(payload, humanRequest(payload, adminId), async req => {
+        const assessment = await findOne<AssessmentInstance>(payload, 'assessment-instances', {
+          and: [
+            { asset: { equals: movingAsset.id } },
+            { status: { in: ['pending', 'in_progress'] } },
+          ],
+        })
+        if (!assessment) throw new Error('El escenario de traslado requiere una revisión abierta')
+        summary.tasksCreated += Number(
+          await ensureTask(
+            payload,
+            ctx,
+            {
+              title,
+              description:
+                'El equipo cambió de oficina. La persona asignada anteriormente no tiene acceso a la nueva oficina; selecciona un responsable elegible.',
+              priority: 'high',
+              officeId: mainOfficeId,
+              startAt: at(now, -DAY),
+              dueAt: at(now, 3 * DAY),
+              reference: { relationTo: 'assessment-instances', value: String(assessment.id) },
+              assignedUserId: String(core.users.mainManager.id),
+              finalState: 'in_progress',
+            },
+            req
+          )
+        )
+        // AUDIT: this action must emit an AuditLogs entry (chain_hash over {seed asset move and task reassignment}, previous hash for this organization_id)
+        // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+        // NOTIFY: this event should trigger a Notification Bell entry for {previous claimant and destination office managers}
+        // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
+        await payload.update({
+          collection: 'assets',
+          id: movingAsset.id,
+          req,
+          overrideAccess: true,
+          data: { office: secondaryOfficeId, agent: DEMO_AGENT_SECONDARY, owner: null },
+        })
+      })
+      sourceChanged = true
+    }
+    const retiringAsset = await findAsset(payload, 'demo-expanded-0-002')
+    const cancellationTitle = 'Revisar impresora retirada · cancelación automática'
+    if (
+      !(await findOne(payload, 'tasks', {
+        seed_key: { equals: seedKey(core.organizationId, 'task', cancellationTitle) },
+      }))
+    ) {
+      await withTransaction(payload, humanRequest(payload, adminId), async req => {
+        summary.tasksCreated += Number(
+          await ensureTask(
+            payload,
+            ctx,
+            {
+              title: cancellationTitle,
+              description:
+                'La impresora fue retirada; la tarea se canceló automáticamente y conserva su historial.',
+              officeId: mainOfficeId,
+              priority: 'normal',
+              startAt: at(now, -DAY),
+              dueAt: at(now, 2 * DAY),
+              finalState: 'in_progress',
+              reference: { relationTo: 'assets', value: String(retiringAsset.id) },
+            },
+            req
+          )
+        )
+        // AUDIT: this action must emit an AuditLogs entry (chain_hash over {seed asset retirement and task cancellation}, previous hash for this organization_id)
+        // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+        // NOTIFY: this event should trigger a Notification Bell entry for {task claimant}
+        // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
+        await payload.update({
+          collection: 'assets',
+          id: retiringAsset.id,
+          req,
+          overrideAccess: true,
+          data: { status: 'retired' },
+        })
+      })
+      sourceChanged = true
+    }
+    if (
+      !(await findOne(payload, 'scan-reports', { id: { equals: 'demo-location-conflict-v1' } }))
+    ) {
+      const origin = await findAsset(payload, 'demo-expanded-0-001')
+      await processScanReport(
+        payload,
+        report(now, {
+          id: 'demo-location-conflict-v1',
+          agentId: DEMO_AGENT_SECONDARY,
+          network: '10.20.20.0/24',
+          gatewayIp: '10.20.20.1',
+          gatewayMac: '00:11:22:33:55:01',
+          offsetMs: -60000,
+          assets: [
+            {
+              key: 'location-conflict',
+              ip: '10.20.20.190',
+              mac: origin.mac ?? '',
+              vendor: origin.vendor ?? '',
+              hostname: origin.hostname ?? '',
+              os: null,
+              services: [],
+            },
+          ],
+        }),
+        {
+          agentId: DEMO_AGENT_SECONDARY,
+          officeId: secondaryOfficeId,
+          organizationId: core.organizationId,
+        }
+      )
+      summary.reportsProcessed += 1
+      sourceChanged = true
+    }
+    const latestSnapshot = (
+      await payload.find({
+        collection: 'inventory-snapshots',
+        overrideAccess: true,
+        depth: 0,
+        sort: '-taken_at',
+        limit: 1,
+        where: { office: { equals: mainOfficeId } },
+      })
+    ).docs[0]
+    for (const input of [
+      {
+        title: 'Verificar inventario vigente de oficina',
+        description:
+          'Trabajar sobre el inventario actual; la instantánea conserva la evidencia de origen.',
+        reference: latestSnapshot
+          ? { relationTo: 'inventory-snapshots' as const, value: String(latestSnapshot.id) }
+          : undefined,
+      },
+      {
+        title: 'Revisar riesgo vigente de oficina',
+        description:
+          'Consultar el puntaje actual y comparar con la evaluación que originó esta tarea.',
+        reference: {
+          relationTo: 'risk-evaluations' as const,
+          value: latestEvaluationByOffice.get(mainOfficeId)!,
+        },
+      },
+    ])
+      summary.tasksCreated += Number(
+        await ensureTask(payload, ctx, {
+          ...input,
+          officeId: mainOfficeId,
+          priority: 'normal',
+          startAt: at(now, -DAY),
+          dueAt: at(now, 4 * DAY),
+          finalState: 'pending',
+        })
+      )
+    if (sourceChanged) {
+      for (const officeId of [mainOfficeId, secondaryOfficeId])
+        await recalculateRisk(payload, { organizationId: core.organizationId, officeId })
+      await recalculateRisk(payload, { organizationId: core.organizationId })
+    }
+  }
   return summary
 }

@@ -1,5 +1,11 @@
 import type { CollectionConfig } from 'payload'
-import { rejectInactiveLogin } from '../../access/auth/rejectInactiveLogin'
+import { throttleLogin } from '../../access/auth/login-throttle'
+import {
+  guardSessionOperation,
+  prepareAccountLogin,
+  revokeInactiveSessions,
+  lockLogout,
+} from '../../access/auth/account-sessions'
 
 // TODO(rbac-feature): create/update/delete cerrados por alcance de esta fase (solo-lectura).
 // access:()=>false en las 4 acciones NO bloquea /api/admins/login ni /api/admins/me —
@@ -7,26 +13,33 @@ import { rejectInactiveLogin } from '../../access/auth/rejectInactiveLogin'
 export const Admins: CollectionConfig = {
   slug: 'admins',
   auth: {
+    removeTokenFromResponses: true,
     // Ver Users/index.ts — mismos valores, mismo razonamiento (cookie compartida, refresh reactivo).
     tokenExpiration: 60 * 60,
     cookies: {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'Lax',
     },
-    maxLoginAttempts: 5,
-    lockTime: 10 * 60 * 1000,
+    maxLoginAttempts: 0,
+    useSessions: true,
   },
   admin: {
     useAsTitle: 'email',
   },
+  endpoints: [{ path: '/first-register', method: 'post', handler: () => Response.json({ error: 'Bootstrap is available only through the seed CLI' }, { status: 403 }) }],
   access: {
+    // No account-wide lockout or manual unlock; process-local throttling bounds attempts.
+    unlock: () => false,
     create: () => false,
     read: () => false,
     update: () => false,
     delete: () => false,
   },
   hooks: {
-    beforeLogin: [rejectInactiveLogin],
+    beforeOperation: [throttleLogin, guardSessionOperation],
+    beforeLogin: [prepareAccountLogin],
+    beforeChange: [revokeInactiveSessions],
+    afterLogout: [lockLogout],
   },
   fields: [
     {

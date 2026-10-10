@@ -1,4 +1,4 @@
-import type { Payload } from 'payload'
+import type { Payload, PayloadRequest } from 'payload'
 import { createInventorySnapshot } from './createInventorySnapshot'
 
 // Mismo gap que DEFAULT_OFFLINE_AFTER_HOURS (agingSweep.ts) — default de plataforma cuando la
@@ -23,10 +23,12 @@ export function shouldTakeSnapshot(
 export async function maybeCreateAutoSnapshot(
   payload: Payload,
   officeId: string,
-  organizationId: string
+  organizationId: string,
+  req?: PayloadRequest
 ) {
   const settingsResult = await payload.find({
     collection: 'organization-settings',
+    req,
     where: { organization: { equals: organizationId } },
     overrideAccess: true,
     depth: 0,
@@ -35,7 +37,7 @@ export async function maybeCreateAutoSnapshot(
   const settings = settingsResult.docs[0]
 
   if (settings?.snapshot_before_each_scan) {
-    await createInventorySnapshot(payload, officeId, { type: 'scheduled' })
+    await createInventorySnapshot(payload, officeId, { type: 'scheduled' }, req)
     return
   }
 
@@ -46,6 +48,7 @@ export async function maybeCreateAutoSnapshot(
 
   const lastSnapshotResult = await payload.find({
     collection: 'inventory-snapshots',
+    req,
     where: { office: { equals: officeId } },
     sort: '-taken_at',
     overrideAccess: true,
@@ -55,6 +58,6 @@ export async function maybeCreateAutoSnapshot(
   const lastTakenAt = lastSnapshotResult.docs[0]?.taken_at ?? null
 
   if (shouldTakeSnapshot(lastTakenAt, intervalDays, Date.now())) {
-    await createInventorySnapshot(payload, officeId, { type: 'scheduled' })
+    await createInventorySnapshot(payload, officeId, { type: 'scheduled' }, req)
   }
 }

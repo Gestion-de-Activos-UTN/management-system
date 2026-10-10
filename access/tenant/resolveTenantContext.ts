@@ -61,7 +61,7 @@ export async function resolveTenantContext(
 
     return {
       userId: identity.externalId,
-      role: 'platform_admin',
+      role: organizationId ? 'org_admin' : 'platform_admin',
       organizationId,
       officeIds,
       selectedOfficeId: officeIds[0] ?? null,
@@ -130,7 +130,7 @@ export function createPayloadTenantResolverDeps(payload: Payload): TenantResolve
         where: { organization: { equals: organizationId } },
         overrideAccess: true,
         depth: 0,
-        limit: 1000,
+        pagination: false,
       })
       return result.docs.map(doc => String(doc.id))
     },

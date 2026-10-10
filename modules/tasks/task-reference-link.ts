@@ -29,11 +29,29 @@ export function getTaskReferenceHref(
     case 'scan-reports':
       return withQuery(`/portal/inventory/scan-reports/${reference.value}`)
     case 'risk-evaluations':
-      return withQuery('/portal/risk-score', `evaluation=${encodeURIComponent(reference.value)}`)
+      return withQuery(
+        '/portal/risk-score',
+        `evaluation=${encodeURIComponent(reference.value)}&officeId=${encodeURIComponent(reference.office_id ?? 'all')}`
+      )
     case 'agents':
       return withQuery(
         '/portal/administration/offices',
         `agent=${encodeURIComponent(reference.value)}`
       )
   }
+}
+
+/** Open the live scope while keeping the immutable reference as evidence. */
+export function getTaskCurrentReferenceHref(
+  reference: TaskReferenceInfo,
+  asOrganization?: string
+): string | null {
+  if (
+    !reference.available ||
+    !['inventory-snapshots', 'risk-evaluations'].includes(reference.relationTo)
+  )
+    return null
+  const params = new URLSearchParams({ officeId: reference.office_id ?? 'all' })
+  if (asOrganization) params.set('asOrganization', asOrganization)
+  return `${reference.relationTo === 'inventory-snapshots' ? '/portal/inventory' : '/portal/risk-score'}?${params}`
 }

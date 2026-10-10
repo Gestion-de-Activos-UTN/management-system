@@ -83,7 +83,8 @@ function networkAsset(doc: Asset, now: Date): RiskInputAsset {
     excluded: isAssetExcludedFromAssessments(doc, now),
     network: {
       current: doc.status !== 'offline',
-      complete: coverage?.port_scan === 'complete' && coverage?.service_detection === 'complete',
+      complete: coverage?.port_scan === 'complete' && coverage?.service_detection === 'complete' &&
+        !(doc.services ?? []).some(service => !['open', 'closed'].includes(service.state ?? 'unknown')),
       services: classified,
     },
   }

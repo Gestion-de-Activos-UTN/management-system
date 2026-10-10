@@ -25,21 +25,7 @@ import { RISK_CATALOG_V2 } from '@/domain/risk/catalog-v2'
 import { useState } from 'react'
 import { Badge, Modal, SimpleGrid } from '@mantine/core'
 
-const OFFLINE_AFTER_HOURS_OPTIONS = [
-  { value: '24', label: '1 day (24h)' },
-  { value: '48', label: '2 days (48h)' },
-  { value: '72', label: '3 days (72h) — platform default' },
-  { value: '96', label: '4 days (96h)' },
-  { value: '168', label: '7 days (168h)' },
-]
-
-const SNAPSHOT_INTERVAL_DAYS_OPTIONS = [
-  { value: '1', label: '1 day' },
-  { value: '3', label: '3 days' },
-  { value: '7', label: '7 days — platform default' },
-  { value: '14', label: '14 days' },
-  { value: '30', label: '30 days' },
-]
+import { OFFLINE_AFTER_HOURS_OPTIONS, SNAPSHOT_INTERVAL_DAYS_OPTIONS } from '@/domain/organizations/settings-options'
 
 export default function AdminSettingsPage() {
   const { data: settings, isPending } = useOrganizationSettings()

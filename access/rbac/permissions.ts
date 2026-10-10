@@ -16,6 +16,7 @@ export type CollectionSlug =
   | 'risk-contributions'
   | 'tasks'
 export type Action =
+  | 'read_technical'
   | 'create'
   | 'read'
   | 'update'
@@ -44,7 +45,7 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     agents: ['create', 'read', 'update'],
     assets: ['read'],
     'non-network-assets': ['read'],
-    'scan-reports': ['read'],
+    'scan-reports': ['read', 'read_technical'],
     roles: ['read'],
     'job-runs': ['read'],
     'inventory-snapshots': ['create', 'read'],
@@ -60,9 +61,9 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     organizations: ['read'],
     offices: ['read'],
     agents: ['create', 'read', 'update'],
-    assets: ['read', 'update'],
+    assets: ['read', 'update', 'delete'],
     'non-network-assets': ['create', 'read', 'update', 'delete'],
-    'scan-reports': ['read'],
+    'scan-reports': ['read', 'read_technical'],
     'inventory-snapshots': ['create', 'read'],
     'assessment-instances': ['read'],
     'assessment-answers': ['read'],
@@ -104,7 +105,7 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     offices: ['read'],
     assets: ['read', 'update'],
     'non-network-assets': ['create', 'read', 'update'],
-    'scan-reports': ['read'],
+    'scan-reports': ['read', 'read_technical'],
     'inventory-snapshots': ['read'],
     'assessment-instances': ['read'],
     'assessment-answers': ['read'],
@@ -139,7 +140,9 @@ export function canDo(
   _organizationId: string | null
 ): boolean {
   if (!roleSlug) return false
-  return MATRIX[roleSlug]?.[collection]?.includes(action) ?? false
+  if (roleSlug === 'platform_admin' && !_organizationId && action !== 'read') return false
+  const effectiveRole = roleSlug === 'platform_admin' && _organizationId ? 'org_admin' : roleSlug
+  return MATRIX[effectiveRole]?.[collection]?.includes(action) ?? false
 }
 
 // Alcance de fila por rol: org_admin/platform_admin ven toda la organización (incluidas las filas

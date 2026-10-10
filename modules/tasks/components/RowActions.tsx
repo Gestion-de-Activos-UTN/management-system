@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { ActionIcon, Group, Menu, Tooltip } from '@mantine/core'
 import { Archive, Check, Ellipsis, ExternalLink, Eye, Hand, RotateCcw, Trash2 } from 'lucide-react'
 import type { TaskDTO } from '../service'
-import { getTaskReferenceHref } from '../task-reference-link'
+import { getTaskReferenceHref, getTaskCurrentReferenceHref } from '../task-reference-link'
 import { useTaskCommand } from '../hooks/use-task-actions'
 
 // Componente aparte (no una cell inline) porque necesita su propio hook de mutación.
@@ -15,7 +15,8 @@ export function RowActions({ task, asOrganization }: { task: TaskDTO; asOrganiza
     task.available_actions.includes(action)
   const suffix = asOrganization ? `?asOrganization=${asOrganization}` : ''
   const referenceHref = task.related_entity_info
-    ? getTaskReferenceHref(task.related_entity_info, asOrganization)
+    ? (getTaskCurrentReferenceHref(task.related_entity_info, asOrganization) ??
+      getTaskReferenceHref(task.related_entity_info, asOrganization))
     : null
   const hasMenu = referenceHref || has('release') || has('archive') || has('delete')
 

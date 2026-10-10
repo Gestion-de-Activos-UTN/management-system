@@ -20,7 +20,7 @@ describe('expired assessment reconciliation job', () => {
           const clauses = (args.where?.and ?? []) as Array<Record<string, unknown>>
           const isExpiredQuery = clauses.some(clause => 'due_at' in clause)
           return isExpiredQuery
-            ? { docs: [expired], totalPages: 1 }
+            ? { docs: expired.expiry_reconciled_at || clauses.some(clause => 'id' in clause) ? [] : [expired], totalPages: 1 }
             : { docs: openCycles, totalPages: 1 }
         }
         if (args.collection === 'organization-settings') {
@@ -42,7 +42,11 @@ describe('expired assessment reconciliation job', () => {
         openCycles.push(created)
         return created
       },
-      async update() {
+      async update({ data }: { data: Record<string, unknown> }) {
+        if (data.expiry_reconciled_at) {
+          expired.expiry_reconciled_at = String(data.expiry_reconciled_at)
+          return expired
+        }
         throw new Error('No cycle should be superseded during an idempotent retry')
       },
     } as unknown as Payload
@@ -52,7 +56,8 @@ describe('expired assessment reconciliation job', () => {
 
     assert.equal(first.cycles_created, 1)
     assert.equal(retry.cycles_created, 0)
-    assert.equal(retry.cycles_preserved, 1)
+    assert.equal(retry.expired_cycles_examined, 0)
+    assert.equal(retry.cycles_preserved, 0)
     assert.equal(openCycles.length, 1)
     assert.equal(openCycles[0].created_reason, 'answer_expired')
   })

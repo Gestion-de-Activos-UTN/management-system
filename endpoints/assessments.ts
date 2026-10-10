@@ -1,3 +1,5 @@
+import { riskRecalculationStatus } from '@/domain/risk/recalculation-status'
+import { actorRelation } from '@/lib/actor-relation'
 import type { Endpoint, PayloadRequest, Where } from 'payload'
 import type { AssessmentInstance, Asset, NonNetworkAsset } from '@/app/types/payload-types'
 import { getTenantContext, type TenantContext } from '@/access/tenant/resolveTenantContext'
@@ -177,7 +179,7 @@ export const assessmentsListEndpoint: Endpoint = {
           overrideAccess: true,
           req,
           depth: 0,
-          limit: 5000,
+          pagination: false,
         }),
         req.payload.find({
           collection: 'non-network-assets',
@@ -190,7 +192,7 @@ export const assessmentsListEndpoint: Endpoint = {
           overrideAccess: true,
           req,
           depth: 0,
-          limit: 5000,
+          pagination: false,
         }),
       ])
       const currentAssetIds = currentAssets.docs.map(asset => String(asset.id))
@@ -213,7 +215,7 @@ export const assessmentsListEndpoint: Endpoint = {
       overrideAccess: true,
       req,
       depth: 1,
-      limit: 5000,
+      pagination: false,
       sort: '-createdAt',
     })
     const docs = result.docs.filter(doc => {
@@ -263,9 +265,11 @@ export const securityReviewSummaryEndpoint: Endpoint = {
       },
     })
     const evaluation = evaluations.docs[0]
+    const recalculation = await riskRecalculationStatus(req, ctx.organizationId, officeId ?? undefined, evaluation?.evaluated_at)
     if (!evaluation)
       return json({
         risk_score: null,
+        recalculation,
         evaluated_percentage: 0,
         applicable_checks: 0,
         not_evaluable: 0,
@@ -277,6 +281,7 @@ export const securityReviewSummaryEndpoint: Endpoint = {
     // Counts are persisted with the evaluation; counting contribution rows here would truncate.
     const counts = evaluation.counts as RiskEvaluationDTO['counts']
     return json({
+      recalculation,
       risk_score: scoreVisible(evaluation.confidence) ? (evaluation.score ?? null) : null,
       evaluated_percentage: evaluation.coverage,
       applicable_checks:
@@ -624,12 +629,12 @@ export const assessmentPolicyEndpoint: Endpoint = {
           assessment_policy_key: parsed.data.policy_key,
           assessment_policy_version: parsed.data.policy_version,
           assessment_policy_selected_at: new Date().toISOString(),
-          assessment_policy_selected_by: ctx.userId,
+          assessment_policy_selected_by: actorRelation(req, ctx.userId),
         },
       })
       await reconcileOrganizationAssessments(req.payload, ctx.organizationId, 'policy_changed', req)
+      await enqueueOrganizationRiskRecalculation(req.payload, ctx.organizationId, req)
       if (ownsTransaction && transactionID) await req.payload.db.commitTransaction(transactionID)
-      await enqueueOrganizationRiskRecalculation(req.payload, ctx.organizationId)
       return json(updated)
     } catch (error) {
       if (ownsTransaction && transactionID) await req.payload.db.rollbackTransaction(transactionID)

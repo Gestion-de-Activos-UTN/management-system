@@ -1,0 +1,49 @@
+diff --git a/dist/transactions/beginTransaction.js b/dist/transactions/beginTransaction.js
+index b997960d6443005979890c1fdeef9271810a407c..61dc95fb9e0b5cd1c313020b2fcf065ab956db18 100644
+--- a/dist/transactions/beginTransaction.js
++++ b/dist/transactions/beginTransaction.js
+@@ -8,6 +8,7 @@ export const beginTransaction = async function beginTransaction(options) {
+         let transaction;
+         let transactionReady;
+         let transactionFailed;
++        const rollbackRequested = new Error('Payload transaction rollback requested');
+         // Await initialization here
+         // Prevent race conditions where the adapter may be
+         // re-initializing, and `this.drizzle` is potentially undefined
+@@ -26,12 +27,15 @@ export const beginTransaction = async function beginTransaction(options) {
+                 };
+                 reject = ()=>{
+                     // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+-                    rej();
+-                    return done;
++                    rej(rollbackRequested);
++                    return done.catch((err)=>{
++                        if (err !== rollbackRequested) throw err;
++                    });
+                 };
+                 transactionReady();
+             });
+-        }, options || this.transactionOptions).catch((err)=>{
++        }, options || this.transactionOptions);
++        void done.catch((err)=>{
+             // Connection failed before callback ran - reject instead of hanging forever
+             transactionFailed(err);
+         });
+diff --git a/dist/transactions/commitTransaction.js b/dist/transactions/commitTransaction.js
+index 50c8251dbd29fe3ca7296800ed4fe5d2bb814057..b6515cc4f343a2436476a7e21cccff184e8aee2e 100644
+--- a/dist/transactions/commitTransaction.js
++++ b/dist/transactions/commitTransaction.js
+@@ -8,11 +8,8 @@ export const commitTransaction = async function commitTransaction(incomingID = '
+     // Delete from registry FIRST to prevent race conditions
+     // This ensures other operations can't retrieve this session while we're ending it
+     delete this.sessions[transactionID];
+-    try {
+-        await session.resolve();
+-    } catch (_) {
+-        await session.reject();
+-    }
++    // Drizzle has already rolled back on failure. Preserve the original COMMIT error.
++    await session.resolve();
+ };
+ 
+ //# sourceMappingURL=commitTransaction.js.map

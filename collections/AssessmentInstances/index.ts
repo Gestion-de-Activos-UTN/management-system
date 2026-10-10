@@ -14,6 +14,8 @@ export const AssessmentInstances: CollectionConfig = {
   },
   hooks: { beforeChange: [validateAssessmentInstance] },
   fields: [
+    { name: 'open_cycle_key', type: 'text', unique: true, admin: { hidden: true }, access: { create: () => false, update: () => false } },
+    { name: 'expiry_reconciled_at', type: 'date', index: true, admin: { readOnly: true }, access: { create: () => false, update: () => false } },
     {
       name: 'organization',
       type: 'relationship',
@@ -66,7 +68,7 @@ export const AssessmentInstances: CollectionConfig = {
     { name: 'opened_at', type: 'date', required: true },
     { name: 'due_at', type: 'date', required: true, index: true },
     { name: 'completed_at', type: 'date' },
-    { name: 'completed_by', type: 'relationship', relationTo: 'users' },
+    { name: 'completed_by', type: 'relationship', relationTo: ['users', 'admins'] },
     {
       name: 'completion_summary',
       type: 'group',

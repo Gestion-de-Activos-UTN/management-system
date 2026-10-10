@@ -74,6 +74,10 @@ const POSIX_LAUNCHER = [
   '# Gated on the marker, not on the interpreter: a venv whose pip install failed still has a',
   '# bin/python, and gating on that would skip the retry and start the agent without its deps.',
   'if [ ! -f "$VENV_READY" ]; then',
+  '  if [ "${EUID:-$(id -u)}" -eq 0 ]; then',
+  '    echo "Prepare the environment by running ./start-agent.sh as a regular user first; dependency installation cannot run as root." >&2',
+  '    exit 1',
+  '  fi',
   '  if [ ! -x "$VENV_DIR/bin/python" ]; then',
   '    "$PYTHON_BIN" -m venv "$VENV_DIR" || exit 1',
   '  fi',
@@ -120,6 +124,11 @@ const WINDOWS_LAUNCHER_PS1 = [
   '# deps. $ErrorActionPreference does not catch this on its own — in Windows PowerShell a native',
   '# executable returning a non-zero exit code is not a terminating error, hence the explicit checks.',
   'if (-not (Test-Path -LiteralPath $VenvReady)) {',
+  '  $Identity = [Security.Principal.WindowsIdentity]::GetCurrent()',
+  '  $Principal = New-Object Security.Principal.WindowsPrincipal($Identity)',
+  '  if ($Principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {',
+  '    throw "Prepare the environment by running start-agent.cmd without Administrator privileges first."',
+  '  }',
   '  if (-not (Test-Path -LiteralPath $VenvPython)) {',
   '    & $PythonBin @PythonArgs -m venv $VenvDir',
   '    if ($LASTEXITCODE -ne 0) {',
@@ -183,7 +192,8 @@ The launcher is a source script; this package does not contain native binaries.
 ## Permissions
 
 Without elevated permissions the agent falls back to an unprivileged TCP-connect
-scan. Run with sudo only when raw-socket scans or OS detection are required:
+scan. Complete the first run without sudo to prepare dependencies, then stop the agent.
+Run with sudo only when raw-socket scans or OS detection are required:
 
   sudo ./start-agent.sh --once
 `

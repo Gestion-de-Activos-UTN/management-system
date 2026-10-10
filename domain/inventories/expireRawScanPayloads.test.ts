@@ -20,7 +20,7 @@ test('expireRawScanPayloads clears raw data but keeps report documents', async (
 
   const result = await expireRawScanPayloads(payload, new Date('2026-01-01T00:00:00.000Z'))
 
-  assert.deepEqual(result, { expired: 2 })
+  assert.deepEqual(result, { expired: 2, asset_evidence_expired: 0, snapshot_evidence_expired: 0 })
   assert.deepEqual(updates, [
     { id: 'report-1', raw_payload: null, raw_payload_expires_at: null },
     { id: 'report-2', raw_payload: null, raw_payload_expires_at: null },
