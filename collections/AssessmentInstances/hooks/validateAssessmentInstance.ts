@@ -6,6 +6,7 @@ import {
   type AssessmentStatus,
 } from '../invariants'
 import type { AssessmentScope } from '@/domain/assessments/catalog'
+import { isManualCategoryAssessable } from '@/domain/risk/risk-asset-type'
 
 const optionalRelationId = (value: unknown): string | null => (value ? relationId(value) : null)
 
@@ -86,10 +87,13 @@ export const validateAssessmentInstance: CollectionBeforeChangeHook = async ({
     )
       throw new Error('Manual assessment asset belongs to another organization or office')
     if (
-      (manualAsset.status === 'retired' || manualAsset.asset_category !== 'computer') &&
+      (
+        manualAsset.status === 'retired' ||
+        !isManualCategoryAssessable(manualAsset.asset_category)
+      ) &&
       merged.status !== 'superseded'
     )
-      throw new Error('Only active manually entered computers can receive assessment cycles')
+      throw new Error('Only active manually entered assets with assessments can receive cycles')
   }
 
   if (

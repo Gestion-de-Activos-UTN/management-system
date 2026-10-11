@@ -47,11 +47,10 @@ export const MANUAL_ASSET_CATEGORY_VALUES = [
 export type ManualAssetCategory = (typeof MANUAL_ASSET_CATEGORY_VALUES)[number]
 
 // Capability por categoría, deliberadamente SEPARADA del gate de assessments
-// (`asset_category === 'computer'` en domain/assessments/reconcileAssessmentInstance.ts y
-// getRiskSummary.ts). Unificarlas cambiaría el set de preguntas aplicables y con eso el
-// denominador del risk score — son dos preguntas distintas sobre la misma categoría.
-// Record y no Set: agregar una categoría al enum rompe la compilación acá hasta que alguien
-// decida si tiene software, que es exactamente lo que se busca.
+// (`isManualCategoryAssessable` en domain/risk/risk-asset-type.ts). Unificarlas cambiaría el set de
+// preguntas aplicables y con eso el denominador del risk score — son dos preguntas distintas 
+// sobre la misma categoría. Record y no Set: agregar una categoría al enum rompe la compilación 
+// acá hasta que alguien decida si tiene software, que es exactamente lo que se busca.
 export const CATEGORY_HAS_SOFTWARE: Record<ManualAssetCategory, boolean> = {
   computer: false,
   mobile_device: false,

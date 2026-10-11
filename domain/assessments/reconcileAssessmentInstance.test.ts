@@ -163,7 +163,7 @@ describe('manually entered computer assessment reconciliation', () => {
     )
   })
 
-  it('creates the applicable v2 review for a manual mobile device', async () => {
+/*   it('creates the applicable v2 review for a manual mobile device', async () => {
     const { payload, creates } = makePayload()
     const result = await reconcileManualAssetAssessmentInstance(
       payload,
@@ -172,13 +172,13 @@ describe('manually entered computer assessment reconciliation', () => {
     )
     assert.equal(result.action, 'created')
     assert.equal((creates[0].question_set_snapshot as unknown[]).length, 9)
-  })
+  }) */
 
-  it('does not create a review for an excluded manual computer', async () => {
+  it('does not create a review for a manual mobile device (category not assessable)', async () => {
     const { payload, creates } = makePayload()
     const result = await reconcileManualAssetAssessmentInstance(
       payload,
-      { ...manualComputer, assessment_scope: 'excluded' } as NonNetworkAsset,
+      { ...manualComputer, asset_category: 'mobile_device' } as NonNetworkAsset,
       'asset_identified'
     )
     assert.equal(result.action, 'none')

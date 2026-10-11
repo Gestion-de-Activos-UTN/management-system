@@ -6,6 +6,7 @@ import {
 } from '@/domain/assessments/reconcileAssessmentInstance'
 import { enqueueRiskRecalculation } from '@/domain/risk/enqueueRiskRecalculation'
 import { relationId } from '@/lib/relationId'
+import { isManualCategoryAssessable } from '@/domain/risk/risk-asset-type'
 
 const relationChanged = (current: unknown, previous: unknown) =>
   (current ? relationId(current) : null) !== (previous ? relationId(previous) : null)
@@ -16,7 +17,7 @@ export function manualAssessmentApplicabilityChanged(
   operation: 'create' | 'update'
 ): boolean {
   if (operation === 'create' || !previousDoc) {
-    return doc.asset_category === 'computer' && doc.status !== 'retired'
+        return isManualCategoryAssessable(doc.asset_category) && doc.status !== 'retired'
   }
   // Moving offices re-homes the open cycle: its assignees and office managers belong to the
   // office. Completed answers stay valid because they describe the device, not the office.

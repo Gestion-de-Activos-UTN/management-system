@@ -105,11 +105,11 @@ export const RISK_QUESTIONS_V2 = [
     key: 'A.8.2.privileged_access',
     control_key: 'A.8.2',
     scope: 'asset',
-    prompt: '¿Quiénes poseen acceso total de administrador o root a este equipo?',
+    prompt: '¿Quiénes poseen acceso total de administrador a este activo?',
     help_text:
-      'Una cuenta administradora puede instalar programas, cambiar la seguridad y acceder a toda la información. Elige la opción según quién conoce o puede usar esas credenciales.',
+      'Una cuenta administradora puede cambiar la configuración y la seguridad y acceder a toda la información del activo. Elige la opción según quién conoce o puede usar esas credenciales.',
     // ponytail: databases are servers; no inventory source reports a separate database type.
-    asset_types: ['server', 'gateway'],
+    asset_types: ['server', 'gateway', 'cloud_asset', 'information_repository'],
     options: options(
       ['exclusive_authorized', 'Personal exclusivo y autorizado', 1],
       ['multiple_as_needed', 'Varias personas o quien lo necesita', 0.4],
@@ -175,6 +175,21 @@ export const RISK_QUESTIONS_V2 = [
       ['none', 'No se actualiza', 0]
     ),
   }),
+    question({
+    key: 'A.8.8.vendor_support',
+    control_key: 'A.8.8',
+    scope: 'asset',
+    prompt:
+      '¿El fabricante todavía publica actualizaciones de seguridad para la versión de este producto que se usa?',
+    help_text:
+      'Consulta la página oficial del fabricante y busca la fecha de fin de soporte de la versión en uso. Que el producto siga funcionando no significa que tenga soporte. El soporte extendido pago cuenta sólo si está contratado y activo. Si no sabes qué versión es, elige «No lo sé».',
+    asset_types: ['software_license'],
+    options: options(
+      ['supported_updated', 'Sí, con soporte vigente y actualizado', 1],
+      ['supported_pending', 'Sí, con soporte vigente pero con actualizaciones pendientes', 0.6],
+      ['unsupported', 'No, el fabricante ya no da soporte', 0]
+    ),
+  }),
   question({
     key: 'A.8.9-20.default_password',
     control_key: 'A.8.9/A.8.20',
@@ -203,15 +218,15 @@ export const RISK_QUESTIONS_V2 = [
     key: 'A.8.13.backup',
     control_key: 'A.8.13',
     scope: 'asset',
-    prompt: '¿Dónde se guarda principalmente la información de trabajo de este equipo?',
+    prompt: '¿Dónde se guarda principalmente la información de este activo y cómo está respaldada?',
     help_text:
-      'Elige dónde se guardan normalmente los archivos. «Disco local con copia periódica» requiere una segunda copia actualizada y separada del equipo.',
-    asset_types: ['workstation', 'mobile', 'server'],
+      'Elige dónde se guarda normalmente la información. «Almacenamiento local con copia periódica» requiere una segunda copia actualizada y separada del activo.',
+    asset_types: ['workstation', 'mobile', 'server', 'information_repository'],
     options: options(
       ['corporate_cloud', 'Nube corporativa', 1],
-      ['local_with_backup', 'Disco local con copia periódica', 0.5],
+      ['local_with_backup', 'Almacenamiento local con copia periódica', 0.5],
       ['personal_cloud', 'Nube personal o compartida', 0.3],
-      ['local_only', 'Sólo disco local', 0]
+      ['local_only', 'Sólo almacenamiento local, sin copia', 0]
     ),
   }),
   question({
@@ -325,6 +340,12 @@ export const RISK_CONTROLS_V2 = [
     title: 'Configuración de red y firmware',
     severity: 'high',
     question_keys: ['A.8.9-20.default_password', 'A.8.9-20.firmware'],
+  },
+    {
+    key: 'A.8.8',
+    title: 'Gestión de vulnerabilidades técnicas',
+    severity: 'high',
+    question_keys: ['A.8.8.vendor_support'],
   },
   {
     key: 'A.8.13',

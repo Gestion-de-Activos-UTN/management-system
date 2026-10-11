@@ -9,8 +9,8 @@ const clone = () => structuredClone(RISK_CATALOG_V2) as unknown as RiskCatalogV2
 describe('risk catalog v2', () => {
   it('validates the complete catalog', () => {
     assert.doesNotThrow(() => validateRiskCatalogV2(RISK_CATALOG_V2))
-    assert.equal(RISK_CATALOG_V2.controls.length, 17)
-    assert.equal(RISK_QUESTIONS_V2.length, 19)
+    assert.equal(RISK_CATALOG_V2.controls.length, 18)
+    assert.equal(RISK_QUESTIONS_V2.length, 20)
   })
 
   it('keeps every efficacy inside 0..1 and unknown options non evaluable', () => {
