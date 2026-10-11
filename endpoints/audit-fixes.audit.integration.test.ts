@@ -167,9 +167,15 @@ it('SEC-40: cookies cannot unlock; five bad attempts lock the account until lock
       ).toBe(403)
     }
     const after = await payload.db.findOne({ collection, where: { id: { equals: account.id } } })
-    expect(Date.parse((after as unknown as { lockUntil: string }).lockUntil)).toBeGreaterThan(Date.now())
+    expect(Date.parse((after as unknown as { lockUntil: string }).lockUntil)).toBeGreaterThan(
+      Date.now()
+    )
     // Simulate lockTime elapsing: the account unlocks by itself, no manual unlock needed.
-    await payload.db.updateOne({ collection, id: account.id, data: { lockUntil: new Date(Date.now() - 1000).toISOString() } })
+    await payload.db.updateOne({
+      collection,
+      id: account.id,
+      data: { lockUntil: new Date(Date.now() - 1000).toISOString() },
+    })
     expect(
       (await api(`/api/${collection}/login`, 'POST', { email: account.email, password })).status
     ).toBe(200)

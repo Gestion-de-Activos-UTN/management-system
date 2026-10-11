@@ -63,15 +63,26 @@ const assetDoc = async (id: string) =>
 it('SEC-09/10: concurrent identical retries apply inventory and snapshot once', async () => {
   const { auth } = await scope()
   const report = auditReport(auth, [auditAsset(auth, { mac: '00:11:22:AB:CD:EF' })])
-  const results = await Promise.all([processScanReport(payload, report, auth), processScanReport(payload, report, auth)])
+  const results = await Promise.all([
+    processScanReport(payload, report, auth),
+    processScanReport(payload, report, auth),
+  ])
   expect(results.filter(result => result.alreadyProcessed)).toHaveLength(1)
-  const assets = await payload.find({ collection: 'assets', overrideAccess: true,
-    where: { organization: { equals: auth.organizationId }, mac: { equals: '00:11:22:AB:CD:EF' } } })
+  const assets = await payload.find({
+    collection: 'assets',
+    overrideAccess: true,
+    where: { organization: { equals: auth.organizationId }, mac: { equals: '00:11:22:AB:CD:EF' } },
+  })
   expect(assets.totalDocs).toBe(1)
-  const snapshots = await payload.find({ collection: 'inventory-snapshots', overrideAccess: true,
-    where: { office: { equals: auth.officeId } } })
+  const snapshots = await payload.find({
+    collection: 'inventory-snapshots',
+    overrideAccess: true,
+    where: { office: { equals: auth.officeId } },
+  })
   expect(snapshots.totalDocs).toBe(1)
-  await expect(processScanReport(payload, { ...report, gateway_ip: '10.0.0.1' }, auth)).rejects.toMatchObject({ status: 409 })
+  await expect(
+    processScanReport(payload, { ...report, gateway_ip: '10.0.0.1' }, auth)
+  ).rejects.toMatchObject({ status: 409 })
 })
 
 it('REVIEW-02: concurrent distinct reports read each other after the organization lock', async () => {
@@ -80,10 +91,16 @@ it('REVIEW-02: concurrent distinct reports read each other after the organizatio
     auditReport(auth, [auditAsset(auth, { ip: `10.0.0.${octet}`, mac: `00:11:22:33:44:${octet}` })])
   )
   const results = await Promise.all(reports.map(report => processScanReport(payload, report, auth)))
-  expect(results.map(result => [result.status, result.alreadyProcessed])).toEqual([['processed', false], ['processed', false]])
+  expect(results.map(result => [result.status, result.alreadyProcessed])).toEqual([
+    ['processed', false],
+    ['processed', false],
+  ])
   // The second report must see the snapshot the first committed while it waited on the lock.
-  const snapshots = await payload.find({ collection: 'inventory-snapshots', overrideAccess: true,
-    where: { office: { equals: auth.officeId } } })
+  const snapshots = await payload.find({
+    collection: 'inventory-snapshots',
+    overrideAccess: true,
+    where: { office: { equals: auth.officeId } },
+  })
   expect(snapshots.totalDocs).toBe(1)
 })
 
@@ -283,7 +300,9 @@ it('SEC-09: another agent cannot resume an existing report with changed content'
     [auditAsset(other.auth, { hostname: 'replacement' })],
     { report_id: report.report_id }
   )
-  await expect(processScanReport(payload, replacement, other.auth)).rejects.toMatchObject({ status: 409 })
+  await expect(processScanReport(payload, replacement, other.auth)).rejects.toMatchObject({
+    status: 409,
+  })
   const stored = await payload.findByID({
     collection: 'scan-reports',
     id: report.report_id,
@@ -323,7 +342,9 @@ it('SEC-10: second asset failure rolls back the whole report; retry creates exac
       })
     ).totalDocs
   ).toBe(0)
-  await expect(payload.findByID({ collection: 'scan-reports', id: report.report_id, overrideAccess: true })).rejects.toMatchObject({ status: 404 })
+  await expect(
+    payload.findByID({ collection: 'scan-reports', id: report.report_id, overrideAccess: true })
+  ).rejects.toMatchObject({ status: 404 })
   await processScanReport(payload, report, auth)
   const snapshots = await payload.find({
     collection: 'inventory-snapshots',
@@ -351,7 +372,9 @@ it('SEC-48: required automatic snapshot failure rejects and rolls back the repor
     return original(args as never) as never
   })
   try {
-    await expect(processScanReport(payload, auditReport(auth, [auditAsset(auth)]), auth)).rejects.toThrow('Snapshot INSERT failure')
+    await expect(
+      processScanReport(payload, auditReport(auth, [auditAsset(auth)]), auth)
+    ).rejects.toThrow('Snapshot INSERT failure')
     expect(
       (
         await payload.find({
@@ -410,19 +433,37 @@ it('SEC-47: concurrent changes yield a coherent snapshot after transaction retry
 
 it('SEC-50: aging rechecks a fresh observation committed after its candidate selection', async () => {
   const { auth, server } = await scope()
-  await payload.update({ collection: 'assets', id: server.id, overrideAccess: true,
-    context: { systemJob: true }, data: { last_seen: '2000-01-01T00:00:00.000Z' } })
+  await payload.update({
+    collection: 'assets',
+    id: server.id,
+    overrideAccess: true,
+    context: { systemJob: true },
+    data: { last_seen: '2000-01-01T00:00:00.000Z' },
+  })
   const original = payload.find.bind(payload)
   let injected = false
   const spy = vi.spyOn(payload, 'find').mockImplementation(async args => {
     const result = await original(args as never)
-    if (!injected && args.collection === 'assets' && args.sort === 'id' && result.docs.some(row => row.id === server.id)) {
+    if (
+      !injected &&
+      args.collection === 'assets' &&
+      args.sort === 'id' &&
+      result.docs.some(row => row.id === server.id)
+    ) {
       injected = true
-      await ingestScanReport(payload, auditReport(auth, [auditAsset(auth, { ip: server.ip!, mac: server.mac ?? '' })]), auth)
+      await ingestScanReport(
+        payload,
+        auditReport(auth, [auditAsset(auth, { ip: server.ip!, mac: server.mac ?? '' })]),
+        auth
+      )
     }
     return result as never
   })
-  try { await agingSweep(payload) } finally { spy.mockRestore() }
+  try {
+    await agingSweep(payload)
+  } finally {
+    spy.mockRestore()
+  }
   const doc = await assetDoc(String(server.id))
   expect(injected).toBe(true)
   expect(Date.parse(doc.last_seen!)).toBeGreaterThan(Date.now() - 60000)
@@ -451,7 +492,10 @@ it('SEC-31: concurrent open cycles are rejected by database uniqueness', async (
   }
   try {
     const first = await reconcileAssessmentInstance(payload, subject, 'initial', req1)
-    const second = reconcileAssessmentInstance(payload, subject, 'initial', req2).then(value => ({ value }), error => ({ error }))
+    const second = reconcileAssessmentInstance(payload, subject, 'initial', req2).then(
+      value => ({ value }),
+      error => ({ error })
+    )
     expect(first.action).toBe('created')
     await payload.db.commitTransaction(tx1!)
     const outcome = await second
@@ -680,9 +724,12 @@ it('SEC-25/37/43: cookies reject foreign Origin and viewers receive only scanner
     }),
   })
   expect(result.status).toBe(401)
-  const trusted = await handleEndpoints({ config: payload.config, request: new Request('http://localhost/api/v1/offices/agent-summary', {
-    headers: { cookie, origin: 'http://localhost:3001' },
-  }) })
+  const trusted = await handleEndpoints({
+    config: payload.config,
+    request: new Request('http://localhost/api/v1/offices/agent-summary', {
+      headers: { cookie, origin: 'http://localhost:3001' },
+    }),
+  })
   expect(trusted.status).toBe(200)
   const data = await trusted.json()
   expect(data.docs[0]).toEqual({ office_id: auth.officeId, scanner_status: 'online' })
@@ -741,8 +788,13 @@ it('SEC-53: moved task follows the asset and is visible only in its new office',
       status: 404,
     })
   }
-  const newOfficeReq = await createLocalReq({ user: { id: b, collection: 'users' } as never }, payload)
-  await expect(assertCanReadTask(newOfficeReq, (await getTenantContext(newOfficeReq))!, task)).resolves.toBeDefined()
+  const newOfficeReq = await createLocalReq(
+    { user: { id: b, collection: 'users' } as never },
+    payload
+  )
+  await expect(
+    assertCanReadTask(newOfficeReq, (await getTenantContext(newOfficeReq))!, task)
+  ).resolves.toBeDefined()
 })
 
 it('SEC-53: retiring an asset cancels its task automatically and rejects a new claim', async () => {
@@ -775,7 +827,9 @@ it('SEC-53: retiring an asset cancels its task automatically and rejects a new c
     { user: { id: admin, collection: 'users' } as never },
     payload
   )
-  await expect(claimTask(claimReq, (await getTenantContext(claimReq))!, String(tasks[0].id))).rejects.toMatchObject({ code: 'task_not_pending' })
+  await expect(
+    claimTask(claimReq, (await getTenantContext(claimReq))!, String(tasks[0].id))
+  ).rejects.toMatchObject({ code: 'task_not_pending' })
   expect(
     (await payload.findByID({ collection: 'tasks', id: tasks[0].id, overrideAccess: true })).status
   ).toBe('cancelled')
@@ -838,7 +892,14 @@ it('SEC-52/53: logical deletion cancels open tasks, preserves references and que
       { user: { id: admin, collection: 'users' } as never },
       payload
     )
-    await expect(payload.delete({ collection: 'non-network-assets', id: manual.id, overrideAccess: true, req: deleteReq })).rejects.toThrow('lógicamente')
+    await expect(
+      payload.delete({
+        collection: 'non-network-assets',
+        id: manual.id,
+        overrideAccess: true,
+        req: deleteReq,
+      })
+    ).rejects.toThrow('lógicamente')
     deleteReq.routeParams = { id: String(manual.id) }
     expect((await logicalDeleteEndpoint('non-network-assets').handler(deleteReq)).status).toBe(200)
     const task = await payload.findByID({
@@ -870,7 +931,9 @@ it('SEC-52/53: logical deletion cancels open tasks, preserves references and que
       limit: 1000,
     })
     expect(contributions.totalDocs).toBeGreaterThan(0)
-    expect(contributions.docs.every(c => relationId(c.manual_asset) === String(manual.id))).toBe(true)
+    expect(contributions.docs.every(c => relationId(c.manual_asset) === String(manual.id))).toBe(
+      true
+    )
     const jobs = await payload.find({
       collection: 'payload-jobs',
       overrideAccess: true,
@@ -937,17 +1000,46 @@ it('SEED: renamed manual assets and tasks retain their scenario identity on repe
   ).toBe(tasks.totalDocs)
 })
 
-
 it('SEC-01: selected PlatformAdmin creates, claims and completes with its own actor identity', async () => {
   const { auth } = await scope()
   await member(payload, auth.organizationId, [auth.officeId], 'org_admin')
-  const role = (await payload.find({ collection: 'roles', overrideAccess: true, where: { slug: { equals: 'platform_admin' } }, limit: 1 })).docs[0]
-  const admin = await payload.create({ collection: 'admins', overrideAccess: true, data: { email: `platform-${crypto.randomUUID()}@example.test`, password: 'x'.repeat(12), role: role.id } })
-  const request = () => createLocalReq({ user: { id: admin.id, collection: 'admins' } as never, req: { url: `http://localhost/api/v1/tasks?asOrganization=${auth.organizationId}` } as never }, payload)
+  const role = (
+    await payload.find({
+      collection: 'roles',
+      overrideAccess: true,
+      where: { slug: { equals: 'platform_admin' } },
+      limit: 1,
+    })
+  ).docs[0]
+  const admin = await payload.create({
+    collection: 'admins',
+    overrideAccess: true,
+    data: {
+      email: `platform-${crypto.randomUUID()}@example.test`,
+      password: 'x'.repeat(12),
+      role: role.id,
+    },
+  })
+  const request = () =>
+    createLocalReq(
+      {
+        user: { id: admin.id, collection: 'admins' } as never,
+        req: {
+          url: `http://localhost/api/v1/tasks?asOrganization=${auth.organizationId}`,
+        } as never,
+      },
+      payload
+    )
   const req = await request()
   const ctx = (await getTenantContext(req))!
   expect(ctx).toMatchObject({ role: 'org_admin', isPlatformAdmin: true })
-  const [task] = await createTasks(req, ctx, { title: 'Platform task', priority: 'normal', global: false, office_ids: [auth.officeId], assignment_kind: 'open_pool' } as never)
+  const [task] = await createTasks(req, ctx, {
+    title: 'Platform task',
+    priority: 'normal',
+    global: false,
+    office_ids: [auth.officeId],
+    assignment_kind: 'open_pool',
+  } as never)
   expect(task.created_by.relationTo).toBe('admins')
   expect(relationId(task.created_by)).toBe(String(admin.id))
   const claimReq = await request()
@@ -955,41 +1047,128 @@ it('SEC-01: selected PlatformAdmin creates, claims and completes with its own ac
   expect(claimed.claimed_by?.relationTo).toBe('admins')
   expect(relationId(claimed.claimed_by)).toBe(String(admin.id))
   const completeReq = await request()
-  const completed = await completeTask(completeReq, (await getTenantContext(completeReq))!, String(task.id))
+  const completed = await completeTask(
+    completeReq,
+    (await getTenantContext(completeReq))!,
+    String(task.id)
+  )
   expect(completed.completed_by?.relationTo).toBe('admins')
   expect(relationId(completed.completed_by)).toBe(String(admin.id))
-  const noSelection = await createLocalReq({ user: { id: admin.id, collection: 'admins' } as never }, payload)
-  await expect(createTasks(noSelection, (await getTenantContext(noSelection))!, { title: 'No scope' } as never)).rejects.toMatchObject({ status: 403 })
+  const noSelection = await createLocalReq(
+    { user: { id: admin.id, collection: 'admins' } as never },
+    payload
+  )
+  await expect(
+    createTasks(noSelection, (await getTenantContext(noSelection))!, { title: 'No scope' } as never)
+  ).rejects.toMatchObject({ status: 403 })
 })
 
 it('SEC-04: global MAC conflicts preserve identity and office until an authorized move, then release an invalid claim', async () => {
   const { auth } = await scope()
   const mac = '00:11:22:AA:BC:DE'
-  const first = await processScanReport(payload, auditReport(auth, [auditAsset(auth, { mac })]), auth)
-  const asset = (await payload.find({ collection: 'assets', overrideAccess: true, where: { asset_id: { equals: first.processedAssetIds[0] } }, limit: 1 })).docs[0]
-  await payload.update({ collection: 'assets', id: asset.id, overrideAccess: true, context: { systemJob: true }, data: { identified: true, identification_status: 'confirmed', confirmed_type: 'server', authorization_status: 'authorized' } })
-  const destination = await payload.create({ collection: 'offices', overrideAccess: true, data: { organization: auth.organizationId, name: 'New location' } })
-  const agent = await payload.create({ collection: 'agents', overrideAccess: true, context: { systemJob: true }, data: { id: `agent-${crypto.randomUUID()}`, office: destination.id } })
+  const first = await processScanReport(
+    payload,
+    auditReport(auth, [auditAsset(auth, { mac })]),
+    auth
+  )
+  const asset = (
+    await payload.find({
+      collection: 'assets',
+      overrideAccess: true,
+      where: { asset_id: { equals: first.processedAssetIds[0] } },
+      limit: 1,
+    })
+  ).docs[0]
+  await payload.update({
+    collection: 'assets',
+    id: asset.id,
+    overrideAccess: true,
+    context: { systemJob: true },
+    data: {
+      identified: true,
+      identification_status: 'confirmed',
+      confirmed_type: 'server',
+      authorization_status: 'authorized',
+    },
+  })
+  const destination = await payload.create({
+    collection: 'offices',
+    overrideAccess: true,
+    data: { organization: auth.organizationId, name: 'New location' },
+  })
+  const agent = await payload.create({
+    collection: 'agents',
+    overrideAccess: true,
+    context: { systemJob: true },
+    data: { id: `agent-${crypto.randomUUID()}`, office: destination.id },
+  })
   const otherAuth = { ...auth, officeId: String(destination.id), agentId: String(agent.id) }
   const manager = await member(payload, auth.organizationId, [auth.officeId], 'office_manager')
-  const admin = await member(payload, auth.organizationId, [auth.officeId, String(destination.id)], 'org_admin')
-  const managerReq = await createLocalReq({ user: { id: manager, collection: 'users' } as never }, payload)
-  const [task] = await createTasks(managerReq, (await getTenantContext(managerReq))!, { title: 'Claim before movement', priority: 'normal', office_ids: [auth.officeId], global: false, assignment_kind: 'user', assigned_user: manager, related_entity: { relationTo: 'assets', value: String(asset.id) } } as never)
-  const claimReq = await createLocalReq({ user: { id: manager, collection: 'users' } as never }, payload)
+  const admin = await member(
+    payload,
+    auth.organizationId,
+    [auth.officeId, String(destination.id)],
+    'org_admin'
+  )
+  const managerReq = await createLocalReq(
+    { user: { id: manager, collection: 'users' } as never },
+    payload
+  )
+  const [task] = await createTasks(managerReq, (await getTenantContext(managerReq))!, {
+    title: 'Claim before movement',
+    priority: 'normal',
+    office_ids: [auth.officeId],
+    global: false,
+    assignment_kind: 'user',
+    assigned_user: manager,
+    related_entity: { relationTo: 'assets', value: String(asset.id) },
+  } as never)
+  const claimReq = await createLocalReq(
+    { user: { id: manager, collection: 'users' } as never },
+    payload
+  )
   await claimTask(claimReq, (await getTenantContext(claimReq))!, String(task.id))
-  await processScanReport(payload, auditReport(otherAuth, [auditAsset(otherAuth, { mac })]), otherAuth)
-  await processScanReport(payload, auditReport(otherAuth, [auditAsset(otherAuth, { mac })]), otherAuth)
+  await processScanReport(
+    payload,
+    auditReport(otherAuth, [auditAsset(otherAuth, { mac })]),
+    otherAuth
+  )
+  await processScanReport(
+    payload,
+    auditReport(otherAuth, [auditAsset(otherAuth, { mac })]),
+    otherAuth
+  )
   expect(relationId((await assetDoc(String(asset.id))).office)).toBe(auth.officeId)
-  const incidents = await payload.find({ collection: 'inventory-incidents', overrideAccess: true, where: { asset: { equals: asset.id } } })
+  const incidents = await payload.find({
+    collection: 'inventory-incidents',
+    overrideAccess: true,
+    where: { asset: { equals: asset.id } },
+  })
   expect(incidents.totalDocs).toBe(1)
-  const resolveReq = async (userId: string) => { const r = await createLocalReq({ user: { id: userId, collection: 'users' } as never }, payload); r.routeParams = { id: incidents.docs[0].id }; r.json = async () => ({ decision: 'move' }); return r }
-  expect((await resolveInventoryIncidentEndpoint.handler(await resolveReq(manager))).status).toBe(404)
+  const resolveReq = async (userId: string) => {
+    const r = await createLocalReq({ user: { id: userId, collection: 'users' } as never }, payload)
+    r.routeParams = { id: incidents.docs[0].id }
+    r.json = async () => ({ decision: 'move' })
+    return r
+  }
+  expect((await resolveInventoryIncidentEndpoint.handler(await resolveReq(manager))).status).toBe(
+    404
+  )
   expect((await resolveInventoryIncidentEndpoint.handler(await resolveReq(admin))).status).toBe(200)
   const moved = await assetDoc(String(asset.id))
   expect(moved.asset_id).toBe(asset.asset_id)
   expect(relationId(moved.office)).toBe(String(destination.id))
-  const updatedTask = await payload.findByID({ collection: 'tasks', id: task.id, overrideAccess: true, depth: 0 })
-  expect(updatedTask).toMatchObject({ status: 'pending', requires_reassignment: true, office: destination.id })
+  const updatedTask = await payload.findByID({
+    collection: 'tasks',
+    id: task.id,
+    overrideAccess: true,
+    depth: 0,
+  })
+  expect(updatedTask).toMatchObject({
+    status: 'pending',
+    requires_reassignment: true,
+    office: destination.id,
+  })
   expect(updatedTask.claimed_by ?? null).toBeNull()
   expect(updatedTask.assigned_user ?? null).toBeNull()
   expect(updatedTask.lifecycle_history).toHaveLength(1)
@@ -998,60 +1177,173 @@ it('SEC-04: global MAC conflicts preserve identity and office until an authorize
 it('REVIEW-07: a kept location keeps refreshing presence without moving the asset', async () => {
   const { auth } = await scope()
   const mac = '00:11:22:AA:BC:07'
-  const first = await processScanReport(payload, auditReport(auth, [auditAsset(auth, { mac })]), auth)
-  const asset = (await payload.find({ collection: 'assets', overrideAccess: true, where: { asset_id: { equals: first.processedAssetIds[0] } }, limit: 1 })).docs[0]
-  const visited = await payload.create({ collection: 'offices', overrideAccess: true, data: { organization: auth.organizationId, name: 'Visited office' } })
-  const agent = await payload.create({ collection: 'agents', overrideAccess: true, context: { systemJob: true }, data: { id: `agent-${crypto.randomUUID()}`, office: visited.id } })
+  const first = await processScanReport(
+    payload,
+    auditReport(auth, [auditAsset(auth, { mac })]),
+    auth
+  )
+  const asset = (
+    await payload.find({
+      collection: 'assets',
+      overrideAccess: true,
+      where: { asset_id: { equals: first.processedAssetIds[0] } },
+      limit: 1,
+    })
+  ).docs[0]
+  const visited = await payload.create({
+    collection: 'offices',
+    overrideAccess: true,
+    data: { organization: auth.organizationId, name: 'Visited office' },
+  })
+  const agent = await payload.create({
+    collection: 'agents',
+    overrideAccess: true,
+    context: { systemJob: true },
+    data: { id: `agent-${crypto.randomUUID()}`, office: visited.id },
+  })
   const otherAuth = { ...auth, officeId: String(visited.id), agentId: String(agent.id) }
-  const admin = await member(payload, auth.organizationId, [auth.officeId, String(visited.id)], 'org_admin')
-  await processScanReport(payload, auditReport(otherAuth, [auditAsset(otherAuth, { mac })]), otherAuth)
-  const incidents = await payload.find({ collection: 'inventory-incidents', overrideAccess: true, where: { asset: { equals: asset.id } } })
-  const resolveReq = await createLocalReq({ user: { id: admin, collection: 'users' } as never }, payload)
+  const admin = await member(
+    payload,
+    auth.organizationId,
+    [auth.officeId, String(visited.id)],
+    'org_admin'
+  )
+  await processScanReport(
+    payload,
+    auditReport(otherAuth, [auditAsset(otherAuth, { mac })]),
+    otherAuth
+  )
+  const incidents = await payload.find({
+    collection: 'inventory-incidents',
+    overrideAccess: true,
+    where: { asset: { equals: asset.id } },
+  })
+  const resolveReq = await createLocalReq(
+    { user: { id: admin, collection: 'users' } as never },
+    payload
+  )
   resolveReq.routeParams = { id: incidents.docs[0].id }
   resolveReq.json = async () => ({ decision: 'keep' })
   expect((await resolveInventoryIncidentEndpoint.handler(resolveReq)).status).toBe(200)
 
   const later = new Date(Date.now() + 1000).toISOString()
-  const result = await processScanReport(payload,
-    auditReport(otherAuth, [auditAsset(otherAuth, { mac, scan_time: later })], { scan_start: later, scan_end: later }), otherAuth)
+  const result = await processScanReport(
+    payload,
+    auditReport(otherAuth, [auditAsset(otherAuth, { mac, scan_time: later })], {
+      scan_start: later,
+      scan_end: later,
+    }),
+    otherAuth
+  )
   expect(result.rejectedAssets).toEqual([])
   const refreshed = await assetDoc(String(asset.id))
   expect(Date.parse(refreshed.last_seen!)).toBe(Date.parse(later))
   expect(relationId(refreshed.office)).toBe(auth.officeId)
-  const after = await payload.find({ collection: 'inventory-incidents', overrideAccess: true, where: { asset: { equals: asset.id } } })
+  const after = await payload.find({
+    collection: 'inventory-incidents',
+    overrideAccess: true,
+    where: { asset: { equals: asset.id } },
+  })
   expect(after.docs.map(incident => incident.status)).toEqual(['kept'])
 })
 
 it('FOLLOWUP: moving an asset follows the replacement assessment, releases invalid claims, and preserves completed task history', async () => {
   const { auth, server } = await scope()
-  const destination = await payload.create({ collection: 'offices', overrideAccess: true, data: { organization: auth.organizationId, name: 'Followup destination' } })
+  const destination = await payload.create({
+    collection: 'offices',
+    overrideAccess: true,
+    data: { organization: auth.organizationId, name: 'Followup destination' },
+  })
   const manager = await member(payload, auth.organizationId, [auth.officeId], 'office_manager')
-  const admin = await member(payload, auth.organizationId, [auth.officeId, String(destination.id)], 'org_admin')
-  await payload.update({ collection: 'assets', id: server.id, overrideAccess: true, data: { identified: true, identification_status: 'confirmed', confirmed_type: 'workstation', authorization_status: 'authorized' } })
-  const assessment = (await payload.find({ collection: 'assessment-instances', overrideAccess: true, where: { asset: { equals: server.id }, status: { equals: 'pending' } } })).docs[0]
+  const admin = await member(
+    payload,
+    auth.organizationId,
+    [auth.officeId, String(destination.id)],
+    'org_admin'
+  )
+  await payload.update({
+    collection: 'assets',
+    id: server.id,
+    overrideAccess: true,
+    data: {
+      identified: true,
+      identification_status: 'confirmed',
+      confirmed_type: 'workstation',
+      authorization_status: 'authorized',
+    },
+  })
+  const assessment = (
+    await payload.find({
+      collection: 'assessment-instances',
+      overrideAccess: true,
+      where: { asset: { equals: server.id }, status: { equals: 'pending' } },
+    })
+  ).docs[0]
   expect(assessment).toBeTruthy()
   const req = await createLocalReq({ user: { id: manager, collection: 'users' } as never }, payload)
   const ctx = (await getTenantContext(req))!
-  const input = { title: 'Followup review task', priority: 'normal', global: false, office_ids: [auth.officeId], assignment_kind: 'user', assigned_user: manager, related_entity: { relationTo: 'assessment-instances', value: String(assessment.id) } } as never
+  const input = {
+    title: 'Followup review task',
+    priority: 'normal',
+    global: false,
+    office_ids: [auth.officeId],
+    assignment_kind: 'user',
+    assigned_user: manager,
+    related_entity: { relationTo: 'assessment-instances', value: String(assessment.id) },
+  } as never
   const [task] = await createTasks(req, ctx, input)
   await claimTask(req, ctx, String(task.id))
-  const [completed] = await createTasks(req, ctx, { ...input as object, title: 'Historical completed task' } as never)
+  const [completed] = await createTasks(req, ctx, {
+    ...(input as object),
+    title: 'Historical completed task',
+  } as never)
   await claimTask(req, ctx, String(completed.id))
   await completeTask(req, ctx, String(completed.id))
-  const adminReq = await createLocalReq({ user: { id: admin, collection: 'users' } as never }, payload)
-  await payload.update({ collection: 'assets', id: server.id, req: adminReq, overrideAccess: true, data: { office: destination.id, owner: null } })
-  const moved = await payload.findByID({ collection: 'tasks', id: task.id, overrideAccess: true, depth: 0 })
+  const adminReq = await createLocalReq(
+    { user: { id: admin, collection: 'users' } as never },
+    payload
+  )
+  await payload.update({
+    collection: 'assets',
+    id: server.id,
+    req: adminReq,
+    overrideAccess: true,
+    data: { office: destination.id, owner: null },
+  })
+  const moved = await payload.findByID({
+    collection: 'tasks',
+    id: task.id,
+    overrideAccess: true,
+    depth: 0,
+  })
   expect(moved.status).toBe('pending')
   expect(moved.requires_reassignment).toBe(true)
   expect(moved.claimed_by ?? null).toBeNull()
   expect(relationId(moved.office)).toBe(String(destination.id))
   expect(relationId(moved.related_entity?.value)).not.toBe(String(assessment.id))
-  expect(moved.lifecycle_history).toEqual(expect.arrayContaining([expect.objectContaining({ previous_assessment: assessment.id })]))
-  const historical = await payload.findByID({ collection: 'tasks', id: completed.id, overrideAccess: true, depth: 0 })
+  expect(moved.lifecycle_history).toEqual(
+    expect.arrayContaining([expect.objectContaining({ previous_assessment: assessment.id })])
+  )
+  const historical = await payload.findByID({
+    collection: 'tasks',
+    id: completed.id,
+    overrideAccess: true,
+    depth: 0,
+  })
   expect(historical.status).toBe('completed')
   expect(relationId(historical.related_entity?.value)).toBe(String(assessment.id))
-  await payload.update({ collection: 'assets', id: server.id, req: adminReq, overrideAccess: true, data: { status: 'retired' } })
-  const cancelled = await payload.findByID({ collection: 'tasks', id: task.id, overrideAccess: true })
+  await payload.update({
+    collection: 'assets',
+    id: server.id,
+    req: adminReq,
+    overrideAccess: true,
+    data: { status: 'retired' },
+  })
+  const cancelled = await payload.findByID({
+    collection: 'tasks',
+    id: task.id,
+    overrideAccess: true,
+  })
   expect(cancelled.status).toBe('cancelled')
   expect(cancelled.cancellation_reason).toBe('Activo retirado.')
 })
@@ -1059,9 +1351,23 @@ it('FOLLOWUP: moving an asset follows the replacement assessment, releases inval
 it('FOLLOWUP: compact enriched seed covers reassignment, automatic cancellation and immutable origin references without duplicates', async () => {
   const first = await seedDemoData(payload, { profile: 'expanded' })
   expect(first.manualAssetsCreated).toBe(8)
-  const org = (await payload.find({ collection: 'organizations', overrideAccess: true, where: { name: { equals: 'Demo Organization' } } })).docs[0]
+  const org = (
+    await payload.find({
+      collection: 'organizations',
+      overrideAccess: true,
+      where: { name: { equals: 'Demo Organization' } },
+    })
+  ).docs[0]
   const scope = { organization: { equals: org.id } }
-  const tasks = (await payload.find({ collection: 'tasks', overrideAccess: true, depth: 0, pagination: false, where: scope })).docs
+  const tasks = (
+    await payload.find({
+      collection: 'tasks',
+      overrideAccess: true,
+      depth: 0,
+      pagination: false,
+      where: scope,
+    })
+  ).docs
   const reassign = tasks.find(t => t.title.startsWith('Revisar portátil trasladado'))!
   expect(reassign.requires_reassignment).toBe(true)
   expect(reassign.status).toBe('pending')
@@ -1069,30 +1375,74 @@ it('FOLLOWUP: compact enriched seed covers reassignment, automatic cancellation 
   const cancelled = tasks.find(t => t.title.startsWith('Revisar impresora retirada'))!
   expect(cancelled.status).toBe('cancelled')
   expect(cancelled.cancellation_reason).toBe('Activo retirado.')
-  expect(tasks.some(t => t.status === 'pending' && t.related_entity?.relationTo === 'inventory-snapshots')).toBe(true)
-  expect(tasks.some(t => t.status === 'pending' && t.related_entity?.relationTo === 'risk-evaluations')).toBe(true)
-  expect((await payload.count({ collection: 'assets', overrideAccess: true, where: scope })).totalDocs).toBe(21)
-  expect((await payload.count({ collection: 'non-network-assets', overrideAccess: true, where: scope })).totalDocs).toBe(18)
+  expect(
+    tasks.some(
+      t => t.status === 'pending' && t.related_entity?.relationTo === 'inventory-snapshots'
+    )
+  ).toBe(true)
+  expect(
+    tasks.some(t => t.status === 'pending' && t.related_entity?.relationTo === 'risk-evaluations')
+  ).toBe(true)
+  expect(
+    (await payload.count({ collection: 'assets', overrideAccess: true, where: scope })).totalDocs
+  ).toBe(21)
+  expect(
+    (await payload.count({ collection: 'non-network-assets', overrideAccess: true, where: scope }))
+      .totalDocs
+  ).toBe(18)
   expect(tasks).toHaveLength(22)
   const repeat = await seedDemoData(payload, { profile: 'expanded' })
-  expect(repeat).toMatchObject({ reportsProcessed: 0, manualAssetsCreated: 0, tasksCreated: 0, snapshotsCreated: 0 })
-  expect((await payload.count({ collection: 'tasks', overrideAccess: true, where: scope })).totalDocs).toBe(tasks.length)
+  expect(repeat).toMatchObject({
+    reportsProcessed: 0,
+    manualAssetsCreated: 0,
+    tasksCreated: 0,
+    snapshotsCreated: 0,
+  })
+  expect(
+    (await payload.count({ collection: 'tasks', overrideAccess: true, where: scope })).totalDocs
+  ).toBe(tasks.length)
 }, 120000)
 
 it('FOLLOWUP: historical risk reads the selected immutable evaluation and enforces office/organization scope', async () => {
   const { auth } = await scope()
   const manager = await member(payload, auth.organizationId, [auth.officeId], 'office_manager')
-  const old = await recalculateRisk(payload, { organizationId: auth.organizationId, officeId: auth.officeId })
+  const old = await recalculateRisk(payload, {
+    organizationId: auth.organizationId,
+    officeId: auth.officeId,
+  })
   await recalculateRisk(payload, { organizationId: auth.organizationId, officeId: auth.officeId })
   const { latestRiskEvaluationEndpoint } = await import('./risk')
-  const request = (officeId: string, id: string) => createLocalReq({ user: { id: manager, collection: 'users' } as never, req: { url: `http://localhost/api/v1/risk/latest?office_id=${officeId}&evaluation_id=${id}` } as never }, payload)
-  const response = await latestRiskEvaluationEndpoint.handler(await request(auth.officeId, String(old.id)))
+  const request = (officeId: string, id: string) =>
+    createLocalReq(
+      {
+        user: { id: manager, collection: 'users' } as never,
+        req: {
+          url: `http://localhost/api/v1/risk/latest?office_id=${officeId}&evaluation_id=${id}`,
+        } as never,
+      },
+      payload
+    )
+  const response = await latestRiskEvaluationEndpoint.handler(
+    await request(auth.officeId, String(old.id))
+  )
   expect(response.status).toBe(200)
   const data = await response.json()
   expect(data.evaluation.id).toBe(String(old.id))
   expect(data.recalculation).toBeUndefined()
   const other = await scope()
-  const foreign = await recalculateRisk(payload, { organizationId: other.auth.organizationId, officeId: other.auth.officeId })
-  expect((await latestRiskEvaluationEndpoint.handler(await request(auth.officeId, String(foreign.id)))).status).toBe(404)
-  expect((await latestRiskEvaluationEndpoint.handler(await request(other.auth.officeId, String(foreign.id)))).status).toBe(403)
+  const foreign = await recalculateRisk(payload, {
+    organizationId: other.auth.organizationId,
+    officeId: other.auth.officeId,
+  })
+  expect(
+    (await latestRiskEvaluationEndpoint.handler(await request(auth.officeId, String(foreign.id))))
+      .status
+  ).toBe(404)
+  expect(
+    (
+      await latestRiskEvaluationEndpoint.handler(
+        await request(other.auth.officeId, String(foreign.id))
+      )
+    ).status
+  ).toBe(403)
 })

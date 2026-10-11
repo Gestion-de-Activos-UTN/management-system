@@ -1,28 +1,43 @@
 'use client'
 
-import { useSearchParams } from 'next/navigation'
-import { Card, Stack, Text, TextInput } from '@mantine/core'
+import Link from 'next/link'
+import { Alert, Anchor, SimpleGrid, Stack } from '@mantine/core'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { useTenantContext, isEffectiveOrgAdmin } from '@/modules/auth/hooks/use-tenant-context'
+import { useSession } from '@/lib/use-session'
+import { useMyProfile, useUpdateMyProfile } from '@/modules/users/hooks/use-org-members'
+import { AccountProfileCard } from '@/modules/users/components/AccountProfileCard'
+import { AccountAccessCard } from '@/modules/users/components/AccountAccessCard'
 
 export default function AccountPage() {
-  const asOrganization = useSearchParams().get('asOrganization') ?? undefined
-  const { data: tenantContext } = useTenantContext(asOrganization)
-  // A platform admin visiting an org sees this exactly as an org_admin would — the
-  // backend keeps the true `role: platform_admin` for audit purposes, this is display-only.
-  const displayRole = isEffectiveOrgAdmin(tenantContext) ? 'org_admin' : (tenantContext?.role ?? '')
+  const session = useSession()
+  // Un admin de plataforma "visitando" una organización no tiene perfil de organización.
+  const isPlatformAdmin = session?.collection === 'admins'
+  const profile = useMyProfile(session?.collection === 'users')
+  const save = useUpdateMyProfile()
 
   return (
-    <Stack gap="md">
-      <PageHeader title="Configuración de la cuenta" />
-      <Card withBorder padding="lg" w="100%" maw={420}>
-        <Stack gap="sm">
-          <TextInput label="Rol" value={displayRole} readOnly />
-          <Text size="xs" c="dimmed">
-            Vista de solo lectura; la edición estará disponible en una próxima etapa.
-          </Text>
-        </Stack>
-      </Card>
+    <Stack gap="lg">
+      <PageHeader title="Configuración de la cuenta" description="Tu perfil y tu acceso." />
+      {isPlatformAdmin ? (
+        <Alert color="blue">
+          Estás viendo esta organización como administrador de plataforma. Tu perfil se edita en{' '}
+          <Anchor component={Link} href="/account" inherit>
+            la configuración de tu cuenta de plataforma
+          </Anchor>
+          .
+        </Alert>
+      ) : profile.isError ? (
+        <Alert color="red">No se pudo cargar tu perfil.</Alert>
+      ) : (
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+          <AccountProfileCard
+            profile={profile.data}
+            onSave={name => save.mutate(name)}
+            saving={save.isPending}
+          />
+          <AccountAccessCard profile={profile.data} />
+        </SimpleGrid>
+      )}
     </Stack>
   )
 }

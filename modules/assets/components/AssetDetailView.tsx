@@ -88,7 +88,7 @@ function IdentificationHelpCard({ asset }: { asset: Asset }) {
         <Group gap="xs">
           <Text fw={600}>Ayuda para la identificación</Text>
           <Badge variant="filled" color={tier === 'likely' ? 'pine' : 'gray'}>
-            {tier === 'likely' ? 'Likely' : 'Possible'}: {DEVICE_CATEGORY_LABEL[category]}
+            {tier === 'likely' ? 'Probable' : 'Posible'}: {DEVICE_CATEGORY_LABEL[category]}
           </Badge>
         </Group>
         <Text size="xs" c="dimmed">

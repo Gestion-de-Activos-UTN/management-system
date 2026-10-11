@@ -1,9 +1,10 @@
 import { Tooltip } from '@mantine/core'
 import { Ban, Clock3, Wifi, WifiOff } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
+import type { AgentRevocationReason } from '@/domain/agents/agent-state'
 
 type Connectivity = 'online' | 'offline' | 'pending' | 'revoked'
-type RevocationReason = 'manual' | 'auto_lockout_abuse' | null | undefined
+type RevocationReason = AgentRevocationReason | null | undefined
 
 // Wrapper de dominio sobre el StatusBadge genérico, para
 // que online/offline/pending/revoked tengan tono propio en vez de un Badge crudo sin color.
@@ -19,11 +20,19 @@ export function AgentConnectivityBadge({
       ? {
           tone: 'danger' as const,
           label:
-            revocationReason === 'auto_lockout_abuse' ? 'Eliminado (se detectó abuso)' : 'Eliminado',
+            revocationReason === 'auto_lockout_abuse'
+              ? 'Eliminado (se detectó abuso)'
+              : revocationReason === 'office_deactivated'
+                ? 'Eliminado (oficina desactivada)'
+                : 'Eliminado',
           icon: <Ban size={13} strokeWidth={1.5} />,
         }
       : connectivity === 'online'
-        ? { tone: 'success' as const, label: 'En línea', icon: <Wifi size={13} strokeWidth={1.5} /> }
+        ? {
+            tone: 'success' as const,
+            label: 'En línea',
+            icon: <Wifi size={13} strokeWidth={1.5} />,
+          }
         : connectivity === 'pending'
           ? {
               tone: 'neutral' as const,
@@ -39,7 +48,13 @@ export function AgentConnectivityBadge({
   return (
     <Tooltip label={status.label}>
       <span style={{ flexShrink: 0 }}>
-        <StatusBadge tone={status.tone} label={status.label} icon={status.icon} iconOnly size="xs" />
+        <StatusBadge
+          tone={status.tone}
+          label={status.label}
+          icon={status.icon}
+          iconOnly
+          size="xs"
+        />
       </span>
     </Tooltip>
   )

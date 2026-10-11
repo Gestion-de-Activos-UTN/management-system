@@ -2,6 +2,7 @@ import type { Endpoint } from 'payload'
 import { getTenantContext } from '../access/tenant/resolveTenantContext'
 import { canDo, hasOrgWideScope, type Action } from '../access/rbac/permissions'
 import { defaultFeatures } from '../domain/subscriptions/features'
+import { planLimits } from '../domain/subscriptions/plan-limits'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
@@ -54,6 +55,8 @@ export const sessionEndpoint: Endpoint = {
       ...ctx,
       orgWide: hasOrgWideScope(ctx.role),
       features,
+      // Para mostrar el uso del plan (Administración); los endpoints los hacen cumplir igual.
+      limits: subscription?.docs[0] ? planLimits(subscription.docs[0]) : null,
       permissions: {
         technicalEvidence: Boolean(
           ctx.organizationId &&

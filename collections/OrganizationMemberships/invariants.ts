@@ -28,7 +28,7 @@ export function assertNoRankEscalation(actorRank: number | null, targetRank: num
 export function assertNotLastActiveOrgAdmin(activeAdminCountAfter: number): void {
   if (activeAdminCountAfter <= 0) {
     throw new LastActiveOrgAdminError(
-      'No se puede desactivar/eliminar el último OrgAdmin activo de la organización'
+      'La organización debe conservar al menos un administrador activo'
     )
   }
 }

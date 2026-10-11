@@ -1,7 +1,11 @@
 import type { Endpoint } from 'payload'
-import { getTenantContext } from '../access/tenant/resolveTenantContext'
+import { getTenantContext, type TenantContext } from '../access/tenant/resolveTenantContext'
 import { relationId } from '../lib/relationId'
-import { hasOrgWideScope, type RoleSlug } from '../access/rbac/permissions'
+import { canDo, hasOrgWideScope, type RoleSlug } from '../access/rbac/permissions'
+import { adminErrorResponse, organizationAdminLock } from '../domain/organizations/admin-actions'
+import { withTransaction } from '../domain/with-transaction'
+import { updateMember } from '../domain/organizations/member-admin'
+import { MemberUpdateSchema } from '../modules/users/schema'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
@@ -20,16 +24,23 @@ export const orgMembersEndpoint: Endpoint = {
     if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
     if (!ctx.organizationId) return json({ docs: [] })
 
+    // Administración → Usuarios necesita también a las personas desactivadas (para
+    // reactivarlas); los selectores de persona siguen recibiendo sólo las activas.
+    const includeInactive =
+      new URL(req.url ?? 'http://localhost').searchParams.get('include_inactive') === '1' &&
+      canDo(ctx.role, 'organization-memberships', 'read', ctx.organizationId)
     const memberships = await req.payload.find({
       collection: 'organization-memberships',
-      where: {
-        organization: { equals: ctx.organizationId },
-        is_active: { equals: true },
-        status: { equals: 'active' },
-      },
+      where: includeInactive
+        ? { organization: { equals: ctx.organizationId } }
+        : {
+            organization: { equals: ctx.organizationId },
+            is_active: { equals: true },
+            status: { equals: 'active' },
+          },
       overrideAccess: true,
       req,
-      depth: 2,
+      depth: 1,
       limit: 500,
     })
 
@@ -57,9 +68,46 @@ export const orgMembersEndpoint: Endpoint = {
         role: roleSlug(m),
         office_ids: (m.offices ?? []).map(relationId),
         status: m.status,
+        is_active: Boolean(m.is_active),
       }
     })
 
     return json({ docs })
+  },
+}
+
+export const updateOrgMemberEndpoint: Endpoint = {
+  path: '/v1/org-members/:id',
+  method: 'patch',
+  handler: async req => {
+    try {
+      const ctx = await getTenantContext(req)
+      if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
+      if (
+        !ctx.organizationId ||
+        !canDo(ctx.role, 'organization-memberships', 'update', ctx.organizationId)
+      ) {
+        return json({ error: 'forbidden' }, 403)
+      }
+      const parsed = MemberUpdateSchema.safeParse(await req.json!().catch(() => ({})))
+      if (!parsed.success)
+        return json({ error: 'invalid_member', issues: parsed.error.issues }, 400)
+      const organizationId = ctx.organizationId
+      await withTransaction(
+        req.payload,
+        req,
+        () =>
+          updateMember(
+            req,
+            ctx as TenantContext & { organizationId: string },
+            String(req.routeParams?.id ?? ''),
+            parsed.data
+          ),
+        { lockKey: organizationAdminLock(organizationId) }
+      )
+      return json({ ok: true })
+    } catch (error) {
+      return adminErrorResponse(error)
+    }
   },
 }

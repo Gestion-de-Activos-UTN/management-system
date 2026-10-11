@@ -9,6 +9,8 @@ export interface CreateOrgWithAdminInput {
   adminEmail: string
   adminPassword: string
   adminName: string
+  /** Nombre de la primera oficina; por defecto "Casa central". */
+  officeName?: string
 }
 
 // Implementa documentation/04-bootstrap-creation-order.md pasos 1-5 (Organization ->
@@ -90,7 +92,7 @@ export async function createOrgWithAdmin(
       collection: 'offices',
       overrideAccess: true,
       req,
-      data: { organization: organization.id, name: 'Main Office' },
+      data: { organization: organization.id, name: input.officeName ?? 'Casa central' },
     })
 
     await reconcileAssessmentInstance(

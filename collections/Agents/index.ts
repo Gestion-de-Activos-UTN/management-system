@@ -128,7 +128,8 @@ export const Agents: CollectionConfig = {
       options: [...AGENT_REVOCATION_REASONS],
       admin: {
         readOnly: true,
-        description: 'Motivo de la revocación: manual (acción humana) o auto_lockout_abuse.',
+        description:
+          'Motivo de la revocación: manual (acción humana), auto_lockout_abuse u office_deactivated (se desactivó su oficina).',
       },
     },
     {

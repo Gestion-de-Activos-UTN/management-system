@@ -1,7 +1,11 @@
 import type { Endpoint } from 'payload'
 import { getTenantContext } from '../access/tenant/resolveTenantContext'
 import { relationId } from '../lib/relationId'
-import { getAgentLifecycleStatus, getAgentConnectivity } from '../domain/agents/agent-state'
+import {
+  getAgentLifecycleStatus,
+  getAgentConnectivity,
+  type AgentRevocationReason,
+} from '../domain/agents/agent-state'
 import { getAgentQuota, SubscriptionNotFoundError } from '../domain/subscriptions/agent-quota'
 import { canDo } from '../access/rbac/permissions'
 
@@ -20,7 +24,7 @@ export interface DetailedOfficeAgentSummary {
     id: string
     lifecycle_status: 'provisioned' | 'active' | 'revoked'
     connectivity: 'online' | 'offline' | 'pending' | 'revoked'
-    revocation_reason: 'manual' | 'auto_lockout_abuse' | null
+    revocation_reason: AgentRevocationReason | null
     last_heartbeat_at: string | null
   }>
 }

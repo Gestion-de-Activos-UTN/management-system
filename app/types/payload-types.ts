@@ -297,7 +297,8 @@ export interface Office {
   id: string;
   organization: string | Organization;
   name: string;
-  county_fips?: string | null;
+  province_id?: string | null;
+  department_id?: string | null;
   is_active?: boolean | null;
   updatedAt: string;
   createdAt: string;
@@ -407,9 +408,9 @@ export interface Agent {
   is_active?: boolean | null;
   revoked_at?: string | null;
   /**
-   * Motivo de la revocación: manual (acción humana) o auto_lockout_abuse.
+   * Motivo de la revocación: manual (acción humana), auto_lockout_abuse u office_deactivated (se desactivó su oficina).
    */
-  revocation_reason?: ('manual' | 'auto_lockout_abuse') | null;
+  revocation_reason?: ('manual' | 'auto_lockout_abuse' | 'office_deactivated') | null;
   failedAttempts?: number | null;
   lockedUntil?: string | null;
   lockoutCount?: number | null;
@@ -1167,7 +1168,7 @@ export interface PortalMessage {
   scope: 'global' | 'organizations';
   target_organizations?: (string | Organization)[] | null;
   target_kind: 'all' | 'role' | 'user';
-  target_roles?: ('org_admin' | 'org_viewer' | 'office_manager')[] | null;
+  target_roles?: ('org_admin' | 'office_manager' | 'org_viewer')[] | null;
   target_users?: (string | User)[] | null;
   linked_section?: ('dashboard' | 'risk-score' | 'security-review' | 'tasks' | 'inventory' | 'administration') | null;
   linked_entity_type?:
@@ -1586,7 +1587,8 @@ export interface OrganizationsSelect<T extends boolean = true> {
 export interface OfficesSelect<T extends boolean = true> {
   organization?: T;
   name?: T;
-  county_fips?: T;
+  province_id?: T;
+  department_id?: T;
   is_active?: T;
   updatedAt?: T;
   createdAt?: T;

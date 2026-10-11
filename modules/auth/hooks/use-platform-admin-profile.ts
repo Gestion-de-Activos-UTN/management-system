@@ -5,7 +5,11 @@ import { notifications } from '@mantine/notifications'
 import type { HttpError } from '@/lib/http-client'
 import { showApiError } from '@/lib/notify-error'
 import { useSession } from '@/lib/use-session'
-import { getPlatformAdminProfile, updatePlatformAdminProfile } from '../service'
+import {
+  getPlatformAdminProfile,
+  updatePlatformAdminProfile,
+  type PlatformAdminProfile,
+} from '../service'
 import type { PlatformAdminProfileInput } from '../schema'
 
 export function usePlatformAdminProfile() {
@@ -19,7 +23,7 @@ export function usePlatformAdminProfile() {
 
 export function useUpdatePlatformAdminProfile() {
   const queryClient = useQueryClient()
-  return useMutation<PlatformAdminProfileInput, HttpError, PlatformAdminProfileInput>({
+  return useMutation<PlatformAdminProfile, HttpError, PlatformAdminProfileInput>({
     mutationFn: updatePlatformAdminProfile,
     onSuccess: async () => {
       await Promise.all([

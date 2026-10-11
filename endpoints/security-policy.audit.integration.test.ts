@@ -117,7 +117,8 @@ it('seed: navigation and demo populate an empty database and repeat without over
   expect(second.tasksCreated).toBe(0)
   expect(second.reportsProcessed).toBe(0)
   const after = await counts()
-  for (const key of Object.keys(before) as Array<keyof typeof before>) expect(after[key], String(key)).toBe(before[key])
+  for (const key of Object.keys(before) as Array<keyof typeof before>)
+    expect(after[key], String(key)).toBe(before[key])
   expect(
     (await payload.findByID({ collection: 'assets', id: asset.id, overrideAccess: true })).alias
   ).toBe('User changed alias')

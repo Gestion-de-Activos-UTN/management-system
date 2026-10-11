@@ -1,23 +1,97 @@
-import type { Endpoint, PayloadRequest } from 'payload'
-import { getTenantContext } from '@/access/tenant/resolveTenantContext'
+import type { Endpoint, PayloadRequest, Where } from 'payload'
+import { getTenantContext, type TenantContext } from '@/access/tenant/resolveTenantContext'
 import { assertCanReadTask, loadTask } from '@/domain/tasks/task-actions'
 import { resolveTaskReference, tenantCanReadTaskReference } from '@/domain/tasks/task-reference'
-import { TaskDomainError } from '@/domain/tasks/task-error'
 import { messageTargetsUser } from '@/domain/portal-messages/targeting'
 import { relationId } from '@/lib/relationId'
 import { getTaskReferenceHref } from '@/modules/tasks/task-reference-link'
-import { PortalMessageInputSchema } from '@/modules/portal-messages/schema'
+import { PORTAL_MESSAGE_SECTION_LINKS } from '@/modules/portal-messages/portal-message-labels'
+import { PORTAL_MESSAGE_ROLES, PortalMessageInputSchema } from '@/modules/portal-messages/schema'
 import { TASK_REFERENCE_COLLECTIONS } from '@/modules/tasks/schema'
 
 const json = (body: unknown, status = 200) => Response.json(body, { status })
-const ORG_ROLES = ['org_admin', 'org_viewer', 'office_manager'] as const
-const MESSAGE_SECTION_LINKS: Record<string, { label: string; href: string }> = {
-  dashboard: { label: 'Panel general', href: '/portal/dashboard' },
-  'risk-score': { label: 'Puntaje de riesgo', href: '/portal/risk-score' },
-  'security-review': { label: 'Revisión de seguridad', href: '/portal/security-review' },
-  tasks: { label: 'Tareas', href: '/portal/tasks' },
-  inventory: { label: 'Inventario', href: '/portal/inventory' },
-  administration: { label: 'Administración', href: '/portal/administration' },
+// ponytail: tope fijo de opciones; agregar búsqueda server-side si una organización lo supera.
+const ENTITY_OPTIONS_LIMIT = 200
+
+type MessageLink = {
+  kind: 'section' | 'entity'
+  relationTo: string
+  value?: string
+  label?: string
+  href?: string | null
+  access: 'allowed' | 'denied' | 'unavailable'
+}
+
+/** Resuelve, para quien recibe el mensaje, la sección o entidad enlazada y si puede abrirla. */
+async function resolveMessageLink(
+  req: PayloadRequest,
+  ctx: TenantContext,
+  message: { linked_section?: unknown; linked_entity?: unknown }
+): Promise<MessageLink | null> {
+  if (message.linked_entity) {
+    const raw = message.linked_entity as { relationTo: string; value: unknown }
+    const reference = { relationTo: raw.relationTo, value: relationId(raw.value) }
+    try {
+      if (reference.relationTo === 'tasks') {
+        const task = await loadTask(req, reference.value)
+        await assertCanReadTask(req, ctx, task)
+        return {
+          kind: 'entity',
+          ...reference,
+          label: task.title,
+          href: `/portal/tasks/${reference.value}`,
+          access: 'allowed',
+        }
+      }
+      const resolved = await resolveTaskReference(req, reference as never)
+      if (resolved.unavailable)
+        return { kind: 'entity', relationTo: resolved.relationTo, access: 'unavailable' }
+      if (!tenantCanReadTaskReference(ctx, resolved))
+        return { kind: 'entity', relationTo: resolved.relationTo, access: 'denied' }
+      return {
+        kind: 'entity',
+        relationTo: resolved.relationTo,
+        value: resolved.value,
+        label: resolved.label,
+        href: getTaskReferenceHref(
+          { ...resolved, available: true, office_id: resolved.officeId },
+          undefined
+        ),
+        access: 'allowed',
+      }
+    } catch {
+      return {
+        kind: 'entity',
+        relationTo: reference.relationTo,
+        access: reference.relationTo === 'tasks' ? 'denied' : 'unavailable',
+      }
+    }
+  }
+  const section = message.linked_section ? String(message.linked_section) : null
+  const sectionLink = section
+    ? PORTAL_MESSAGE_SECTION_LINKS[section as keyof typeof PORTAL_MESSAGE_SECTION_LINKS]
+    : undefined
+  if (!section) return null
+  return {
+    kind: 'section',
+    relationTo: section,
+    label: sectionLink?.label,
+    href: sectionLink?.href ?? null,
+    access: sectionLink ? 'allowed' : 'unavailable',
+  }
+}
+
+/** Etiqueta legible de la entidad enlazada, para la vista previa del panel de administración. */
+async function adminEntityLabel(req: PayloadRequest, linkedEntity: unknown) {
+  if (!linkedEntity) return null
+  const raw = linkedEntity as { relationTo: string; value: unknown }
+  const value = relationId(raw.value)
+  try {
+    if (raw.relationTo === 'tasks') return (await loadTask(req, value)).title
+    return (await resolveTaskReference(req, { relationTo: raw.relationTo, value } as never)).label
+  } catch {
+    return null
+  }
 }
 
 async function platformAdmin(req: PayloadRequest) {
@@ -113,6 +187,7 @@ function messageInputFromDoc(doc: Record<string, unknown>) {
       : null,
     expires_at: doc.expires_at ? String(doc.expires_at) : null,
     is_active: Boolean(doc.is_active),
+    linked_entity_label: (doc.linked_entity_label as string | null | undefined) ?? null,
     delivery_version: Math.max(1, Number(doc.delivery_version ?? 1)),
     createdAt: doc.createdAt,
   }
@@ -224,14 +299,16 @@ async function listAdminOptions(req: PayloadRequest, organizationIds: string[]) 
           },
           overrideAccess: true,
           req,
-          depth: 2,
+          depth: 1,
           pagination: false,
         })
       : Promise.resolve({ docs: [] }),
   ])
   return {
     organizations: organizations.docs,
-    roles: roles.docs.filter(role => ORG_ROLES.includes(role.slug as (typeof ORG_ROLES)[number])),
+    roles: roles.docs.filter(role =>
+      PORTAL_MESSAGE_ROLES.includes(role.slug as (typeof PORTAL_MESSAGE_ROLES)[number])
+    ),
     users: memberships.docs.map(membership => {
       const user = membership.user as unknown as { id: string; name: string; email: string }
       const role = membership.role as unknown as { slug: string; name: string }
@@ -252,22 +329,31 @@ const adminMessagesEndpoint: Endpoint = {
   handler: async req => {
     const auth = await platformAdmin(req)
     if (auth.response) return auth.response
-    const messages = await req.payload.find({
-      collection: 'portal-messages',
-      overrideAccess: true,
-      req,
-      depth: 2,
-      pagination: false,
-      sort: '-createdAt',
-    })
     const params = new URL(req.url ?? 'http://localhost').searchParams
     const organizationIds = params
       .getAll('organization_id')
       .flatMap(value => value.split(','))
       .filter(Boolean)
+    // Con organization_id lo pide el formulario, que sólo necesita las opciones de audiencia:
+    // se evita resolver la etiqueta de cada entidad enlazada en cada cambio de selección.
+    const messages = organizationIds.length
+      ? { docs: [] }
+      : await req.payload.find({
+          collection: 'portal-messages',
+          overrideAccess: true,
+          req,
+          depth: 0,
+          pagination: false,
+          sort: '-createdAt',
+        })
     return json({
-      docs: messages.docs.map(message =>
-        messageInputFromDoc(message as unknown as Record<string, unknown>)
+      docs: await Promise.all(
+        messages.docs.map(async message =>
+          messageInputFromDoc({
+            ...(message as unknown as Record<string, unknown>),
+            linked_entity_label: await adminEntityLabel(req, message.linked_entity),
+          })
+        )
       ),
       ...(await listAdminOptions(req, organizationIds)),
     })
@@ -293,7 +379,7 @@ const createMessageEndpoint: Endpoint = {
         data: payloadData(parsed.data, auth.ctx.userId) as never,
         overrideAccess: true,
         req,
-        depth: 2,
+        depth: 0,
       })
       return json(message, 201)
     } catch (error) {
@@ -316,7 +402,10 @@ const updateMessageEndpoint: Endpoint = {
         400
       )
     try {
-      await validateAudience(req, parsed.data)
+      // Un mensaje inactivo no se entrega, así que su audiencia puede haber quedado obsoleta
+      // (organización desactivada, persona que dejó la organización, entidad borrada) sin
+      // impedir desactivarlo. Se vuelve a validar completa al reactivarlo.
+      if (parsed.data.is_active) await validateAudience(req, parsed.data)
       // AUDIT: this action must emit an AuditLogs entry (chain_hash over {portal message, audience, expiry, active state}, previous hash for the platform scope)
       // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
       // NOTIFY: changing or activating this message changes what its selected audience sees
@@ -327,7 +416,7 @@ const updateMessageEndpoint: Endpoint = {
         data: payloadData(parsed.data) as never,
         overrideAccess: true,
         req,
-        depth: 2,
+        depth: 0,
       })
       return json(message)
     } catch (error) {
@@ -393,7 +482,7 @@ const myMessagesEndpoint: Endpoint = {
       },
       overrideAccess: true,
       req,
-      depth: 2,
+      depth: 0,
       pagination: false,
       sort: '-createdAt',
     })
@@ -426,57 +515,7 @@ const myMessagesEndpoint: Endpoint = {
           rawReceipt && Number(rawReceipt.delivery_version ?? 1) === deliveryVersion
             ? rawReceipt
             : undefined
-        let entity: Record<string, unknown> | null = null
-        const section = message.linked_section ? String(message.linked_section) : null
-        if (section) {
-          const sectionLink = MESSAGE_SECTION_LINKS[section]
-          entity = {
-            relationTo: section,
-            label: sectionLink?.label,
-            href: sectionLink?.href ?? null,
-            access: 'allowed',
-          }
-        }
-        if (message.linked_entity) {
-          const raw = message.linked_entity as unknown as { relationTo: string; value: unknown }
-          const reference = { relationTo: raw.relationTo, value: relationId(raw.value) }
-          try {
-            if (reference.relationTo === 'tasks') {
-              const task = await loadTask(req, reference.value)
-              await assertCanReadTask(req, auth.ctx, task)
-              entity = {
-                relationTo: reference.relationTo,
-                value: reference.value,
-                label: task.title,
-                href: `/portal/tasks/${reference.value}`,
-                access: 'allowed',
-              }
-            } else {
-              const resolved = await resolveTaskReference(req, reference as never)
-              if (resolved.unavailable) {
-                entity = { relationTo: resolved.relationTo, access: 'unavailable' }
-              } else if (tenantCanReadTaskReference(auth.ctx, resolved)) {
-                entity = {
-                  relationTo: resolved.relationTo,
-                  value: resolved.value,
-                  label: resolved.label,
-                  href: getTaskReferenceHref(
-                    { ...resolved, available: true, office_id: resolved.officeId },
-                    undefined
-                  ),
-                  access: 'allowed',
-                }
-              } else {
-                entity = { relationTo: resolved.relationTo, access: 'denied' }
-              }
-            }
-          } catch {
-            entity = {
-              relationTo: reference.relationTo,
-              access: reference.relationTo === 'tasks' ? 'denied' : 'unavailable',
-            }
-          }
-        }
+        const entity = await resolveMessageLink(req, auth.ctx, message)
         return {
           id: message.id,
           delivery_version: deliveryVersion,
@@ -627,32 +666,8 @@ const resolvePortalMessageLinkEndpoint: Endpoint = {
       return json({ error: 'message_not_found' }, 404)
     }
 
-    let url = message.linked_section
-      ? (MESSAGE_SECTION_LINKS[String(message.linked_section)]?.href ?? null)
-      : null
-    if (message.linked_entity) {
-      const raw = message.linked_entity as unknown as { relationTo: string; value: unknown }
-      const reference = { relationTo: raw.relationTo, value: relationId(raw.value) }
-      try {
-        if (reference.relationTo === 'tasks') {
-          const task = await loadTask(req, reference.value)
-          await assertCanReadTask(req, auth.ctx, task)
-          url = `/portal/tasks/${reference.value}`
-        } else {
-          const resolved = await resolveTaskReference(req, reference as never)
-          if (resolved.unavailable || !tenantCanReadTaskReference(auth.ctx, resolved)) {
-            url = null
-          } else {
-            url = getTaskReferenceHref(
-              { ...resolved, available: true, office_id: resolved.officeId },
-              undefined
-            )
-          }
-        }
-      } catch {
-        url = null
-      }
-    }
+    const link = await resolveMessageLink(req, auth.ctx, message)
+    const url = link?.access === 'allowed' ? (link.href ?? null) : null
     return json({ url })
   },
 }
@@ -702,9 +717,8 @@ const messageEntityOptionsEndpoint: Endpoint = {
         overrideAccess: true,
         req,
         depth: 0,
-        pagination: false,
         sort: 'title',
-        limit: 2000,
+        limit: ENTITY_OPTIONS_LIMIT,
       })
       return json({
         docs: found.docs.map(doc => ({
@@ -714,22 +728,40 @@ const messageEntityOptionsEndpoint: Endpoint = {
         })),
       })
     }
+    const collection = type as (typeof TASK_REFERENCE_COLLECTIONS)[number]
+    // Se acota en la query a la organización destinataria (scan-reports sólo conoce su oficina)
+    // en lugar de traer toda la colección y descartar después.
+    let where: Where
+    if (collection === 'scan-reports') {
+      const offices = await req.payload.find({
+        collection: 'offices',
+        where: { organization: { equals: organizationId } },
+        overrideAccess: true,
+        req,
+        depth: 0,
+        pagination: false,
+      })
+      where = { office: { in: offices.docs.map(office => String(office.id)) } }
+    } else {
+      where = { organization: { equals: organizationId } }
+    }
     const found = await req.payload.find({
-      collection: type as (typeof TASK_REFERENCE_COLLECTIONS)[number],
+      collection,
+      where,
       overrideAccess: true,
       req,
       depth: 0,
-      pagination: false,
-      limit: 2000,
+      limit: ENTITY_OPTIONS_LIMIT,
+      sort: '-updatedAt',
     })
     const docs = await Promise.all(
       found.docs.map(async doc => {
         try {
           const reference = await resolveTaskReference(req, {
-            relationTo: type as (typeof TASK_REFERENCE_COLLECTIONS)[number],
+            relationTo: collection,
             value: String(doc.id),
           })
-          if (reference.organizationId !== organizationId || reference.unavailable) return null
+          if (reference.unavailable) return null
           return { relationTo: type, value: String(doc.id), label: reference.label }
         } catch {
           return null
