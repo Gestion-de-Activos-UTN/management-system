@@ -60,6 +60,8 @@ export const sessionEndpoint: Endpoint = {
           canDo(ctx.role, 'scan-reports', 'read_technical', ctx.organizationId)
         ),
         tasks: taskActions.filter(action => canDo(ctx.role, 'tasks', action, ctx.organizationId)),
+        // Same rule endpoints/inventoryIncidents.ts enforces to resolve an inventory incident.
+        assets: (['update'] as const).filter(action => canDo(ctx.role, 'assets', action, ctx.organizationId)),
       },
     })
   },

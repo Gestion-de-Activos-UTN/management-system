@@ -160,9 +160,11 @@ it('technical permission: viewer sees report summary and normalized inventory, n
     expect(JSON.stringify(snapshot.assets_dump)).not.toMatch(/"(?:host_scripts|scripts)":/)
   const session = await api('/api/v1/session', 'GET', undefined, viewer)
   expect(session.data.permissions.technicalEvidence).toBe(false)
-  expect(
-    (await api('/api/v1/session', 'GET', undefined, manager)).data.permissions.technicalEvidence
-  ).toBe(true)
+  expect(session.data.permissions.assets).toEqual([])
+  const managerSession = await api('/api/v1/session', 'GET', undefined, manager)
+  expect(managerSession.data.permissions.technicalEvidence).toBe(true)
+  // Resolved server-side so InventoryIncidentsPanel never checks roles itself.
+  expect(managerSession.data.permissions.assets).toEqual(['update'])
 })
 
 it('technical permission: OfficeManager cannot read another office through ID or relationship population', async () => {

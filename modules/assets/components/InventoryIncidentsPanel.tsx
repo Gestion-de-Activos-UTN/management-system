@@ -2,7 +2,6 @@
 import { Alert, Button, Group, Stack, Text } from '@mantine/core'
 import { formatDateTime } from '@/lib/format-date'
 import { relationId } from '@/lib/relationId'
-import { hasOrgWideScope } from '@/access/rbac/permissions'
 import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
 import { useInventoryIncidents } from '../hooks/use-inventory-incidents'
 
@@ -27,8 +26,8 @@ export function InventoryIncidentsPanel({
         const assetLabel = asset?.alias || asset?.hostname || asset?.ip || incident.ip
         const canResolve =
           ctx &&
-          (ctx.role === 'org_admin' || ctx.role === 'office_manager') &&
-          (hasOrgWideScope(ctx.role) ||
+          ctx.permissions.assets.includes('update') &&
+          (ctx.orgWide ||
             [incident.office, incident.proposed_office]
               .filter(Boolean)
               .every(office => ctx.officeIds.includes(relationId(office))))
