@@ -428,6 +428,8 @@ export async function ingestScanReport(
   const processedAssetIds: string[] = []
   const processedDocumentIds: string[] = []
   const rejectedAssets: IngestResult['rejectedAssets'] = []
+  // Offices whose kept assets were refreshed here; their risk depends on that presence too.
+  const presenceOffices = new Set<string>()
 
   const grouped = new Map<string, AssetPayload[]>()
   for (const asset of report.assets) grouped.set(asset.ip, [...(grouped.get(asset.ip) ?? []), asset])
@@ -460,9 +462,20 @@ export async function ingestScanReport(
     const technical = sanitizeTechnicalBlock(asset, report, existingDoc, auth.agentId)
     const incomingIsLatest = !existingDoc?.last_seen || Date.parse(asset.scan_time) >= Date.parse(existingDoc.last_seen)
 
-    if (existingDoc && incomingIsLatest && String(typeof existingDoc.office === 'object' ? existingDoc.office?.id : existingDoc.office) !== auth.officeId) {
-      const incident = await recordInventoryIncident(payload, { organization: auth.organizationId, office: String(typeof existingDoc.office === 'object' ? existingDoc.office?.id : existingDoc.office), proposed_office: auth.officeId, asset: String(existingDoc.id), agent: auth.agentId, kind: 'location', reason: 'Ubicación por confirmar: el equipo fue observado en otra oficina.', ip: asset.ip, report_id: report.report_id, observed_at: asset.scan_time }, req)
+    const existingOfficeId = existingDoc && String(typeof existingDoc.office === 'object' ? existingDoc.office?.id : existingDoc.office)
+    if (existingDoc && existingOfficeId && incomingIsLatest && existingOfficeId !== auth.officeId) {
+      const incident = await recordInventoryIncident(payload, { organization: auth.organizationId, office: existingOfficeId, proposed_office: auth.officeId, asset: String(existingDoc.id), agent: auth.agentId, kind: 'location', reason: 'Ubicación por confirmar: el equipo fue observado en otra oficina.', ip: asset.ip, report_id: report.report_id, observed_at: asset.scan_time }, req)
       if (incident.status === 'pending') await payload.update({ collection: 'assets', id: existingDoc.id, req, overrideAccess: true, context: { systemJob: true }, data: { location_pending: true } })
+      if (incident.status === 'kept') {
+        // A responsible person kept the current office: the device is still seen, so only its
+        // presence is refreshed. Office, agent, identity and technical data stay as they were.
+        // AUDIT: this action must emit an AuditLogs entry (chain_hash over {asset, last_seen, status}, previous hash for this organization_id)
+        // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+        await payload.update({ collection: 'assets', id: existingDoc.id, req, overrideAccess: true, context: { systemJob: true },
+          data: { last_seen: asset.scan_time, ...(existingDoc.status === 'retired' ? {} : { status: 'active' }) } })
+        presenceOffices.add(existingOfficeId)
+        continue
+      }
       rejectedAssets.push({ asset_id: asset.asset_id, error: 'Ubicación por confirmar. Se conserva la oficina actual hasta que un responsable confirme el traslado.' })
       continue
     }
@@ -519,6 +532,6 @@ export async function ingestScanReport(
     processedAssetIds.push(technical.asset_id)
   }
 
-  await enqueueRiskRecalculation(payload, auth.organizationId, [auth.officeId], req)
+  await enqueueRiskRecalculation(payload, auth.organizationId, [auth.officeId, ...presenceOffices], req)
   return { processedAssetIds, processedDocumentIds, rejectedAssets }
 }

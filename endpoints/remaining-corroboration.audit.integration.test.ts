@@ -995,6 +995,33 @@ it('SEC-04: global MAC conflicts preserve identity and office until an authorize
   expect(updatedTask.lifecycle_history).toHaveLength(1)
 })
 
+it('REVIEW-07: a kept location keeps refreshing presence without moving the asset', async () => {
+  const { auth } = await scope()
+  const mac = '00:11:22:AA:BC:07'
+  const first = await processScanReport(payload, auditReport(auth, [auditAsset(auth, { mac })]), auth)
+  const asset = (await payload.find({ collection: 'assets', overrideAccess: true, where: { asset_id: { equals: first.processedAssetIds[0] } }, limit: 1 })).docs[0]
+  const visited = await payload.create({ collection: 'offices', overrideAccess: true, data: { organization: auth.organizationId, name: 'Visited office' } })
+  const agent = await payload.create({ collection: 'agents', overrideAccess: true, context: { systemJob: true }, data: { id: `agent-${crypto.randomUUID()}`, office: visited.id } })
+  const otherAuth = { ...auth, officeId: String(visited.id), agentId: String(agent.id) }
+  const admin = await member(payload, auth.organizationId, [auth.officeId, String(visited.id)], 'org_admin')
+  await processScanReport(payload, auditReport(otherAuth, [auditAsset(otherAuth, { mac })]), otherAuth)
+  const incidents = await payload.find({ collection: 'inventory-incidents', overrideAccess: true, where: { asset: { equals: asset.id } } })
+  const resolveReq = await createLocalReq({ user: { id: admin, collection: 'users' } as never }, payload)
+  resolveReq.routeParams = { id: incidents.docs[0].id }
+  resolveReq.json = async () => ({ decision: 'keep' })
+  expect((await resolveInventoryIncidentEndpoint.handler(resolveReq)).status).toBe(200)
+
+  const later = new Date(Date.now() + 1000).toISOString()
+  const result = await processScanReport(payload,
+    auditReport(otherAuth, [auditAsset(otherAuth, { mac, scan_time: later })], { scan_start: later, scan_end: later }), otherAuth)
+  expect(result.rejectedAssets).toEqual([])
+  const refreshed = await assetDoc(String(asset.id))
+  expect(Date.parse(refreshed.last_seen!)).toBe(Date.parse(later))
+  expect(relationId(refreshed.office)).toBe(auth.officeId)
+  const after = await payload.find({ collection: 'inventory-incidents', overrideAccess: true, where: { asset: { equals: asset.id } } })
+  expect(after.docs.map(incident => incident.status)).toEqual(['kept'])
+})
+
 it('FOLLOWUP: moving an asset follows the replacement assessment, releases invalid claims, and preserves completed task history', async () => {
   const { auth, server } = await scope()
   const destination = await payload.create({ collection: 'offices', overrideAccess: true, data: { organization: auth.organizationId, name: 'Followup destination' } })
