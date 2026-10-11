@@ -1,4 +1,6 @@
 import type { CollectionConfig } from 'payload'
+import { orgScopedAccess } from '../../access/rbac/orgScopedAccess'
+import { readTechnicalEvidence } from '../../access/rbac/technical-evidence'
 
 // Escritura solo vía domain/inventories/ingestScanReport.ts con overrideAccess — mismo patrón que AuditLogs (SYSTEM_PROMPT.md §2).
 export const ScanReports: CollectionConfig = {
@@ -8,11 +10,14 @@ export const ScanReports: CollectionConfig = {
   },
   access: {
     create: () => false,
-    read: () => false,
+    // Sin campo `organization` propio (solo `office`) — scope por oficinas del actor, no por organización.
+    read: orgScopedAccess('scan-reports', 'read', { kind: 'offices', field: 'office' }),
     update: () => false,
     delete: () => false,
   },
   fields: [
+    { name: 'content_fingerprint', type: 'text', admin: { readOnly: true } },
+    { name: 'received_at', type: 'date', index: true, admin: { readOnly: true } },
     {
       name: 'id',
       type: 'text',
@@ -55,8 +60,38 @@ export const ScanReports: CollectionConfig = {
       type: 'number',
     },
     {
+      name: 'execution_status',
+      type: 'select',
+      options: ['completed', 'partial', 'failed'],
+      required: true,
+    },
+    {
+      name: 'report_coverage',
+      type: 'json',
+    },
+    {
+      name: 'scanner_interfaces',
+      type: 'json',
+    },
+    {
+      // Resuelto por el agente (tabla de ruteo/ARP), no un guess — todo asset de este
+      // reporte está, por construcción del scan, detrás de este gateway (contracts/scan-report.schema.ts).
+      name: 'gateway_ip',
+      type: 'text',
+    },
+    {
+      name: 'gateway_mac',
+      type: 'text',
+    },
+    {
       name: 'raw_payload',
       type: 'json',
+      access: { read: readTechnicalEvidence },
+    },
+    {
+      name: 'raw_payload_expires_at',
+      type: 'date',
+      index: true,
     },
     {
       name: 'status',
@@ -71,6 +106,7 @@ export const ScanReports: CollectionConfig = {
     {
       name: 'error',
       type: 'text',
+      access: { read: readTechnicalEvidence },
     },
   ],
 }

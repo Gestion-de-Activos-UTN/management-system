@@ -23,7 +23,15 @@ function buildReport(overrides: Record<string, unknown> = {}) {
         mac: '44:D4:54:B8:9E:CE',
         vendor: 'Sagemcom Broadband SAS',
         hostname: 'Docsis-Gateway',
-        os: { name: 'Linux', accuracy: 95, cpe: ['cpe:/o:linux:linux_kernel:3'] },
+        os: {
+          name: 'Linux',
+          accuracy: 95,
+          cpe: ['cpe:/o:linux:linux_kernel:3'],
+          osfamily: 'Linux',
+          osgen: '',
+          vendor: '',
+          device_type: 'router',
+        },
         services: [
           {
             port: 80,
@@ -34,11 +42,44 @@ function buildReport(overrides: Record<string, unknown> = {}) {
             version: '1.25',
             extra_info: '',
             cpe: '',
+            reason: 'syn-ack',
+            detection_method: 'probed',
+            confidence: 10,
+            tunnel: '',
+            scripts: {},
           },
         ],
         scan_time: '2026-07-24T23:51:45.039267+00:00',
+        os_candidates: [],
+        state_reason: 'arp-response',
+        host_scripts: {},
+        names: [{ value: 'Docsis-Gateway', source: 'ptr' }],
+        mac_metadata: { kind: 'globally_administered', vendor_resolution: 'resolved' },
+        asset_coverage: {
+          port_scan: 'complete',
+          service_detection: 'complete',
+          os_detection: 'complete',
+          name_resolution: 'complete',
+        },
+        scan_issues: [],
       },
     ],
+    scan_mode: 'full',
+    scan_mode_reason: null,
+    execution_status: 'completed',
+    scanner_interfaces: [],
+    report_coverage: {
+      schema_version: 1,
+      profile: 'siam_standard_v1',
+      discovery: { status: 'complete', methods_attempted: ['arp'] },
+      ports: [{ protocol: 'tcp', port_spec: '1-1000', status: 'complete' }],
+      service_detection: { status: 'complete' },
+      os_detection: { status: 'complete' },
+      name_resolution: { status: 'complete', methods_attempted: ['ptr'] },
+      limitations: [],
+    },
+    gateway_ip: null,
+    gateway_mac: null,
     ...overrides,
   }
 }
@@ -56,8 +97,75 @@ test('rechaza si falta un campo requerido del bloque técnico', () => {
   assert.throws(() => ScanReportPayloadSchema.parse(raw))
 })
 
-test('acepta un campo extra desconocido (permisivo-en-lectura)', () => {
+test('rechaza un campo extra desconocido', () => {
   const raw = buildReport()
   ;(raw.assets[0] as Record<string, unknown>).future_field = 'algo que un agente más nuevo mande'
-  assert.doesNotThrow(() => ScanReportPayloadSchema.parse(raw))
+  assert.throws(() => ScanReportPayloadSchema.parse(raw))
+})
+
+test('rechaza un reporte sin cobertura obligatoria', () => {
+  const raw = buildReport()
+  delete (raw as Record<string, unknown>).report_coverage
+  assert.throws(() => ScanReportPayloadSchema.parse(raw))
+})
+
+test('acepta scan_mode degraded con su razón', () => {
+  const raw = buildReport({
+    scan_mode: 'degraded',
+    scan_mode_reason: 'sin permisos root para raw sockets',
+  })
+  raw.report_coverage.os_detection.status = 'not_attempted'
+  raw.assets[0].asset_coverage.os_detection = 'not_attempted'
+  const parsed = ScanReportPayloadSchema.parse(raw)
+  assert.equal(parsed.scan_mode, 'degraded')
+  assert.equal(parsed.scan_mode_reason, 'sin permisos root para raw sockets')
+})
+
+test('acepta gateway desconocido expresado como null', () => {
+  const parsed = ScanReportPayloadSchema.parse(buildReport())
+  assert.equal(parsed.gateway_ip, null)
+  assert.equal(parsed.gateway_mac, null)
+})
+
+test('acepta gateway_ip/gateway_mac cuando el agente pudo resolverlos', () => {
+  const parsed = ScanReportPayloadSchema.parse(
+    buildReport({ gateway_ip: '192.168.0.1', gateway_mac: 'AA:BB:CC:DD:EE:FF' })
+  )
+  assert.equal(parsed.gateway_ip, '192.168.0.1')
+  assert.equal(parsed.gateway_mac, 'AA:BB:CC:DD:EE:FF')
+})
+
+test('rechaza hosts_up inconsistente con assets', () => {
+  assert.throws(() => ScanReportPayloadSchema.parse(buildReport({ hosts_up: 2 })))
+})
+
+test('rechaza scan_mode degraded sin razón', () => {
+  assert.throws(() =>
+    ScanReportPayloadSchema.parse(buildReport({ scan_mode: 'degraded', scan_mode_reason: null }))
+  )
+})
+
+function partialPortScan(limitations: { stage: string; code: string }[]) {
+  const raw = buildReport({ execution_status: 'partial' })
+  raw.report_coverage.ports[0].status = 'partial'
+  raw.report_coverage.service_detection.status = 'partial'
+  raw.report_coverage.os_detection.status = 'partial'
+  raw.report_coverage.limitations = limitations as never
+  return raw
+}
+
+test('acepta un asset complete en un reporte partial por host_timeout de otro host', () => {
+  const raw = partialPortScan([{ stage: 'port_scan', code: 'host_timeout' }])
+  assert.equal(ScanReportPayloadSchema.safeParse(raw).success, true)
+})
+
+test('rechaza un asset complete en un reporte partial sin host_timeout', () => {
+  const raw = partialPortScan([{ stage: 'scanner', code: 'parse_error' }])
+  assert.equal(ScanReportPayloadSchema.safeParse(raw).success, false)
+})
+
+test('host_timeout no habilita name_resolution complete sobre un reporte partial', () => {
+  const raw = partialPortScan([{ stage: 'port_scan', code: 'host_timeout' }])
+  raw.report_coverage.name_resolution.status = 'partial'
+  assert.equal(ScanReportPayloadSchema.safeParse(raw).success, false)
 })

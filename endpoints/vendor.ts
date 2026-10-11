@@ -20,15 +20,15 @@ const MOCK_VENDORS: Record<string, string> = {
 export const vendorEndpoint: Endpoint = {
   path: '/v1/vendor',
   method: 'get',
-  handler: async (req) => {
+  handler: async req => {
     try {
       // oui_lookup.py::_lookup_vendor_remote no manda X-Agent-ID, igual que heartbeat.
       await resolveAgentAuth(
         { authorization: req.headers.get('authorization') },
-        createPayloadAgentAuthDeps(req.payload),
+        createPayloadAgentAuthDeps(req.payload)
       )
     } catch (err) {
-      if (err instanceof AgentAuthError) return json({ error: err.message }, 401)
+      if (err instanceof AgentAuthError) return json({ error: err.message }, err.status)
       throw err
     }
 

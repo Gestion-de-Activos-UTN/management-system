@@ -1,6 +1,8 @@
 import type { CollectionConfig } from 'payload'
+import { orgScopedAccess } from '../../access/rbac/orgScopedAccess'
+import { syncOrgAdminMemberships } from './hooks/syncOrgAdminMemberships'
 
-// TODO(rbac-feature): reemplazar por access real cuando exista TenantContext/RBAC (documentation/02-core-interfaces.md §4)
+// TODO(rbac-feature): create/update/delete cerrados por alcance de esta fase (solo-lectura).
 export const Offices: CollectionConfig = {
   slug: 'offices',
   admin: {
@@ -8,10 +10,11 @@ export const Offices: CollectionConfig = {
   },
   access: {
     create: () => false,
-    read: () => false,
+    read: orgScopedAccess('offices', 'read', { kind: 'org_offices', field: 'id' }),
     update: () => false,
     delete: () => false,
   },
+  hooks: { afterChange: [syncOrgAdminMemberships] },
   fields: [
     {
       name: 'organization',

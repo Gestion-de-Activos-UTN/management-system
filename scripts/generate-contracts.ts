@@ -1,6 +1,9 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { z } from 'zod'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 import { ScanReportPayloadSchema } from '../contracts/scan-report.schema'
 import { AssetPayloadSchema } from '../contracts/asset.schema'
 import { HeartbeatPayloadSchema } from '../contracts/heartbeat.schema'

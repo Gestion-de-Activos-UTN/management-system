@@ -1,0 +1,201 @@
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import { getPayload } from 'payload'
+import type { Payload, PayloadRequest } from 'payload'
+import config from '../payload.config'
+import { assetIdentifyEndpoint } from './assetIdentify'
+
+// Mismo enfoque que reports.integration.test.ts (Local API real + PayloadRequest mínimo), pero
+// la identidad acá es de un usuario humano, no un agente con API key — payloadNativeIdentityProvider
+// (access/tenant/identityProvider.ts) lee `req.user` directo, así que alcanza con setearlo en el
+// fake request en vez de simular cookies/JWT.
+function fakeRequest(
+  payload: Payload,
+  opts: {
+    user?: { id: string; collection: 'users' }
+    routeParams?: Record<string, string>
+    body?: unknown
+  }
+) {
+  return {
+    payload,
+    user: opts.user,
+    context: {},
+    routeParams: opts.routeParams ?? {},
+    json: async () => opts.body ?? {},
+  } as unknown as PayloadRequest
+}
+
+async function seedTenant(
+  payload: Payload,
+  roleSlug: 'org_admin' | 'org_viewer' | 'office_manager',
+  // 'other' = a second office of the same organization, not the asset's one.
+  officeIds: string[] | 'self' | 'other'
+) {
+  const organization = await payload.create({
+    collection: 'organizations',
+    data: { name: `Org ${Math.random()}` },
+    overrideAccess: true,
+  })
+  const office = await payload.create({
+    collection: 'offices',
+    data: { organization: organization.id, name: 'Oficina Test' },
+    overrideAccess: true,
+  })
+  const agent = await payload.create({
+    collection: 'agents',
+    data: { id: `agent-${Math.random().toString(36).slice(2)}`, office: office.id },
+    overrideAccess: true,
+  })
+  const asset = await payload.create({
+    collection: 'assets',
+    data: {
+      asset_id: `a-${Math.random().toString(36).slice(2)}`,
+      agent: agent.id,
+      office: office.id,
+      organization: organization.id,
+      identified: false,
+    },
+    overrideAccess: true,
+    // Simula el único creador real (ingestScanReport.ts) — ver rejectBusinessEditsBeforeIdentified.ts.
+    context: { systemJob: true },
+  })
+  // canDo (access/rbac/permissions.ts) indexa la matriz por el slug literal ('org_admin',
+  // 'org_viewer') — Roles.slug es unique, así que se busca el existente (mismo patrón idempotente
+  // que scripts/seed-navigation.ts::findOrCreateRole) en vez de crear uno nuevo con slug al azar.
+  const existingRole = await payload.find({
+    collection: 'roles',
+    where: { slug: { equals: roleSlug } },
+    overrideAccess: true,
+    limit: 1,
+  })
+  const role =
+    existingRole.docs[0] ??
+    (await payload.create({
+      collection: 'roles',
+      data: {
+        slug: roleSlug,
+        name: roleSlug,
+        rank: roleSlug === 'org_admin' ? 2 : roleSlug === 'office_manager' ? 5 : 3,
+        scope: roleSlug === 'office_manager' ? 'organization_office' : 'organization',
+        is_platform_role: false,
+      },
+      overrideAccess: true,
+    }))
+  const otherOffice =
+    officeIds === 'other'
+      ? await payload.create({
+          collection: 'offices',
+          data: { organization: organization.id, name: 'Otra oficina' },
+          overrideAccess: true,
+        })
+      : null
+  const user = await payload.create({
+    collection: 'users',
+    data: {
+      name: 'Test User',
+      email: `u-${Math.random().toString(36).slice(2)}@test.local`,
+      password: 'x'.repeat(12),
+    },
+    overrideAccess: true,
+  })
+  await payload.create({
+    collection: 'organization-memberships',
+    data: {
+      user: user.id,
+      organization: organization.id,
+      offices:
+        officeIds === 'self' ? [office.id] : officeIds === 'other' ? [otherOffice!.id] : officeIds,
+      role: role.id,
+      status: 'active',
+      is_active: true,
+    },
+    overrideAccess: true,
+  })
+  return { organization, office, asset, user, roleSlug: role.slug }
+}
+
+test('PATCH /v1/assets/:id/identify: 401 sin sesión', async () => {
+  const payload = await getPayload({ config })
+  const { asset } = await seedTenant(payload, 'org_admin', 'self')
+
+  const res = await assetIdentifyEndpoint.handler(
+    fakeRequest(payload, { routeParams: { id: String(asset.id) }, body: { identified: true } })
+  )
+  assert.equal(res.status, 401)
+})
+
+test('PATCH /v1/assets/:id/identify: 403 sin permiso de update sobre assets (org_viewer)', async () => {
+  const payload = await getPayload({ config })
+  const { asset, user } = await seedTenant(payload, 'org_viewer', 'self')
+
+  const res = await assetIdentifyEndpoint.handler(
+    fakeRequest(payload, {
+      user: { id: String(user.id), collection: 'users' },
+      routeParams: { id: String(asset.id) },
+      body: { identified: true },
+    })
+  )
+  assert.equal(res.status, 403)
+})
+
+test('PATCH /v1/assets/:id/identify: rechaza (403) si la office del asset no está en el alcance del usuario', async () => {
+  const payload = await getPayload({ config })
+  // org_admin siempre recibe todas las oficinas de su organización (enforceOrgAdminOffices), así
+  // que el scoping por oficina se prueba con un office_manager asignado a otra oficina.
+  const { asset, user } = await seedTenant(payload, 'office_manager', 'other')
+
+  await assert.rejects(
+    async () => {
+      await assetIdentifyEndpoint.handler(
+        fakeRequest(payload, {
+          user: { id: String(user.id), collection: 'users' },
+          routeParams: { id: String(asset.id) },
+          body: { identified: true },
+        })
+      )
+    },
+    (e: unknown) => (e as { status?: number }).status === 403
+  )
+})
+
+test('PATCH /v1/assets/:id/identify: confirma tipo, autorización, owner y criticidad', async () => {
+  const payload = await getPayload({ config })
+  const { asset, user } = await seedTenant(payload, 'org_admin', 'self')
+
+  const identifyRes = await assetIdentifyEndpoint.handler(
+    fakeRequest(payload, {
+      user: { id: String(user.id), collection: 'users' },
+      routeParams: { id: String(asset.id) },
+      body: {
+        confirmed_type: 'workstation',
+        authorization_status: 'authorized',
+        owner: String(user.id),
+        criticality: 'medium',
+      },
+    })
+  )
+  assert.equal(identifyRes.status, 200)
+  const body = await identifyRes.json()
+  assert.equal(body.identified, true)
+  assert.equal(body.identification_status, 'confirmed')
+  assert.equal(body.confirmed_type, 'workstation')
+  assert.equal(body.authorization_status, 'authorized')
+})
+
+test('PATCH /v1/assets/:id/identify: un activo no autorizado no exige owner ni criticidad', async () => {
+  const payload = await getPayload({ config })
+  const { asset, user } = await seedTenant(payload, 'org_admin', 'self')
+  const res = await assetIdentifyEndpoint.handler(
+    fakeRequest(payload, {
+      user: { id: String(user.id), collection: 'users' },
+      routeParams: { id: String(asset.id) },
+      body: { confirmed_type: 'mobile', authorization_status: 'unauthorized' },
+    })
+  )
+  assert.equal(res.status, 200)
+  const body = await res.json()
+  assert.equal(body.authorization_status, 'unauthorized')
+  assert.equal(body.owner, null)
+  assert.equal(body.criticality, null)
+})

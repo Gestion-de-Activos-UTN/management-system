@@ -1,14 +1,25 @@
+import { reconcileAssetTasks } from '@/domain/tasks/reconcile-asset-tasks'
+import { logicalDeleteEndpoint, rejectPhysicalAssetDelete, preserveDeletedAsset } from '@/domain/assets/logical-delete'
 import type { CollectionConfig } from 'payload'
+import { readTechnicalEvidence } from '../../access/rbac/technical-evidence'
+import { orgScopedAccess } from '../../access/rbac/orgScopedAccess'
+import { validateOwnerTenant } from './hooks/validateOwnerTenant'
+import { rejectManualOfflineStatus } from './hooks/rejectManualOfflineStatus'
+import { rejectBusinessEditsBeforeIdentified } from './hooks/rejectBusinessEditsBeforeIdentified'
+import { enforceAuthorizationInvariant } from './hooks/enforceAuthorizationInvariant'
+import { reconcileAssessmentApplicability } from './hooks/reconcileAssessmentApplicability'
+import { SCANNED_ASSET_TYPE_OPTIONS } from '../../domain/assets/asset-types'
+import { assessmentScopeFields } from '../../domain/assessments/asset-assessment-scope'
+import { validateAssetAssessmentScope } from '../../domain/assessments/validateAssetAssessmentScope'
 
 const technicalFieldAccess = {
   // Bloque técnico: solo lo escribe el upsert de ingesta (domain/inventories/ingestScanReport.ts), nunca un humano.
   update: () => false,
 }
 
-// TODO(rbac-feature): bloque de negocio (alias..status) necesita access real de edición manual
-// una vez exista TenantContext/RBAC — por ahora también () => false, nadie escribe vía API todavía.
-// `owner` (FK→Users, documentation/05-inventory-architecture.md §5.1) se agrega cuando la collection Users exista —
-// referenciar un slug de collection inexistente rompe payload.config.ts al build.
+// Bloque de negocio (alias..status): edición manual habilitada (cierre del módulo de Inventario,
+// access/rbac/permissions.ts — org_admin/office_manager ganan 'update' sobre 'assets'). `create`/
+// `delete` de la colección siguen () => false: un Asset nunca se crea/borra a mano.
 export const Assets: CollectionConfig = {
   slug: 'assets',
   admin: {
@@ -16,16 +27,34 @@ export const Assets: CollectionConfig = {
   },
   access: {
     create: () => false,
-    read: () => false,
-    update: () => false,
+    read: orgScopedAccess('assets', 'read', { kind: 'org_offices', field: 'office' }),
+    update: orgScopedAccess('assets', 'update', { kind: 'org_offices', field: 'office' }),
     delete: () => false,
   },
+  endpoints: [logicalDeleteEndpoint('assets')],
+  hooks: {
+    beforeDelete: [rejectPhysicalAssetDelete],
+    beforeChange: [preserveDeletedAsset,
+      validateOwnerTenant,
+      rejectManualOfflineStatus,
+      rejectBusinessEditsBeforeIdentified,
+      enforceAuthorizationInvariant,
+      validateAssetAssessmentScope,
+    ],
+    afterChange: [reconcileAssessmentApplicability, reconcileAssetTasks],
+  },
   fields: [
+    { name: 'location_pending', type: 'checkbox', defaultValue: false, access: technicalFieldAccess },
+    { name: 'deleted_at', type: 'date', index: true, access: { create: () => false, update: () => false } },
+    { name: 'port_scan_coverage', type: 'json', access: technicalFieldAccess },
+    { name: 'scanner_asset_id', type: 'text', index: true, access: technicalFieldAccess },
+    { name: 'identity_key', type: 'text', unique: true, index: true, access: technicalFieldAccess },
     {
       name: 'asset_id',
       type: 'text',
       required: true,
       unique: true,
+      access: technicalFieldAccess,
     },
     {
       name: 'agent',
@@ -44,17 +73,151 @@ export const Assets: CollectionConfig = {
       access: technicalFieldAccess,
     },
     {
+      name: 'observed_agents',
+      type: 'array',
+      access: technicalFieldAccess,
+      fields: [
+        {
+          name: 'agent',
+          type: 'relationship',
+          relationTo: 'agents',
+          required: true,
+        },
+        { name: 'ip', type: 'text' },
+        { name: 'gateway_ip', type: 'text' },
+        { name: 'gateway_mac', type: 'text' },
+        { name: 'last_seen', type: 'date', required: true },
+      ],
+    },
+    {
       name: 'organization',
       type: 'relationship',
       relationTo: 'organizations',
       admin: { readOnly: true },
       access: technicalFieldAccess,
     },
-    { name: 'ip', type: 'text', access: technicalFieldAccess },
+    // index: true en ip/mac — domain/inventories/ingestScanReport.ts::findExistingAsset busca
+    // por estos dos campos (acotado a `agent`) en cada ingesta, ya no por `asset_id`.
+    { name: 'ip', type: 'text', index: true, access: technicalFieldAccess },
+    { name: 'last_observed_cidr', type: 'text', index: true, access: technicalFieldAccess },
     { name: 'last_seen', type: 'date', access: technicalFieldAccess },
-    { name: 'mac', type: 'text', access: technicalFieldAccess },
+    { name: 'gateway_ip', type: 'text', access: technicalFieldAccess },
+    { name: 'gateway_mac', type: 'text', access: technicalFieldAccess },
+    { name: 'mac', type: 'text', index: true, access: technicalFieldAccess },
+    {
+      name: 'mac_metadata',
+      type: 'group',
+      access: technicalFieldAccess,
+      fields: [
+        {
+          name: 'kind',
+          type: 'select',
+          options: [
+            'globally_administered',
+            'locally_administered',
+            'multicast',
+            'broadcast',
+            'invalid',
+            'unknown',
+          ],
+        },
+        {
+          name: 'vendor_resolution',
+          type: 'select',
+          options: ['resolved', 'not_found', 'not_attempted', 'unknown'],
+        },
+      ],
+    },
     { name: 'vendor', type: 'text', access: technicalFieldAccess },
     { name: 'hostname', type: 'text', access: technicalFieldAccess },
+    {
+      name: 'names',
+      type: 'array',
+      maxRows: 20,
+      access: technicalFieldAccess,
+      fields: [
+        { name: 'value', type: 'text', maxLength: 253, required: true },
+        {
+          name: 'source',
+          type: 'select',
+          options: ['nmap', 'ptr', 'mdns', 'netbios', 'ssdp'],
+          required: true,
+        },
+      ],
+    },
+    {
+      name: 'is_scanner_host',
+      type: 'checkbox',
+      defaultValue: false,
+      access: technicalFieldAccess,
+    },
+    {
+      name: 'scanner_host_match',
+      type: 'select',
+      options: ['ip', 'mac', 'both', 'conflict', 'none', 'unknown'],
+      defaultValue: 'unknown',
+      access: technicalFieldAccess,
+    },
+    {
+      name: 'asset_coverage',
+      type: 'group',
+      access: technicalFieldAccess,
+      fields: [
+        {
+          name: 'port_scan',
+          type: 'select',
+          options: ['complete', 'partial', 'not_attempted', 'unknown'],
+        },
+        {
+          name: 'service_detection',
+          type: 'select',
+          options: ['complete', 'partial', 'not_attempted', 'unknown'],
+        },
+        {
+          name: 'os_detection',
+          type: 'select',
+          options: ['complete', 'partial', 'not_attempted', 'unknown'],
+        },
+        {
+          name: 'name_resolution',
+          type: 'select',
+          options: ['complete', 'partial', 'not_attempted', 'unknown'],
+        },
+      ],
+    },
+    {
+      name: 'scan_issues',
+      type: 'array',
+      maxRows: 20,
+      access: technicalFieldAccess,
+      fields: [
+        { name: 'stage', type: 'text', maxLength: 40, required: true },
+        { name: 'code', type: 'text', maxLength: 40, required: true },
+      ],
+    },
+    {
+      name: 'evidence_history',
+      type: 'array',
+      maxRows: 100,
+      access: technicalFieldAccess,
+      fields: [
+        { name: 'kind', type: 'select', options: ['mac', 'vendor', 'name', 'device_class'] },
+        { name: 'value', type: 'text', maxLength: 500 },
+        { name: 'source', type: 'text', maxLength: 40 },
+        { name: 'first_seen_at', type: 'date' },
+        { name: 'last_seen_at', type: 'date' },
+        { name: 'seen_count', type: 'number', min: 1 },
+        { name: 'last_report_id', type: 'text', maxLength: 120 },
+      ],
+    },
+    {
+      name: 'applied_report_ids',
+      type: 'array',
+      maxRows: 50,
+      access: technicalFieldAccess,
+      admin: { hidden: true },
+      fields: [{ name: 'report_id', type: 'text', maxLength: 120, required: true }],
+    },
     {
       name: 'os',
       type: 'group',
@@ -63,7 +226,49 @@ export const Assets: CollectionConfig = {
         { name: 'name', type: 'text' },
         { name: 'accuracy', type: 'number' },
         { name: 'cpe', type: 'text', hasMany: true },
+        { name: 'osfamily', type: 'text' },
+        { name: 'osgen', type: 'text' },
+        { name: 'vendor', type: 'text' },
+        { name: 'device_type', type: 'text' },
       ],
+    },
+    {
+      // Hasta 3 candidatos de osmatch (scanner-prototype models.py::Asset.os_candidates), orden
+      // descendente por accuracy — os_candidates[0] es el mismo dato que `os`. Campo raíz (no
+      // anida en `os`), así que necesita su propio access: technicalFieldAccess explícito.
+      name: 'os_candidates',
+      type: 'array',
+      access: technicalFieldAccess,
+      fields: [
+        { name: 'name', type: 'text' },
+        { name: 'accuracy', type: 'number' },
+        { name: 'cpe', type: 'text', hasMany: true },
+        { name: 'osfamily', type: 'text' },
+        { name: 'osgen', type: 'text' },
+        { name: 'vendor', type: 'text' },
+        { name: 'device_type', type: 'text' },
+      ],
+    },
+    {
+      // Regla de negocio de la plataforma (nunca del agente, ver domain/inventories/ingestScanReport.ts):
+      // 'identified' si os_candidates[0].accuracy >= 85, si no 'indeterminate'.
+      name: 'os_status',
+      type: 'select',
+      options: ['identified', 'indeterminate'],
+      admin: { readOnly: true },
+      access: technicalFieldAccess,
+    },
+    {
+      // Motivo de host discovery de nmap (arp-response, echo-reply...), no solo el estado "up".
+      name: 'state_reason',
+      type: 'text',
+      access: technicalFieldAccess,
+    },
+    {
+      // Salida de scripts NSE a nivel host (ej. smb-os-discovery): id de script -> output crudo.
+      name: 'host_scripts',
+      type: 'json',
+      access: { ...technicalFieldAccess, read: readTechnicalEvidence },
     },
     {
       name: 'services',
@@ -78,17 +283,135 @@ export const Assets: CollectionConfig = {
         { name: 'version', type: 'text' },
         { name: 'extra_info', type: 'text' },
         { name: 'cpe', type: 'text' },
+        { name: 'reason', type: 'text' },
+        { name: 'detection_method', type: 'text' },
+        { name: 'confidence', type: 'number', min: 0, max: 10 },
+        { name: 'tunnel', type: 'text' },
+        // Salida de scripts NSE (-sC) para este puerto: id de script -> output crudo.
+        { name: 'scripts', type: 'json', access: { read: readTechnicalEvidence } },
       ],
     },
+    {
+      name: 'inferred_type',
+      type: 'select',
+      options: [...SCANNED_ASSET_TYPE_OPTIONS, { value: 'unknown', label: 'Unknown' }],
+      defaultValue: 'unknown',
+      admin: { readOnly: true },
+      access: technicalFieldAccess,
+    },
+    {
+      name: 'inference_confidence',
+      type: 'select',
+      options: ['likely', 'possible', 'unknown'],
+      defaultValue: 'unknown',
+      admin: { readOnly: true },
+      access: technicalFieldAccess,
+    },
+    {
+      name: 'inference_signals',
+      type: 'json',
+      admin: { readOnly: true },
+      access: technicalFieldAccess,
+    },
+    {
+      name: 'inference_version',
+      type: 'number',
+      defaultValue: 1,
+      admin: { readOnly: true },
+      access: technicalFieldAccess,
+    },
     // Bloque de negocio — nunca sobrescrito por el upsert de ingesta, solo en creación o edición manual.
-    { name: 'alias', type: 'text' },
-    { name: 'criticality', type: 'text' },
-    { name: 'location', type: 'text' },
+    // maxLength es la única validación de longitud que realmente corre: el PATCH manual pega
+    // directo al REST genérico de Payload (modules/assets/service.ts), nunca pasa por el Zod de
+    // modules/assets/schema.ts (que solo se usa como tipo TS del lado del cliente) — sin esto,
+    // cualquiera con permiso de update sobre `assets` podía mandar un string sin límite alguno.
+    {
+      // Confirmación humana de que el activo detectado es real. Mientras es false, alias/
+      // location/criticality/owner quedan bloqueados server-side (rejectBusinessEditsBeforeIdentified.ts)
+      // — no tiene sentido asignarle metadatos de negocio a algo que nadie confirmó todavía.
+      // Acción directa y bidireccional para org_admin/office_manager este sprint (sin flujo de
+      // aprobación) vía endpoints/assetIdentify.ts.
+      name: 'identified',
+      type: 'checkbox',
+      defaultValue: false,
+      admin: { hidden: true },
+    },
+    {
+      name: 'identification_status',
+      type: 'select',
+      options: ['pending', 'confirmed', 'needs_review'],
+      defaultValue: 'pending',
+      admin: { readOnly: true },
+    },
+    {
+      // Solo lo escriben endpoints/assetIdentify.ts (overrideAccess) — un PATCH genérico nunca
+      // debe poder tocarlo directo, ver hooks/enforceAuthorizationInvariant.ts.
+      name: 'confirmed_type',
+      type: 'select',
+      options: [...SCANNED_ASSET_TYPE_OPTIONS],
+      access: technicalFieldAccess,
+    },
+    {
+      // Solo lo escriben endpoints/assetIdentify.ts y assetUnidentify.ts (overrideAccess).
+      name: 'authorization_status',
+      type: 'select',
+      options: ['pending', 'authorized', 'unauthorized'],
+      defaultValue: 'pending',
+      access: technicalFieldAccess,
+    },
+    {
+      name: 'type_confirmed_by',
+      type: 'relationship',
+      relationTo: ['users', 'admins'],
+      admin: { readOnly: true },
+      access: technicalFieldAccess,
+    },
+    {
+      name: 'type_confirmed_at',
+      type: 'date',
+      admin: { readOnly: true },
+      access: technicalFieldAccess,
+    },
+    { name: 'alias', type: 'text', maxLength: 120 },
+    {
+      name: 'criticality',
+      type: 'select',
+      options: ['low', 'medium', 'high', 'critical'],
+    },
+    {
+      name: 'owner',
+      type: 'relationship',
+      relationTo: 'users',
+      // Pertenencia a la organización del Asset validada en hooks/validateOwnerTenant.ts —
+      // el filtro de fila (RBAC) no alcanza para validar el *valor* de una FK a otra colección.
+    },
+    { name: 'location', type: 'text', maxLength: 200 },
+    ...assessmentScopeFields(),
     {
       name: 'status',
       type: 'select',
-      options: ['activo', 'retirado', 'offline'],
-      defaultValue: 'activo',
+      options: ['active', 'retired', 'offline'],
+      defaultValue: 'active',
+    },
+    {
+      // "NEW" badge en la tabla de Inventario hasta que un usuario entra al detalle del asset
+      // (markAssetViewed(), disparado desde AssetDetailView). `null` = nunca visto. Nunca se
+      // incluye en el `data` de ingestScanReport.ts/agingSweep.ts (ver esos archivos) — un
+      // upsert de Payload solo escribe los campos presentes en `data`, así que un re-scan de un
+      // asset ya conocido jamás toca ni resetea esta marca, sin necesitar ningún hook extra.
+      name: 'first_viewed_at',
+      type: 'date',
+      admin: { readOnly: true },
+    },
+    {
+      // "CHANGED" badge en la tabla de Inventario — distinto de "New" (first_viewed_at): un
+      // activo YA visto cuya última ingesta modificó su bloque técnico (ingestScanReport.ts,
+      // hasTechnicalChanged). `null` = sin cambios pendientes de revisar. Se apaga al volver a
+      // entrar al detalle (AssetDetailView), igual que first_viewed_at, pero acá SÍ se vuelve a
+      // setear en cada re-scan que introduzca un cambio real (no es sticky).
+      name: 'technical_changed_at',
+      type: 'date',
+      admin: { readOnly: true },
     },
   ],
 }

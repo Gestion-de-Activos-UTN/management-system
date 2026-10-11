@@ -5,18 +5,28 @@ import {
   createPayloadAgentAuthDeps,
   AgentAuthError,
 } from '../access/middleware/resolveAgentAuth'
-import { ingestScanReport } from '../domain/inventories/ingestScanReport'
+import { processScanReport } from '../domain/inventories/processScanReport'
+import { readBoundedJSON, RequestBodyError } from '../lib/read-bounded-json'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
 }
 
+const MAX_REPORT_BYTES = 5 * 1024 * 1024
 // AUDIT: la ingesta de un ScanReport es una escritura sensible (crea/actualiza Assets de una organización).
 // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent una vez exista el write path de AuditLogs.
 export const reportsEndpoint: Endpoint = {
   path: '/v1/reports',
   method: 'post',
-  handler: async (req) => {
+  handler: async req => {
+    let rawBody: unknown
+    try { rawBody = await readBoundedJSON(req, MAX_REPORT_BYTES) }
+    catch (error) {
+      if (error instanceof RequestBodyError) return json({ error: error.message }, error.status)
+      throw error
+    }
+
+    const authDeps = createPayloadAgentAuthDeps(req.payload)
     let auth
     try {
       auth = await resolveAgentAuth(
@@ -24,14 +34,16 @@ export const reportsEndpoint: Endpoint = {
           authorization: req.headers.get('authorization'),
           'x-agent-id': req.headers.get('x-agent-id'),
         },
-        createPayloadAgentAuthDeps(req.payload),
+        authDeps
       )
     } catch (err) {
-      if (err instanceof AgentAuthError) return json({ error: err.message }, 401)
+      if (err instanceof AgentAuthError) return json({ error: err.message }, err.status)
       throw err
     }
+    // Resetea acá, no solo al final: la resolución de auth arriba ya exigió el hash
+    // correcto, así que un retry idempotente (línea ~59, abajo) también cuenta como éxito.
+    await authDeps.resetAttempts(auth.agentId)
 
-    const rawBody = await req.json!()
     const parseResult = ScanReportPayloadSchema.safeParse(rawBody)
     if (!parseResult.success) {
       return json({ error: 'invalid payload', issues: parseResult.error.issues }, 400)
@@ -44,55 +56,15 @@ export const reportsEndpoint: Endpoint = {
     if (body.agent_id !== auth.agentId) {
       return json({ error: 'agent_id mismatch' }, 401)
     }
-
-    const existing = await req.payload.find({
-      collection: 'scan-reports',
-      where: { id: { equals: body.report_id } },
-      overrideAccess: true,
-      limit: 1,
-      depth: 0,
-    })
-    const existingReport = existing.docs[0]
-
-    // Idempotencia (doc 08.6): reintento con el mismo report_id ya procesado/fallido no reprocesa.
-    if (existingReport && existingReport.status !== 'received') {
-      return json({ report_id: body.report_id, status: existingReport.status }, 200)
+    if (body.assets.some(asset => asset.agent_id !== body.agent_id)) {
+      return json({ error: 'asset agent_id mismatch' }, 400)
     }
 
-    if (!existingReport) {
-      await req.payload.create({
-        collection: 'scan-reports',
-        overrideAccess: true,
-        data: {
-          id: body.report_id,
-          agent: auth.agentId,
-          office: auth.officeId,
-          network: body.network,
-          scan_start: body.scan_start,
-          scan_end: body.scan_end,
-          hosts_up: body.hosts_up,
-          raw_payload: body,
-          status: 'received',
-        },
-      })
-    }
-
-    const result = await ingestScanReport(req.payload, body, auth)
-
-    await req.payload.update({
-      collection: 'scan-reports',
-      id: body.report_id,
-      overrideAccess: true,
-      data: {
-        status: 'processed',
-        processed_at: new Date().toISOString(),
-        error: result.rejectedAssets.length > 0 ? JSON.stringify(result.rejectedAssets) : null,
-      },
-    })
+    const result = await processScanReport(req.payload, body, auth, req)
 
     return json({
       report_id: body.report_id,
-      status: 'processed',
+      status: result.status,
       processed: result.processedAssetIds.length,
       rejected: result.rejectedAssets,
     })

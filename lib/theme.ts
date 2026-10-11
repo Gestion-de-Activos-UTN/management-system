@@ -1,12 +1,14 @@
 import {
-  Button,
+  Card,
+  Modal,
+  Select,
   createTheme,
   defaultVariantColorsResolver,
   parseThemeColor,
   rgba,
   type MantineColorsTuple,
   type VariantColorsResolver,
-} from '@mantine/core';
+} from '@mantine/core'
 
 /**
  * SIAM palette — warm neutral "bone" base + muted slate-teal "pine" accent.
@@ -27,7 +29,7 @@ const bone: MantineColorsTuple = [
   '#766b57',
   '#5a5142',
   '#3a342a',
-];
+]
 
 const pine: MantineColorsTuple = [
   '#eef3f1',
@@ -40,56 +42,80 @@ const pine: MantineColorsTuple = [
   '#2f5b52',
   '#23443e',
   '#182f2b',
-];
+]
 
 // Mantine's default "light"/"subtle" hover alpha (0.12) reads as almost no
 // feedback on the bone/pine palette — bump it up. "subtle" also gets a
 // visible border so it doesn't look identical to plain text until hovered.
-const variantColorResolver: VariantColorsResolver = (input) => {
-  const base = defaultVariantColorsResolver(input);
-  const parsed = parseThemeColor({ color: input.color, theme: input.theme });
+const variantColorResolver: VariantColorsResolver = input => {
+  const base = defaultVariantColorsResolver(input)
+  const parsed = parseThemeColor({ color: input.color, theme: input.theme })
 
   if (input.variant === 'light') {
-    const shade =
-      parsed.shade ?? (input.theme.primaryShade as { light: number }).light;
-    const shadeColor = input.theme.colors[parsed.color]?.[shade];
-    return shadeColor ? { ...base, hover: rgba(shadeColor, 0.22) } : base;
+    const shade = parsed.shade ?? (input.theme.primaryShade as { light: number }).light
+    const shadeColor = input.theme.colors[parsed.color]?.[shade]
+    return shadeColor ? { ...base, hover: rgba(shadeColor, 0.22) } : base
   }
 
   if (input.variant === 'subtle') {
-    return { ...base, border: `1px solid var(--mantine-color-default-border)` };
+    // Mantine's own "subtle" border is always transparent — make it visible so
+    // it doesn't look identical to plain text until hovered. A colored subtle
+    // button (e.g. color="red" for a destructive action) must border in that
+    // same color, so reuse `base.color` — it's already the exact CSS var
+    // Mantine resolved for the text, which adapts to light/dark on its own.
+    return input.color
+      ? { ...base, border: `1px solid ${base.color}` }
+      : { ...base, border: `1px solid var(--mantine-color-default-border)` }
   }
 
-  return base;
-};
+  return base
+}
 
 export const theme = createTheme({
   colors: { bone, pine },
   primaryColor: 'pine',
   primaryShade: { light: 6, dark: 4 },
+  breakpoints: {
+    xs: '30em',
+    sm: '48em',
+    md: '64em',
+    lg: '75em',
+    xl: '90em',
+  },
+  // One radius everywhere — cards, buttons, inputs, nav, badges. Two different
+  // rounding amounts (a pill badge next to a barely-rounded button) read as a
+  // mismatch, not a hierarchy, so there's a single consistent 'md' (8px).
   defaultRadius: 'md',
   autoContrast: true,
   variantColorResolver,
   // System font stack — every browser already ships one of these, no
   // webfont to load/flash.
-  fontFamily:
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, Arial, sans-serif',
-  fontFamilyMonospace:
-    'ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace',
+  fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Roboto, Arial, sans-serif',
+  // Used deliberately, not decoratively — technical/identifying data (IPs,
+  // hostnames, asset/org ids) renders in this face wherever it appears, the one
+  // typographic signature tying the UI to an inventory/compliance tool's actual
+  // subject matter. See components/ui/TechnicalText.tsx.
+  fontFamilyMonospace: 'ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace',
   headings: {
-    fontWeight: '600',
+    fontWeight: '700',
   },
   white: bone[0],
   black: bone[9],
   components: {
+    // Same absolute radius as everything else still reads as "more rounded" on a
+    // ~22px-tall badge than on a ~36px button — the corner curve is a much
+    // bigger proportion of a short element's height. Sized down to 'sm' so the
+    // two actually look consistent, not just numerically equal.
     Badge: {
-      defaultProps: { radius: 'sm', variant: 'filled' },
+      defaultProps: { variant: 'filled', radius: 'sm' },
     },
-    Button: Button.extend({
-      styles: (_theme, props) =>
-        props.variant === 'subtle'
-          ? { root: { borderColor: 'var(--mantine-color-default-border)' } }
-          : {},
-    }),
+    // Soft elevation by default — cards/modals/papers read as "raised" surfaces
+    // instead of flat outlined boxes (hover lift itself lives in globals.css).
+    Card: Card.extend({ defaultProps: { shadow: 'sm' } }),
+    Modal: Modal.extend({ defaultProps: { shadow: 'lg' } }),
+    // Mantine deselecciona al volver a clickear la opción elegida: un campo obligatorio quedaba
+    // vacío sin aviso (p. ej. la oficina preseleccionada de una tarea de inventario). Para
+    // vaciar un campo opcional está `clearable`; los filtros tienen su opción "Todas/Todos".
+    Select: Select.extend({ defaultProps: { allowDeselect: false } }),
   },
-});
+})

@@ -63,6 +63,7 @@ export type SupportedTimezones =
 
 export interface Config {
   auth: {
+    admins: AdminAuthOperations;
     users: UserAuthOperations;
   };
   blocks: {};
@@ -71,9 +72,27 @@ export interface Config {
     offices: Office;
     agents: Agent;
     assets: Asset;
+    'non-network-assets': NonNetworkAsset;
     'scan-reports': ScanReport;
-    'payload-kv': PayloadKv;
+    roles: Role;
+    'organization-settings': OrganizationSetting;
+    subscriptions: Subscription;
+    admins: Admin;
     users: User;
+    'organization-memberships': OrganizationMembership;
+    'job-runs': JobRun;
+    'inventory-snapshots': InventorySnapshot;
+    'assessment-instances': AssessmentInstance;
+    'assessment-answers': AssessmentAnswer;
+    'compliance-results': ComplianceResult;
+    'risk-evaluations': RiskEvaluation;
+    'risk-contributions': RiskContribution;
+    tasks: Task;
+    'portal-messages': PortalMessage;
+    'portal-message-receipts': PortalMessageReceipt;
+    'inventory-incidents': InventoryIncident;
+    'payload-kv': PayloadKv;
+    'payload-jobs': PayloadJob;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
@@ -84,27 +103,78 @@ export interface Config {
     offices: OfficesSelect<false> | OfficesSelect<true>;
     agents: AgentsSelect<false> | AgentsSelect<true>;
     assets: AssetsSelect<false> | AssetsSelect<true>;
+    'non-network-assets': NonNetworkAssetsSelect<false> | NonNetworkAssetsSelect<true>;
     'scan-reports': ScanReportsSelect<false> | ScanReportsSelect<true>;
-    'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
+    roles: RolesSelect<false> | RolesSelect<true>;
+    'organization-settings': OrganizationSettingsSelect<false> | OrganizationSettingsSelect<true>;
+    subscriptions: SubscriptionsSelect<false> | SubscriptionsSelect<true>;
+    admins: AdminsSelect<false> | AdminsSelect<true>;
     users: UsersSelect<false> | UsersSelect<true>;
+    'organization-memberships': OrganizationMembershipsSelect<false> | OrganizationMembershipsSelect<true>;
+    'job-runs': JobRunsSelect<false> | JobRunsSelect<true>;
+    'inventory-snapshots': InventorySnapshotsSelect<false> | InventorySnapshotsSelect<true>;
+    'assessment-instances': AssessmentInstancesSelect<false> | AssessmentInstancesSelect<true>;
+    'assessment-answers': AssessmentAnswersSelect<false> | AssessmentAnswersSelect<true>;
+    'compliance-results': ComplianceResultsSelect<false> | ComplianceResultsSelect<true>;
+    'risk-evaluations': RiskEvaluationsSelect<false> | RiskEvaluationsSelect<true>;
+    'risk-contributions': RiskContributionsSelect<false> | RiskContributionsSelect<true>;
+    tasks: TasksSelect<false> | TasksSelect<true>;
+    'portal-messages': PortalMessagesSelect<false> | PortalMessagesSelect<true>;
+    'portal-message-receipts': PortalMessageReceiptsSelect<false> | PortalMessageReceiptsSelect<true>;
+    'inventory-incidents': InventoryIncidentsSelect<false> | InventoryIncidentsSelect<true>;
+    'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
+    'payload-jobs': PayloadJobsSelect<false> | PayloadJobsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
   };
   db: {
-    defaultIDType: number;
+    defaultIDType: string;
   };
   fallbackLocale: null;
-  globals: {};
-  globalsSelect: {};
+  globals: {
+    'payload-jobs-stats': PayloadJobsStat;
+  };
+  globalsSelect: {
+    'payload-jobs-stats': PayloadJobsStatsSelect<false> | PayloadJobsStatsSelect<true>;
+  };
   locale: null;
   widgets: {
     collections: CollectionsWidget;
   };
-  user: User;
+  user: Admin | User;
   jobs: {
-    tasks: unknown;
+    tasks: {
+      'recalculate-risk': TaskRecalculateRisk;
+      'refresh-risk': TaskRefreshRisk;
+      'aging-sweep': TaskAgingSweep;
+      'expire-raw-scan-payloads': TaskExpireRawScanPayloads;
+      'reconcile-expired-assessments': TaskReconcileExpiredAssessments;
+      'reconcile-expired-asset-exclusions': TaskReconcileExpiredAssetExclusions;
+      inline: {
+        input: unknown;
+        output: unknown;
+      };
+    };
     workflows: unknown;
+  };
+}
+export interface AdminAuthOperations {
+  forgotPassword: {
+    email: string;
+    password: string;
+  };
+  login: {
+    email: string;
+    password: string;
+  };
+  registerFirstUser: {
+    email: string;
+    password: string;
+  };
+  unlock: {
+    email: string;
+    password: string;
   };
 }
 export interface UserAuthOperations {
@@ -130,144 +200,61 @@ export interface UserAuthOperations {
  * via the `definition` "organizations".
  */
 export interface Organization {
-  id: number;
+  id: string;
   name: string;
   is_active?: boolean | null;
+  settings?: (string | null) | OrganizationSetting;
+  subscription?: (string | null) | Subscription;
   updatedAt: string;
   createdAt: string;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "offices".
+ * via the `definition` "organization-settings".
  */
-export interface Office {
-  id: number;
-  organization: number | Organization;
-  name: string;
-  county_fips?: string | null;
-  is_active?: boolean | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "agents".
- */
-export interface Agent {
-  /**
-   * agent_id tal cual lo manda el escáner (ej. agent-001)
-   */
+export interface OrganizationSetting {
   id: string;
-  office: number | Office;
-  organization?: (number | null) | Organization;
-  last_heartbeat_at?: string | null;
-  status?: ('online' | 'offline') | null;
-  /**
-   * false = token revocado, rechazar toda ingesta de este agente
-   */
-  is_active?: boolean | null;
-  apiKeyPrefix?: string | null;
-  apiKeyHash?: string | null;
-  /**
-   * Solo visible una vez, en la respuesta de creación.
-   */
-  apiKey?: string | null;
+  organization: string | Organization;
+  industry: string;
+  assessment_policy_key: 'essential' | 'reinforced';
+  assessment_policy_version: number;
+  assessment_policy_selected_at: string;
+  assessment_policy_selected_by?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
+  maturity_it_owner?: ('yes' | 'no') | null;
+  maturity_security_budget?: ('none' | 'occasional' | 'recurring') | null;
+  maturity_updated_at?: string | null;
+  maturity_updated_by?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
+  offline_after_hours?: number | null;
+  snapshot_before_each_scan?: boolean | null;
+  snapshot_interval_days?: number | null;
   updatedAt: string;
   createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "assets".
- */
-export interface Asset {
-  id: number;
-  asset_id: string;
-  agent: string | Agent;
-  office?: (number | null) | Office;
-  organization?: (number | null) | Organization;
-  ip?: string | null;
-  last_seen?: string | null;
-  mac?: string | null;
-  vendor?: string | null;
-  hostname?: string | null;
-  os?: {
-    name?: string | null;
-    accuracy?: number | null;
-    cpe?: string[] | null;
-  };
-  services?:
-    | {
-        port?: number | null;
-        protocol?: string | null;
-        state?: string | null;
-        name?: string | null;
-        product?: string | null;
-        version?: string | null;
-        extra_info?: string | null;
-        cpe?: string | null;
-        id?: string | null;
-      }[]
-    | null;
-  alias?: string | null;
-  criticality?: string | null;
-  location?: string | null;
-  status?: ('activo' | 'retirado' | 'offline') | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "scan-reports".
- */
-export interface ScanReport {
-  /**
-   * report_id tal cual lo manda el escáner
-   */
-  id: string;
-  agent: string | Agent;
-  office?: (number | null) | Office;
-  network?: string | null;
-  scan_start?: string | null;
-  scan_end?: string | null;
-  hosts_up?: number | null;
-  raw_payload?:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
-  status?: ('received' | 'processed' | 'failed') | null;
-  processed_at?: string | null;
-  error?: string | null;
-  updatedAt: string;
-  createdAt: string;
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "payload-kv".
- */
-export interface PayloadKv {
-  id: number;
-  key: string;
-  data:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "users".
  */
 export interface User {
-  id: number;
+  id: string;
+  name: string;
+  status?: ('active' | 'inactive') | null;
+  organization_membership?: (string | null) | OrganizationMembership;
   updatedAt: string;
   createdAt: string;
   email: string;
@@ -289,18 +276,1160 @@ export interface User {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "payload-locked-documents".
+ * via the `definition` "organization-memberships".
  */
-export interface PayloadLockedDocument {
-  id: number;
-  document?:
+export interface OrganizationMembership {
+  id: string;
+  user: string | User;
+  organization: string | Organization;
+  offices?: (string | Office)[] | null;
+  role: string | Role;
+  status?: ('onboarding' | 'active') | null;
+  is_active?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "offices".
+ */
+export interface Office {
+  id: string;
+  organization: string | Organization;
+  name: string;
+  county_fips?: string | null;
+  is_active?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "roles".
+ */
+export interface Role {
+  id: string;
+  slug: string;
+  name: string;
+  /**
+   * 1 = máxima autoridad
+   */
+  rank: number;
+  scope: 'platform' | 'organization' | 'organization_office' | 'office_user';
+  is_platform_role?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "admins".
+ */
+export interface Admin {
+  id: string;
+  name?: string | null;
+  role: string | Role;
+  status?: ('active' | 'inactive') | null;
+  updatedAt: string;
+  createdAt: string;
+  email: string;
+  resetPasswordToken?: string | null;
+  resetPasswordExpiration?: string | null;
+  salt?: string | null;
+  hash?: string | null;
+  loginAttempts?: number | null;
+  lockUntil?: string | null;
+  sessions?:
+    | {
+        id: string;
+        createdAt?: string | null;
+        expiresAt: string;
+      }[]
+    | null;
+  password?: string | null;
+  collection: 'admins';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "subscriptions".
+ */
+export interface Subscription {
+  id: string;
+  organization: string | Organization;
+  level: 'basic' | 'premium';
+  /**
+   * Topes por rol: org_admin, office_manager y org_viewer.
+   */
+  user_limits:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  max_offices?: number | null;
+  /**
+   * Mapa plano feature_key -> boolean, ver domain/subscriptions/features.ts
+   */
+  features?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "agents".
+ */
+export interface Agent {
+  /**
+   * agent_id tal cual lo manda el escáner (ej. agent-001)
+   */
+  id: string;
+  office: string | Office;
+  organization?: (string | null) | Organization;
+  provisioned_at?: string | null;
+  first_heartbeat_at?: string | null;
+  last_heartbeat_at?: string | null;
+  last_agent_timestamp?: string | null;
+  runtime_status?: ('idle' | 'scanning' | 'unknown') | null;
+  lifecycle_status?: ('provisioned' | 'active' | 'revoked') | null;
+  status?: ('online' | 'offline') | null;
+  /**
+   * Compatibilidad: false = token revocado. Usar lifecycle_status en código nuevo.
+   */
+  is_active?: boolean | null;
+  revoked_at?: string | null;
+  /**
+   * Motivo de la revocación: manual (acción humana) o auto_lockout_abuse.
+   */
+  revocation_reason?: ('manual' | 'auto_lockout_abuse') | null;
+  failedAttempts?: number | null;
+  lockedUntil?: string | null;
+  lockoutCount?: number | null;
+  apiKeyPrefix?: string | null;
+  apiKeyHash?: string | null;
+  /**
+   * Solo visible una vez, en la respuesta de creación.
+   */
+  apiKey?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "assets".
+ */
+export interface Asset {
+  id: string;
+  location_pending?: boolean | null;
+  deleted_at?: string | null;
+  port_scan_coverage?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  scanner_asset_id?: string | null;
+  identity_key?: string | null;
+  asset_id: string;
+  agent: string | Agent;
+  office?: (string | null) | Office;
+  observed_agents?:
+    | {
+        agent: string | Agent;
+        ip?: string | null;
+        gateway_ip?: string | null;
+        gateway_mac?: string | null;
+        last_seen: string;
+        id?: string | null;
+      }[]
+    | null;
+  organization?: (string | null) | Organization;
+  ip?: string | null;
+  last_observed_cidr?: string | null;
+  last_seen?: string | null;
+  gateway_ip?: string | null;
+  gateway_mac?: string | null;
+  mac?: string | null;
+  mac_metadata?: {
+    kind?:
+      ('globally_administered' | 'locally_administered' | 'multicast' | 'broadcast' | 'invalid' | 'unknown') | null;
+    vendor_resolution?: ('resolved' | 'not_found' | 'not_attempted' | 'unknown') | null;
+  };
+  vendor?: string | null;
+  hostname?: string | null;
+  names?:
+    | {
+        value: string;
+        source: 'nmap' | 'ptr' | 'mdns' | 'netbios' | 'ssdp';
+        id?: string | null;
+      }[]
+    | null;
+  is_scanner_host?: boolean | null;
+  scanner_host_match?: ('ip' | 'mac' | 'both' | 'conflict' | 'none' | 'unknown') | null;
+  asset_coverage?: {
+    port_scan?: ('complete' | 'partial' | 'not_attempted' | 'unknown') | null;
+    service_detection?: ('complete' | 'partial' | 'not_attempted' | 'unknown') | null;
+    os_detection?: ('complete' | 'partial' | 'not_attempted' | 'unknown') | null;
+    name_resolution?: ('complete' | 'partial' | 'not_attempted' | 'unknown') | null;
+  };
+  scan_issues?:
+    | {
+        stage: string;
+        code: string;
+        id?: string | null;
+      }[]
+    | null;
+  evidence_history?:
+    | {
+        kind?: ('mac' | 'vendor' | 'name' | 'device_class') | null;
+        value?: string | null;
+        source?: string | null;
+        first_seen_at?: string | null;
+        last_seen_at?: string | null;
+        seen_count?: number | null;
+        last_report_id?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  applied_report_ids?:
+    | {
+        report_id: string;
+        id?: string | null;
+      }[]
+    | null;
+  os?: {
+    name?: string | null;
+    accuracy?: number | null;
+    cpe?: string[] | null;
+    osfamily?: string | null;
+    osgen?: string | null;
+    vendor?: string | null;
+    device_type?: string | null;
+  };
+  os_candidates?:
+    | {
+        name?: string | null;
+        accuracy?: number | null;
+        cpe?: string[] | null;
+        osfamily?: string | null;
+        osgen?: string | null;
+        vendor?: string | null;
+        device_type?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  os_status?: ('identified' | 'indeterminate') | null;
+  state_reason?: string | null;
+  host_scripts?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  services?:
+    | {
+        port?: number | null;
+        protocol?: string | null;
+        state?: string | null;
+        name?: string | null;
+        product?: string | null;
+        version?: string | null;
+        extra_info?: string | null;
+        cpe?: string | null;
+        reason?: string | null;
+        detection_method?: string | null;
+        confidence?: number | null;
+        tunnel?: string | null;
+        scripts?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+        id?: string | null;
+      }[]
+    | null;
+  inferred_type?:
+    | ('workstation' | 'mobile' | 'gateway' | 'network_device' | 'printer' | 'server' | 'iot' | 'other' | 'unknown')
+    | null;
+  inference_confidence?: ('likely' | 'possible' | 'unknown') | null;
+  inference_signals?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  inference_version?: number | null;
+  identified?: boolean | null;
+  identification_status?: ('pending' | 'confirmed' | 'needs_review') | null;
+  confirmed_type?:
+    ('workstation' | 'mobile' | 'gateway' | 'network_device' | 'printer' | 'server' | 'iot' | 'other') | null;
+  authorization_status?: ('pending' | 'authorized' | 'unauthorized') | null;
+  type_confirmed_by?:
     | ({
-        relationTo: 'organizations';
-        value: number | Organization;
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
+  type_confirmed_at?: string | null;
+  alias?: string | null;
+  criticality?: ('low' | 'medium' | 'high' | 'critical') | null;
+  owner?: (string | null) | User;
+  location?: string | null;
+  assessment_scope?: ('included' | 'excluded') | null;
+  assessment_exclusion_reason?:
+    | (
+        | 'personal_device'
+        | 'visitor_device'
+        | 'third_party_managed'
+        | 'temporary_or_lab'
+        | 'duplicate_or_misidentified'
+        | 'contractually_out_of_scope'
+        | 'other'
+      )
+    | null;
+  assessment_exclusion_note?: string | null;
+  assessment_excluded_until?: string | null;
+  assessment_excluded_at?: string | null;
+  assessment_excluded_by?: (string | null) | User;
+  status?: ('active' | 'retired' | 'offline') | null;
+  first_viewed_at?: string | null;
+  technical_changed_at?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "non-network-assets".
+ */
+export interface NonNetworkAsset {
+  id: string;
+  deleted_at?: string | null;
+  seed_key?: string | null;
+  alias: string;
+  asset_category:
+    | 'computer'
+    | 'mobile_device'
+    | 'server'
+    | 'network_device'
+    | 'printer'
+    | 'iot'
+    | 'removable_media'
+    | 'other_equipment'
+    | 'antivirus_edr'
+    | 'software_license'
+    | 'cloud_asset'
+    | 'provider_service'
+    | 'backup'
+    | 'information_repository'
+    | 'physical_record'
+    | 'other';
+  criticality: 'low' | 'medium' | 'high' | 'critical';
+  owner: string | User;
+  location?: string | null;
+  assessment_scope?: ('included' | 'excluded') | null;
+  assessment_exclusion_reason?:
+    | (
+        | 'personal_device'
+        | 'visitor_device'
+        | 'third_party_managed'
+        | 'temporary_or_lab'
+        | 'duplicate_or_misidentified'
+        | 'contractually_out_of_scope'
+        | 'other'
+      )
+    | null;
+  assessment_exclusion_note?: string | null;
+  assessment_excluded_until?: string | null;
+  assessment_excluded_at?: string | null;
+  assessment_excluded_by?: (string | null) | User;
+  status?: ('active' | 'retired') | null;
+  review_interval: 'never' | '1d' | '3d' | '1w' | '1m' | '6m' | '1y';
+  next_review_at?: string | null;
+  last_reviewed_at?: string | null;
+  review_status?: string | null;
+  can_review?: boolean | null;
+  related_assets?: (string | Asset)[] | null;
+  office: string | Office;
+  organization: string | Organization;
+  last_updated_at?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "scan-reports".
+ */
+export interface ScanReport {
+  content_fingerprint?: string | null;
+  received_at?: string | null;
+  /**
+   * report_id tal cual lo manda el escáner
+   */
+  id: string;
+  agent: string | Agent;
+  office?: (string | null) | Office;
+  network?: string | null;
+  scan_start?: string | null;
+  scan_end?: string | null;
+  hosts_up?: number | null;
+  execution_status: 'completed' | 'partial' | 'failed';
+  report_coverage?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  scanner_interfaces?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  gateway_ip?: string | null;
+  gateway_mac?: string | null;
+  raw_payload?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  raw_payload_expires_at?: string | null;
+  status?: ('received' | 'processed' | 'failed') | null;
+  processed_at?: string | null;
+  error?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "job-runs".
+ */
+export interface JobRun {
+  id: string;
+  job_type: 'aging_sweep';
+  started_at: string;
+  finished_at?: string | null;
+  status: 'running' | 'success' | 'failed';
+  summary?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  error?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "inventory-snapshots".
+ */
+export interface InventorySnapshot {
+  id: string;
+  organization: string | Organization;
+  office: string | Office;
+  taken_at: string;
+  generated_by: 'manual' | 'scheduled' | 'pre_audit';
+  triggered_by_user?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
+  risk_score: string | RiskEvaluation;
+  assessment_results_snapshot:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  assets_dump:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "risk-evaluations".
+ */
+export interface RiskEvaluation {
+  id: string;
+  organization: string | Organization;
+  office?: (string | null) | Office;
+  catalog_version: number;
+  engine_version: number;
+  policy_key: 'essential' | 'reinforced';
+  evaluated_at: string;
+  rro_raw: number;
+  rro_adjusted: number;
+  riem: number;
+  score?: number | null;
+  base_band?: ('low' | 'medium' | 'high' | 'critical') | null;
+  final_band?: ('low' | 'medium' | 'high' | 'critical') | null;
+  coverage: number;
+  unknown_percentage: number;
+  confidence: 'hidden' | 'preliminary' | 'warning' | 'usable' | 'reliable';
+  effective_confidence: 'hidden' | 'preliminary' | 'warning' | 'usable' | 'reliable';
+  counts:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  alerts:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  control_summary:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  asset_summary:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "assessment-instances".
+ */
+export interface AssessmentInstance {
+  id: string;
+  open_cycle_key?: string | null;
+  expiry_reconciled_at?: string | null;
+  organization: string | Organization;
+  scope: 'organization' | 'office' | 'asset';
+  office?: (string | null) | Office;
+  asset?: (string | null) | Asset;
+  manual_asset?: (string | null) | NonNetworkAsset;
+  policy_key: 'essential' | 'reinforced';
+  policy_version: number;
+  catalog_version: number;
+  question_set_snapshot:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  status: 'pending' | 'in_progress' | 'completed' | 'expired' | 'superseded';
+  assigned_to?: (string | null) | User;
+  created_reason:
+    | 'initial'
+    | 'asset_identified'
+    | 'assessment_scope_changed'
+    | 'office_changed'
+    | 'policy_changed'
+    | 'answer_expired'
+    | 'manual_review';
+  opened_at: string;
+  due_at: string;
+  completed_at?: string | null;
+  completed_by?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
+  completion_summary: {
+    compliant: number;
+    partially_effective: number;
+    non_compliant: number;
+    not_evaluable: number;
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "assessment-answers".
+ */
+export interface AssessmentAnswer {
+  id: string;
+  organization: string | Organization;
+  assessment: string | AssessmentInstance;
+  question_key: string;
+  question_version: number;
+  option_key: string;
+  option_snapshot:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  justification?: string | null;
+  evidence_note?: string | null;
+  answered_by:
+    | {
+        relationTo: 'users';
+        value: string | User;
+      }
+    | {
+        relationTo: 'admins';
+        value: string | Admin;
+      };
+  answered_at: string;
+  valid_until: string;
+  evaluation_effect_snapshot:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "compliance-results".
+ */
+export interface ComplianceResult {
+  id: string;
+  organization: string | Organization;
+  office?: (string | null) | Office;
+  asset?: (string | null) | Asset;
+  manual_asset?: (string | null) | NonNetworkAsset;
+  service_key?: string | null;
+  control_key: string;
+  check_key: string;
+  status: 'compliant' | 'non_compliant' | 'not_evaluable';
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  policy_key: 'essential' | 'reinforced';
+  policy_version: number;
+  evaluated_at: string;
+  valid_until: string;
+  reason_code: string;
+  explanation: string;
+  evidence_snapshot:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  supersedes?: (string | null) | ComplianceResult;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "risk-contributions".
+ */
+export interface RiskContribution {
+  id: string;
+  organization: string | Organization;
+  office?: (string | null) | Office;
+  evaluation: string | RiskEvaluation;
+  asset_key: string;
+  asset?: (string | null) | Asset;
+  manual_asset?: (string | null) | NonNetworkAsset;
+  control_key: string;
+  criticality: 'low' | 'medium' | 'high' | 'critical' | 'unknown';
+  scope_multiplier: number;
+  severity: 'low' | 'medium' | 'high' | 'critical' | 'unknown';
+  exposure: 'low' | 'medium' | 'high';
+  exposure_source?: ('scan' | 'default_unknown') | null;
+  efficacy?: number | null;
+  effect_snapshot:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  status: 'compliant' | 'partially_effective' | 'non_compliant' | 'not_evaluable';
+  inherent_risk?: number | null;
+  residual_risk?: number | null;
+  coverage_weight: number;
+  excluded: boolean;
+  reason_code: string;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tasks".
+ */
+export interface Task {
+  id: string;
+  requires_reassignment?: boolean | null;
+  lifecycle_history?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  seed_key?: string | null;
+  title: string;
+  description?: string | null;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  start_at: string;
+  due_at?: string | null;
+  initial_due_at?: string | null;
+  effective_status?: string | null;
+  is_overdue?: boolean | null;
+  assignment_kind: 'open_pool' | 'role' | 'user';
+  assigned_role?: (string | null) | Role;
+  assigned_user?: (string | null) | User;
+  claimed_by?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
+  claimed_at?: string | null;
+  completed_by?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
+  completed_at?: string | null;
+  completion_reason?: string | null;
+  cancelled_by?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
+  archived_by?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
+  archived_at?: string | null;
+  related_entity?:
+    | ({
+        relationTo: 'offices';
+        value: string | Office;
+      } | null)
+    | ({
+        relationTo: 'assets';
+        value: string | Asset;
+      } | null)
+    | ({
+        relationTo: 'non-network-assets';
+        value: string | NonNetworkAsset;
+      } | null)
+    | ({
+        relationTo: 'assessment-instances';
+        value: string | AssessmentInstance;
+      } | null)
+    | ({
+        relationTo: 'compliance-results';
+        value: string | ComplianceResult;
+      } | null)
+    | ({
+        relationTo: 'inventory-snapshots';
+        value: string | InventorySnapshot;
+      } | null)
+    | ({
+        relationTo: 'scan-reports';
+        value: string | ScanReport;
+      } | null)
+    | ({
+        relationTo: 'risk-evaluations';
+        value: string | RiskEvaluation;
+      } | null)
+    | ({
+        relationTo: 'agents';
+        value: string | Agent;
+      } | null);
+  organization: string | Organization;
+  office?: (string | null) | Office;
+  created_by:
+    | {
+        relationTo: 'users';
+        value: string | User;
+      }
+    | {
+        relationTo: 'admins';
+        value: string | Admin;
+      };
+  creation_batch_id?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "portal-messages".
+ */
+export interface PortalMessage {
+  id: string;
+  title: string;
+  description: string;
+  message_type: 'notice' | 'actionable';
+  template_key?: string | null;
+  cta_label?: string | null;
+  scope: 'global' | 'organizations';
+  target_organizations?: (string | Organization)[] | null;
+  target_kind: 'all' | 'role' | 'user';
+  target_roles?: ('org_admin' | 'org_viewer' | 'office_manager')[] | null;
+  target_users?: (string | User)[] | null;
+  linked_section?: ('dashboard' | 'risk-score' | 'security-review' | 'tasks' | 'inventory' | 'administration') | null;
+  linked_entity_type?:
+    | (
+        | 'tasks'
+        | 'offices'
+        | 'assets'
+        | 'non-network-assets'
+        | 'assessment-instances'
+        | 'compliance-results'
+        | 'inventory-snapshots'
+        | 'scan-reports'
+        | 'risk-evaluations'
+        | 'agents'
+      )
+    | null;
+  linked_entity?:
+    | ({
+        relationTo: 'tasks';
+        value: string | Task;
       } | null)
     | ({
         relationTo: 'offices';
-        value: number | Office;
+        value: string | Office;
+      } | null)
+    | ({
+        relationTo: 'assets';
+        value: string | Asset;
+      } | null)
+    | ({
+        relationTo: 'non-network-assets';
+        value: string | NonNetworkAsset;
+      } | null)
+    | ({
+        relationTo: 'assessment-instances';
+        value: string | AssessmentInstance;
+      } | null)
+    | ({
+        relationTo: 'compliance-results';
+        value: string | ComplianceResult;
+      } | null)
+    | ({
+        relationTo: 'inventory-snapshots';
+        value: string | InventorySnapshot;
+      } | null)
+    | ({
+        relationTo: 'scan-reports';
+        value: string | ScanReport;
+      } | null)
+    | ({
+        relationTo: 'risk-evaluations';
+        value: string | RiskEvaluation;
+      } | null)
+    | ({
+        relationTo: 'agents';
+        value: string | Agent;
+      } | null);
+  expires_at?: string | null;
+  is_active?: boolean | null;
+  delivery_version: number;
+  created_by?: (string | null) | Admin;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "portal-message-receipts".
+ */
+export interface PortalMessageReceipt {
+  id: string;
+  message: string | PortalMessage;
+  user: string | User;
+  delivery_version: number;
+  seen_at?: string | null;
+  dismissed_at?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "inventory-incidents".
+ */
+export interface InventoryIncident {
+  id: string;
+  incident_key: string;
+  organization: string | Organization;
+  office: string | Office;
+  proposed_office?: (string | null) | Office;
+  asset?: (string | null) | Asset;
+  agent?: (string | null) | Agent;
+  kind: 'location' | 'identity';
+  status: 'pending' | 'moved' | 'kept' | 'reviewed';
+  reason: string;
+  ip?: string | null;
+  report_id?: string | null;
+  observed_at: string;
+  resolved_at?: string | null;
+  resolved_by?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-kv".
+ */
+export interface PayloadKv {
+  id: string;
+  key: string;
+  data:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs".
+ */
+export interface PayloadJob {
+  id: string;
+  /**
+   * Input data provided to the job
+   */
+  input?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  taskStatus?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  completedAt?: string | null;
+  totalTried?: number | null;
+  /**
+   * If hasError is true this job will not be retried
+   */
+  hasError?: boolean | null;
+  /**
+   * If hasError is true, this is the error that caused it
+   */
+  error?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Task execution log
+   */
+  log?:
+    | {
+        executedAt: string;
+        completedAt: string;
+        taskSlug:
+          | 'inline'
+          | 'recalculate-risk'
+          | 'refresh-risk'
+          | 'aging-sweep'
+          | 'expire-raw-scan-payloads'
+          | 'reconcile-expired-assessments'
+          | 'reconcile-expired-asset-exclusions';
+        taskID: string;
+        input?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+        output?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+        state: 'failed' | 'succeeded';
+        error?:
+          | {
+              [k: string]: unknown;
+            }
+          | unknown[]
+          | string
+          | number
+          | boolean
+          | null;
+        id?: string | null;
+      }[]
+    | null;
+  taskSlug?:
+    | (
+        | 'inline'
+        | 'recalculate-risk'
+        | 'refresh-risk'
+        | 'aging-sweep'
+        | 'expire-raw-scan-payloads'
+        | 'reconcile-expired-assessments'
+        | 'reconcile-expired-asset-exclusions'
+      )
+    | null;
+  queue?: string | null;
+  waitUntil?: string | null;
+  processing?: boolean | null;
+  /**
+   * Used for concurrency control. Jobs with the same key are subject to exclusive/supersedes rules.
+   */
+  concurrencyKey?: string | null;
+  meta?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-locked-documents".
+ */
+export interface PayloadLockedDocument {
+  id: string;
+  document?:
+    | ({
+        relationTo: 'organizations';
+        value: string | Organization;
+      } | null)
+    | ({
+        relationTo: 'offices';
+        value: string | Office;
       } | null)
     | ({
         relationTo: 'agents';
@@ -308,21 +1437,94 @@ export interface PayloadLockedDocument {
       } | null)
     | ({
         relationTo: 'assets';
-        value: number | Asset;
+        value: string | Asset;
+      } | null)
+    | ({
+        relationTo: 'non-network-assets';
+        value: string | NonNetworkAsset;
       } | null)
     | ({
         relationTo: 'scan-reports';
         value: string | ScanReport;
       } | null)
     | ({
+        relationTo: 'roles';
+        value: string | Role;
+      } | null)
+    | ({
+        relationTo: 'organization-settings';
+        value: string | OrganizationSetting;
+      } | null)
+    | ({
+        relationTo: 'subscriptions';
+        value: string | Subscription;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null)
+    | ({
         relationTo: 'users';
-        value: number | User;
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'organization-memberships';
+        value: string | OrganizationMembership;
+      } | null)
+    | ({
+        relationTo: 'job-runs';
+        value: string | JobRun;
+      } | null)
+    | ({
+        relationTo: 'inventory-snapshots';
+        value: string | InventorySnapshot;
+      } | null)
+    | ({
+        relationTo: 'assessment-instances';
+        value: string | AssessmentInstance;
+      } | null)
+    | ({
+        relationTo: 'assessment-answers';
+        value: string | AssessmentAnswer;
+      } | null)
+    | ({
+        relationTo: 'compliance-results';
+        value: string | ComplianceResult;
+      } | null)
+    | ({
+        relationTo: 'risk-evaluations';
+        value: string | RiskEvaluation;
+      } | null)
+    | ({
+        relationTo: 'risk-contributions';
+        value: string | RiskContribution;
+      } | null)
+    | ({
+        relationTo: 'tasks';
+        value: string | Task;
+      } | null)
+    | ({
+        relationTo: 'portal-messages';
+        value: string | PortalMessage;
+      } | null)
+    | ({
+        relationTo: 'portal-message-receipts';
+        value: string | PortalMessageReceipt;
+      } | null)
+    | ({
+        relationTo: 'inventory-incidents';
+        value: string | InventoryIncident;
       } | null);
   globalSlug?: string | null;
-  user: {
-    relationTo: 'users';
-    value: number | User;
-  };
+  user:
+    | {
+        relationTo: 'admins';
+        value: string | Admin;
+      }
+    | {
+        relationTo: 'users';
+        value: string | User;
+      };
   updatedAt: string;
   createdAt: string;
 }
@@ -331,11 +1533,16 @@ export interface PayloadLockedDocument {
  * via the `definition` "payload-preferences".
  */
 export interface PayloadPreference {
-  id: number;
-  user: {
-    relationTo: 'users';
-    value: number | User;
-  };
+  id: string;
+  user:
+    | {
+        relationTo: 'admins';
+        value: string | Admin;
+      }
+    | {
+        relationTo: 'users';
+        value: string | User;
+      };
   key?: string | null;
   value?:
     | {
@@ -354,7 +1561,7 @@ export interface PayloadPreference {
  * via the `definition` "payload-migrations".
  */
 export interface PayloadMigration {
-  id: number;
+  id: string;
   name?: string | null;
   batch?: number | null;
   updatedAt: string;
@@ -367,6 +1574,8 @@ export interface PayloadMigration {
 export interface OrganizationsSelect<T extends boolean = true> {
   name?: T;
   is_active?: T;
+  settings?: T;
+  subscription?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -390,9 +1599,19 @@ export interface AgentsSelect<T extends boolean = true> {
   id?: T;
   office?: T;
   organization?: T;
+  provisioned_at?: T;
+  first_heartbeat_at?: T;
   last_heartbeat_at?: T;
+  last_agent_timestamp?: T;
+  runtime_status?: T;
+  lifecycle_status?: T;
   status?: T;
   is_active?: T;
+  revoked_at?: T;
+  revocation_reason?: T;
+  failedAttempts?: T;
+  lockedUntil?: T;
+  lockoutCount?: T;
   apiKeyPrefix?: T;
   apiKeyHash?: T;
   apiKey?: T;
@@ -404,22 +1623,107 @@ export interface AgentsSelect<T extends boolean = true> {
  * via the `definition` "assets_select".
  */
 export interface AssetsSelect<T extends boolean = true> {
+  location_pending?: T;
+  deleted_at?: T;
+  port_scan_coverage?: T;
+  scanner_asset_id?: T;
+  identity_key?: T;
   asset_id?: T;
   agent?: T;
   office?: T;
+  observed_agents?:
+    | T
+    | {
+        agent?: T;
+        ip?: T;
+        gateway_ip?: T;
+        gateway_mac?: T;
+        last_seen?: T;
+        id?: T;
+      };
   organization?: T;
   ip?: T;
+  last_observed_cidr?: T;
   last_seen?: T;
+  gateway_ip?: T;
+  gateway_mac?: T;
   mac?: T;
+  mac_metadata?:
+    | T
+    | {
+        kind?: T;
+        vendor_resolution?: T;
+      };
   vendor?: T;
   hostname?: T;
+  names?:
+    | T
+    | {
+        value?: T;
+        source?: T;
+        id?: T;
+      };
+  is_scanner_host?: T;
+  scanner_host_match?: T;
+  asset_coverage?:
+    | T
+    | {
+        port_scan?: T;
+        service_detection?: T;
+        os_detection?: T;
+        name_resolution?: T;
+      };
+  scan_issues?:
+    | T
+    | {
+        stage?: T;
+        code?: T;
+        id?: T;
+      };
+  evidence_history?:
+    | T
+    | {
+        kind?: T;
+        value?: T;
+        source?: T;
+        first_seen_at?: T;
+        last_seen_at?: T;
+        seen_count?: T;
+        last_report_id?: T;
+        id?: T;
+      };
+  applied_report_ids?:
+    | T
+    | {
+        report_id?: T;
+        id?: T;
+      };
   os?:
     | T
     | {
         name?: T;
         accuracy?: T;
         cpe?: T;
+        osfamily?: T;
+        osgen?: T;
+        vendor?: T;
+        device_type?: T;
       };
+  os_candidates?:
+    | T
+    | {
+        name?: T;
+        accuracy?: T;
+        cpe?: T;
+        osfamily?: T;
+        osgen?: T;
+        vendor?: T;
+        device_type?: T;
+        id?: T;
+      };
+  os_status?: T;
+  state_reason?: T;
+  host_scripts?: T;
   services?:
     | T
     | {
@@ -431,12 +1735,67 @@ export interface AssetsSelect<T extends boolean = true> {
         version?: T;
         extra_info?: T;
         cpe?: T;
+        reason?: T;
+        detection_method?: T;
+        confidence?: T;
+        tunnel?: T;
+        scripts?: T;
         id?: T;
       };
+  inferred_type?: T;
+  inference_confidence?: T;
+  inference_signals?: T;
+  inference_version?: T;
+  identified?: T;
+  identification_status?: T;
+  confirmed_type?: T;
+  authorization_status?: T;
+  type_confirmed_by?: T;
+  type_confirmed_at?: T;
   alias?: T;
   criticality?: T;
+  owner?: T;
   location?: T;
+  assessment_scope?: T;
+  assessment_exclusion_reason?: T;
+  assessment_exclusion_note?: T;
+  assessment_excluded_until?: T;
+  assessment_excluded_at?: T;
+  assessment_excluded_by?: T;
   status?: T;
+  first_viewed_at?: T;
+  technical_changed_at?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "non-network-assets_select".
+ */
+export interface NonNetworkAssetsSelect<T extends boolean = true> {
+  deleted_at?: T;
+  seed_key?: T;
+  alias?: T;
+  asset_category?: T;
+  criticality?: T;
+  owner?: T;
+  location?: T;
+  assessment_scope?: T;
+  assessment_exclusion_reason?: T;
+  assessment_exclusion_note?: T;
+  assessment_excluded_until?: T;
+  assessment_excluded_at?: T;
+  assessment_excluded_by?: T;
+  status?: T;
+  review_interval?: T;
+  next_review_at?: T;
+  last_reviewed_at?: T;
+  review_status?: T;
+  can_review?: T;
+  related_assets?: T;
+  office?: T;
+  organization?: T;
+  last_updated_at?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -445,6 +1804,8 @@ export interface AssetsSelect<T extends boolean = true> {
  * via the `definition` "scan-reports_select".
  */
 export interface ScanReportsSelect<T extends boolean = true> {
+  content_fingerprint?: T;
+  received_at?: T;
   id?: T;
   agent?: T;
   office?: T;
@@ -452,7 +1813,13 @@ export interface ScanReportsSelect<T extends boolean = true> {
   scan_start?: T;
   scan_end?: T;
   hosts_up?: T;
+  execution_status?: T;
+  report_coverage?: T;
+  scanner_interfaces?: T;
+  gateway_ip?: T;
+  gateway_mac?: T;
   raw_payload?: T;
+  raw_payload_expires_at?: T;
   status?: T;
   processed_at?: T;
   error?: T;
@@ -461,17 +1828,59 @@ export interface ScanReportsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "payload-kv_select".
+ * via the `definition` "roles_select".
  */
-export interface PayloadKvSelect<T extends boolean = true> {
-  key?: T;
-  data?: T;
+export interface RolesSelect<T extends boolean = true> {
+  slug?: T;
+  name?: T;
+  rank?: T;
+  scope?: T;
+  is_platform_role?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "users_select".
+ * via the `definition` "organization-settings_select".
  */
-export interface UsersSelect<T extends boolean = true> {
+export interface OrganizationSettingsSelect<T extends boolean = true> {
+  organization?: T;
+  industry?: T;
+  assessment_policy_key?: T;
+  assessment_policy_version?: T;
+  assessment_policy_selected_at?: T;
+  assessment_policy_selected_by?: T;
+  maturity_it_owner?: T;
+  maturity_security_budget?: T;
+  maturity_updated_at?: T;
+  maturity_updated_by?: T;
+  offline_after_hours?: T;
+  snapshot_before_each_scan?: T;
+  snapshot_interval_days?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "subscriptions_select".
+ */
+export interface SubscriptionsSelect<T extends boolean = true> {
+  organization?: T;
+  level?: T;
+  user_limits?: T;
+  max_offices?: T;
+  features?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "admins_select".
+ */
+export interface AdminsSelect<T extends boolean = true> {
+  name?: T;
+  role?: T;
+  status?: T;
   updatedAt?: T;
   createdAt?: T;
   email?: T;
@@ -488,6 +1897,349 @@ export interface UsersSelect<T extends boolean = true> {
         createdAt?: T;
         expiresAt?: T;
       };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "users_select".
+ */
+export interface UsersSelect<T extends boolean = true> {
+  name?: T;
+  status?: T;
+  organization_membership?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  email?: T;
+  resetPasswordToken?: T;
+  resetPasswordExpiration?: T;
+  salt?: T;
+  hash?: T;
+  loginAttempts?: T;
+  lockUntil?: T;
+  sessions?:
+    | T
+    | {
+        id?: T;
+        createdAt?: T;
+        expiresAt?: T;
+      };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "organization-memberships_select".
+ */
+export interface OrganizationMembershipsSelect<T extends boolean = true> {
+  user?: T;
+  organization?: T;
+  offices?: T;
+  role?: T;
+  status?: T;
+  is_active?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "job-runs_select".
+ */
+export interface JobRunsSelect<T extends boolean = true> {
+  job_type?: T;
+  started_at?: T;
+  finished_at?: T;
+  status?: T;
+  summary?: T;
+  error?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "inventory-snapshots_select".
+ */
+export interface InventorySnapshotsSelect<T extends boolean = true> {
+  organization?: T;
+  office?: T;
+  taken_at?: T;
+  generated_by?: T;
+  triggered_by_user?: T;
+  risk_score?: T;
+  assessment_results_snapshot?: T;
+  assets_dump?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "assessment-instances_select".
+ */
+export interface AssessmentInstancesSelect<T extends boolean = true> {
+  open_cycle_key?: T;
+  expiry_reconciled_at?: T;
+  organization?: T;
+  scope?: T;
+  office?: T;
+  asset?: T;
+  manual_asset?: T;
+  policy_key?: T;
+  policy_version?: T;
+  catalog_version?: T;
+  question_set_snapshot?: T;
+  status?: T;
+  assigned_to?: T;
+  created_reason?: T;
+  opened_at?: T;
+  due_at?: T;
+  completed_at?: T;
+  completed_by?: T;
+  completion_summary?:
+    | T
+    | {
+        compliant?: T;
+        partially_effective?: T;
+        non_compliant?: T;
+        not_evaluable?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "assessment-answers_select".
+ */
+export interface AssessmentAnswersSelect<T extends boolean = true> {
+  organization?: T;
+  assessment?: T;
+  question_key?: T;
+  question_version?: T;
+  option_key?: T;
+  option_snapshot?: T;
+  justification?: T;
+  evidence_note?: T;
+  answered_by?: T;
+  answered_at?: T;
+  valid_until?: T;
+  evaluation_effect_snapshot?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "compliance-results_select".
+ */
+export interface ComplianceResultsSelect<T extends boolean = true> {
+  organization?: T;
+  office?: T;
+  asset?: T;
+  manual_asset?: T;
+  service_key?: T;
+  control_key?: T;
+  check_key?: T;
+  status?: T;
+  severity?: T;
+  policy_key?: T;
+  policy_version?: T;
+  evaluated_at?: T;
+  valid_until?: T;
+  reason_code?: T;
+  explanation?: T;
+  evidence_snapshot?: T;
+  supersedes?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "risk-evaluations_select".
+ */
+export interface RiskEvaluationsSelect<T extends boolean = true> {
+  organization?: T;
+  office?: T;
+  catalog_version?: T;
+  engine_version?: T;
+  policy_key?: T;
+  evaluated_at?: T;
+  rro_raw?: T;
+  rro_adjusted?: T;
+  riem?: T;
+  score?: T;
+  base_band?: T;
+  final_band?: T;
+  coverage?: T;
+  unknown_percentage?: T;
+  confidence?: T;
+  effective_confidence?: T;
+  counts?: T;
+  alerts?: T;
+  control_summary?: T;
+  asset_summary?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "risk-contributions_select".
+ */
+export interface RiskContributionsSelect<T extends boolean = true> {
+  organization?: T;
+  office?: T;
+  evaluation?: T;
+  asset_key?: T;
+  asset?: T;
+  manual_asset?: T;
+  control_key?: T;
+  criticality?: T;
+  scope_multiplier?: T;
+  severity?: T;
+  exposure?: T;
+  exposure_source?: T;
+  efficacy?: T;
+  effect_snapshot?: T;
+  status?: T;
+  inherent_risk?: T;
+  residual_risk?: T;
+  coverage_weight?: T;
+  excluded?: T;
+  reason_code?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tasks_select".
+ */
+export interface TasksSelect<T extends boolean = true> {
+  requires_reassignment?: T;
+  lifecycle_history?: T;
+  seed_key?: T;
+  title?: T;
+  description?: T;
+  priority?: T;
+  status?: T;
+  start_at?: T;
+  due_at?: T;
+  initial_due_at?: T;
+  effective_status?: T;
+  is_overdue?: T;
+  assignment_kind?: T;
+  assigned_role?: T;
+  assigned_user?: T;
+  claimed_by?: T;
+  claimed_at?: T;
+  completed_by?: T;
+  completed_at?: T;
+  completion_reason?: T;
+  cancelled_by?: T;
+  cancelled_at?: T;
+  cancellation_reason?: T;
+  archived_by?: T;
+  archived_at?: T;
+  related_entity?: T;
+  organization?: T;
+  office?: T;
+  created_by?: T;
+  creation_batch_id?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "portal-messages_select".
+ */
+export interface PortalMessagesSelect<T extends boolean = true> {
+  title?: T;
+  description?: T;
+  message_type?: T;
+  template_key?: T;
+  cta_label?: T;
+  scope?: T;
+  target_organizations?: T;
+  target_kind?: T;
+  target_roles?: T;
+  target_users?: T;
+  linked_section?: T;
+  linked_entity_type?: T;
+  linked_entity?: T;
+  expires_at?: T;
+  is_active?: T;
+  delivery_version?: T;
+  created_by?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "portal-message-receipts_select".
+ */
+export interface PortalMessageReceiptsSelect<T extends boolean = true> {
+  message?: T;
+  user?: T;
+  delivery_version?: T;
+  seen_at?: T;
+  dismissed_at?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "inventory-incidents_select".
+ */
+export interface InventoryIncidentsSelect<T extends boolean = true> {
+  incident_key?: T;
+  organization?: T;
+  office?: T;
+  proposed_office?: T;
+  asset?: T;
+  agent?: T;
+  kind?: T;
+  status?: T;
+  reason?: T;
+  ip?: T;
+  report_id?: T;
+  observed_at?: T;
+  resolved_at?: T;
+  resolved_by?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-kv_select".
+ */
+export interface PayloadKvSelect<T extends boolean = true> {
+  key?: T;
+  data?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs_select".
+ */
+export interface PayloadJobsSelect<T extends boolean = true> {
+  input?: T;
+  taskStatus?: T;
+  completedAt?: T;
+  totalTried?: T;
+  hasError?: T;
+  error?: T;
+  log?:
+    | T
+    | {
+        executedAt?: T;
+        completedAt?: T;
+        taskSlug?: T;
+        taskID?: T;
+        input?: T;
+        output?: T;
+        state?: T;
+        error?: T;
+        id?: T;
+      };
+  taskSlug?: T;
+  queue?: T;
+  waitUntil?: T;
+  processing?: T;
+  concurrencyKey?: T;
+  meta?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -523,6 +2275,34 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs-stats".
+ */
+export interface PayloadJobsStat {
+  id: string;
+  stats?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-jobs-stats_select".
+ */
+export interface PayloadJobsStatsSelect<T extends boolean = true> {
+  stats?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "collections_widget".
  */
 export interface CollectionsWidget {
@@ -530,6 +2310,76 @@ export interface CollectionsWidget {
     [k: string]: unknown;
   };
   width: 'full';
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskRecalculate-risk".
+ */
+export interface TaskRecalculateRisk {
+  input: {
+    organization_id: string;
+    office_id?: string | null;
+  };
+  output: {
+    evaluation_id: string;
+  };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskRefresh-risk".
+ */
+export interface TaskRefreshRisk {
+  input?: unknown;
+  output: {
+    organizations: number;
+  };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskAging-sweep".
+ */
+export interface TaskAgingSweep {
+  input?: unknown;
+  output: {
+    assets_transitioned: number;
+    organizations_processed: number;
+  };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskExpire-raw-scan-payloads".
+ */
+export interface TaskExpireRawScanPayloads {
+  input?: unknown;
+  output: {
+    expired: number;
+    asset_evidence_expired: number;
+    snapshot_evidence_expired: number;
+  };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskReconcile-expired-assessments".
+ */
+export interface TaskReconcileExpiredAssessments {
+  input?: unknown;
+  output: {
+    expired_cycles_examined: number;
+    cycles_created: number;
+    cycles_preserved: number;
+    cycles_skipped: number;
+  };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskReconcile-expired-asset-exclusions".
+ */
+export interface TaskReconcileExpiredAssetExclusions {
+  input?: unknown;
+  output: {
+    network_assets_reincluded: number;
+    manual_assets_reincluded: number;
+  };
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

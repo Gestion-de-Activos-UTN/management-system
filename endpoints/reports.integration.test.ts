@@ -1,5 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
+import crypto from 'node:crypto'
 import { getPayload } from 'payload'
 import type { Payload, PayloadRequest } from 'payload'
 import config from '../payload.config'
@@ -18,8 +19,8 @@ function fakeRequest(payload: Payload, headers: Record<string, string>, body: un
   } as unknown as PayloadRequest
 }
 
-function reportPayload(overrides: Record<string, unknown> = {}) {
-  return {
+function reportPayload(agentId: string, overrides: Record<string, unknown> = {}) {
+  const report = {
     report_id: `r-${Math.random().toString(36).slice(2)}`,
     agent_id: 'agent-001',
     network: '192.168.0.0/24',
@@ -37,9 +38,42 @@ function reportPayload(overrides: Record<string, unknown> = {}) {
         os: null,
         services: [],
         scan_time: '2026-07-24T23:51:45.039267+00:00',
+        os_candidates: [],
+        state_reason: 'arp-response',
+        host_scripts: {},
+        names: [{ value: 'Docsis-Gateway', source: 'ptr' }],
+        mac_metadata: { kind: 'globally_administered', vendor_resolution: 'resolved' },
+        asset_coverage: {
+          port_scan: 'complete',
+          service_detection: 'complete',
+          os_detection: 'complete',
+          name_resolution: 'complete',
+        },
+        scan_issues: [],
       },
     ],
+    scan_mode: 'full',
+    scan_mode_reason: null,
+    execution_status: 'completed',
+    scanner_interfaces: [],
+    report_coverage: {
+      schema_version: 1,
+      profile: 'siam_standard_v1',
+      discovery: { status: 'complete', methods_attempted: ['arp'] },
+      ports: [{ protocol: 'tcp', port_spec: '1-1000', status: 'complete' }],
+      service_detection: { status: 'complete' },
+      os_detection: { status: 'complete' },
+      name_resolution: { status: 'complete', methods_attempted: ['ptr'] },
+      limitations: [],
+    },
+    gateway_ip: null,
+    gateway_mac: null,
     ...overrides,
+  }
+  return {
+    ...report,
+    agent_id: agentId,
+    assets: report.assets.map(asset => ({ ...asset, agent_id: agentId })),
   }
 }
 
@@ -54,21 +88,22 @@ async function seedAgent(payload: Payload) {
     data: { organization: organization.id, name: 'Oficina Test' },
     overrideAccess: true,
   })
+  const agentId = crypto.randomUUID()
   const agent = await payload.create({
     collection: 'agents',
-    data: { id: 'agent-001', office: office.id },
+    data: { id: agentId, office: office.id },
     overrideAccess: true,
   })
-  return { organization, office, apiKey: agent.apiKey as string }
+  return { organization, office, agentId, apiKey: agent.apiKey as string }
 }
 
 test('POST /v1/reports crea assets y es idempotente por report_id', async () => {
   const payload = await getPayload({ config })
-  const { apiKey } = await seedAgent(payload)
-  const body = reportPayload()
+  const { apiKey, agentId } = await seedAgent(payload)
+  const body = reportPayload(agentId)
 
   const first = await reportsEndpoint.handler(
-    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' }, body),
+    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': agentId }, body)
   )
   assert.equal(first.status, 200)
   const firstJson = await first.json()
@@ -76,13 +111,13 @@ test('POST /v1/reports crea assets y es idempotente por report_id', async () => 
 
   const asset = await payload.find({
     collection: 'assets',
-    where: { asset_id: { equals: body.assets[0].asset_id } },
+    where: { scanner_asset_id: { equals: body.assets[0].asset_id } },
     overrideAccess: true,
   })
   assert.equal(asset.docs.length, 1)
 
   const second = await reportsEndpoint.handler(
-    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': 'agent-001' }, body),
+    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': agentId }, body)
   )
   assert.equal(second.status, 200)
   const secondJson = await second.json()
@@ -90,18 +125,191 @@ test('POST /v1/reports crea assets y es idempotente por report_id', async () => 
 
   const assetsAfterRetry = await payload.find({
     collection: 'assets',
-    where: { asset_id: { equals: body.assets[0].asset_id } },
+    where: { scanner_asset_id: { equals: body.assets[0].asset_id } },
     overrideAccess: true,
   })
   assert.equal(assetsAfterRetry.docs.length, 1, 'no debe duplicar el asset en el reintento')
 })
 
-test('POST /v1/reports rechaza token inválido', async () => {
+test('POST /v1/reports reconcilia un scan degradado seguido de uno full: mismo doc, sin perder alias/owner/status', async () => {
+  // Reproduce el bug real (visto en datos de dev): scan sin sudo -> asset_id sale de la IP (mac
+  // vacía). Un humano identifica el activo y le pone alias/status. Scan siguiente CON sudo ->
+  // mac se resuelve -> asset_id hash distinto -> antes de este fix, ingestScanReport.ts no lo
+  // encontraba por asset_id y creaba un documento nuevo, huérfano de esos datos de negocio.
   const payload = await getPayload({ config })
-  await seedAgent(payload)
+  const { apiKey, agentId } = await seedAgent(payload)
+  const degradedAssetId = `a-degraded-${Math.random().toString(36).slice(2)}`
+  const fullAssetId = `a-full-${Math.random().toString(36).slice(2)}`
+  const uniqueIp = `10.${crypto.randomInt(1, 255)}.${crypto.randomInt(1, 255)}.${crypto.randomInt(1, 255)}`
+
+  const degradedBody = reportPayload(agentId, {
+    network: uniqueIp.split('.').slice(0, 3).join('.') + '.0/24',
+    scan_mode: 'degraded',
+    scan_mode_reason: 'not running elevated',
+    report_coverage: {
+      schema_version: 1,
+      profile: 'siam_standard_v1',
+      discovery: { status: 'complete', methods_attempted: ['default_nmap_discovery'] },
+      ports: [{ protocol: 'tcp', port_spec: '1-1000', status: 'complete' }],
+      service_detection: { status: 'complete' },
+      os_detection: { status: 'not_attempted' },
+      name_resolution: { status: 'complete', methods_attempted: ['ptr'] },
+      limitations: [{ stage: 'scanner', code: 'permission_denied' }],
+    },
+    assets: [
+      {
+        asset_id: degradedAssetId,
+        agent_id: 'agent-001',
+        ip: uniqueIp,
+        mac: '',
+        vendor: '',
+        hostname: '',
+        os: null,
+        services: [],
+        scan_time: '2026-07-24T23:51:45.039267+00:00',
+        os_candidates: [],
+        state_reason: 'echo-reply',
+        host_scripts: {},
+        names: [],
+        mac_metadata: { kind: 'unknown', vendor_resolution: 'not_attempted' },
+        asset_coverage: {
+          port_scan: 'complete',
+          service_detection: 'complete',
+          os_detection: 'not_attempted',
+          name_resolution: 'complete',
+        },
+        scan_issues: [],
+      },
+    ],
+  })
+  await reportsEndpoint.handler(
+    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': agentId }, degradedBody)
+  )
+
+  const created = await payload.find({
+    collection: 'assets',
+    where: { ip: { equals: uniqueIp } },
+    overrideAccess: true,
+  })
+  assert.equal(created.docs.length, 1)
+  await payload.update({
+    collection: 'assets',
+    id: created.docs[0].id,
+    overrideAccess: true,
+    data: { alias: 'Notebook de Gervasio', identified: true, status: 'retired' },
+  })
+
+  const fullBody = reportPayload(agentId, {
+    network: uniqueIp.split('.').slice(0, 3).join('.') + '.0/24',
+    scan_mode: 'full',
+    assets: [
+      {
+        asset_id: fullAssetId,
+        agent_id: 'agent-001',
+        ip: uniqueIp,
+        mac: 'AA:BB:CC:DD:EE:77',
+        vendor: 'Acme',
+        hostname: 'gervasio-nb',
+        os: null,
+        services: [],
+        scan_time: '2026-07-24T23:55:00.000000+00:00',
+        os_candidates: [],
+        state_reason: 'arp-response',
+        host_scripts: {},
+        names: [{ value: 'gervasio-nb', source: 'ptr' }],
+        mac_metadata: { kind: 'locally_administered', vendor_resolution: 'not_attempted' },
+        asset_coverage: {
+          port_scan: 'complete',
+          service_detection: 'complete',
+          os_detection: 'complete',
+          name_resolution: 'complete',
+        },
+        scan_issues: [],
+      },
+    ],
+  })
+  await reportsEndpoint.handler(
+    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': agentId }, fullBody)
+  )
+
+  const afterFull = await payload.find({
+    collection: 'assets',
+    where: { ip: { equals: uniqueIp } },
+    overrideAccess: true,
+  })
+  assert.equal(afterFull.docs.length, 1, 'no debe duplicar el asset al resolverse la mac')
+  assert.equal(afterFull.docs[0].id, created.docs[0].id, 'debe ser el mismo documento')
+  assert.equal(afterFull.docs[0].mac, 'AA:BB:CC:DD:EE:77')
+  assert.equal(afterFull.docs[0].alias, 'Notebook de Gervasio')
+  assert.equal(afterFull.docs[0].identified, true)
+  assert.equal(afterFull.docs[0].status, 'retired', 'retired es sticky, un scan nuevo no lo revive')
+})
+
+test('POST /v1/reports NO rechaza un host sin mac/vendor/hostname resueltos', async () => {
+  // Caso real: nmap manda "" (no null) para mac/vendor/hostname cuando el host está fuera del
+  // segmento L2 del agente (notebooks/celulares por WiFi en otro subnet) — doc 05 §5.1 los marca
+  // "Técnicos opcionales" a propósito. Antes de este fix, ingestScanReport.ts los exigía y
+  // descartaba en silencio exactamente estos hosts (regresión real reportada por el usuario:
+  // "solo veo dos activos" contra la plataforma vs. muchos más en el JSON local sin filtrar).
+  const payload = await getPayload({ config })
+  const { apiKey, agentId } = await seedAgent(payload)
+  const body = reportPayload(agentId, {
+    assets: [
+      {
+        asset_id: `a-${Math.random().toString(36).slice(2)}`,
+        agent_id: 'agent-001',
+        ip: '192.168.0.42',
+        mac: '',
+        vendor: '',
+        hostname: '',
+        os: null,
+        services: [],
+        scan_time: '2026-07-24T23:51:45.039267+00:00',
+        os_candidates: [],
+        state_reason: 'echo-reply',
+        host_scripts: {},
+        names: [],
+        mac_metadata: { kind: 'unknown', vendor_resolution: 'not_attempted' },
+        asset_coverage: {
+          port_scan: 'complete',
+          service_detection: 'complete',
+          os_detection: 'not_attempted',
+          name_resolution: 'complete',
+        },
+        scan_issues: [],
+      },
+    ],
+  })
 
   const res = await reportsEndpoint.handler(
-    fakeRequest(payload, { authorization: 'Bearer not-a-real-token' }, reportPayload()),
+    fakeRequest(payload, { authorization: `Bearer ${apiKey}`, 'x-agent-id': agentId }, body)
+  )
+  assert.equal(res.status, 200)
+  const resJson = await res.json()
+  assert.equal(resJson.processed, 1)
+  assert.deepEqual(resJson.rejected, [])
+
+  const asset = await payload.find({
+    collection: 'assets',
+    where: { scanner_asset_id: { equals: body.assets[0].asset_id } },
+    overrideAccess: true,
+  })
+  assert.equal(asset.docs.length, 1)
+  assert.equal(asset.docs[0].mac, null)
+  assert.equal(asset.docs[0].vendor, null)
+  assert.equal(asset.docs[0].hostname, null)
+})
+
+test('POST /v1/reports rechaza token inválido', async () => {
+  const payload = await getPayload({ config })
+  const { agentId } = await seedAgent(payload)
+
+  const res = await reportsEndpoint.handler(
+    fakeRequest(
+      payload,
+      { authorization: 'Bearer not-a-real-token', 'x-agent-id': agentId },
+      reportPayload(agentId)
+    )
   )
   assert.equal(res.status, 401)
 })

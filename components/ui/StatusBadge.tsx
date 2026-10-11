@@ -1,4 +1,5 @@
-import { Badge } from '@mantine/core';
+import { Badge, VisuallyHidden } from '@mantine/core'
+import type { ReactNode } from 'react'
 
 const TONE_COLOR = {
   success: 'green',
@@ -6,9 +7,9 @@ const TONE_COLOR = {
   danger: 'red',
   info: 'pine',
   neutral: 'bone',
-} as const;
+} as const
 
-export type StatusTone = keyof typeof TONE_COLOR;
+export type StatusTone = keyof typeof TONE_COLOR
 
 /**
  * Generic tone → color badge, zero domain knowledge (SYSTEM_PROMPT.md #3).
@@ -23,9 +24,28 @@ export type StatusTone = keyof typeof TONE_COLOR;
 export function StatusBadge({
   tone,
   label,
+  size,
+  icon,
+  iconOnly = false,
 }: {
-  tone: StatusTone;
-  label: string;
+  tone: StatusTone
+  label: string
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
+  icon?: ReactNode
+  iconOnly?: boolean
 }) {
-  return <Badge color={TONE_COLOR[tone]}>{label}</Badge>;
+  return (
+    <Badge
+      color={TONE_COLOR[tone]}
+      size={size}
+      style={{
+        display: 'inline-flex',
+        width: 'fit-content',
+        maxWidth: '100%',
+      }}
+    >
+      {icon && <span aria-hidden="true">{icon}</span>}
+      {iconOnly && icon ? <VisuallyHidden>{label}</VisuallyHidden> : label}
+    </Badge>
+  )
 }
