@@ -1,7 +1,9 @@
 import { httpClient } from '@/lib/http-client'
 import type { PlatformAdminProfileInput } from './schema'
 
-type LoginResponse = { exp: number; user: { id: string; email: string } }
+export type PlatformAdminProfile = PlatformAdminProfileInput & { email: string }
+
+type LoginResponse = { exp: number; user: { id: string; email: string; name?: string | null } }
 
 export function loginAdmin(email: string, password: string) {
   return httpClient.post<LoginResponse>('/api/admins/login', { email, password })
@@ -12,9 +14,9 @@ export function loginUser(email: string, password: string) {
 }
 
 export function getPlatformAdminProfile() {
-  return httpClient.get<PlatformAdminProfileInput>('/api/v1/platform-admin-profile')
+  return httpClient.get<PlatformAdminProfile>('/api/v1/platform-admin-profile')
 }
 
 export function updatePlatformAdminProfile(input: PlatformAdminProfileInput) {
-  return httpClient.patch<PlatformAdminProfileInput>('/api/v1/platform-admin-profile', input)
+  return httpClient.patch<PlatformAdminProfile>('/api/v1/platform-admin-profile', input)
 }

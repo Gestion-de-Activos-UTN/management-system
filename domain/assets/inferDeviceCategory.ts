@@ -213,18 +213,18 @@ export function inferDeviceCategory(asset: DeviceInferenceInput): DeviceInferenc
     return {
       category: null,
       tier: 'unknown',
-      signals: ['conflicting direct identity evidence'],
+      signals: ['evidencia de identidad directa contradictoria'],
     }
   }
 
   // El gateway resuelto desde la tabla de ruteo/ARP del agente es una señal directa y mucho más
   // fuerte que inferir un router por marca o por un puerto común.
   if (matchesGateway) {
-    add('gateway', 6, 'matches the network gateway')
+    add('gateway', 6, 'coincide con el gateway de la red')
   }
 
   if (matchesScanner) {
-    add('workstation', 6, 'scanner runs on this host')
+    add('workstation', 6, 'el escáner corre en este equipo')
   }
 
   const matchVendorKeyword = (text: string) =>
@@ -232,13 +232,13 @@ export function inferDeviceCategory(asset: DeviceInferenceInput): DeviceInferenc
 
   if (vendor) {
     const hint = matchVendorKeyword(vendor)
-    if (hint) add(hint.category, 2, `vendor "${asset.vendor}"`)
+    if (hint) add(hint.category, 2, `fabricante "${asset.vendor}"`)
   }
 
   if (hostname) {
     for (const hint of HOSTNAME_HINTS) {
       if (hint.pattern.test(hostname)) {
-        add(hint.category, 2, `hostname "${hostname}"`)
+        add(hint.category, 2, `nombre de host "${hostname}"`)
         break // primer patrón estructural que matchea gana — evita sumar en dos categorías a la vez
       }
     }
@@ -249,7 +249,7 @@ export function inferDeviceCategory(asset: DeviceInferenceInput): DeviceInferenc
       add(
         brandHint.category,
         2,
-        `hostname mentions "${brandHint.keywords.find(k => hostnameLower.includes(k))}"`
+        `el nombre de host menciona "${brandHint.keywords.find(k => hostnameLower.includes(k))}"`
       )
   }
 
@@ -257,7 +257,7 @@ export function inferDeviceCategory(asset: DeviceInferenceInput): DeviceInferenc
     if (!name.value || name.value === hostname) continue
     const sourceWeight = name.source === 'netbios' || name.source === 'mdns' ? 2 : 1
     const hint = HOSTNAME_HINTS.find(candidate => candidate.pattern.test(name.value ?? ''))
-    if (hint) add(hint.category, sourceWeight, `${name.source ?? 'network'} name "${name.value}"`)
+    if (hint) add(hint.category, sourceWeight, `nombre ${name.source ?? 'de red'} "${name.value}"`)
   }
 
   // "Windows" (o cualquier match hacia workstation) con cero puertos confirmados es
@@ -271,7 +271,7 @@ export function inferDeviceCategory(asset: DeviceInferenceInput): DeviceInferenc
     for (const hint of OS_HINTS) {
       if (hint.pattern.test(osName)) {
         const weight = hint.category === 'workstation' && workstationOsContradictsPorts ? 1 : 3
-        add(hint.category, weight, `OS "${osName}"`)
+        add(hint.category, weight, `sistema operativo "${osName}"`)
         break
       }
     }
@@ -281,14 +281,14 @@ export function inferDeviceCategory(asset: DeviceInferenceInput): DeviceInferenc
     const hint = NMAP_DEVICE_TYPE_HINTS.find(candidate => candidate.pattern.test(nmapDeviceType))
     if (hint) {
       const weight = (asset.os?.accuracy ?? 0) >= 85 ? 4 : 2
-      add(hint.category, weight, `Nmap device class "${nmapDeviceType}"`)
+      add(hint.category, weight, `clase de dispositivo de Nmap "${nmapDeviceType}"`)
     }
   }
 
   if (ports.length > 0) {
     for (const hint of PORT_HINTS) {
       const matched = hint.ports.find(p => ports.includes(p))
-      if (matched) add(hint.category, hint.weight, `port ${matched} open`)
+      if (matched) add(hint.category, hint.weight, `puerto ${matched} abierto`)
     }
   }
 
@@ -297,7 +297,7 @@ export function inferDeviceCategory(asset: DeviceInferenceInput): DeviceInferenc
     if (!text.trim()) continue
     for (const hint of PRODUCT_HINTS) {
       const matched = hint.keywords.find(k => text.includes(k))
-      if (matched) add(hint.category, hint.weight, `service "${matched}"`)
+      if (matched) add(hint.category, hint.weight, `servicio "${matched}"`)
     }
   }
 
@@ -308,7 +308,7 @@ export function inferDeviceCategory(asset: DeviceInferenceInput): DeviceInferenc
   // SSH/HTTP, 9100/631); un celular o tablet casi nunca. Peso moderado (no "likely" por sí
   // solo) porque un firewall agresivo puede producir el mismo resultado en cualquier equipo.
   if (portCoverageComplete && !allObservedPortsFiltered && ports.length === 0) {
-    add('mobile', 2, 'no open ports in the completed standard scan')
+    add('mobile', 2, 'sin puertos abiertos en el escaneo estándar completo')
   }
 
   const ranked = (Object.entries(scores) as Array<[DeviceCategory, number]>).sort(
@@ -329,50 +329,50 @@ export function inferDeviceCategory(asset: DeviceInferenceInput): DeviceInferenc
 }
 
 export const DEVICE_CATEGORY_LABEL: Record<DeviceCategory, string> = {
-  workstation: 'Workstation / PC',
-  mobile: 'Mobile phone',
+  workstation: 'Computadora / PC',
+  mobile: 'Teléfono móvil',
   gateway: 'Gateway / Router',
-  printer: 'Printer',
-  server: 'Server',
-  network_device: 'Switch / Access point',
-  iot: 'IoT / Embedded device',
+  printer: 'Impresora',
+  server: 'Servidor',
+  network_device: 'Switch / Punto de acceso',
+  iot: 'Dispositivo IoT / embebido',
 }
 
 export const DEVICE_CATEGORY_HELP: Record<DeviceCategory, string[]> = {
   workstation: [
-    'Windows: run `hostname` in a command prompt, or check Settings → System → About.',
-    'Linux: run `hostnamectl`.',
-    'Compare the MAC shown here against `ipconfig /all` (Windows) or `ip link` (Linux) on the machine.',
+    'Windows: ejecuta `hostname` en una consola, o revisa Configuración → Sistema → Acerca de.',
+    'Linux: ejecuta `hostnamectl`.',
+    'Compara la MAC que se muestra acá con `ipconfig /all` (Windows) o `ip link` (Linux) en el equipo.',
   ],
   mobile: [
-    'Check Settings → About phone / Wi-Fi → MAC address on the device.',
-    "Compare that MAC against this asset's MAC, and cross-check the router's connected-clients list.",
+    'En el dispositivo, revisa Ajustes → Acerca del teléfono / Wi-Fi → Dirección MAC.',
+    'Compara esa MAC con la de este activo y contrástala con la lista de clientes conectados del router.',
   ],
   gateway: [
-    "Open this asset's IP in a browser — most routers/gateways expose an admin login page.",
-    'Check the physical label on the device for model and vendor.',
+    'Abre la IP de este activo en un navegador: la mayoría de los routers/gateways muestra una página de administración.',
+    'Revisa la etiqueta física del equipo para ver modelo y fabricante.',
   ],
   printer: [
-    "Check the printer's own display panel for its network settings.",
-    'Print a network configuration page from the printer menu (usually under Setup/Network).',
+    'Revisa la configuración de red en el panel de la propia impresora.',
+    'Imprime una página de configuración de red desde el menú de la impresora (suele estar en Configuración/Red).',
   ],
   server: [
-    'Check running services on the host (`systemctl list-units`, `netstat -tlnp` on Linux; `services.msc` on Windows).',
-    "Confirm with whoever manages that office's infrastructure — servers are usually known assets, not surprises.",
+    'Revisa los servicios en ejecución del equipo (`systemctl list-units`, `netstat -tlnp` en Linux; `services.msc` en Windows).',
+    'Confírmalo con quien administra la infraestructura de esa oficina: un servidor suele ser un activo conocido, no una sorpresa.',
   ],
   network_device: [
-    'Check the physical label and management interface for its exact network role.',
-    'Compare its MAC against the router or controller client/device list.',
+    'Revisa la etiqueta física y la interfaz de administración para conocer su función exacta en la red.',
+    'Compara su MAC con la lista de clientes/dispositivos del router o controlador.',
   ],
   iot: [
-    'Check the physical device or its companion application for the network MAC address.',
-    'Confirm its purpose with the person responsible for this office.',
+    'Busca la dirección MAC de red en el propio dispositivo o en su aplicación.',
+    'Confirma para qué se usa con la persona responsable de esta oficina.',
   ],
 }
 
 export const GENERIC_IDENTIFICATION_HELP: string[] = [
-  "Check the router/switch's DHCP client list for this IP or MAC — many show a vendor or device name.",
-  'If the device has a screen or a physical label, look it up by MAC/vendor there.',
-  'Open this IP in a browser — if it responds, it may expose an admin or status page.',
-  'Ask whoever owns that office/location which device sits at this IP.',
+  'Busca esta IP o MAC en la lista de clientes DHCP del router/switch: muchos muestran el fabricante o el nombre del equipo.',
+  'Si el dispositivo tiene pantalla o etiqueta física, búscalo ahí por MAC o fabricante.',
+  'Abre esta IP en un navegador: si responde, puede mostrar una página de administración o de estado.',
+  'Pregunta a la persona responsable de esa oficina o ubicación qué equipo tiene esta IP.',
 ]

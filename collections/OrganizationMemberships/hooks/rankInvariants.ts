@@ -91,15 +91,19 @@ async function enforceLastActiveOrgAdminInvariant(
   assertNotLastActiveOrgAdmin(countAfter)
 }
 
-// Invariante último org_admin activo — antes de persistir is_active:false.
+// Invariante último org_admin activo — antes de persistir is_active:false o un cambio de rol
+// (degradar al último org_admin lo deja igual de fuera que desactivarlo).
 export const blockLastActiveOrgAdminOnUpdate: CollectionBeforeChangeHook = async ({
   data,
   operation,
   originalDoc,
   req,
 }) => {
-  if (operation !== 'update' || data?.is_active !== false || !originalDoc) return data
+  if (operation !== 'update' || !originalDoc) return data
   if (originalDoc.is_active !== true) return data // ya estaba inactiva, no es una transición
+  const deactivating = data?.is_active === false
+  const changingRole = Boolean(data?.role) && relationId(data.role) !== relationId(originalDoc.role)
+  if (!deactivating && !changingRole) return data
 
   await enforceLastActiveOrgAdminInvariant(
     req,

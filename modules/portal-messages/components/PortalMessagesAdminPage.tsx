@@ -1,26 +1,71 @@
 'use client'
 
 import { useState } from 'react'
-import { Badge, Button, Group, Modal, Stack, Switch, Text } from '@mantine/core'
+import { Alert, Button, Modal, Stack, Switch, Text } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { Plus } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '@/components/ui/DataTable'
+import { DateTimeCell } from '@/components/ui/DateTimeCell'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { useAdminPortalMessages, useSavePortalMessage } from '../hooks/use-portal-messages'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import { formatDate } from '@/lib/format-date'
+import { roleSlugLabel } from '@/lib/role-labels'
+import { useAdminPortalMessages, useSetPortalMessageActive } from '../hooks/use-portal-messages'
 import type { PortalMessageInput } from '../schema'
-import type { PortalMessageRecord } from '../service'
+import type { PortalMessageDTO, PortalMessageRecord } from '../service'
+import {
+  PORTAL_MESSAGE_SECTION_LINKS,
+  PORTAL_MESSAGE_STATUS_LABELS,
+  PORTAL_MESSAGE_STATUS_TONES,
+  PORTAL_MESSAGE_TYPE_LABELS,
+  PORTAL_MESSAGE_TYPE_TONES,
+  portalMessageStatus,
+} from '../portal-message-labels'
 import { PortalMessageForm } from './PortalMessageForm'
 import { RowActions } from './RowActions'
 import { PortalMessageDialog } from './PortalMessageDialog'
 
-const SECTION_LABELS: Record<string, string> = {
-  dashboard: 'Panel general',
-  'risk-score': 'Puntaje de riesgo',
-  'security-review': 'Revisión de seguridad',
-  tasks: 'Tareas',
-  inventory: 'Inventario',
-  administration: 'Administración',
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
+
+function audienceSummary(
+  audience: PortalMessageRecord['audience'],
+  organizationName: (id: string) => string | undefined
+) {
+  if (audience.scope === 'global')
+    return { primary: 'Global', secondary: 'Todas las organizaciones' }
+  const ids = audience.organization_ids
+  const names = ids.map(organizationName).filter(Boolean)
+  const primary =
+    ids.length <= 2 && names.length === ids.length
+      ? names.join(', ')
+      : plural(ids.length, 'organización', 'organizaciones')
+  const secondary =
+    audience.target_kind === 'role'
+      ? audience.role_slugs.map(roleSlugLabel).join(', ')
+      : audience.target_kind === 'user'
+        ? plural(audience.user_ids.length, 'persona', 'personas')
+        : 'Todas las personas'
+  return { primary, secondary }
+}
+
+/** Lo que vería quien recibe el mensaje, a partir del registro guardado. */
+function previewFromRecord(message: PortalMessageRecord): PortalMessageDTO['entity'] {
+  if (message.linked_entity) {
+    return {
+      kind: 'entity',
+      relationTo: message.linked_entity.relationTo,
+      label: message.linked_entity_label ?? undefined,
+      access: message.linked_entity_label ? 'allowed' : 'unavailable',
+    }
+  }
+  if (!message.linked_section) return null
+  return {
+    kind: 'section',
+    relationTo: message.linked_section,
+    label: PORTAL_MESSAGE_SECTION_LINKS[message.linked_section].label,
+    access: 'allowed',
+  }
 }
 
 export function PortalMessagesAdminPage() {
@@ -28,7 +73,10 @@ export function PortalMessagesAdminPage() {
   const [editing, setEditing] = useState<PortalMessageRecord | null>(null)
   const [previewing, setPreviewing] = useState<PortalMessageRecord | null>(null)
   const query = useAdminPortalMessages([])
-  const save = useSavePortalMessage()
+  const setActive = useSetPortalMessageActive()
+  const organizations = new Map(
+    (query.data?.organizations ?? []).map(organization => [organization.id, organization.name])
+  )
 
   const startNew = () => {
     setEditing(null)
@@ -38,10 +86,9 @@ export function PortalMessagesAdminPage() {
     setEditing(message)
     open()
   }
-  const startPreview = (message: PortalMessageRecord) => setPreviewing(message)
   const toggleActive = (message: PortalMessageRecord) => {
     const input: PortalMessageInput = { ...message, is_active: !message.is_active }
-    void save.mutateAsync({ input, id: message.id })
+    setActive.mutate({ input, id: message.id })
   }
 
   const columns: ColumnDef<PortalMessageRecord, unknown>[] = [
@@ -50,7 +97,7 @@ export function PortalMessagesAdminPage() {
       header: 'Título',
       cell: ({ row }) => (
         <Stack gap={2}>
-          <Text fw={600} size="sm">
+          <Text fw={600} size="sm" lineClamp={1}>
             {row.original.title}
           </Text>
           <Text c="dimmed" size="xs" lineClamp={1}>
@@ -62,22 +109,41 @@ export function PortalMessagesAdminPage() {
     {
       accessorKey: 'message_type',
       header: 'Tipo',
-      cell: ({ getValue }) => (getValue() === 'actionable' ? 'Accionable' : 'Aviso'),
+      cell: ({ row }) => (
+        <StatusBadge
+          tone={PORTAL_MESSAGE_TYPE_TONES[row.original.message_type]}
+          label={PORTAL_MESSAGE_TYPE_LABELS[row.original.message_type]}
+        />
+      ),
     },
     {
       id: 'audience',
       header: 'Audiencia',
-      cell: ({ row }) =>
-        row.original.audience.scope === 'global'
-          ? 'Global'
-          : `${row.original.audience.organization_ids.length} organizaciones`,
+      cell: ({ row }) => {
+        const summary = audienceSummary(row.original.audience, id => organizations.get(id))
+        return (
+          <Stack gap={0}>
+            <Text size="sm" lineClamp={1}>
+              {summary.primary}
+            </Text>
+            <Text size="xs" c="dimmed" lineClamp={1}>
+              {summary.secondary}
+            </Text>
+          </Stack>
+        )
+      },
     },
     {
-      accessorKey: 'expires_at',
-      header: 'Expira',
-      cell: ({ getValue }) => {
-        const value = getValue<string | null | undefined>()
-        return value ? new Date(value).toLocaleDateString('es-AR') : 'Sin fecha'
+      id: 'status',
+      header: 'Estado',
+      cell: ({ row }) => {
+        const status = portalMessageStatus(row.original)
+        return (
+          <StatusBadge
+            tone={PORTAL_MESSAGE_STATUS_TONES[status]}
+            label={PORTAL_MESSAGE_STATUS_LABELS[status]}
+          />
+        )
       },
     },
     {
@@ -87,9 +153,27 @@ export function PortalMessagesAdminPage() {
         <Switch
           aria-label={`${row.original.is_active ? 'Desactivar' : 'Activar'} ${row.original.title}`}
           checked={row.original.is_active}
+          disabled={setActive.isPending && setActive.variables?.id === row.original.id}
           onChange={() => toggleActive(row.original)}
         />
       ),
+    },
+    {
+      accessorKey: 'expires_at',
+      header: 'Expira',
+      cell: ({ getValue }) => {
+        const value = getValue<string | null | undefined>()
+        return (
+          <Text size="sm" c={value ? undefined : 'dimmed'}>
+            {value ? formatDate(value) : 'Sin fecha'}
+          </Text>
+        )
+      },
+    },
+    {
+      accessorKey: 'createdAt',
+      header: 'Creado',
+      cell: ({ getValue }) => <DateTimeCell value={getValue<string | undefined>()} />,
     },
     {
       id: 'actions',
@@ -97,29 +181,12 @@ export function PortalMessagesAdminPage() {
       enableSorting: false,
       meta: { align: 'center' },
       cell: ({ row }) => (
-        <RowActions message={row.original} onPreview={startPreview} onEdit={startEdit} />
+        <RowActions message={row.original} onPreview={setPreviewing} onEdit={startEdit} />
       ),
     },
   ]
 
-  const previewMessage = previewing
-    ? {
-        id: previewing.id,
-        title: previewing.title,
-        description: previewing.description,
-        message_type: previewing.message_type,
-        cta_label: previewing.cta_label,
-        entity: previewing.linked_section
-          ? {
-              relationTo: previewing.linked_entity_type ?? previewing.linked_section,
-              label: previewing.linked_entity
-                ? 'Entidad específica enlazada'
-                : SECTION_LABELS[previewing.linked_section],
-              access: 'allowed' as const,
-            }
-          : null,
-      }
-    : null
+  const closePreview = () => setPreviewing(null)
 
   return (
     <Stack gap="lg">
@@ -127,19 +194,19 @@ export function PortalMessagesAdminPage() {
         title="Mensajes del portal"
         description="Crea avisos y acciones dirigidos a organizaciones y sus usuarios."
         rightSection={
-          <Button leftSection={<Plus size={16} />} onClick={startNew}>
+          <Button leftSection={<Plus size={16} strokeWidth={1.5} />} onClick={startNew}>
             Nuevo mensaje
           </Button>
         }
       />
+      {query.isError && <Alert color="red">No se pudieron cargar los mensajes.</Alert>}
       <DataTable
         columns={columns}
         data={query.data?.docs ?? []}
         isLoading={query.isPending}
         emptyLabel="Todavía no hay mensajes."
-        minWidth={800}
+        minWidth={1000}
       />
-      {query.isError && <Badge color="red">No se pudieron cargar los mensajes.</Badge>}
       <Modal
         opened={opened}
         onClose={close}
@@ -156,21 +223,16 @@ export function PortalMessagesAdminPage() {
           }}
         />
       </Modal>
-      <Modal
+      {/* Vista previa: el mismo modal que verá quien lo recibe; cualquier botón sólo lo cierra. */}
+      <PortalMessageDialog
+        message={previewing && { ...previewing, entity: previewFromRecord(previewing) }}
         opened={Boolean(previewing)}
-        onClose={() => setPreviewing(null)}
-        title="Vista previa del mensaje"
-        size="md"
-        centered
-      >
-        <PortalMessageDialog
-          message={previewMessage}
-          opened={Boolean(previewing)}
-          variant="inline"
-          readOnly
-          onClose={() => setPreviewing(null)}
-        />
-      </Modal>
+        onClose={closePreview}
+        onAcknowledge={closePreview}
+        onRemindLater={closePreview}
+        onNoThanks={closePreview}
+        onAction={closePreview}
+      />
     </Stack>
   )
 }

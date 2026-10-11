@@ -12,6 +12,7 @@ export type PortalMessageDTO = {
   seen: boolean
   dismissed: boolean
   entity: null | {
+    kind: 'section' | 'entity'
     relationTo: string
     value?: string
     label?: string
@@ -24,6 +25,7 @@ export type PortalMessageRecord = Omit<PortalMessageInput, 'message_type'> & {
   id: string
   delivery_version: number
   message_type: 'notice' | 'actionable'
+  linked_entity_label?: string | null
   createdAt?: string
 }
 

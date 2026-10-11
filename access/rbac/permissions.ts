@@ -15,6 +15,7 @@ export type CollectionSlug =
   | 'risk-evaluations'
   | 'risk-contributions'
   | 'tasks'
+  | 'organization-memberships'
 export type Action =
   | 'read_technical'
   | 'create'
@@ -59,7 +60,10 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
   },
   org_admin: {
     organizations: ['read'],
-    offices: ['read'],
+    // Alta, edición y (des)activación de oficinas y de miembros: sólo el org_admin, vía
+    // endpoints/offices.ts y endpoints/orgMembers.ts (las colecciones siguen cerradas).
+    offices: ['create', 'read', 'update'],
+    'organization-memberships': ['read', 'update'],
     agents: ['create', 'read', 'update'],
     assets: ['read', 'update', 'delete'],
     'non-network-assets': ['create', 'read', 'update', 'delete'],

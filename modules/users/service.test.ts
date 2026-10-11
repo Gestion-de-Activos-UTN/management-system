@@ -9,6 +9,7 @@ const member = (role: OrgMember['role'], officeIds: string[]): OrgMember => ({
   role,
   office_ids: officeIds,
   status: 'active',
+  is_active: true,
 })
 
 test('los roles de oficina sólo pueden ser responsables en sus oficinas', () => {

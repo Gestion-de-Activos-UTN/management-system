@@ -49,7 +49,9 @@ import { assetBusinessEndpoint } from './endpoints/assetBusiness'
 import { agingSweepEndpoint, expireRawScanPayloadsEndpoint } from './endpoints/internalJobs'
 import { agingSweep } from './domain/inventories/agingSweep'
 import { generateInventorySnapshotEndpoint } from './endpoints/inventorySnapshots'
-import { orgMembersEndpoint } from './endpoints/orgMembers'
+import { orgMembersEndpoint, updateOrgMemberEndpoint } from './endpoints/orgMembers'
+import { officeEndpoints } from './endpoints/offices'
+import { myProfileEndpoints } from './endpoints/myProfile'
 import {
   organizationSettingsGetEndpoint,
   organizationSettingsUpdateEndpoint,
@@ -146,6 +148,7 @@ export default buildConfig({
     expireRawScanPayloadsEndpoint,
     generateInventorySnapshotEndpoint,
     orgMembersEndpoint,
+    updateOrgMemberEndpoint,
     organizationSettingsGetEndpoint,
     organizationSettingsUpdateEndpoint,
     organizationMaturityUpdateEndpoint,
@@ -167,6 +170,8 @@ export default buildConfig({
     latestRiskEvaluationEndpoint,
     ...taskEndpoints,
     ...portalMessageEndpoints,
+    ...officeEndpoints,
+    ...myProfileEndpoints,
   ],
   jobs: {
     // Queue supersede/delete/create must use the caller's transaction, without the hook path

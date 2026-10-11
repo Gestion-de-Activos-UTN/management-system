@@ -1,11 +1,12 @@
 import type { CollectionConfig } from 'payload'
-import { PortalMessageEntityTypes, PORTAL_MESSAGE_SECTIONS } from '@/modules/portal-messages/schema'
+import { ROLE_LABELS } from '@/lib/role-labels'
+import {
+  PortalMessageEntityTypes,
+  PORTAL_MESSAGE_ROLES,
+  PORTAL_MESSAGE_SECTIONS,
+} from '@/modules/portal-messages/schema'
 
-const ORG_ROLE_OPTIONS = [
-  { label: 'Administrador de organización', value: 'org_admin' },
-  { label: 'Visualizador de organización', value: 'org_viewer' },
-  { label: 'Responsable de oficina', value: 'office_manager' },
-]
+const ORG_ROLE_OPTIONS = PORTAL_MESSAGE_ROLES.map(value => ({ label: ROLE_LABELS[value], value }))
 
 export const PortalMessages: CollectionConfig = {
   slug: 'portal-messages',

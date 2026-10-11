@@ -27,7 +27,7 @@ export const platformAdminProfileEndpoint: Endpoint = {
       req,
       depth: 0,
     })
-    return json({ name: admin.name ?? '' })
+    return json({ name: admin.name ?? '', email: admin.email })
   },
 }
 
@@ -38,8 +38,7 @@ export const updatePlatformAdminProfileEndpoint: Endpoint = {
     const auth = await currentPlatformAdmin(req)
     if (auth.response) return auth.response
     const parsed = PlatformAdminProfileSchema.safeParse(await req.json!().catch(() => ({})))
-    if (!parsed.success)
-      return json({ error: 'invalid_profile', issues: parsed.error.issues }, 400)
+    if (!parsed.success) return json({ error: 'invalid_profile', issues: parsed.error.issues }, 400)
 
     // AUDIT: this action must emit an AuditLogs entry (chain_hash over {platform admin profile name}, previous hash for the platform scope)
     // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
@@ -51,6 +50,6 @@ export const updatePlatformAdminProfileEndpoint: Endpoint = {
       req,
       depth: 0,
     })
-    return json({ name: admin.name ?? '' })
+    return json({ name: admin.name ?? '', email: admin.email })
   },
 }

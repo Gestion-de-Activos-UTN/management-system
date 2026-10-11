@@ -28,7 +28,10 @@ export default function LoginPage() {
     e.preventDefault()
     login.mutate(
       { email, password },
-      { onSuccess: session => router.replace(session.collection === 'admins' ? '/' : '/portal') }
+      {
+        onSuccess: ({ session }) =>
+          router.replace(session.collection === 'admins' ? '/' : '/portal'),
+      }
     )
   }
 

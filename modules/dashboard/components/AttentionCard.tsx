@@ -23,7 +23,7 @@ export function AttentionCard({
 }) {
   const pending = items.filter(item => item.count > 0)
   return (
-    <Card withBorder radius="lg" p="lg" h="100%">
+    <Card withBorder radius="lg" p="lg">
       <Stack gap="md">
         <Group justify="space-between">
           <Text fw={700}>Requiere atención</Text>

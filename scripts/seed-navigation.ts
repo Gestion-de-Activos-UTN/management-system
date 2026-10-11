@@ -1,22 +1,76 @@
+import { randomUUID } from 'node:crypto'
 import { pathToFileURL } from 'node:url'
-import type { Payload, PayloadRequest } from 'payload'
+import type { Payload, PayloadRequest, Where } from 'payload'
 import config from '../payload.config'
 import { createOrgWithAdmin } from '../domain/organizations/createOrgWithAdmin'
 import { initializeSeedPayload } from './seed-payload'
+import { DEMO_OFFICES, type DemoOffice } from '../domain/demo/demo-offices'
 import { PORTAL_MESSAGE_TEMPLATES } from '../modules/portal-messages/templates'
 
 // Único script de esta fase (modo navegación de solo lectura): siembra, en una sola
 // transacción atómica, los 4 roles base, una organización demo completa (Settings +
-// Subscription + Office vía createOrgWithAdmin) y un usuario por rol. Credenciales fijas
-// a propósito — es un seed de navegación/demo, no producción.
+// Subscription + Office vía createOrgWithAdmin), un usuario por rol y los datos de
+// Administración (ubicación de oficinas, una oficina inactiva, personas desactivadas o en
+// incorporación). Credenciales fijas a propósito — es un seed de navegación/demo, no producción.
 const ORG_NAME = 'Demo Organization'
 
+// Personas demo con nombres reales; el email es la credencial y no cambia. `legacyName` es el
+// nombre genérico que usaban antes: sólo ese se reemplaza al reparar una base ya sembrada.
 const CREDENTIALS = {
-  org_admin: { email: 'org-admin@siam.com', password: 'Password2026' },
-  org_viewer: { email: 'org-viewer@siam.com', password: 'Password2026' },
-  office_manager: { email: 'main-manager@siam.com', password: 'Password2026' },
-  office_manager_secondary: { email: 'secondary-manager@siam.com', password: 'Password2026' },
-  platform_admin: { email: 'platform-admin@siam.com', password: 'Password2026' },
+  org_admin: {
+    email: 'org-admin@siam.com',
+    password: 'Password2026',
+    name: 'Valeria Rossi',
+    legacyName: 'Org Admin',
+  },
+  org_viewer: {
+    email: 'org-viewer@siam.com',
+    password: 'Password2026',
+    name: 'Diego Martínez',
+    legacyName: 'Org Viewer',
+  },
+  office_manager: {
+    email: 'main-manager@siam.com',
+    password: 'Password2026',
+    name: 'Sofía Herrera',
+    legacyName: 'Main Office Manager',
+  },
+  office_manager_secondary: {
+    email: 'secondary-manager@siam.com',
+    password: 'Password2026',
+    name: 'Joaquín Benítez',
+    legacyName: 'Secondary Office Manager',
+  },
+  platform_admin: {
+    email: 'platform-admin@siam.com',
+    password: 'Password2026',
+    name: 'Carolina Paz',
+    legacyName: 'Platform Admin',
+  },
+}
+
+/** Reemplaza los nombres genéricos de una base sembrada antes; respeta los que se editaron. */
+async function renameLegacyDemoPeople(payload: Payload, req: PayloadRequest) {
+  for (const [key, person] of Object.entries(CREDENTIALS)) {
+    const collection = key === 'platform_admin' ? 'admins' : 'users'
+    const found = await payload.find({
+      collection,
+      where: { email: { equals: person.email } },
+      overrideAccess: true,
+      req,
+      limit: 1,
+    })
+    const doc = found.docs[0]
+    if (doc && doc.name === person.legacyName) {
+      await payload.update({
+        collection,
+        id: doc.id,
+        overrideAccess: true,
+        req,
+        data: { name: person.name },
+      })
+    }
+  }
 }
 
 const ROLES = [
@@ -81,6 +135,145 @@ async function ensurePortalWelcomeMessage(payload: Payload, req: PayloadRequest)
   return true
 }
 
+const INACTIVE_OFFICE = {
+  name: 'Sucursal Córdoba',
+  province_id: '14',
+  department_id: '14014', // Córdoba, Capital
+}
+// Personas sin credenciales impresas: sólo existen para mostrar estados en Administración →
+// Usuarios. Una quedó desactivada al cerrarse su oficina; la otra todavía se está incorporando.
+const FORMER_MANAGER = { email: 'former-manager@siam.com', name: 'Lucía Fernández' }
+const ONBOARDING_VIEWER = { email: 'new-viewer@siam.com', name: 'Martín Gómez' }
+
+async function findOneDoc<C extends 'offices' | 'users'>(
+  payload: Payload,
+  req: PayloadRequest,
+  collection: C,
+  where: Where
+) {
+  const found = await payload.find({ collection, where, overrideAccess: true, req, limit: 1 })
+  return found.docs[0]
+}
+
+async function ensureSeedMember(
+  payload: Payload,
+  req: PayloadRequest,
+  input: {
+    organizationId: string
+    email: string
+    name: string
+    officeId: string
+    roleSlug: 'office_manager' | 'org_viewer'
+    membership: { is_active: boolean; status: 'active' | 'onboarding' }
+  }
+) {
+  // Si ya existe no se toca: un administrador pudo haberla reactivado o editado.
+  if (await findOneDoc(payload, req, 'users', { email: { equals: input.email } })) return
+  const role = await findRoleBySlug(payload, req, input.roleSlug)
+  const user = await payload.create({
+    collection: 'users',
+    overrideAccess: true,
+    req,
+    data: {
+      email: input.email,
+      // Sin login en la demo: contraseña aleatoria que nadie conoce.
+      password: randomUUID(),
+      name: input.name,
+      status: input.membership.is_active ? 'active' : 'inactive',
+    },
+  })
+  await payload.create({
+    collection: 'organization-memberships',
+    overrideAccess: true,
+    req,
+    data: {
+      user: user.id,
+      organization: input.organizationId,
+      offices: [input.officeId],
+      role: role.id,
+      ...input.membership,
+    },
+  })
+}
+
+/**
+ * Busca una oficina demo por su nombre actual o el heredado ("Main Office"/"Secondary Office").
+ * Si todavía tiene el heredado lo reemplaza, y completa la ubicación si falta; nunca pisa lo que
+ * se haya editado a mano.
+ */
+async function findDemoOffice(
+  payload: Payload,
+  req: PayloadRequest,
+  organizationId: string,
+  demo: DemoOffice
+) {
+  const office = await findOneDoc(payload, req, 'offices', {
+    and: [
+      { organization: { equals: organizationId } },
+      { name: { in: [demo.name, demo.legacyName] } },
+    ],
+  })
+  if (!office) return undefined
+  const repair = {
+    ...(office.name === demo.legacyName ? { name: demo.name } : {}),
+    ...(!office.province_id
+      ? { province_id: demo.province_id, department_id: demo.department_id }
+      : {}),
+  }
+  if (!Object.keys(repair).length) return office
+  return payload.update({
+    collection: 'offices',
+    id: office.id,
+    overrideAccess: true,
+    req,
+    data: repair,
+  })
+}
+
+/**
+ * Datos de Administración: ubicación de las oficinas, una oficina inactiva y personas en otros
+ * estados. Idempotente y no destructivo: sólo completa lo que falta.
+ */
+async function ensureAdministrationDemo(
+  payload: Payload,
+  req: PayloadRequest,
+  organizationId: string
+) {
+  await findDemoOffice(payload, req, organizationId, DEMO_OFFICES.main)
+  const secondaryOffice = await findDemoOffice(payload, req, organizationId, DEMO_OFFICES.secondary)
+
+  const inactiveOffice =
+    (await findOneDoc(payload, req, 'offices', {
+      and: [
+        { organization: { equals: organizationId } },
+        { name: { equals: INACTIVE_OFFICE.name } },
+      ],
+    })) ??
+    (await payload.create({
+      collection: 'offices',
+      overrideAccess: true,
+      req,
+      data: { organization: organizationId, ...INACTIVE_OFFICE, is_active: false },
+    }))
+
+  await ensureSeedMember(payload, req, {
+    organizationId,
+    ...FORMER_MANAGER,
+    officeId: String(inactiveOffice.id),
+    roleSlug: 'office_manager',
+    membership: { is_active: false, status: 'active' },
+  })
+  if (secondaryOffice) {
+    await ensureSeedMember(payload, req, {
+      organizationId,
+      ...ONBOARDING_VIEWER,
+      officeId: String(secondaryOffice.id),
+      roleSlug: 'org_viewer',
+      membership: { is_active: true, status: 'onboarding' },
+    })
+  }
+}
+
 async function findOrCreateRole(
   payload: Payload,
   req: PayloadRequest,
@@ -115,22 +308,14 @@ async function ensureSecondaryOfficeAndAdminScope(
   req: PayloadRequest,
   organizationId: string
 ) {
-  const officesResult = await payload.find({
-    collection: 'offices',
-    where: {
-      and: [{ organization: { equals: organizationId } }, { name: { equals: 'Secondary Office' } }],
-    },
-    overrideAccess: true,
-    req,
-    limit: 1,
-  })
+  const { legacyName: _, ...secondary } = DEMO_OFFICES.secondary
   const secondaryOffice =
-    officesResult.docs[0] ??
+    (await findDemoOffice(payload, req, organizationId, DEMO_OFFICES.secondary)) ??
     (await payload.create({
       collection: 'offices',
       overrideAccess: true,
       req,
-      data: { organization: organizationId, name: 'Secondary Office' },
+      data: { organization: organizationId, ...secondary },
     }))
 
   const adminUsers = await payload.find({
@@ -190,7 +375,7 @@ async function ensureSecondaryOfficeAndAdminScope(
       data: {
         email: CREDENTIALS.office_manager_secondary.email,
         password: CREDENTIALS.office_manager_secondary.password,
-        name: 'Secondary Office Manager',
+        name: CREDENTIALS.office_manager_secondary.name,
       },
     }))
   const secondaryMemberships = await payload.find({
@@ -237,8 +422,8 @@ async function ensureSecondaryOfficeAndAdminScope(
 
 function printCredentials() {
   console.log('Credenciales de navegación (demo, no producción):')
-  for (const [role, { email, password }] of Object.entries(CREDENTIALS)) {
-    console.log(`  ${role}: ${email} / ${password}`)
+  for (const [role, { email, password, name }] of Object.entries(CREDENTIALS)) {
+    console.log(`  ${role}: ${name} · ${email} / ${password}`)
   }
 }
 
@@ -254,6 +439,8 @@ export async function seedNavigation(payload: Payload) {
     const req = { transactionID } as PayloadRequest
     try {
       await ensureSecondaryOfficeAndAdminScope(payload, req, String(existingOrg.docs[0].id))
+      await ensureAdministrationDemo(payload, req, String(existingOrg.docs[0].id))
+      await renameLegacyDemoPeople(payload, req)
       await ensurePortalWelcomeMessage(payload, req)
       if (transactionID) await payload.db.commitTransaction(transactionID)
     } catch (err) {
@@ -282,16 +469,18 @@ export async function seedNavigation(payload: Payload) {
         industry: 'Tecnología',
         adminEmail: CREDENTIALS.org_admin.email,
         adminPassword: CREDENTIALS.org_admin.password,
-        adminName: 'Org Admin',
+        adminName: CREDENTIALS.org_admin.name,
+        officeName: DEMO_OFFICES.main.name,
       },
       req
     )
 
+    const { legacyName: _, ...secondary } = DEMO_OFFICES.secondary
     const secondaryOffice = await payload.create({
       collection: 'offices',
       overrideAccess: true,
       req,
-      data: { organization: organization.id, name: 'Secondary Office' },
+      data: { organization: organization.id, ...secondary },
     })
 
     await payload.update({
@@ -310,7 +499,7 @@ export async function seedNavigation(payload: Payload) {
       data: {
         email: CREDENTIALS.org_viewer.email,
         password: CREDENTIALS.org_viewer.password,
-        name: 'Org Viewer',
+        name: CREDENTIALS.org_viewer.name,
       },
     })
     await payload.create({
@@ -335,7 +524,7 @@ export async function seedNavigation(payload: Payload) {
       data: {
         email: CREDENTIALS.office_manager.email,
         password: CREDENTIALS.office_manager.password,
-        name: 'Main Office Manager',
+        name: CREDENTIALS.office_manager.name,
       },
     })
     await payload.create({
@@ -359,7 +548,7 @@ export async function seedNavigation(payload: Payload) {
       data: {
         email: CREDENTIALS.office_manager_secondary.email,
         password: CREDENTIALS.office_manager_secondary.password,
-        name: 'Secondary Office Manager',
+        name: CREDENTIALS.office_manager_secondary.name,
       },
     })
     await payload.create({
@@ -384,11 +573,12 @@ export async function seedNavigation(payload: Payload) {
       data: {
         email: CREDENTIALS.platform_admin.email,
         password: CREDENTIALS.platform_admin.password,
-        name: 'Platform Admin',
+        name: CREDENTIALS.platform_admin.name,
         role: platformAdminRole.id,
       },
     })
 
+    await ensureAdministrationDemo(payload, req, String(organization.id))
     await ensurePortalWelcomeMessage(payload, req)
 
     if (transactionID) await payload.db.commitTransaction(transactionID)

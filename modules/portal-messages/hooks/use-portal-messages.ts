@@ -10,6 +10,7 @@ import {
   savePortalMessage,
   updatePortalMessageReceipt,
 } from '../service'
+import { showApiError } from '@/lib/notify-error'
 import type { PortalMessageInput } from '../schema'
 
 export function useAdminPortalMessages(organizationIds: string[]) {
@@ -41,6 +42,26 @@ export function useSavePortalMessage() {
   })
 }
 
+export function useSetPortalMessageActive() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ input, id }: { input: PortalMessageInput; id: string }) =>
+      savePortalMessage(input, id),
+    onSuccess: (_, { input }) => {
+      notifications.show({
+        color: 'green',
+        message: input.is_active ? 'Mensaje activado.' : 'Mensaje desactivado.',
+      })
+      return queryClient.invalidateQueries({ queryKey: ['platform-admin', 'portal-messages'] })
+    },
+    onError: (error, { input }) =>
+      showApiError(
+        error,
+        input.is_active ? 'No se pudo activar el mensaje.' : 'No se pudo desactivar el mensaje.'
+      ),
+  })
+}
+
 export function useReplayPortalMessage() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -52,9 +73,7 @@ export function useReplayPortalMessage() {
       })
       return queryClient.invalidateQueries({ queryKey: ['platform-admin', 'portal-messages'] })
     },
-    onError: () => {
-      notifications.show({ color: 'red', message: 'No se pudo volver a mostrar el mensaje.' })
-    },
+    onError: error => showApiError(error, 'No se pudo volver a mostrar el mensaje.'),
   })
 }
 
