@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, expect, it } from 'vitest'
 import {
   createLocalReq,
   getPayload,
@@ -10,7 +10,6 @@ import { sql, type PostgresAdapter } from '@payloadcms/db-postgres'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { seedDemoData } from '@/domain/demo/seedDemoData'
-import { loginBudget, loginOrigins } from '@/access/auth/login-throttle'
 import { expireRawScanPayloads } from '@/domain/inventories/expireRawScanPayloads'
 
 let payload: Payload, config: SanitizedConfig
@@ -84,12 +83,8 @@ beforeAll(async () => {
   config.admin.importMap.autoGenerate = false
   config.jobs.autoRun = []
   payload = await getPayload({ config })
-  loginBudget.clear()
-  loginOrigins.clear()
 })
 afterAll(async () => {
-  loginBudget.clear()
-  loginOrigins.clear()
   if (payload) await payload.destroy()
 })
 
@@ -244,25 +239,6 @@ it('retention: raw reports expire at 30 days, document summaries survive, job is
     asset_evidence_expired: 0,
     snapshot_evidence_expired: 0,
   })
-})
-
-it('SEC-41: process budget returns 429 without locking an account; a cleared budget allows login', async () => {
-  const email = `throttle-${crypto.randomUUID()}@example.test`
-  await payload.create({ collection: 'users', overrideAccess: true, data: { email, password, name: 'Throttle fixture', status: 'active' } })
-  loginBudget.clear()
-  loginOrigins.clear()
-  // Exhaust the real bucket at a fixed bucket clock, independent of bcrypt/CPU load.
-  const clock = Date.now()
-  const realTake = loginBudget.take.bind(loginBudget)
-  const take = vi.spyOn(loginBudget, 'take').mockImplementation(key => realTake(key, clock))
-  try {
-    for (let i = 0; i < 120; i++) expect(loginBudget.take('all')).toBe(true)
-    const result = await api('/api/users/login', 'POST', { email, password: 'incorrect' })
-    expect(result.status).toBe(429)
-    expect(result.response.headers.get('retry-after')).toBe('1')
-  } finally { take.mockRestore() }
-  loginBudget.clear()
-  await login(email)
 })
 
 it('SEC-42: deactivation revokes every cookie, rejects refresh/login and reactivation needs a new login', async () => {

@@ -1,5 +1,4 @@
 import type { CollectionConfig } from 'payload'
-import { throttleLogin } from '../../access/auth/login-throttle'
 import {
   guardSessionOperation,
   prepareAccountLogin,
@@ -20,7 +19,9 @@ export const Admins: CollectionConfig = {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'Lax',
     },
-    maxLoginAttempts: 0,
+    // Payload's native lockout: no proxy/infra needed. The lock expires on its own after lockTime.
+    maxLoginAttempts: 5,
+    lockTime: 10 * 60 * 1000,
     useSessions: true,
   },
   admin: {
@@ -28,7 +29,7 @@ export const Admins: CollectionConfig = {
   },
   endpoints: [{ path: '/first-register', method: 'post', handler: () => Response.json({ error: 'Bootstrap is available only through the seed CLI' }, { status: 403 }) }],
   access: {
-    // No account-wide lockout or manual unlock; process-local throttling bounds attempts.
+    // No manual unlock: a locked account waits for lockTime instead.
     unlock: () => false,
     create: () => false,
     read: () => false,
@@ -36,7 +37,7 @@ export const Admins: CollectionConfig = {
     delete: () => false,
   },
   hooks: {
-    beforeOperation: [throttleLogin, guardSessionOperation],
+    beforeOperation: [guardSessionOperation],
     beforeLogin: [prepareAccountLogin],
     beforeChange: [revokeInactiveSessions],
     afterLogout: [lockLogout],

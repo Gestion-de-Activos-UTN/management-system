@@ -115,7 +115,7 @@ afterAll(async () => {
   if (payload) await payload.destroy()
 })
 
-it('SEC-40/41: cookies cannot unlock; bad attempts do not lock accounts', async () => {
+it('SEC-40: cookies cannot unlock; five bad attempts lock the account until lockTime', async () => {
   const roles = await payload.find({
     collection: 'roles',
     overrideAccess: true,
@@ -156,7 +156,7 @@ it('SEC-40/41: cookies cannot unlock; bad attempts do not lock accounts', async 
       })
     expect(
       (await api(`/api/${collection}/login`, 'POST', { email: account.email, password })).status
-    ).toBe(200)
+    ).toBe(401)
     for (const actor of [undefined, viewerCookie, adminCookie]) {
       expect(
         (await api(`/api/${collection}/unlock`, 'POST', { email: account.email }, actor)).status
@@ -167,8 +167,9 @@ it('SEC-40/41: cookies cannot unlock; bad attempts do not lock accounts', async 
       ).toBe(403)
     }
     const after = await payload.db.findOne({ collection, where: { id: { equals: account.id } } })
-    expect((after as unknown as { loginAttempts?: number }).loginAttempts ?? 0).toBe(0)
-    expect((after as unknown as { lockUntil?: string }).lockUntil ?? null).toBeNull()
+    expect(Date.parse((after as unknown as { lockUntil: string }).lockUntil)).toBeGreaterThan(Date.now())
+    // Simulate lockTime elapsing: the account unlocks by itself, no manual unlock needed.
+    await payload.db.updateOne({ collection, id: account.id, data: { lockUntil: new Date(Date.now() - 1000).toISOString() } })
     expect(
       (await api(`/api/${collection}/login`, 'POST', { email: account.email, password })).status
     ).toBe(200)

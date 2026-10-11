@@ -65,10 +65,8 @@ docker compose logs app | grep -A3 "Credenciales de navegación"
 
 Un único login (`http://localhost:3001/login`) para los dos portales — prueba `admins` y, si falla, `users`; el que responda decide a dónde redirige:
 
-No se bloquea una cuenta por intentos incorrectos. Ambas colecciones comparten un presupuesto
-de login en memoria (120 intentos de capacidad, reposición de dos por segundo); al excederlo,
-HTTP 429 y `Retry-After: 1`. Los contadores se reinician con el proceso. Por defecto no se confían
-headers de IP del cliente. `SIAM_TRUST_LOGIN_PROXY=1` requiere un proxy que reemplace `x-real-ip`.
+Tras 5 intentos incorrectos la cuenta queda bloqueada 10 minutos (lockout nativo de Payload) y se
+desbloquea sola; no existe desbloqueo manual. Aplica a `users` y `admins`.
 Desactivar Users/Admins revoca todas sus sesiones; reactivar exige volver a iniciar sesión.
 
 | Rol              | Portal                   | Ve "Administración" |
