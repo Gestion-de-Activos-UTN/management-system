@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { TASK_REFERENCE_COLLECTIONS } from '@/modules/tasks/schema'
+import { ORGANIZATION_ROLES } from '@/modules/users/schema'
 
 export const PORTAL_MESSAGE_SECTIONS = [
   'dashboard',
@@ -10,7 +11,7 @@ export const PORTAL_MESSAGE_SECTIONS = [
   'administration',
 ] as const
 
-export const PORTAL_MESSAGE_ROLES = ['org_admin', 'org_viewer', 'office_manager'] as const
+export const PORTAL_MESSAGE_ROLES = ORGANIZATION_ROLES
 
 const organizationIds = z.array(z.uuid()).min(1, 'Selecciona al menos una organización.').max(500)
 

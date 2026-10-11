@@ -19,7 +19,7 @@ test('inferDeviceCategory: usa osclass.type de Nmap con mayor peso cuando su pre
   })
   assert.equal(result.category, 'printer')
   assert.equal(result.tier, 'likely')
-  assert.match(result.signals[0], /Nmap device class/)
+  assert.match(result.signals[0], /clase de dispositivo de Nmap/)
 })
 
 test('inferDeviceCategory: OS "Windows" con cero puertos confirmados (nmap fingerprint erróneo de un celular real, os_accuracy=100) clasifica mobile sin depender del modelo en el hostname', () => {
@@ -147,5 +147,5 @@ test('inferDeviceCategory: conflicto directo de gateway no clasifica por heurís
   })
   assert.equal(result.category, null)
   assert.equal(result.tier, 'unknown')
-  assert.match(result.signals[0], /conflicting/)
+  assert.match(result.signals[0], /contradictoria/)
 })

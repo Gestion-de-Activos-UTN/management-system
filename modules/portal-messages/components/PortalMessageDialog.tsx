@@ -1,13 +1,13 @@
 'use client'
 
 import { useRef, type ReactNode } from 'react'
-import { Button, Card, Group, Modal, Paper, Stack, Text, ThemeIcon } from '@mantine/core'
+import { Box, Button, Card, Flex, Group, Modal, Paper, Stack, Text, ThemeIcon } from '@mantine/core'
 import { ArrowRight } from 'lucide-react'
 import { STATUS_TONE_COLOR } from '@/components/ui/StatusBadge'
 import type { PortalMessageDTO } from '../service'
 import {
   PORTAL_MESSAGE_TYPE_ICONS,
-  PORTAL_MESSAGE_TYPE_LABELS,
+  PORTAL_MESSAGE_RECIPIENT_TYPE_LABELS,
   PORTAL_MESSAGE_TYPE_TONES,
   portalMessageLinkType,
 } from '../portal-message-labels'
@@ -71,7 +71,7 @@ export function PortalMessageDialog({
       </ThemeIcon>
       <Stack gap={2} miw={0}>
         <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
-          {PORTAL_MESSAGE_TYPE_LABELS[shown.message_type]}
+          {PORTAL_MESSAGE_RECIPIENT_TYPE_LABELS[shown.message_type]}
           {hasQueue && ` · ${queuePosition} de ${queueTotal}`}
         </Text>
         {title}
@@ -79,8 +79,11 @@ export function PortalMessageDialog({
     </Group>
   )
 
+  // data-autofocus: el modal enfoca la acción principal, no el primer botón que encuentre.
   const primary = (
     <Button
+      fullWidth
+      data-autofocus
       onClick={onAction}
       loading={loadingPrimary}
       disabled={linkBlocked}
@@ -90,46 +93,59 @@ export function PortalMessageDialog({
     </Button>
   )
 
-  const footer = actionable ? (
-    revisit ? (
-      <Group justify="flex-end" gap="xs">
-        <Button variant="default" onClick={onClose}>
-          Cerrar
-        </Button>
-        {primary}
-      </Group>
-    ) : (
-      <Group justify="space-between" gap="xs">
-        <Button variant="subtle" color="gray" onClick={onNoThanks} loading={loadingNoThanks}>
-          No gracias
-        </Button>
-        <Group gap="xs" ml="auto">
-          <Button variant="default" onClick={onRemindLater}>
-            Recordarme más tarde
-          </Button>
-          {primary}
-        </Group>
-      </Group>
-    )
-  ) : (
-    <Group justify="flex-end">
-      {revisit ? (
-        <Button variant="default" onClick={onClose}>
-          Cerrar
-        </Button>
-      ) : (
-        <Button onClick={onAcknowledge}>Entendido</Button>
-      )}
-    </Group>
+  // Las acciones van en una fila, todas del mismo ancho, con la principal a la derecha. En
+  // pantallas angostas se apilan con la principal arriba (column-reverse).
+  const actions = (...buttons: ReactNode[]) => (
+    <Flex direction={{ base: 'column-reverse', xs: 'row' }} gap="xs">
+      {buttons.map((button, index) => (
+        <Box key={index} style={{ flex: 1, minWidth: 0 }}>
+          {button}
+        </Box>
+      ))}
+    </Flex>
   )
+  const footer = actionable
+    ? revisit
+      ? actions(
+          <Button fullWidth variant="default" onClick={onClose}>
+            Cerrar
+          </Button>,
+          primary
+        )
+      : actions(
+          <Button fullWidth variant="default" onClick={onNoThanks} loading={loadingNoThanks}>
+            No gracias
+          </Button>,
+          <Button fullWidth variant="default" onClick={onRemindLater}>
+            Recordarme más tarde
+          </Button>,
+          primary
+        )
+    : actions(
+        revisit ? (
+          <Button fullWidth variant="default" data-autofocus onClick={onClose}>
+            Cerrar
+          </Button>
+        ) : (
+          <Button fullWidth data-autofocus onClick={onAcknowledge}>
+            Entendido
+          </Button>
+        )
+      )
+
+  // En un accionable que sólo lleva a una sección, la tarjeta repetiría lo que ya dice el botón:
+  // se muestra cuando aporta (una entidad concreta, o por qué el enlace no está disponible).
+  // En un aviso es la única forma de navegar, así que siempre va, con su "Abrir".
+  const showLink =
+    shown.entity &&
+    (!actionable || shown.entity.kind === 'entity' || shown.entity.access !== 'allowed')
 
   const body = (
     <Stack gap="md">
       <Text style={{ whiteSpace: 'pre-wrap' }}>{shown.description}</Text>
-      {shown.entity && (
+      {showLink && shown.entity && (
         <LinkedEntity
           entity={shown.entity}
-          // En un aviso el enlace es la única forma de navegar; en uno accionable lo hace la acción.
           onOpen={actionable ? undefined : onAction}
           loading={loadingPrimary}
         />
@@ -140,7 +156,7 @@ export function PortalMessageDialog({
 
   if (variant === 'inline') {
     return (
-      <Card withBorder radius="lg" shadow="sm" w="100%" maw={480} mx="auto" p="lg">
+      <Card withBorder radius="lg" shadow="sm" w="100%" maw={620} mx="auto" p="lg">
         <Stack gap="md">
           {header(
             <Text component="h2" fw={700} fz="lg" lh={1.3}>
@@ -157,6 +173,8 @@ export function PortalMessageDialog({
     <Modal.Root
       opened={opened && Boolean(message)}
       onClose={onClose}
+      // lg: las tres acciones tienen que entrar del mismo ancho en una sola fila.
+      size="lg"
       centered
       transitionProps={{
         transition: 'pop',

@@ -22,11 +22,11 @@ import { useTasks } from '@/modules/tasks/hooks/use-tasks'
 import { AttentionCard, type AttentionItem } from '@/modules/dashboard/components/AttentionCard'
 import { RiskOverviewCard } from '@/modules/dashboard/components/RiskOverviewCard'
 import { MyTasksList, openTasks } from '@/modules/dashboard/components/MyTasksList'
-import { MetricsStrip } from '@/modules/dashboard/components/MetricsStrip'
+import { MetricsStrip } from '@/components/ui/MetricsStrip'
 import { EvidenceCoverageStrip } from '@/modules/dashboard/components/EvidenceCoverageStrip'
 import { ActivityTabsCard } from '@/modules/dashboard/components/ActivityTabsCard'
 import styles from '@/modules/dashboard/components/DashboardLayout.module.css'
-import { PortalMessagesCard } from '@/modules/portal-messages/components/PortalMessagesCard'
+import { PortalMessagesList } from '@/modules/portal-messages/components/PortalMessagesList'
 import { usePortalMessages } from '@/modules/portal-messages/hooks/use-portal-messages'
 import { isInPortalMessageHistory } from '@/modules/portal-messages/portal-message-labels'
 
@@ -129,29 +129,12 @@ export default function PortalDashboardPage() {
             href={href('/portal/risk-score')}
           />
         </div>
-        {/* Lateral: lo que hay que hacer o ver. */}
+        {/* Lateral: lo que requiere atención. */}
         <div className={styles.side}>
           <AttentionCard
             items={attention}
             isPending={metrics.isPending || risk.isPending || tasks.isPending}
           />
-          {tasksAvailable ? (
-            <ActivityTabsCard
-              tasksCount={tasks.data ? openTasks(tasks.data).length : undefined}
-              messagesCount={messages.data?.filter(item => isInPortalMessageHistory(item)).length}
-              tasks={
-                <MyTasksList
-                  tasks={tasks.data ?? []}
-                  isPending={tasks.isPending}
-                  tasksHref={href('/portal/tasks')}
-                  taskHref={id => href(`/portal/tasks/${id}`)}
-                />
-              }
-              messages={<PortalMessagesCard embedded />}
-            />
-          ) : (
-            <PortalMessagesCard />
-          )}
         </div>
         {/* Contexto numérico debajo del riesgo: infraestructura y calidad de la evidencia. */}
         <div className={styles.stats}>
@@ -187,6 +170,23 @@ export default function PortalDashboardPage() {
             ]}
           />
           <EvidenceCoverageStrip summary={risk.data} isPending={risk.isPending} />
+        </div>
+        <div className={styles.activity}>
+          <ActivityTabsCard
+            tasksCount={tasksAvailable && tasks.data ? openTasks(tasks.data).length : undefined}
+            messagesCount={messages.data?.filter(item => isInPortalMessageHistory(item)).length}
+            tasks={
+              tasksAvailable ? (
+                <MyTasksList
+                  tasks={tasks.data ?? []}
+                  isPending={tasks.isPending}
+                  tasksHref={href('/portal/tasks')}
+                  taskHref={id => href(`/portal/tasks/${id}`)}
+                />
+              ) : undefined
+            }
+            messages={<PortalMessagesList />}
+          />
         </div>
       </div>
     </Stack>

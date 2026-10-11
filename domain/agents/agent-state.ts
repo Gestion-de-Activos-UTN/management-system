@@ -7,7 +7,7 @@ export type AgentLifecycleStatus = (typeof AGENT_LIFECYCLE_STATUSES)[number]
 export const AGENT_RUNTIME_STATUSES = ['idle', 'scanning', 'unknown'] as const
 export type AgentRuntimeStatus = (typeof AGENT_RUNTIME_STATUSES)[number]
 
-export const AGENT_REVOCATION_REASONS = ['manual', 'auto_lockout_abuse'] as const
+export const AGENT_REVOCATION_REASONS = ['manual', 'auto_lockout_abuse', 'office_deactivated'] as const
 export type AgentRevocationReason = (typeof AGENT_REVOCATION_REASONS)[number]
 
 // Umbrales del lockout escalonado por intentos fallidos (ver resolveAgentAuth.ts). El lockout

@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import type { PlanLimits } from '@/domain/subscriptions/plan-limits'
 import { httpClient } from '@/lib/http-client'
 import { roleSlugLabel } from '@/lib/role-labels'
 import { useSession } from '@/lib/use-session'
@@ -16,6 +17,8 @@ export type TenantContext = {
   /** Row scope from access/rbac/permissions.ts::hasOrgWideScope; false = only officeIds. */
   orgWide: boolean
   features: Record<string, boolean>
+  /** Topes del plan; null sin organización o sin suscripción. */
+  limits: PlanLimits | null
   permissions: { tasks: string[]; assets: string[]; technicalEvidence?: boolean }
 }
 

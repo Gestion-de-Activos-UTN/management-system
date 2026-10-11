@@ -1,27 +1,25 @@
 'use client'
 
 import { useState } from 'react'
-import { Anchor, Card, Group, Skeleton, Stack, Text, UnstyledButton } from '@mantine/core'
+import { Group, Skeleton, Stack, Text, UnstyledButton } from '@mantine/core'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatRelativeDays } from '@/lib/format-date'
 import { usePortalMessageReceipt, usePortalMessages } from '../hooks/use-portal-messages'
 import { usePortalMessageActions } from '../hooks/use-portal-message-actions'
 import type { PortalMessageDTO } from '../service'
-import { PORTAL_MESSAGE_HISTORY_DAYS, isInPortalMessageHistory } from '../portal-message-labels'
+import {
+  PORTAL_MESSAGE_HISTORY_DAYS,
+  PORTAL_MESSAGE_RECIPIENT_TYPE_LABELS,
+  isInPortalMessageHistory,
+} from '../portal-message-labels'
 import { PortalMessageDialog } from './PortalMessageDialog'
 import { markPortalMessageShown } from '../session-state'
 
-const VISIBLE = 5
-
-/**
- * Mensajes vigentes del usuario: sin leer primero; los leídos hasta cumplir 30 días.
- * `embedded`: sin tarjeta ni título (va dentro de tabs).
- */
-export function PortalMessagesCard({ embedded = false }: { embedded?: boolean }) {
+/** Mensajes vigentes del usuario: sin leer primero; los leídos hasta cumplir 30 días. */
+export function PortalMessagesList() {
   const query = usePortalMessages()
   const receipt = usePortalMessageReceipt()
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [showAll, setShowAll] = useState(false)
   const messages = (query.data ?? [])
     .filter(message => isInPortalMessageHistory(message))
     .sort((a, b) => Number(a.seen) - Number(b.seen) || Number(a.dismissed) - Number(b.dismissed))
@@ -41,22 +39,13 @@ export function PortalMessagesCard({ embedded = false }: { embedded?: boolean })
       })
   }
 
-  const header = (unread > 0 || messages.length > VISIBLE || !embedded) && (
-    <Group justify="space-between">
-      <Group gap="xs">
-        {!embedded && <Text fw={700}>Mensajes</Text>}
-        {unread > 0 && <StatusBadge tone="info" label={`${unread} sin leer`} />}
-      </Group>
-      {messages.length > VISIBLE && (
-        <Anchor component="button" size="sm" onClick={() => setShowAll(value => !value)}>
-          {showAll ? 'Ver menos' : `Ver todos (${messages.length})`}
-        </Anchor>
-      )}
-    </Group>
-  )
   const content = (
     <Stack gap="md">
-      {header}
+      {unread > 0 && (
+        <Group justify="flex-end">
+          <StatusBadge tone="info" label={`${unread} sin leer`} />
+        </Group>
+      )}
       {query.isPending ? (
         <Stack gap="sm">
           <Skeleton height={40} />
@@ -73,7 +62,7 @@ export function PortalMessagesCard({ embedded = false }: { embedded?: boolean })
         </Text>
       ) : (
         <Stack gap="xs">
-          {(showAll ? messages : messages.slice(0, VISIBLE)).map(message => (
+          {messages.map(message => (
             <UnstyledButton
               key={message.id}
               onClick={() => open(message)}
@@ -87,9 +76,7 @@ export function PortalMessagesCard({ embedded = false }: { embedded?: boolean })
                   <Text size="xs" c="dimmed">
                     {message.dismissed
                       ? 'Ya respondido'
-                      : message.message_type === 'actionable'
-                        ? 'Acción requerida'
-                        : 'Aviso'}
+                      : PORTAL_MESSAGE_RECIPIENT_TYPE_LABELS[message.message_type]}
                     {message.createdAt && ` · ${formatRelativeDays(message.createdAt)}`}
                   </Text>
                 </div>
@@ -109,13 +96,7 @@ export function PortalMessagesCard({ embedded = false }: { embedded?: boolean })
 
   return (
     <>
-      {embedded ? (
-        content
-      ) : (
-        <Card withBorder radius="lg" p="lg">
-          {content}
-        </Card>
-      )}
+      {content}
       <PortalMessageDialog
         message={active}
         opened={Boolean(active)}

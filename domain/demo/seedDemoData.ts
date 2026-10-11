@@ -27,6 +27,7 @@ import {
 import { relationId } from '@/lib/relationId'
 import { createHash } from 'node:crypto'
 import { withTransaction } from '@/domain/with-transaction'
+import { DEMO_OFFICES, isDemoOffice } from './demo-offices'
 
 const seedKey = (organization: string, kind: string, label: string) =>
   createHash('sha256')
@@ -422,9 +423,11 @@ async function requiredCore(payload: Payload, organizationName: string) {
     depth: 0,
     limit: 20,
   })
-  const mainOffice = offices.docs.find(office => office.name === 'Main Office') ?? offices.docs[0]
+  const mainOffice =
+    offices.docs.find(office => isDemoOffice(office.name, DEMO_OFFICES.main)) ?? offices.docs[0]
   const secondaryOffice =
-    offices.docs.find(office => office.name === 'Secondary Office') ?? offices.docs[1]
+    offices.docs.find(office => isDemoOffice(office.name, DEMO_OFFICES.secondary)) ??
+    offices.docs[1]
   if (!mainOffice || !secondaryOffice) throw new Error('The demo seed requires two offices')
 
   const emails: Record<DemoUserKey, string> = {
@@ -746,6 +749,129 @@ function snapshotContainsDemoAssets(value: unknown): boolean {
         )
     )
   )
+}
+
+type DemoPortalMessage = {
+  title: string
+  description: string
+  message_type: 'notice' | 'actionable'
+  template_key?: string
+  cta_label?: string
+  audience:
+    | { scope: 'global' }
+    | { scope: 'organizations'; target_kind: 'all' }
+    | { scope: 'organizations'; target_kind: 'role'; target_roles: string[] }
+    | { scope: 'organizations'; target_kind: 'user'; target_users: string[] }
+  linked_section?: string
+  linked_entity?: { relationTo: 'tasks'; value: string }
+  expires_at?: string | null
+  is_active?: boolean
+}
+
+/**
+ * Mensajes del portal que cubren cada caso visible: accionable con sección, aviso por rol,
+ * accionable enlazado a una tarea concreta, uno vencido y uno inactivo (estados del panel de
+ * administración). Se identifican por título: si ya existe, no se toca.
+ */
+async function ensureDemoPortalMessages(
+  payload: Payload,
+  core: Awaited<ReturnType<typeof requiredCore>>,
+  now: Date
+) {
+  const overdueTask = await findOne(payload, 'tasks', {
+    and: [
+      { organization: { equals: core.organizationId } },
+      { title: { equals: 'Validar dispositivo desconocido detectado' } },
+    ],
+  })
+  const messages: DemoPortalMessage[] = [
+    {
+      title: 'Completa la revisión de seguridad del trimestre',
+      description:
+        'Hay controles sin responder en la revisión de seguridad vigente. Completarla mejora la precisión del puntaje de riesgo.',
+      message_type: 'actionable',
+      template_key: 'security_review',
+      cta_label: 'Ir a la revisión',
+      audience: { scope: 'organizations', target_kind: 'all' },
+      linked_section: 'security-review',
+      expires_at: at(now, 45 * DAY),
+    },
+    {
+      title: 'Nuevo: registro de activos manuales',
+      description:
+        'Ya puedes cargar en el inventario los equipos que el escáner no detecta (impresoras, licencias, equipos fuera de la red).',
+      message_type: 'notice',
+      audience: { scope: 'organizations', target_kind: 'role', target_roles: ['office_manager'] },
+      linked_section: 'inventory',
+    },
+    ...(overdueTask
+      ? [
+          {
+            title: 'Tienes una tarea vencida',
+            description:
+              'Hay un dispositivo desconocido en la red de tu oficina que todavía no se validó.',
+            message_type: 'actionable' as const,
+            template_key: 'task_overdue',
+            cta_label: 'Ver la tarea',
+            audience: {
+              scope: 'organizations' as const,
+              target_kind: 'user' as const,
+              target_users: [String(core.users.mainManager.id)],
+            },
+            linked_section: 'tasks',
+            linked_entity: { relationTo: 'tasks' as const, value: String(overdueTask.id) },
+          },
+        ]
+      : []),
+    {
+      title: 'Mantenimiento programado de la plataforma',
+      description: 'El portal estuvo fuera de servicio durante la ventana de mantenimiento.',
+      message_type: 'notice',
+      template_key: 'general_announcement',
+      audience: { scope: 'global' },
+      expires_at: at(now, -3 * DAY),
+    },
+    {
+      title: 'Encuesta de satisfacción',
+      description: 'Cuéntanos cómo te resulta el portal en dos minutos.',
+      message_type: 'actionable',
+      cta_label: 'Responder',
+      audience: { scope: 'organizations', target_kind: 'all' },
+      is_active: false,
+    },
+  ]
+
+  for (const message of messages) {
+    if (await findOne(payload, 'portal-messages', { title: { equals: message.title } })) continue
+    const { audience } = message
+    // AUDIT: this action must emit an AuditLogs entry (portal message create, chain_hash over {portal message, audience, expiry, active state}, previous hash for the platform scope)
+    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+    await payload.create({
+      collection: 'portal-messages',
+      overrideAccess: true,
+      data: {
+        title: message.title,
+        description: message.description,
+        message_type: message.message_type,
+        template_key: message.template_key ?? null,
+        cta_label: message.cta_label ?? null,
+        scope: audience.scope,
+        target_organizations: audience.scope === 'organizations' ? [core.organizationId] : [],
+        target_kind: audience.scope === 'organizations' ? audience.target_kind : 'all',
+        target_roles:
+          'target_roles' in audience
+            ? (audience.target_roles as ('org_admin' | 'org_viewer' | 'office_manager')[])
+            : [],
+        target_users: 'target_users' in audience ? audience.target_users : [],
+        linked_section: (message.linked_section ?? null) as never,
+        linked_entity_type: message.linked_entity?.relationTo ?? null,
+        linked_entity: message.linked_entity ?? null,
+        expires_at: message.expires_at ?? null,
+        is_active: message.is_active ?? true,
+        delivery_version: 1,
+      },
+    })
+  }
 }
 
 export async function seedDemoData(
@@ -1462,5 +1588,6 @@ export async function seedDemoData(
       await recalculateRisk(payload, { organizationId: core.organizationId })
     }
   }
+  await ensureDemoPortalMessages(payload, core, now)
   return summary
 }

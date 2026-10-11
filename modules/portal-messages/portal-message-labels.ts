@@ -60,6 +60,11 @@ export function portalMessageLinkType(link: { kind: 'section' | 'entity'; relati
 }
 
 export const PORTAL_MESSAGE_TYPE_LABELS = { notice: 'Aviso', actionable: 'Accionable' } as const
+/** Lo mismo en palabras de quien recibe el mensaje ("Accionable" es jerga del panel). */
+export const PORTAL_MESSAGE_RECIPIENT_TYPE_LABELS = {
+  notice: 'Aviso',
+  actionable: 'Acción requerida',
+} as const
 export const PORTAL_MESSAGE_TYPE_TONES: Record<'notice' | 'actionable', StatusTone> = {
   notice: 'info',
   actionable: 'warning',

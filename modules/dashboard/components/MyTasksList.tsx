@@ -5,8 +5,6 @@ import { formatRelativeDays } from '@/lib/format-date'
 import type { TaskDTO } from '@/modules/tasks/service'
 import { TASK_STATUS_LABELS, TASK_STATUS_TONES } from '@/modules/tasks/task-labels'
 
-const VISIBLE = 5
-
 /** Tareas abiertas, primero las que vencen antes. */
 export function openTasks(tasks: TaskDTO[]) {
   return tasks
@@ -31,7 +29,7 @@ export function MyTasksList({
     <Stack gap="md">
       <Group justify="flex-end">
         <Anchor component={Link} href={tasksHref} size="sm">
-          Ver todas{open.length > VISIBLE ? ` (${open.length})` : ''}
+          Ver todas en Tareas
         </Anchor>
       </Group>
       {isPending ? (
@@ -45,7 +43,7 @@ export function MyTasksList({
         </Text>
       ) : (
         <Stack gap="xs">
-          {open.slice(0, VISIBLE).map(task => (
+          {open.map(task => (
             <Group key={task.id} justify="space-between" wrap="nowrap" gap="sm">
               <div style={{ minWidth: 0 }}>
                 <Anchor component={Link} href={taskHref(task.id)} size="sm" fw={600} c="inherit">

@@ -10,7 +10,7 @@ import {
   savePortalMessage,
   updatePortalMessageReceipt,
 } from '../service'
-import type { HttpError } from '@/lib/http-client'
+import { showApiError } from '@/lib/notify-error'
 import type { PortalMessageInput } from '../schema'
 
 export function useAdminPortalMessages(organizationIds: string[]) {
@@ -54,16 +54,11 @@ export function useSetPortalMessageActive() {
       })
       return queryClient.invalidateQueries({ queryKey: ['platform-admin', 'portal-messages'] })
     },
-    onError: (error: Partial<HttpError>, { input }) => {
-      notifications.show({
-        color: 'red',
-        message:
-          error.message ??
-          (input.is_active
-            ? 'No se pudo activar el mensaje.'
-            : 'No se pudo desactivar el mensaje.'),
-      })
-    },
+    onError: (error, { input }) =>
+      showApiError(
+        error,
+        input.is_active ? 'No se pudo activar el mensaje.' : 'No se pudo desactivar el mensaje.'
+      ),
   })
 }
 
@@ -78,9 +73,7 @@ export function useReplayPortalMessage() {
       })
       return queryClient.invalidateQueries({ queryKey: ['platform-admin', 'portal-messages'] })
     },
-    onError: () => {
-      notifications.show({ color: 'red', message: 'No se pudo volver a mostrar el mensaje.' })
-    },
+    onError: error => showApiError(error, 'No se pudo volver a mostrar el mensaje.'),
   })
 }
 
