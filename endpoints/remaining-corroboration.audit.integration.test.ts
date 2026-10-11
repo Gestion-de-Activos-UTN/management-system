@@ -74,6 +74,19 @@ it('SEC-09/10: concurrent identical retries apply inventory and snapshot once', 
   await expect(processScanReport(payload, { ...report, gateway_ip: '10.0.0.1' }, auth)).rejects.toMatchObject({ status: 409 })
 })
 
+it('REVIEW-02: concurrent distinct reports read each other after the organization lock', async () => {
+  const { auth } = await scope()
+  const reports = ['91', '92'].map(octet =>
+    auditReport(auth, [auditAsset(auth, { ip: `10.0.0.${octet}`, mac: `00:11:22:33:44:${octet}` })])
+  )
+  const results = await Promise.all(reports.map(report => processScanReport(payload, report, auth)))
+  expect(results.map(result => [result.status, result.alreadyProcessed])).toEqual([['processed', false], ['processed', false]])
+  // The second report must see the snapshot the first committed while it waited on the lock.
+  const snapshots = await payload.find({ collection: 'inventory-snapshots', overrideAccess: true,
+    where: { office: { equals: auth.officeId } } })
+  expect(snapshots.totalDocs).toBe(1)
+})
+
 it('SEC-38: anonymous first-register remains closed with an empty Admins collection', async () => {
   expect((await payload.count({ collection: 'admins', overrideAccess: true })).totalDocs).toBe(0)
   const role = await payload.create({

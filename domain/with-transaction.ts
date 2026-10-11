@@ -1,13 +1,35 @@
 import { sql, type PostgresAdapter } from '@payloadcms/db-postgres'
 import { createLocalReq, ValidationError, type Payload, type PayloadRequest } from 'payload'
 
-export async function transactionLock(req: PayloadRequest, key: string) {
+async function transactionDb(req: PayloadRequest) {
   const id = await req.transactionID
   const session = id && req.payload.db.sessions?.[id]
   if (!session) throw new Error('An active PostgreSQL transaction is required')
-  await (session.db as PostgresAdapter['drizzle']).execute(
-    sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`
+  return session.db as PostgresAdapter['drizzle']
+}
+
+export async function transactionLock(req: PayloadRequest, key: string) {
+  await (await transactionDb(req)).execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`)
+}
+
+async function tryTransactionLock(req: PayloadRequest, key: string): Promise<boolean> {
+  const result = await (await transactionDb(req)).execute(
+    sql`SELECT pg_try_advisory_xact_lock(hashtextextended(${key}, 0)) AS locked`
   )
+  return Boolean((result.rows[0] as { locked?: boolean } | undefined)?.locked)
+}
+
+/** Blocks until `key` is free, in a throwaway READ COMMITTED transaction, then releases it. */
+async function waitForLock(payload: Payload, key: string) {
+  const id = await payload.db.beginTransaction()
+  if (!id) throw new Error('This operation requires PostgreSQL transactions')
+  const req = await createLocalReq({}, payload)
+  req.transactionID = id
+  try {
+    await transactionLock(req, key)
+  } finally {
+    await payload.db.commitTransaction(id)
+  }
 }
 
 export async function lockAssetRow(req: PayloadRequest, collection: 'assets' | 'non-network-assets', id: string) {
@@ -23,16 +45,29 @@ export async function withTransaction<T>(
   payload: Payload,
   request: PayloadRequest | undefined,
   command: (req: PayloadRequest) => Promise<T>,
-  options?: { isolationLevel: 'repeatable read' }
+  options?: { isolationLevel?: 'repeatable read'; lockKey?: string }
 ): Promise<T> {
   const req = request ?? await createLocalReq({}, payload)
   const previous = req.transactionID
   const owns = !previous
   for (let attempt = 0; ; attempt += 1) {
-  const id = await (previous ?? payload.db.beginTransaction(options))
+  const id = await (previous ?? payload.db.beginTransaction(options?.isolationLevel ? { isolationLevel: options.isolationLevel } : undefined))
   if (!id) throw new Error('This operation requires PostgreSQL transactions')
   req.transactionID = id
   try {
+    if (options?.lockKey) {
+      // REPEATABLE READ fixes its snapshot at the first statement, so blocking on the lock there
+      // would leave this transaction reading data from before the holder committed. Only try it;
+      // when busy, wait outside and restart with a fresh snapshot.
+      // ponytail: unbounded wait loop; it ends because every holder commits or rolls back.
+      if (!owns) await transactionLock(req, options.lockKey)
+      else if (!(await tryTransactionLock(req, options.lockKey))) {
+        await payload.db.rollbackTransaction(id)
+        await waitForLock(payload, options.lockKey)
+        attempt -= 1
+        continue
+      }
+    }
     const result = await command(req)
     if (owns) await payload.db.commitTransaction(id)
     return result

@@ -39,9 +39,8 @@ export async function processScanReport(
   body = parsed.data
   if (body.agent_id !== auth.agentId || body.assets.some(asset => asset.agent_id !== auth.agentId))
     throw new APIError('agent_id mismatch', 400)
-  return withTransaction(payload, request, async req => {
   // Serialize all inventory observations of an organization before identity lookup/upsert.
-  await transactionLock(req, `inventory:${auth.organizationId}`)
+  return withTransaction(payload, request, async req => {
   await transactionLock(req, `scan-report:${body.report_id}`)
   const fingerprint = createHash('sha256').update(canonical(body)).digest('hex')
   const existing = await payload.find({
@@ -136,5 +135,5 @@ export async function processScanReport(
     status: body.execution_status === 'failed' ? 'failed' : 'processed',
     alreadyProcessed: false,
   }
-  }, { isolationLevel: 'repeatable read' })
+  }, { isolationLevel: 'repeatable read', lockKey: `inventory:${auth.organizationId}` })
 }
