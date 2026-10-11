@@ -214,7 +214,7 @@ export async function evaluateAutomaticComplianceForAssessment(
           if (!result.service_key || seen.has(result.service_key)) continue
           seen.add(result.service_key)
           if (!currentKeys.has(result.service_key) && result.status !== 'compliant') {
-            const confirmedAbsent = asset.services?.some(service => `${service.protocol}:${service.port}` === result.service_key && service.state === 'closed') || portWasCovered(asset.port_scan_coverage, result.service_key)
+            const confirmedAbsent = asset.services?.some(service => `${service.protocol}:${service.port}` === result.service_key && service.state === 'closed') || portWasCovered(asset.port_scan_coverage, result.service_key, asset.asset_coverage?.port_scan === 'complete')
             checks.push({
               control_key: result.control_key,
               check_key: result.check_key,

@@ -9,6 +9,9 @@ it('requires confirmed range coverage before treating absence as resolution', ()
   expect(portWasCovered(ranges, 'udp:23')).toBe(false)
   expect(portWasCovered([{ ...ranges[0], status: 'partial' }], 'tcp:23')).toBe(false)
   expect(portWasCovered(undefined, 'tcp:23')).toBe(false)
+  // Row partial by another host's timeout: covered only for an asset whose own scan finished.
+  expect(portWasCovered([{ ...ranges[0], status: 'partial' }], 'tcp:23', true)).toBe(true)
+  expect(portWasCovered([{ ...ranges[0], status: 'not_attempted' }], 'tcp:23', true)).toBe(false)
 })
 it('filtered and ambiguous states remain unknown even when the scan claims complete coverage', () => {
   for (const state of ['filtered', 'open|filtered', 'closed|filtered', 'unfiltered', 'unknown']) {

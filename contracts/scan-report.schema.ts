@@ -105,9 +105,14 @@ export const ScanReportPayloadSchema = z
         message: 'degraded scan mode cannot claim complete OS detection',
       })
     }
+    // Un host_timeout de nmap deja partial solo al host que lo sufrió; el reporte queda partial
+    // pero el agente marca complete a los demás (scanner-prototype/src/siam_agent/scanner.py::host_status).
+    // Sin ese límite, ningún asset puede declarar más cobertura que el reporte.
+    const hostTimeout = report.report_coverage.limitations.some(issue => issue.code === 'host_timeout')
+    const allowsComplete = (status: string) => status === 'complete' || (hostTimeout && status === 'partial')
     const globalPortComplete =
       report.report_coverage.ports.length > 0 &&
-      report.report_coverage.ports.every(port => port.status === 'complete')
+      report.report_coverage.ports.every(port => allowsComplete(port.status))
     for (const [index, asset] of report.assets.entries()) {
       const observed = Date.parse(asset.scan_time)
       if (observed < start - SCANNER_CLOCK_TOLERANCE_MS || observed > end + SCANNER_CLOCK_TOLERANCE_MS || observed > Date.now() + SCANNER_CLOCK_TOLERANCE_MS)
@@ -122,9 +127,11 @@ export const ScanReportPayloadSchema = z
         })
       }
       for (const field of ['service_detection', 'os_detection', 'name_resolution'] as const) {
+        const reportStatus = report.report_coverage[field].status
+        // name_resolution no depende del timeout de nmap: el agente copia el estado del reporte.
         if (
           asset.asset_coverage[field] === 'complete' &&
-          report.report_coverage[field].status !== 'complete'
+          (field === 'name_resolution' ? reportStatus !== 'complete' : !allowsComplete(reportStatus))
         ) {
           ctx.addIssue({
             code: 'custom',
