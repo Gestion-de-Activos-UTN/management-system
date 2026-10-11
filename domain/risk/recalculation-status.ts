@@ -25,6 +25,8 @@ export async function riskRecalculationStatus(
     },
   })
   const job = jobs.docs[0]
-  if (!job) return !evaluatedAt || Date.now() - Date.parse(evaluatedAt) >= 5 * 60 * 1000 ? 'outdated' : 'current'
+  // Every input change enqueues a job, so without one the latest evaluation is current; only a
+  // scope that was never evaluated is outdated.
+  if (!job) return evaluatedAt ? 'current' : 'outdated'
   return job.hasError ? 'failed' : job.processing ? 'processing' : 'pending'
 }

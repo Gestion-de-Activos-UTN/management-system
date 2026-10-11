@@ -188,12 +188,14 @@ export default buildConfig({
       },
       {
         // Answer expiry (valid_until) and stale agent heartbeats change risk without any event.
+        // ponytail: daily safety net, so those two can lag up to a day; enqueue from the jobs that
+        // detect them if fresher risk is needed. Every other change enqueues its own recalculation.
         slug: 'refresh-risk',
         label: 'Refresh risk evaluations',
         inputSchema: [],
         outputSchema: [{ name: 'organizations', type: 'number', required: true }],
         retries: 5,
-        schedule: [{ cron: '0 * * * * *', queue: 'maintenance' }],
+        schedule: [{ cron: '0 45 3 * * *', queue: 'maintenance' }],
         handler: async ({ req }) => {
           const organizations = await req.payload.find({
             collection: 'organizations',
@@ -216,7 +218,8 @@ export default buildConfig({
         slug: 'aging-sweep', label: 'Refresh offline inventory', inputSchema: [],
         outputSchema: [{ name: 'assets_transitioned', type: 'number', required: true }, { name: 'organizations_processed', type: 'number', required: true }],
         retries: 5,
-        schedule: [{ cron: '0 * * * * *', queue: 'maintenance' }],
+        // Hourly: offline_after_hours is measured in hours. Offset from the exclusions job.
+        schedule: [{ cron: '0 5 * * * *', queue: 'maintenance' }],
         handler: async ({ req }) => ({ output: await agingSweep(req.payload) }),
       },
       {
@@ -243,7 +246,7 @@ export default buildConfig({
           { name: 'cycles_preserved', type: 'number', required: true },
           { name: 'cycles_skipped', type: 'number', required: true },
         ],
-        schedule: [{ cron: '0 * * * * *', queue: 'maintenance' }],
+        schedule: [{ cron: '0 30 3 * * *', queue: 'maintenance' }],
         handler: async ({ req }) => ({
           output: await reconcileExpiredAssessments(req.payload),
         }),
@@ -256,16 +259,16 @@ export default buildConfig({
           { name: 'network_assets_reincluded', type: 'number', required: true },
           { name: 'manual_assets_reincluded', type: 'number', required: true },
         ],
-        schedule: [{ cron: '0 * * * * *', queue: 'maintenance' }],
+        schedule: [{ cron: '0 0 * * * *', queue: 'maintenance' }],
         handler: async ({ req }) => ({
           output: await reconcileExpiredAssetExclusions(req.payload, new Date(), req),
         }),
       },
     ],
-    // Payload agenda y ejecuta localmente la tarea diaria dentro del proceso de la aplicación.
-    // No requiere cron administrado, workers ni servicios externos.
+    // Payload agenda y ejecuta estas tareas dentro del proceso de la aplicación: no requiere cron
+    // administrado ni workers, pero sí un proceso siempre encendido (no funciona en serverless).
     autoRun: [
-      { cron: '*/15 * * * * *', queue: 'maintenance', limit: 10 },
+      { cron: '0 * * * * *', queue: 'maintenance', limit: 5 },
       // Risk recalculations are queued by domain events; the task's concurrency key collapses bursts.
       { cron: '*/15 * * * * *', queue: 'risk', limit: 10 },
     ],

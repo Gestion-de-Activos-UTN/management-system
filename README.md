@@ -117,8 +117,8 @@ En el portal de organización (`/portal/inventory`, roles `org_admin`/`office_ma
   (`POST /v1/inventory-snapshots/generate`, requiere una oficina seleccionada en la barra superior).
 
 **Job de aging (RF-37/38)** — pasa `Assets` de `active` a `offline` según `last_seen` vs. un umbral
-configurable por organización. **Sin scheduler cableado todavía** (decisión explícita, pendiente de
-la infra de deploy real) — se dispara a mano contra un endpoint interno con token de servicio:
+configurable por organización. Payload lo ejecuta cada hora en la cola `maintenance`; también
+puede dispararse a mano contra un endpoint interno con token de servicio:
 
 ```bash
 curl -X POST http://localhost:3001/api/v1/internal/jobs/aging-sweep \
@@ -142,6 +142,13 @@ OrgAdmin y OfficeManager dentro de sus ámbitos. PlatformAdmin requiere seleccio
 para ver esos campos. OrgViewer conserva resumen e inventario; la API también redacta los scripts
 incluidos en el JSON de snapshots. Una nueva snapshot no renueva el vencimiento de una salida
 cruda anterior. La limpieza usa el cron diario existente; no se añade otro scheduler.
+
+**Tareas programadas** — Payload las agenda y ejecuta dentro del mismo proceso de la app
+(`jobs.autoRun` en `payload.config.ts`), sin cron del sistema ni workers. Por eso el deploy necesita
+un proceso siempre encendido (VPS/contenedor); en serverless no corren. Frecuencias: `aging-sweep` y
+`reconcile-expired-asset-exclusions` cada hora; `reconcile-expired-assessments`,
+`expire-raw-scan-payloads` y `refresh-risk` una vez por día. El riesgo se recalcula por eventos
+(cola `risk`); `refresh-risk` es solo la red de seguridad diaria.
 
 ## Security Review y Risk Score
 
