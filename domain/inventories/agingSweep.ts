@@ -1,4 +1,4 @@
-import type { Payload, Where } from 'payload'
+import type { Payload, PayloadRequest, Where } from 'payload'
 import { enqueueRiskRecalculation } from '@/domain/risk/enqueueRiskRecalculation'
 import { lockAssetRow, withTransaction } from '@/domain/with-transaction'
 import { relationId } from '@/lib/relationId'
@@ -25,9 +25,14 @@ export function shouldGoOffline(
   return elapsedHours >= offlineAfterHours
 }
 
-async function fetchOfflineAfterHours(payload: Payload, organizationId: string): Promise<number> {
+export async function fetchOfflineAfterHours(
+  payload: Payload,
+  organizationId: string,
+  req?: PayloadRequest
+): Promise<number> {
   const result = await payload.find({
     collection: 'organization-settings',
+    req,
     where: { organization: { equals: organizationId } },
     overrideAccess: true,
     depth: 0,

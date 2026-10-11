@@ -182,12 +182,13 @@ test('reconciliación degradado→full: mismo dispositivo por ip, no duplica ni 
   assert.equal('criticality' in updates[0].data, false)
 })
 
-test('un reporte sin MAC crea identidad provisional y conserva intacto el equipo confirmado en la misma IP', async () => {
+test('un reporte sin MAC crea identidad provisional y conserva intacto el equipo confirmado no visto hace más del umbral', async () => {
   const existingDoc = {
     id: 'existing-1',
     first_viewed_at: '2025-01-01T00:00:00.000Z',
     mac: 'AA:BB:CC:DD:EE:01',
     ip: '10.0.0.5',
+    last_seen: '2025-12-01T00:00:00.000Z',
     vendor: null,
     hostname: null,
     os: null,
@@ -203,6 +204,32 @@ test('un reporte sin MAC crea identidad provisional y conserva intacto el equipo
 
   assert.equal(creates.length, 1)
   assert.equal(updates.length, 0)
+  assert.equal(existingDoc.mac, 'AA:BB:CC:DD:EE:01')
+})
+
+test('un reporte sin MAC actualiza el equipo con MAC visto recientemente en la misma IP, sin duplicarlo', async () => {
+  const existingDoc = {
+    id: 'existing-1',
+    first_viewed_at: '2025-01-01T00:00:00.000Z',
+    mac: 'AA:BB:CC:DD:EE:01',
+    ip: '10.0.0.5',
+    last_seen: '2025-12-31T23:00:00.000Z',
+    vendor: null,
+    hostname: null,
+    os: null,
+    os_candidates: [],
+    services: [],
+    gateway_ip: null,
+    gateway_mac: null,
+    status: 'active',
+  }
+  const { payload, updates, creates } = makePayloadWithDocs([existingDoc])
+
+  await ingestScanReport(payload, makeReport([makeAsset({ ip: '10.0.0.5', mac: '' })]), AUTH)
+
+  assert.equal(creates.length, 0)
+  assert.equal(updates.length, 1)
+  assert.equal(updates[0].id, 'existing-1')
   assert.equal(existingDoc.mac, 'AA:BB:CC:DD:EE:01')
 })
 

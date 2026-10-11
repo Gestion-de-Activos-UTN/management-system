@@ -8,6 +8,7 @@ import { enqueueRiskRecalculation } from '../risk/enqueueRiskRecalculation'
 import { inferDeviceCategory } from '../assets/inferDeviceCategory'
 import { randomUUID } from 'node:crypto'
 import { assetIdentityKey, classifyMac, normalizeAssetIdentity } from './asset-identity'
+import { fetchOfflineAfterHours, shouldGoOffline } from './agingSweep'
 
 export interface IngestResult {
   processedAssetIds: string[]
@@ -394,22 +395,26 @@ async function findExistingAsset(
       organization: { equals: organizationId },
       office: { equals: officeId },
       ip: { equals: asset.ip },
-      mac: { exists: false },
     },
+    sort: '-last_seen',
     overrideAccess: true,
     limit: 1,
     depth: 0,
   })
   const candidate = byIp.docs[0]
   if (!candidate) return undefined
-  // Sin mac todavía en este scan: el mismo dispositivo que ya conocíamos por IP (not-null-wins
-  // conserva su mac guardada, si tiene una). Con mac en este scan: solo reconciliar si el
-  // candidato no tiene mac propia — si ya tiene una (distinta, porque si coincidiera lo hubiese
-  // encontrado arriba), la IP fue reasignada por DHCP a otro dispositivo real, no es el mismo.
+  // Candidato sin mac propia: es el mismo dispositivo que ya conocíamos por IP.
   if (!candidate.mac) return candidate
-  // A report without a usable MAC is provisional; an IP alone cannot identify a known device.
-  if (kind !== 'globally_administered' && kind !== 'locally_administered') return undefined
-  return undefined
+  // Candidato con mac propia y este scan trae otra mac usable (si coincidiera lo hubiese encontrado
+  // arriba): la IP fue reasignada por DHCP a otro dispositivo real, no es el mismo.
+  if (kind === 'globally_administered' || kind === 'locally_administered') return undefined
+  // Scan sin mac usable (segmento ruteado, ARP fallido): la IP sola identifica al equipo conocido
+  // solo mientras siga vigente; si ya superó offline_after_hours, queda como identidad provisional.
+  // not-null-wins conserva la mac guardada en el update.
+  const offlineAfterHours = await fetchOfflineAfterHours(payload, organizationId, req)
+  return shouldGoOffline(candidate.last_seen ?? null, offlineAfterHours, Date.parse(asset.scan_time))
+    ? undefined
+    : candidate
 }
 
 // Upsert vía Local API (nunca queries crudas) para que los hooks de Assets se disparen siempre.
