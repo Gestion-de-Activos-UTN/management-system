@@ -1,0 +1,44 @@
+diff --git a/dist/auth/operations/login.js b/dist/auth/operations/login.js
+index 810d30779f503a2aeb9975e77a7f6f78f79c612f..d321536b19a51e19a4fe95bff516c7a10676fc93 100644
+--- a/dist/auth/operations/login.js
++++ b/dist/auth/operations/login.js
+@@ -214,6 +214,19 @@ export const loginOperation = async (incomingArgs)=>{
+                 user
+             });
+         }
++        // /////////////////////////////////////
++        // beforeLogin - Collection
++        // /////////////////////////////////////
++        if (collectionConfig.hooks?.beforeLogin?.length) {
++            for (const hook of collectionConfig.hooks.beforeLogin){
++                user = await hook({
++                    collection: args.collection?.config,
++                    context: args.req.context,
++                    req: args.req,
++                    user
++                }) || user;
++            }
++        }
+         const fieldsToSignArgs = {
+             collectionConfig,
+             email: sanitizedEmail,
+@@ -238,19 +251,6 @@ export const loginOperation = async (incomingArgs)=>{
+                 req
+             });
+         }
+-        // /////////////////////////////////////
+-        // beforeLogin - Collection
+-        // /////////////////////////////////////
+-        if (collectionConfig.hooks?.beforeLogin?.length) {
+-            for (const hook of collectionConfig.hooks.beforeLogin){
+-                user = await hook({
+-                    collection: args.collection?.config,
+-                    context: args.req.context,
+-                    req: args.req,
+-                    user
+-                }) || user;
+-            }
+-        }
+         const { exp, token } = await jwtSign({
+             fieldsToSign,
+             secret,

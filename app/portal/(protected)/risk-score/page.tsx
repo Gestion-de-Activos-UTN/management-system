@@ -31,18 +31,21 @@ import { bandVisible, scoreVisible } from '@/domain/risk/constants'
 import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 
 export default function RiskScorePage() {
-  const asOrganization = useSearchParams().get('asOrganization') ?? undefined
+  const searchParams = useSearchParams()
+  const asOrganization = searchParams.get('asOrganization') ?? undefined
+  const evaluationId = searchParams.get('evaluation') ?? undefined
   const { officeId, ready } = useConcreteOfficeId(asOrganization)
   const [page, setPage] = useState(1)
   // A different office or organization has its own evaluation: start again from the first page.
-  useEffect(() => setPage(1), [officeId, asOrganization])
-  const query = useLatestRisk({ officeId, asOrganization, page, enabled: ready })
+  useEffect(() => setPage(1), [officeId, asOrganization, evaluationId])
+  const query = useLatestRisk({ officeId, asOrganization, evaluationId, page, enabled: ready })
   const data = query.data?.evaluation
   const pagination = query.data?.pagination
   const inventoryHref = `/portal/inventory${asOrganization ? `?asOrganization=${asOrganization}` : ''}`
 
   return (
     <Stack gap="xl">
+      {evaluationId && <Alert color="blue" title="Evaluación histórica">Esta es la evidencia que originó la tarea. El puntaje vigente puede ser diferente.</Alert>}
       <PageHeader
         title="Puntaje de riesgo"
         description="Una vista simple de los problemas de seguridad detectados y de la información que todavía falta revisar."
@@ -56,6 +59,18 @@ export default function RiskScorePage() {
         }
       />
       {query.isError && <Alert color="red">No se pudo cargar la última evaluación.</Alert>}
+      {(query.data?.recalculation === 'pending' || query.data?.recalculation === 'processing' || query.data?.recalculation === 'outdated') && (
+        <Alert color="blue" title="Actualización pendiente">
+          Los cambios están guardados. El puntaje mostrado corresponde al cálculo anterior y se
+          actualizará cuando termine el recálculo.
+        </Alert>
+      )}
+      {query.data?.recalculation === 'failed' && (
+        <Alert color="orange" title="Actualización pendiente de recuperación">
+          El recálculo no pudo completarse. Los cambios están guardados, pero el puntaje puede estar
+          desactualizado.
+        </Alert>
+      )}
       {query.isPending ? (
         <Skeleton height={260} />
       ) : !data ? (

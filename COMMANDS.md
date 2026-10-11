@@ -44,6 +44,21 @@ No tocan la DB — alcanza con tener `node_modules` en algún lado (host si corr
 | `pnpm test`             | Host (con deps instaladas)                      | Tests unitarios (`node --test` vía `tsx`), no tocan la DB                 |
 | `pnpm test:integration` | `docker compose exec app pnpm test:integration` | Toca Postgres real — necesita el `DATABASE_URL` del contenedor (motivo 2) |
 
+### Regresiones de la auditoría
+
+`pnpm test:audit` ejecuta las pruebas unitarias nuevas con Vitest, sin base de datos.
+`pnpm test:audit:integration` requiere Node >=22 y una PostgreSQL **desechable** con
+una base **vacía** con URL como
+`DATABASE_URL=postgresql://siam_audit@127.0.0.1:55443/siam_audit_security_run1`.
+El guard exige host, puerto, usuario y prefijo de nombre aislados; no usar la base de desarrollo.
+Crear otra base vacía para repetir la suite completa: la primera prueba verifica el seed desde cero.
+La suite crea usuarios, activos y jobs de prueba, y también arranca otro proceso de Payload.
+
+El lockfile aplica `patches/@payloadcms__drizzle@3.86.0.patch` y `patches/payload@3.86.0.patch`
+durante la instalación. Al actualizar Payload/Drizzle, revisar ambos parches y repetir las pruebas
+de commit/rollback, sesiones y concurrencia. El segundo parche cambia el orden de `beforeLogin`
+para que nuestros hooks validen el estado actual antes de agregar una sesión.
+
 ## Schema de la base
 
 Sin migraciones: el deploy de este proyecto recrea imagen y DB desde cero cada vez, así que no hay estado incremental que preservar entre versiones. Con `NODE_ENV=development` (el `docker-compose.yml` de este repo), Payload sincroniza el schema de Postgres solo, en cada arranque de la app (`pushDevSchema`, sin comando manual).
@@ -59,7 +74,7 @@ Sin migraciones: el deploy de este proyecto recrea imagen y DB desde cero cada v
 | Comando                | Dónde                                                                                                   | Qué hace                                                                                                                                                                                                                                                       |
 | ---------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `pnpm seed:navigation` | Ya corre solo en `docker compose up` (idempotente: si `Demo Organization` ya existe, repara datos demo) | Siembra los 4 `Roles` base (`platform_admin`, `org_admin`, `org_viewer`, `office_manager`) + la única organización demo completa (`domain/organizations/createOrgWithAdmin.ts`) + un `Admin`/`User` por rol, credenciales fijas (`scripts/seed-navigation.ts`) |
-| `pnpm seed:demo`       | Ya corre después de `seed:navigation` en `docker compose up`                                            | Completa de forma idempotente y no destructiva el escenario funcional: agentes, reportes válidos según Zod, activos enriquecidos, activos manuales, evaluaciones, riesgo, snapshots y tareas en estados variados.                                              |
+| `pnpm seed:demo`       | Ya corre después de `seed:navigation` en `docker compose up`                                            | Demo compacta: 21 activos de red, 18 manuales y 22 tareas; incluye reasignación, retiro y conflicto de ubicación. Idempotente y no destructiva. `SIAM_SEED_PROFILE=standard` selecciona el escenario base sin eliminar datos. |
 
 Credenciales fijas a propósito (demo/navegación, no producción) — recuperables en cualquier momento, a diferencia del token de Agent:
 

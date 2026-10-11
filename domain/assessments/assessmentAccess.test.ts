@@ -37,8 +37,8 @@ describe('assessment write access', () => {
     )
   })
 
-  it('keeps platform visits read-only', () => {
-    assert.equal(canAnswerAssessment(ctx('platform_admin'), assessment), false)
+  it('allows selected platform administrators', () => {
+    assert.equal(canAnswerAssessment(ctx('platform_admin'), assessment), true)
   })
 })
 

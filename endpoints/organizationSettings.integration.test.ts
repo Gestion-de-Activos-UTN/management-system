@@ -1,3 +1,4 @@
+import { relationId } from '@/lib/relationId'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { getPayload } from 'payload'
@@ -31,6 +32,6 @@ test('maturity profile: only org_admin can edit it and the author is recorded', 
   assert.equal(saved.status, 200)
   assert.equal(saved.body.maturity_it_owner, 'yes')
   assert.equal(saved.body.maturity_security_budget, 'occasional')
-  assert.equal(String(saved.body.maturity_updated_by), admin)
+  assert.equal(relationId(saved.body.maturity_updated_by), admin)
   assert.ok(saved.body.maturity_updated_at)
 })

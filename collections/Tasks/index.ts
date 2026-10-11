@@ -31,6 +31,9 @@ export const Tasks: CollectionConfig = {
   },
   hooks: { beforeValidate: [defaultTaskStartAt] },
   fields: [
+    { name: 'requires_reassignment', type: 'checkbox', defaultValue: false, access: serverOnly },
+    { name: 'lifecycle_history', type: 'json', access: serverOnly },
+    { name: 'seed_key', type: 'text', unique: true, admin: { hidden: true }, access: serverOnly },
     { name: 'title', type: 'text', required: true, minLength: 3, maxLength: 160 },
     { name: 'description', type: 'textarea', maxLength: 5000 },
     {
@@ -76,14 +79,35 @@ export const Tasks: CollectionConfig = {
     },
     { name: 'assigned_role', type: 'relationship', relationTo: 'roles' },
     { name: 'assigned_user', type: 'relationship', relationTo: 'users', index: true },
-    { name: 'claimed_by', type: 'relationship', relationTo: 'users', access: serverOnly },
+    {
+      name: 'claimed_by',
+      type: 'relationship',
+      relationTo: ['users', 'admins'],
+      access: serverOnly,
+    },
     { name: 'claimed_at', type: 'date', access: serverOnly },
-    { name: 'completed_by', type: 'relationship', relationTo: 'users', access: serverOnly },
+    {
+      name: 'completed_by',
+      type: 'relationship',
+      relationTo: ['users', 'admins'],
+      access: serverOnly,
+    },
     { name: 'completed_at', type: 'date', access: serverOnly },
-    { name: 'cancelled_by', type: 'relationship', relationTo: 'users', access: serverOnly },
+    { name: 'completion_reason', type: 'textarea', maxLength: 500, access: serverOnly },
+    {
+      name: 'cancelled_by',
+      type: 'relationship',
+      relationTo: ['users', 'admins'],
+      access: serverOnly,
+    },
     { name: 'cancelled_at', type: 'date', access: serverOnly },
     { name: 'cancellation_reason', type: 'textarea', maxLength: 500, access: serverOnly },
-    { name: 'archived_by', type: 'relationship', relationTo: 'users', access: serverOnly },
+    {
+      name: 'archived_by',
+      type: 'relationship',
+      relationTo: ['users', 'admins'],
+      access: serverOnly,
+    },
     { name: 'archived_at', type: 'date', access: serverOnly, index: true },
     {
       name: 'related_entity',
@@ -111,7 +135,7 @@ export const Tasks: CollectionConfig = {
     {
       name: 'created_by',
       type: 'relationship',
-      relationTo: 'users',
+      relationTo: ['users', 'admins'],
       required: true,
       access: serverOnly,
       admin: { readOnly: true },

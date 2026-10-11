@@ -23,6 +23,7 @@ import { AttentionCard, type AttentionItem } from '@/modules/dashboard/component
 import { RiskOverviewCard } from '@/modules/dashboard/components/RiskOverviewCard'
 import { MyTasksCard } from '@/modules/dashboard/components/MyTasksCard'
 import { MetricsStrip } from '@/modules/dashboard/components/MetricsStrip'
+import { PortalMessagesCard } from '@/modules/portal-messages/components/PortalMessagesCard'
 
 const plural = (count: number, one: string, many: string) => (count === 1 ? one : many)
 
@@ -160,6 +161,7 @@ export default function PortalDashboardPage() {
           />
         )}
       </SimpleGrid>
+      <PortalMessagesCard />
     </Stack>
   )
 }

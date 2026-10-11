@@ -1,7 +1,9 @@
-import { getPayload } from 'payload'
+import { pathToFileURL } from 'node:url'
 import type { Payload, PayloadRequest } from 'payload'
 import config from '../payload.config'
 import { createOrgWithAdmin } from '../domain/organizations/createOrgWithAdmin'
+import { initializeSeedPayload } from './seed-payload'
+import { PORTAL_MESSAGE_TEMPLATES } from '../modules/portal-messages/templates'
 
 // Único script de esta fase (modo navegación de solo lectura): siembra, en una sola
 // transacción atómica, los 4 roles base, una organización demo completa (Settings +
@@ -42,6 +44,42 @@ const ROLES = [
     is_platform_role: false,
   },
 ] as const
+
+async function ensurePortalWelcomeMessage(payload: Payload, req: PayloadRequest) {
+  const existing = await payload.find({
+    collection: 'portal-messages',
+    where: { template_key: { equals: 'portal_welcome' } },
+    overrideAccess: true,
+    req,
+    limit: 1,
+  })
+  if (existing.docs[0]) return false
+
+  const welcome = PORTAL_MESSAGE_TEMPLATES.find(template => template.key === 'portal_welcome')!
+  await payload.create({
+    collection: 'portal-messages',
+    overrideAccess: true,
+    req,
+    data: {
+      title: welcome.title,
+      description: welcome.description,
+      message_type: 'notice',
+      template_key: welcome.key,
+      scope: 'global',
+      target_organizations: [],
+      target_kind: 'all',
+      target_roles: [],
+      target_users: [],
+      linked_section: null,
+      linked_entity_type: null,
+      linked_entity: null,
+      expires_at: null,
+      is_active: true,
+      delivery_version: 1,
+    },
+  })
+  return true
+}
 
 async function findOrCreateRole(
   payload: Payload,
@@ -204,9 +242,7 @@ function printCredentials() {
   }
 }
 
-async function main() {
-  const payload = await getPayload({ config })
-
+export async function seedNavigation(payload: Payload) {
   const existingOrg = await payload.find({
     collection: 'organizations',
     where: { name: { equals: ORG_NAME } },
@@ -218,6 +254,7 @@ async function main() {
     const req = { transactionID } as PayloadRequest
     try {
       await ensureSecondaryOfficeAndAdminScope(payload, req, String(existingOrg.docs[0].id))
+      await ensurePortalWelcomeMessage(payload, req)
       if (transactionID) await payload.db.commitTransaction(transactionID)
     } catch (err) {
       if (transactionID) await payload.db.rollbackTransaction(transactionID)
@@ -225,7 +262,7 @@ async function main() {
     }
     console.log(`'${ORG_NAME}' ya existe — se reparó el alcance del org-admin demo.`)
     printCredentials()
-    process.exit(0)
+    return
   }
 
   const transactionID = await payload.db.beginTransaction()
@@ -347,9 +384,12 @@ async function main() {
       data: {
         email: CREDENTIALS.platform_admin.email,
         password: CREDENTIALS.platform_admin.password,
+        name: 'Platform Admin',
         role: platformAdminRole.id,
       },
     })
+
+    await ensurePortalWelcomeMessage(payload, req)
 
     if (transactionID) await payload.db.commitTransaction(transactionID)
   } catch (err) {
@@ -359,10 +399,17 @@ async function main() {
 
   console.log('Seed de navegación OK.')
   printCredentials()
-  process.exit(0)
 }
 
-main().catch(err => {
-  console.error(err)
-  process.exit(1)
-})
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  initializeSeedPayload(config)
+    .then(async payload => {
+      await seedNavigation(payload)
+      await payload.destroy()
+      process.exit(0)
+    })
+    .catch(err => {
+      console.error(err)
+      process.exit(1)
+    })
+}

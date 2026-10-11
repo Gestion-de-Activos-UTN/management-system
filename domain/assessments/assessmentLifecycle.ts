@@ -1,3 +1,4 @@
+import { actorRelation } from '@/lib/actor-relation'
 import type { Payload, PayloadRequest } from 'payload'
 import type { AssessmentAnswer, AssessmentInstance } from '@/app/types/payload-types'
 import {
@@ -15,6 +16,7 @@ import {
   enqueueRiskRecalculation,
 } from '@/domain/risk/enqueueRiskRecalculation'
 import { isAssetExcludedFromAssessments } from './asset-assessment-scope'
+import { transactionLock, withTransaction } from '@/domain/with-transaction'
 
 function questionDefinition(key: string, version: number): RiskQuestionV2 {
   const definition = RISK_QUESTIONS_V2.find(item => item.key === key && item.version === version)
@@ -183,7 +185,7 @@ async function upsertAnswers(
       option_snapshot: { key: option.key, label: option.label, efficacy: option.efficacy },
       justification: answer.justification ?? null,
       evidence_note: answer.evidence_note ?? null,
-      answered_by: actorId,
+      answered_by: actorRelation(req, actorId),
       answered_at: now,
       valid_until: validUntil(now, validityDays),
       evaluation_effect_snapshot: effect,
@@ -241,9 +243,12 @@ export async function saveAssessmentDraft(
   actorId: string,
   req: PayloadRequest
 ) {
+  return withTransaction(payload, req, async () => {
+  await transactionLock(req, `assessment:${assessmentId}`)
   const assessment = await loadAssessment(payload, assessmentId, req)
   await assertTargetIncluded(payload, assessment, req)
   return upsertAnswers(payload, assessment, command, actorId, req)
+  })
 }
 
 export async function completeAssessment(
@@ -254,10 +259,12 @@ export async function completeAssessment(
   request: PayloadRequest,
   options: { enqueueRisk?: boolean } = {}
 ) {
+  const previousTransaction = request.transactionID
   const ownsTransaction = !request.transactionID
   const transactionID = request.transactionID ?? (await payload.db.beginTransaction())
   const req = Object.assign(request, { transactionID })
   try {
+    await transactionLock(req, `assessment:${assessmentId}`)
     let assessment = await loadAssessment(payload, assessmentId, req)
     await assertTargetIncluded(payload, assessment, req)
     if (assessment.status === 'completed') {
@@ -404,23 +411,33 @@ export async function completeAssessment(
       data: {
         status: 'completed',
         completed_at: completedAt,
-        completed_by: actorId,
+        completed_by: actorRelation(req, actorId),
         due_at: validUntilDates.sort()[0] ?? completedAt,
         completion_summary: counts,
       },
     })
-    if (ownsTransaction && transactionID) await payload.db.commitTransaction(transactionID)
     // Organization answers are inherited by every office evaluation.
     if (options.enqueueRisk !== false) {
       if (assessment.office)
-        await enqueueRiskRecalculation(payload, relationId(assessment.organization), [
-          relationId(assessment.office),
-        ])
-      else await enqueueOrganizationRiskRecalculation(payload, relationId(assessment.organization))
+        await enqueueRiskRecalculation(
+          payload,
+          relationId(assessment.organization),
+          [relationId(assessment.office)],
+          req
+        )
+      else
+        await enqueueOrganizationRiskRecalculation(
+          payload,
+          relationId(assessment.organization),
+          req
+        )
     }
+    if (ownsTransaction && transactionID) await payload.db.commitTransaction(transactionID)
     return completed
   } catch (error) {
     if (ownsTransaction && transactionID) await payload.db.rollbackTransaction(transactionID)
     throw error
+  } finally {
+    if (ownsTransaction) request.transactionID = previousTransaction
   }
 }

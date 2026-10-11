@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useUiStore } from '@/lib/ui-store'
 import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
 
@@ -11,11 +12,23 @@ import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
  * `ready` gates the queries until that selection lands, avoiding a guaranteed 403.
  */
 export function useConcreteOfficeId(asOrganization?: string) {
+  const linkedOfficeId = useSearchParams().get('officeId')
   const tenant = useTenantContext(asOrganization).data
   const selectedOfficeId = useUiStore(state => state.selectedOfficeId)
   const setSelectedOfficeId = useUiStore(state => state.setSelectedOfficeId)
   const needsOffice = tenant ? !tenant.orgWide : false
   const fallback = tenant?.officeIds[0] ?? null
+
+  const linkedAllowed = Boolean(
+    tenant &&
+    linkedOfficeId &&
+    (linkedOfficeId === 'all'
+      ? tenant.orgWide
+      : tenant.orgWide || tenant.officeIds.includes(linkedOfficeId))
+  )
+  useEffect(() => {
+    if (linkedAllowed) setSelectedOfficeId(linkedOfficeId === 'all' ? null : linkedOfficeId)
+  }, [linkedOfficeId, linkedAllowed, setSelectedOfficeId])
 
   useEffect(() => {
     if (needsOffice && !selectedOfficeId && fallback) setSelectedOfficeId(fallback)

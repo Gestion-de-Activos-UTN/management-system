@@ -5,7 +5,8 @@ WORKDIR /app
 RUN corepack enable pnpm
 
 COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml ./
-RUN HUSKY=0 pnpm install
+COPY patches ./patches
+RUN HUSKY=0 pnpm install --frozen-lockfile
 
 COPY . .
 

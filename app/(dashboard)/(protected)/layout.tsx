@@ -3,7 +3,7 @@
 import { Suspense, useEffect } from 'react'
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { ActionIcon, Badge, Center, Group, Loader } from '@mantine/core'
-import { Building2, X } from 'lucide-react'
+import { BellRing, Building2, LayoutDashboard, X } from 'lucide-react'
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { SidebarProfile } from '@/components/layout/SidebarProfile'
 import type { SidebarItem } from '@/components/layout/Sidebar'
@@ -53,9 +53,19 @@ function AdminProtectedLayoutInner({ children }: { children: React.ReactNode }) 
   const suffix = asOrganization ? `?asOrganization=${asOrganization}` : ''
   const navItems: SidebarItem[] = [
     {
+      label: 'Resumen',
+      href: `/${suffix}`,
+      icon: <LayoutDashboard size={18} strokeWidth={1.5} />,
+    },
+    {
       label: 'Organizaciones',
       href: `/organizations${suffix}`,
       icon: <Building2 size={18} strokeWidth={1.5} />,
+    },
+    {
+      label: 'Mensajes',
+      href: '/portal-messages',
+      icon: <BellRing size={18} strokeWidth={1.5} />,
     },
   ]
 

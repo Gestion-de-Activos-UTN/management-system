@@ -1,5 +1,6 @@
 import type { ColumnDef } from '@tanstack/react-table'
 import { Badge, Group, Stack, Text, Tooltip } from '@mantine/core'
+import { MapPin } from 'lucide-react'
 import type { Asset } from '@/app/types/payload-types'
 import { TechnicalText } from '@/components/ui/TechnicalText'
 import { OneLineText } from '@/components/ui/OneLineText'
@@ -50,7 +51,7 @@ export function getAssetsColumns(
           .join(' · ')
         return (
           <Stack gap={2} miw={0}>
-            <Group gap="xs" wrap="nowrap" miw={0}>
+            <Group gap="xs" wrap="nowrap" w="100%" miw={0}>
               {asset.first_viewed_at == null ? (
                 // flexShrink: 0 — sin esto el Group encoge el badge y Mantine trunca su label.
                 <Badge size="sm" color="pine" variant="filled" style={{ flexShrink: 0 }}>
@@ -63,11 +64,25 @@ export function getAssetsColumns(
                   </Badge>
                 )
               )}
+              {asset.location_pending && (
+                <Tooltip label="Ubicación por confirmar">
+                  <span style={{ flexShrink: 0 }}>
+                    <StatusBadge
+                      tone="warning"
+                      label="Ubicación por confirmar"
+                      icon={<MapPin size={13} strokeWidth={1.5} />}
+                      iconOnly
+                      size="xs"
+                    />
+                  </span>
+                </Tooltip>
+              )}
               <Tooltip label={name} disabled={!name} openDelay={400}>
                 <Text
                   size="sm"
                   fw={600}
                   truncate
+                  style={{ minWidth: 0, flex: 1 }}
                   c={name ? undefined : 'dimmed'}
                   ff={name && name !== asset.alias ? 'monospace' : undefined}
                 >

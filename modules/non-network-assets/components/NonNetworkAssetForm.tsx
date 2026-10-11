@@ -26,7 +26,7 @@ import {
 } from '@/lib/enum-labels'
 import type { NonNetworkAsset } from '@/app/types/payload-types'
 import { MANUAL_ASSET_CATEGORY_GROUPS } from '@/domain/assets/asset-types'
-import { NonNetworkAssetSchema, type NonNetworkAssetFormValues } from '../schema'
+import { createNonNetworkAssetSchema, type NonNetworkAssetFormValues } from '../schema'
 import { useSaveNonNetworkAsset } from '../hooks/use-save-non-network-asset'
 import { formatDateInput, localDateEndToISOString } from '@/lib/format-date'
 
@@ -55,7 +55,8 @@ export function NonNetworkAssetForm({
     setValue,
     formState: { errors },
   } = useForm<NonNetworkAssetFormValues>({
-    resolver: zodResolver(NonNetworkAssetSchema),
+    mode: 'onChange',
+    resolver: zodResolver(createNonNetworkAssetSchema(asset)),
     defaultValues: {
       alias: asset?.alias ?? '',
       asset_category: asset?.asset_category,
@@ -271,7 +272,9 @@ export function NonNetworkAssetForm({
                 <TextInput
                   type="date"
                   label="Excluido hasta"
-                  description="Déjalo vacío para una exclusión sin vencimiento."
+                  description="Fecha obligatoria, hasta 90 días desde hoy."
+                  required
+                  error={errors.assessment_excluded_until?.message}
                   value={field.value ? formatDateInput(field.value) : ''}
                   onChange={event =>
                     field.onChange(

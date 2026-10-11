@@ -8,7 +8,15 @@ import type {
 } from './schema'
 
 export type TaskAction =
-  'edit' | 'claim' | 'release' | 'reassign' | 'complete' | 'cancel' | 'archive' | 'delete'
+  | 'edit'
+  | 'claim'
+  | 'release'
+  | 'reassign'
+  | 'complete'
+  | 'force_complete'
+  | 'cancel'
+  | 'archive'
+  | 'delete'
 
 export type TaskReferenceInfo = TaskReferenceInput & {
   available: boolean
@@ -19,6 +27,13 @@ export type TaskReferenceInfo = TaskReferenceInput & {
 export type TaskDTO = Task & {
   effective_status: 'planned' | 'pending' | 'in_progress' | 'completed' | 'cancelled'
   related_entity_info: TaskReferenceInfo | null
+  actor_labels?: {
+    created_by: string | null
+    claimed_by: string | null
+    completed_by: string | null
+    cancelled_by: string | null
+    archived_by: string | null
+  }
   available_actions: TaskAction[]
   requires_reassignment: boolean
 }
@@ -67,9 +82,13 @@ export function editTask(id: string, input: EditTaskInput) {
 
 export function taskCommand(
   id: string,
-  action: Exclude<TaskAction, 'edit' | 'reassign' | 'cancel' | 'delete'>
+  action: Exclude<TaskAction, 'edit' | 'reassign' | 'cancel' | 'delete' | 'force_complete'>
 ) {
   return httpClient.post<TaskDTO>(`/api/v1/tasks/${id}/${action}`, {})
+}
+
+export function forceCompleteTask(id: string, reason: string) {
+  return httpClient.post<TaskDTO>(`/api/v1/tasks/${id}/force-complete`, { reason })
 }
 
 export function reassignTask(id: string, input: ReassignTaskInput) {
@@ -104,11 +123,13 @@ export function getTaskAssignmentOptions(params: {
   officeIds: string[]
   reference?: TaskReferenceInput
   asOrganization?: string
+  taskId?: string
 }) {
   return httpClient.get<TaskAssignmentOptions>('/api/v1/tasks/assignment-options', {
-    office_ids: params.officeIds.length ? params.officeIds.join(',') : undefined,
-    reference_type: params.reference?.relationTo,
-    reference_id: params.reference?.value,
+    task_id: params.taskId,
+    office_ids: !params.taskId && params.officeIds.length ? params.officeIds.join(',') : undefined,
+    reference_type: params.taskId ? undefined : params.reference?.relationTo,
+    reference_id: params.taskId ? undefined : params.reference?.value,
     asOrganization: params.asOrganization,
   })
 }

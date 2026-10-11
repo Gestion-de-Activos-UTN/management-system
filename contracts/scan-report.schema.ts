@@ -1,12 +1,15 @@
 import { z } from 'zod'
 import { AssetPayloadSchema, CoverageStatusSchema, ScanIssueSchema } from './asset.schema'
+import { networkContains, ScanNetworkSchema, InterfaceNetworkSchema } from './network'
+
+export const SCANNER_CLOCK_TOLERANCE_MS = 5 * 60 * 1000
 
 export const ScannerInterfaceSchema = z
   .object({
     name: z.string().min(1).max(120),
     ip: z.ipv4(),
     mac: z.union([z.literal(''), z.string().regex(/^(?:[0-9A-F]{2}:){5}[0-9A-F]{2}$/)]),
-    network: z.string().min(1).max(43),
+    network: InterfaceNetworkSchema,
     is_route_to_target: z.boolean(),
   })
   .strict()
@@ -50,7 +53,7 @@ export const ScanReportPayloadSchema = z
   .object({
     report_id: z.string().min(1).max(120),
     agent_id: z.string().min(1).max(120),
-    network: z.string().min(1).max(43),
+    network: ScanNetworkSchema,
     scan_start: z.iso.datetime({ offset: true }),
     scan_end: z.iso.datetime({ offset: true }),
     hosts_up: z.number().int().min(0).max(65534),
@@ -67,6 +70,10 @@ export const ScanReportPayloadSchema = z
   })
   .strict()
   .superRefine((report, ctx) => {
+    const start = Date.parse(report.scan_start)
+    const end = Date.parse(report.scan_end)
+    if (start > end) ctx.addIssue({ code: 'custom', path: ['scan_end'], message: 'scan_end must follow scan_start' })
+    if (end > Date.now() + SCANNER_CLOCK_TOLERANCE_MS) ctx.addIssue({ code: 'custom', path: ['scan_end'], message: 'scan time is too far in the future' })
     if (report.hosts_up !== report.assets.length) {
       ctx.addIssue({
         code: 'custom',
@@ -98,10 +105,20 @@ export const ScanReportPayloadSchema = z
         message: 'degraded scan mode cannot claim complete OS detection',
       })
     }
+    // Un host_timeout de nmap deja partial solo al host que lo sufrió; el reporte queda partial
+    // pero el agente marca complete a los demás (scanner-prototype/src/siam_agent/scanner.py::host_status).
+    // Sin ese límite, ningún asset puede declarar más cobertura que el reporte.
+    const hostTimeout = report.report_coverage.limitations.some(issue => issue.code === 'host_timeout')
+    const allowsComplete = (status: string) => status === 'complete' || (hostTimeout && status === 'partial')
     const globalPortComplete =
       report.report_coverage.ports.length > 0 &&
-      report.report_coverage.ports.every(port => port.status === 'complete')
+      report.report_coverage.ports.every(port => allowsComplete(port.status))
     for (const [index, asset] of report.assets.entries()) {
+      const observed = Date.parse(asset.scan_time)
+      if (observed < start - SCANNER_CLOCK_TOLERANCE_MS || observed > end + SCANNER_CLOCK_TOLERANCE_MS || observed > Date.now() + SCANNER_CLOCK_TOLERANCE_MS)
+        ctx.addIssue({ code: 'custom', path: ['assets', index, 'scan_time'], message: 'observation must fall within the scan interval and clock tolerance' })
+      if (!networkContains(report.network, asset.ip))
+        ctx.addIssue({ code: 'custom', path: ['assets', index, 'ip'], message: 'asset IP must belong to the scanned network' })
       if (asset.asset_coverage.port_scan === 'complete' && !globalPortComplete) {
         ctx.addIssue({
           code: 'custom',
@@ -110,9 +127,11 @@ export const ScanReportPayloadSchema = z
         })
       }
       for (const field of ['service_detection', 'os_detection', 'name_resolution'] as const) {
+        const reportStatus = report.report_coverage[field].status
+        // name_resolution no depende del timeout de nmap: el agente copia el estado del reporte.
         if (
           asset.asset_coverage[field] === 'complete' &&
-          report.report_coverage[field].status !== 'complete'
+          (field === 'name_resolution' ? reportStatus !== 'complete' : !allowsComplete(reportStatus))
         ) {
           ctx.addIssue({
             code: 'custom',

@@ -6,6 +6,8 @@ import {
   type AssessmentStatus,
 } from '../invariants'
 import type { AssessmentScope } from '@/domain/assessments/catalog'
+import { createHash } from 'node:crypto'
+import { isDeepStrictEqual } from 'node:util'
 
 const optionalRelationId = (value: unknown): string | null => (value ? relationId(value) : null)
 
@@ -21,11 +23,15 @@ export const validateAssessmentInstance: CollectionBeforeChangeHook = async ({
   const assetId = optionalRelationId(merged.asset)
   const manualAssetId = optionalRelationId(merged.manual_asset)
   const scope = merged.scope as AssessmentScope
+  // A target may already have moved. Closing its former cycle preserves the historical office;
+  // new/open cycles must still match the target's current office.
+  const closingHistoricalCycle = operation === 'update' && merged.status === 'superseded'
 
   if (!organizationId) throw new Error('Assessment organization is required')
   assertAssessmentTarget(scope, officeId, assetId, manualAssetId)
 
   if (operation === 'update') {
+    if (req.context?.assessmentExpiryMaintenance && originalDoc?.status === 'completed' && Object.entries(data).every(([key, value]) => ['expiry_reconciled_at', 'updatedAt'].includes(key) || isDeepStrictEqual(value ?? null, originalDoc?.[key] ?? null))) return data
     assertAssessmentMutable(originalDoc?.status as AssessmentStatus)
     for (const field of [
       'organization',
@@ -64,7 +70,7 @@ export const validateAssessmentInstance: CollectionBeforeChangeHook = async ({
     })
     if (
       relationId(asset.organization) !== organizationId ||
-      relationId(asset.office) !== officeId
+      (!closingHistoricalCycle && relationId(asset.office) !== officeId)
     ) {
       throw new Error('Assessment asset does not belong to its organization and office')
     }
@@ -82,7 +88,7 @@ export const validateAssessmentInstance: CollectionBeforeChangeHook = async ({
     })
     if (
       relationId(manualAsset.organization) !== organizationId ||
-      relationId(manualAsset.office) !== officeId
+      (!closingHistoricalCycle && relationId(manualAsset.office) !== officeId)
     )
       throw new Error('Manual assessment asset belongs to another organization or office')
     if (
@@ -132,5 +138,11 @@ export const validateAssessmentInstance: CollectionBeforeChangeHook = async ({
     if (existing.docs.length)
       throw new Error('An open assessment already exists for this policy and target')
   }
-  return data
+  // A nullable unique column enforces one open cycle even when concurrent checks see none.
+  // Closed cycles retain their history and release the key for the next review.
+  const open = ['pending', 'in_progress'].includes(String(merged.status ?? 'pending'))
+  return { ...data, open_cycle_key: open ? createHash('sha256').update(JSON.stringify([
+    organizationId, scope, scope === 'organization' ? organizationId : scope === 'office' ? officeId : manualAssetId ?? assetId,
+    manualAssetId ? 'manual' : 'network', merged.policy_key, merged.policy_version,
+  ])).digest('hex') : null }
 }

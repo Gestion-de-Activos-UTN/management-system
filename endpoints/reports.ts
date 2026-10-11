@@ -6,6 +6,7 @@ import {
   AgentAuthError,
 } from '../access/middleware/resolveAgentAuth'
 import { processScanReport } from '../domain/inventories/processScanReport'
+import { readBoundedJSON, RequestBodyError } from '../lib/read-bounded-json'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
@@ -18,8 +19,12 @@ export const reportsEndpoint: Endpoint = {
   path: '/v1/reports',
   method: 'post',
   handler: async req => {
-    const declaredLength = Number(req.headers.get('content-length') ?? 0)
-    if (declaredLength > MAX_REPORT_BYTES) return json({ error: 'payload too large' }, 413)
+    let rawBody: unknown
+    try { rawBody = await readBoundedJSON(req, MAX_REPORT_BYTES) }
+    catch (error) {
+      if (error instanceof RequestBodyError) return json({ error: error.message }, error.status)
+      throw error
+    }
 
     const authDeps = createPayloadAgentAuthDeps(req.payload)
     let auth
@@ -39,10 +44,6 @@ export const reportsEndpoint: Endpoint = {
     // correcto, así que un retry idempotente (línea ~59, abajo) también cuenta como éxito.
     await authDeps.resetAttempts(auth.agentId)
 
-    const rawBody = await req.json!()
-    if (Buffer.byteLength(JSON.stringify(rawBody), 'utf8') > MAX_REPORT_BYTES) {
-      return json({ error: 'payload too large' }, 413)
-    }
     const parseResult = ScanReportPayloadSchema.safeParse(rawBody)
     if (!parseResult.success) {
       return json({ error: 'invalid payload', issues: parseResult.error.issues }, 400)

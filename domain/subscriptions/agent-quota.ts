@@ -64,7 +64,8 @@ export async function getAgentQuota(
       overrideAccess: true,
       req,
       depth: 0,
-      limit: 5000,
+      pagination: false,
+      select: { office: true, lifecycle_status: true, is_active: true },
     }),
   ])
   const subscription = subscriptions.docs[0]

@@ -15,6 +15,7 @@ export type ResolvedTaskReference = TaskReferenceInput & {
   organizationId: string
   officeId: string | null
   label: string
+  unavailable?: boolean
 }
 
 const REFERENCE_COLLECTION_PERMISSIONS: Record<TaskReferenceInput['relationTo'], CollectionSlug> = {
@@ -163,7 +164,8 @@ export async function resolveTaskReference(
       'No se pudo resolver la organización de la entidad.'
     )
   }
-  return { ...reference, organizationId, officeId, label }
+  return { ...reference, organizationId, officeId, label,
+    ...(['assets', 'non-network-assets'].includes(reference.relationTo) ? { unavailable: doc.status === 'retired' || Boolean(doc.deleted_at) } : {}) }
 }
 
 export function roleCanReadTaskReference(

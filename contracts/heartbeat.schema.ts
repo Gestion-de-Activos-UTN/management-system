@@ -4,12 +4,12 @@ import { z } from 'zod'
 // (no es un dataclass en models.py, pero la forma es fija igual).
 export const HeartbeatPayloadSchema = z
   .object({
-    agent_id: z.string(),
+    agent_id: z.string().min(1).max(120),
     // Agentes viejos podían mandar cualquier texto; los valores desconocidos se conservan como
     // `unknown` en vez de romper el canal durante una actualización gradual.
     status: z.enum(['idle', 'scanning', 'unknown']).catch('unknown'),
     timestamp: z.iso.datetime({ offset: true }),
   })
-  .passthrough()
+  .strict()
 
 export type HeartbeatPayload = z.infer<typeof HeartbeatPayloadSchema>

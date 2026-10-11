@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { Payload } from 'payload'
+import type { Payload, PayloadRequest } from 'payload'
 import { reconcileExpiredAssetExclusions } from './reconcileExpiredAssetExclusions'
 
 test('reincludes expired assets from both inventories and only queries dated exclusions', async () => {
   const finds: Array<Record<string, unknown>> = []
   const updates: Array<Record<string, unknown>> = []
   const payload = {
+    db: { beginTransaction: async () => 'tx', commitTransaction: async () => {}, rollbackTransaction: async () => {}, sessions: { tx: { db: { execute: async () => {} } } } },
+    async findByID({ id }: { id: string }) { return { id, assessment_scope: 'excluded', assessment_excluded_until: '2026-09-11T12:00:00.000Z' } },
     async find(args: Record<string, unknown>) {
       finds.push(args)
       return { docs: [{ id: args.collection === 'assets' ? 'network-1' : 'manual-1' }] }
@@ -18,7 +20,7 @@ test('reincludes expired assets from both inventories and only queries dated exc
   } as unknown as Payload
 
   const now = new Date('2026-09-12T12:00:00.000Z')
-  const result = await reconcileExpiredAssetExclusions(payload, now)
+  const result = await reconcileExpiredAssetExclusions(payload, now, { payload, context: {} } as PayloadRequest)
 
   assert.deepEqual(result, { network_assets_reincluded: 1, manual_assets_reincluded: 1 })
   assert.equal(updates.length, 2)

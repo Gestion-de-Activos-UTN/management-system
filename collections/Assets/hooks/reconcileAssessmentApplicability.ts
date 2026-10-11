@@ -58,9 +58,14 @@ export const reconcileAssessmentApplicability: CollectionAfterChangeHook<Asset> 
   // System jobs batch their own recalculation (ingest and aging sweep enqueue once per run); only a
   // move still needs the previous office refreshed here.
   if (!req.context?.systemJob || officeMoved)
-    await enqueueRiskRecalculation(req.payload, relationId(doc.organization), [
-      doc.office ? relationId(doc.office) : null,
-      officeMoved ? relationId(previousDoc.office) : null,
-    ])
+    await enqueueRiskRecalculation(
+      req.payload,
+      relationId(doc.organization),
+      [
+        doc.office ? relationId(doc.office) : null,
+        officeMoved ? relationId(previousDoc.office) : null,
+      ],
+      req
+    )
   return doc
 }

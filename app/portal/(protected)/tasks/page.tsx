@@ -173,7 +173,13 @@ export default function TasksPage() {
         emptyLabel={EMPTY_LABELS[view]}
         minWidth={850}
       />
-      <Modal opened={opened} onClose={() => setOpened(false)} title="Nueva tarea" size="xl">
+      <Modal
+        opened={opened}
+        onClose={() => setOpened(false)}
+        title="Nueva tarea"
+        size="xl"
+        centered
+      >
         <TaskForm asOrganization={asOrganization} onSaved={() => setOpened(false)} />
       </Modal>
     </Stack>

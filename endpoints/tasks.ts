@@ -1,3 +1,4 @@
+import { actorMatches } from '@/lib/actor-relation'
 import type { Endpoint, PayloadRequest, Where } from 'payload'
 import type { Task } from '@/app/types/payload-types'
 import { getTenantContext, type TenantContext } from '@/access/tenant/resolveTenantContext'
@@ -7,18 +8,22 @@ import {
   CancelTaskSchema,
   CreateTasksSchema,
   EditTaskSchema,
+  ForceCompleteTaskSchema,
   ReassignTaskSchema,
   TASK_REFERENCE_COLLECTIONS,
   TaskListQuerySchema,
   TaskReferenceSchema,
+  TaskAssignmentOptionsQuerySchema,
 } from '@/modules/tasks/schema'
 import {
   archiveTask,
+  assignmentOptionsScope,
   availableTaskActions,
   assertCanReadTask,
   cancelTask,
   claimTask,
   completeTask,
+  forceCompleteTask,
   createTasks,
   deletePendingTask,
   editTask,
@@ -105,6 +110,100 @@ function taskReferenceInfo(
   }
 }
 
+type TaskActorCollection = 'users' | 'admins'
+
+type TaskActorReference = { collection: TaskActorCollection | null; id: string }
+
+function taskActorReference(value: unknown): TaskActorReference | null {
+  if (value === null || value === undefined || value === '') return null
+  if (typeof value === 'object' && 'relationTo' in value && 'value' in value) {
+    const collection = value.relationTo
+    if (collection !== 'users' && collection !== 'admins') return null
+    const id = relationId(value.value)
+    return id ? { collection, id } : null
+  }
+  // At depth 0 Payload may return a polymorphic relationship as a raw id. Resolve it against
+  // both actor collections; platform admins do not have a Users document.
+  if (typeof value === 'string' || typeof value === 'number') {
+    const id = String(value)
+    return id ? { collection: null, id } : null
+  }
+  return null
+}
+
+async function taskActorLabels(req: PayloadRequest, task: Task) {
+  const actorFields = {
+    created_by: task.created_by,
+    claimed_by: task.claimed_by,
+    completed_by: task.completed_by,
+    cancelled_by: task.cancelled_by,
+    archived_by: task.archived_by,
+  } as const
+  const references = Object.fromEntries(
+    Object.entries(actorFields).map(([field, value]) => [field, taskActorReference(value)])
+  ) as Record<keyof typeof actorFields, ReturnType<typeof taskActorReference>>
+  const idsByCollection: Record<TaskActorCollection, Set<string>> = {
+    users: new Set(),
+    admins: new Set(),
+  }
+  for (const reference of Object.values(references)) {
+    if (!reference) continue
+    if (reference.collection) idsByCollection[reference.collection].add(reference.id)
+    else {
+      idsByCollection.users.add(reference.id)
+      idsByCollection.admins.add(reference.id)
+    }
+  }
+
+  const [users, admins] = await Promise.all([
+    idsByCollection.users.size
+      ? req.payload.find({
+          collection: 'users',
+          where: { id: { in: [...idsByCollection.users] } },
+          select: { name: true, email: true },
+          overrideAccess: true,
+          req,
+          depth: 0,
+          pagination: false,
+        })
+      : Promise.resolve({ docs: [] }),
+    idsByCollection.admins.size
+      ? req.payload.find({
+          collection: 'admins',
+          where: { id: { in: [...idsByCollection.admins] } },
+          select: { name: true, email: true },
+          overrideAccess: true,
+          req,
+          depth: 0,
+          pagination: false,
+        })
+      : Promise.resolve({ docs: [] }),
+  ])
+  const labels = new Map<string, string>()
+  const labelsById = new Map<string, string>()
+  for (const user of users.docs) {
+    const label = user.name || user.email
+    labels.set(`users:${user.id}`, label)
+    labelsById.set(user.id, label)
+  }
+  for (const admin of admins.docs) {
+    const label = admin.name?.trim() || 'Administrador de plataforma'
+    labels.set(`admins:${admin.id}`, label)
+    if (!labelsById.has(admin.id)) labelsById.set(admin.id, label)
+  }
+
+  return Object.fromEntries(
+    Object.entries(references).map(([field, reference]) => [
+      field,
+      reference
+        ? reference.collection
+          ? (labels.get(`${reference.collection}:${reference.id}`) ?? null)
+          : (labelsById.get(reference.id) ?? null)
+        : null,
+    ])
+  ) as Record<keyof typeof actorFields, string | null>
+}
+
 const listTasksEndpoint: Endpoint = {
   path: '/v1/tasks',
   method: 'get',
@@ -145,7 +244,7 @@ const listTasksEndpoint: Endpoint = {
         req,
         depth: 0,
         sort: 'due_at,-createdAt',
-        limit: 1000,
+        pagination: false,
       })
 
       const visible = await Promise.all(
@@ -156,8 +255,7 @@ const listTasksEndpoint: Endpoint = {
             if (parsed.data.status && effective.effective_status !== parsed.data.status) return null
             if (parsed.data.view === 'mine') {
               const mine =
-                relationId(task.claimed_by) === ctx.userId ||
-                relationId(task.assigned_user) === ctx.userId
+                actorMatches(task.claimed_by, ctx) || relationId(task.assigned_user) === ctx.userId
               if (!mine) return null
             }
             if (parsed.data.view === 'pool') {
@@ -191,6 +289,7 @@ const taskDetailEndpoint: Endpoint = {
       const reference = await assertCanReadTask(req, ctx, task)
       return json({
         ...taskWithDerivedState(task),
+        actor_labels: await taskActorLabels(req, task),
         related_entity_info: taskReferenceInfo(task, reference),
         available_actions: await availableTaskActions(req, ctx, task, reference),
         requires_reassignment: await taskRequiresReassignment(req, task, reference),
@@ -269,6 +368,22 @@ const cancelTaskEndpoint: Endpoint = {
     }),
 }
 
+const forceCompleteTaskEndpoint: Endpoint = {
+  path: '/v1/tasks/:id/force-complete',
+  method: 'post',
+  handler: req =>
+    withTaskErrors(async () => {
+      const ctx = await taskContext(req)
+      if (ctx instanceof Response) return ctx
+      const parsed = ForceCompleteTaskSchema.safeParse(await req.json!().catch(() => ({})))
+      if (!parsed.success)
+        return json({ error: 'invalid_reason', issues: parsed.error.issues }, 400)
+      return json(
+        taskWithDerivedState(await forceCompleteTask(req, ctx, taskId(req), parsed.data.reason))
+      )
+    }),
+}
+
 const deleteTaskEndpoint: Endpoint = {
   path: '/v1/tasks/:id',
   method: 'delete',
@@ -287,32 +402,31 @@ const assignmentOptionsEndpoint: Endpoint = {
     withTaskErrors(async () => {
       const ctx = await taskContext(req)
       if (ctx instanceof Response) return ctx
-      if (!canDo(ctx.role, 'tasks', 'create', ctx.organizationId))
-        return json({ error: 'forbidden' }, 403)
       const params = new URL(req.url ?? 'http://localhost', 'http://localhost').searchParams
-      const officeId = params.get('office_id')
-      const officeIds =
-        params
-          .get('office_ids')
-          ?.split(',')
-          .map(value => value.trim())
-          .filter(Boolean) ?? []
-      const rawReference = params.get('reference_type')
-        ? { relationTo: params.get('reference_type'), value: params.get('reference_id') }
-        : undefined
-      const parsedReference = rawReference ? TaskReferenceSchema.safeParse(rawReference) : null
-      if (parsedReference && !parsedReference.success)
-        return json({ error: 'invalid_reference' }, 400)
-      const reference = parsedReference?.success
-        ? await resolveTaskReference(req, parsedReference.data)
-        : undefined
-      if (reference && !tenantCanReadTaskReference(ctx, reference))
-        return json({ error: 'forbidden' }, 403)
-      const targetOffices = reference
-        ? [reference.officeId]
-        : officeIds.length
-          ? officeIds
-          : [officeId]
+      for (const key of ['office_id', 'office_ids', 'reference_type', 'reference_id', 'task_id'])
+        if (params.getAll(key).length > 1) return json({ error: 'invalid_query' }, 400)
+      const query = TaskAssignmentOptionsQuerySchema.safeParse({
+        office_id: params.get('office_id') ?? undefined,
+        office_ids: params.has('office_ids')
+          ? params
+              .get('office_ids')!
+              .split(',')
+              .map(id => id.trim())
+          : undefined,
+        task_id: params.get('task_id') ?? undefined,
+        reference_type: params.get('reference_type') ?? undefined,
+        reference_id: params.get('reference_id') ?? undefined,
+      })
+      if (!query.success) return json({ error: 'invalid_query', issues: query.error.issues }, 400)
+      const { office_id: officeId, office_ids: officeIds = [], task_id: taskId } = query.data
+      const { offices: targetOffices, reference } = await assignmentOptionsScope(req, ctx, {
+        officeIds: [...new Set(officeIds.length ? officeIds : officeId ? [officeId] : [])],
+        reference:
+          query.data.reference_type && query.data.reference_id
+            ? { relationTo: query.data.reference_type, value: query.data.reference_id }
+            : undefined,
+        taskId: taskId ?? undefined,
+      })
       const memberSets = await Promise.all(
         targetOffices.map(targetOffice =>
           listEligibleTaskMembers(req, ctx.organizationId!, targetOffice, reference)
@@ -408,6 +522,7 @@ export const taskEndpoints: Endpoint[] = [
   commandEndpoint('/v1/tasks/:id/release', releaseTask),
   reassignTaskEndpoint,
   commandEndpoint('/v1/tasks/:id/complete', completeTask),
+  forceCompleteTaskEndpoint,
   cancelTaskEndpoint,
   commandEndpoint('/v1/tasks/:id/archive', archiveTask),
   deleteTaskEndpoint,

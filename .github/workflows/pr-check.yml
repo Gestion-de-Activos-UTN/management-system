@@ -23,3 +23,7 @@ jobs:
       - run: pnpm run type-check
       - run: pnpm run test
       - run: pnpm run build
+        env:
+          # payload.config.ts exige un origen HTTPS canónico en producción (lib/platform-origin.ts).
+          # Este build no se despliega: alcanza con un origen reservado (.invalid, RFC 6761).
+          NEXT_PUBLIC_SITE_URL: https://ci.invalid

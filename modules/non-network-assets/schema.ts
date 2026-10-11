@@ -1,41 +1,30 @@
 import { z } from 'zod'
 import { MANUAL_ASSET_CATEGORY_VALUES } from '@/domain/assets/asset-types'
-import { ASSESSMENT_EXCLUSION_REASON_VALUES } from '@/domain/assessments/asset-assessment-scope'
+import {
+  AssessmentScopeFieldsSchema,
+  validateAssessmentScope,
+  assessmentExclusionWindowChanged,
+  type AssessmentScopeBaseline,
+} from '@/domain/assessments/assessment-scope-schema'
 
-export const NonNetworkAssetSchema = z
-  .object({
-    alias: z.string().trim().min(1, 'El alias es obligatorio').max(120),
-    asset_category: z.enum(MANUAL_ASSET_CATEGORY_VALUES),
-    criticality: z.enum(['low', 'medium', 'high', 'critical']),
-    owner: z.string().min(1, 'El responsable es obligatorio'),
-    location: z.string().trim().max(200).nullable(),
-    status: z.enum(['active', 'retired']),
-    office: z.string().min(1, 'La oficina es obligatoria'),
-    // next_review_at ya no se edita a mano — se deriva de este intervalo (ver
-    // collections/NonNetworkAssets/hooks/resolveTenant.ts).
-    review_interval: z.enum(['never', '1d', '3d', '1w', '1m', '6m', '1y']),
-    assessment_scope: z.enum(['included', 'excluded']),
-    assessment_exclusion_reason: z.enum(ASSESSMENT_EXCLUSION_REASON_VALUES).nullable(),
-    assessment_exclusion_note: z.string().trim().max(1000).nullable(),
-    assessment_excluded_until: z.iso.datetime().nullable(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.assessment_scope === 'excluded' && !value.assessment_exclusion_reason)
-      ctx.addIssue({
-        code: 'custom',
-        path: ['assessment_exclusion_reason'],
-        message: 'Selecciona un motivo',
-      })
-    if (
-      value.assessment_scope === 'excluded' &&
-      value.assessment_exclusion_reason === 'other' &&
-      !value.assessment_exclusion_note
-    )
-      ctx.addIssue({
-        code: 'custom',
-        path: ['assessment_exclusion_note'],
-        message: 'Agrega una breve explicación',
-      })
-  })
+const NonNetworkAssetFieldsSchema = z.object({
+  alias: z.string().trim().min(1, 'El alias es obligatorio').max(120),
+  asset_category: z.enum(MANUAL_ASSET_CATEGORY_VALUES),
+  criticality: z.enum(['low', 'medium', 'high', 'critical']),
+  owner: z.string().min(1, 'El responsable es obligatorio'),
+  location: z.string().trim().max(200).nullable(),
+  status: z.enum(['active', 'retired']),
+  office: z.string().min(1, 'La oficina es obligatoria'),
+  // next_review_at ya no se edita a mano — se deriva de este intervalo (ver
+  // collections/NonNetworkAssets/hooks/resolveTenant.ts).
+  review_interval: z.enum(['never', '1d', '3d', '1w', '1m', '6m', '1y']),
+  ...AssessmentScopeFieldsSchema.shape,
+})
+
+export const createNonNetworkAssetSchema = (original?: AssessmentScopeBaseline) =>
+  NonNetworkAssetFieldsSchema.superRefine((value, ctx) =>
+    validateAssessmentScope(value, ctx, assessmentExclusionWindowChanged(value, original))
+  )
+export const NonNetworkAssetSchema = createNonNetworkAssetSchema()
 
 export type NonNetworkAssetFormValues = z.infer<typeof NonNetworkAssetSchema>

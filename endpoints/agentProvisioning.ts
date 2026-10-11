@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import { platformOrigin } from '../lib/platform-origin'
 import type { Endpoint } from 'payload'
 import { canDo } from '../access/rbac/permissions'
 import { getTenantContext } from '../access/tenant/resolveTenantContext'
@@ -50,9 +51,18 @@ export const agentProvisioningEndpoint: Endpoint = {
     const organizationId = relationId(office.organization)
     const agentId = `agent-${crypto.randomUUID()}`
     const platformToken = crypto.randomBytes(32).toString('base64url')
+    // Build before reserving quota: an IO failure must leave no orphan credential or agent.
+    const origin = platformOrigin()
+    const packageBytes = await buildAgentPackage({
+      agentId,
+      platformToken,
+      platformUrl: `${origin}/api/v1/reports`,
+      heartbeatUrl: `${origin}/api/v1/heartbeat`,
+      platform,
+    })
 
     // El lock solo serializa el check-de-cupo + create — buildAgentPackage (zip/IO, lento y sin
-    // relación con el invariante de cupo) corre después, afuera, para no bloquear otras requests
+    // relación con el invariante de cupo) se construyó antes, afuera, para no bloquear otras requests
     // de provisioning del mismo org detrás de un trabajo que no necesita exclusión mutua.
     const denied = await withAgentQuotaLock(organizationId, async () => {
       let quota
@@ -78,16 +88,6 @@ export const agentProvisioningEndpoint: Endpoint = {
       return null
     })
     if (denied) return denied
-
-    const platformUrl = `${new URL(req.url || 'http://localhost').origin}/api/v1/reports`
-    const heartbeatUrl = `${new URL(req.url || 'http://localhost').origin}/api/v1/heartbeat`
-    const packageBytes = await buildAgentPackage({
-      agentId,
-      platformToken,
-      platformUrl,
-      heartbeatUrl,
-      platform,
-    })
 
     // AUDIT: this action must emit an AuditLogs entry (chain_hash over {agent, office, organization, package_hash}, previous hash for this organization_id)
     // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists

@@ -10,6 +10,7 @@ import {
   createTasks,
   deleteTask,
   editTask,
+  forceCompleteTask,
   reassignTask,
   taskCommand,
   type TaskAction,
@@ -46,6 +47,7 @@ export function useTaskCommand(id: string) {
     mutationFn: ({ action, payload }) => {
       if (action === 'delete') return deleteTask(id)
       if (action === 'cancel') return cancelTask(id, String(payload ?? ''))
+      if (action === 'force_complete') return forceCompleteTask(id, String(payload ?? ''))
       if (action === 'reassign') return reassignTask(id, payload as ReassignTaskInput)
       if (action === 'edit') throw new Error('Edit uses useEditTask')
       return taskCommand(id, action)
@@ -56,6 +58,7 @@ export function useTaskCommand(id: string) {
         claim: 'Tarea reclamada',
         release: 'Tarea liberada',
         complete: 'Tarea completada',
+        force_complete: 'Tarea completada por administración',
         cancel: 'Tarea cancelada',
         archive: 'Tarea archivada',
         delete: 'Tarea eliminada',

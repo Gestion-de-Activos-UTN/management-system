@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { ActionIcon, Group, Menu, Tooltip } from '@mantine/core'
 import { Archive, Check, Ellipsis, ExternalLink, Eye, Hand, RotateCcw, Trash2 } from 'lucide-react'
 import type { TaskDTO } from '../service'
-import { getTaskReferenceHref } from '../task-reference-link'
+import { getTaskReferenceHref, getTaskCurrentReferenceHref } from '../task-reference-link'
 import { useTaskCommand } from '../hooks/use-task-actions'
 
 // Componente aparte (no una cell inline) porque necesita su propio hook de mutación.
@@ -15,7 +15,8 @@ export function RowActions({ task, asOrganization }: { task: TaskDTO; asOrganiza
     task.available_actions.includes(action)
   const suffix = asOrganization ? `?asOrganization=${asOrganization}` : ''
   const referenceHref = task.related_entity_info
-    ? getTaskReferenceHref(task.related_entity_info, asOrganization)
+    ? (getTaskCurrentReferenceHref(task.related_entity_info, asOrganization) ??
+      getTaskReferenceHref(task.related_entity_info, asOrganization))
     : null
   const hasMenu = referenceHref || has('release') || has('archive') || has('delete')
 
@@ -27,7 +28,8 @@ export function RowActions({ task, asOrganization }: { task: TaskDTO; asOrganiza
             variant="light"
             size="md"
             aria-label="Reclamar"
-            loading={command.isPending}
+            loading={command.isPending && command.variables?.action === 'claim'}
+            disabled={command.isPending}
             onClick={() => command.mutate({ action: 'claim' })}
           >
             <Hand size={16} strokeWidth={1.5} />
@@ -41,7 +43,8 @@ export function RowActions({ task, asOrganization }: { task: TaskDTO; asOrganiza
             size="md"
             color="green"
             aria-label="Completar"
-            loading={command.isPending}
+            loading={command.isPending && command.variables?.action === 'complete'}
+            disabled={command.isPending}
             onClick={() => command.mutate({ action: 'complete' })}
           >
             <Check size={16} strokeWidth={1.5} />
@@ -62,7 +65,13 @@ export function RowActions({ task, asOrganization }: { task: TaskDTO; asOrganiza
       {hasMenu && (
         <Menu position="bottom-end" withinPortal>
           <Menu.Target>
-            <ActionIcon variant="subtle" color="gray" size="md" aria-label="Más acciones">
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="md"
+              aria-label="Más acciones"
+              disabled={command.isPending}
+            >
               <Ellipsis size={16} strokeWidth={1.5} />
             </ActionIcon>
           </Menu.Target>
@@ -79,6 +88,7 @@ export function RowActions({ task, asOrganization }: { task: TaskDTO; asOrganiza
             {has('release') && (
               <Menu.Item
                 leftSection={<RotateCcw size={14} strokeWidth={1.5} />}
+                disabled={command.isPending}
                 onClick={() => command.mutate({ action: 'release' })}
               >
                 Liberar tarea
@@ -87,6 +97,7 @@ export function RowActions({ task, asOrganization }: { task: TaskDTO; asOrganiza
             {has('archive') && (
               <Menu.Item
                 leftSection={<Archive size={14} strokeWidth={1.5} />}
+                disabled={command.isPending}
                 onClick={() => command.mutate({ action: 'archive' })}
               >
                 Archivar
@@ -96,6 +107,7 @@ export function RowActions({ task, asOrganization }: { task: TaskDTO; asOrganiza
               <Menu.Item
                 color="red"
                 leftSection={<Trash2 size={14} strokeWidth={1.5} />}
+                disabled={command.isPending}
                 onClick={() =>
                   window.confirm('¿Eliminar esta tarea pendiente?') &&
                   command.mutate({ action: 'delete' })

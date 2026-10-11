@@ -1,3 +1,6 @@
+import { actorRelation, actorMatches } from '@/lib/actor-relation'
+import { withTaskLock } from './with-task-lock'
+import { withTransaction, lockAssetRow } from '@/domain/with-transaction'
 import crypto from 'crypto'
 import type { PayloadRequest } from 'payload'
 import type { Task } from '@/app/types/payload-types'
@@ -79,6 +82,7 @@ async function assertReferenceReadable(
   const stored = storedReference(task)
   const resolved = await resolveStoredTaskReference(req, task)
   if (stored && resolved && !tenantCanReadTaskReference(ctx, resolved)) {
+    if (task.status === 'completed' || task.status === 'cancelled') return undefined
     throw new TaskDomainError('task_not_found', 404, 'La tarea no existe.')
   }
   return resolved
@@ -90,7 +94,19 @@ export async function actorIsEligible(
   task: Task,
   reference?: ResolvedTaskReference
 ): Promise<boolean> {
-  if (!ctx.organizationId) return false
+  if (!ctx.organizationId || task.requires_reassignment) return false
+  if (ctx.isPlatformAdmin) {
+    if (task.assignment_kind === 'open_pool') return true
+    if (task.assignment_kind !== 'role' || !task.assigned_role) return false
+    const role = await req.payload.findByID({
+      collection: 'roles',
+      id: relationId(task.assigned_role),
+      overrideAccess: true,
+      req,
+      depth: 0,
+    })
+    return role.slug === 'org_admin'
+  }
   const members = await listEligibleTaskMembers(
     req,
     ctx.organizationId,
@@ -116,7 +132,7 @@ export async function assertCanReadTask(
   const reference = await assertReferenceReadable(req, ctx, task)
   const manager = canDo(ctx.role, 'tasks', 'assign', ctx.organizationId)
   const involved =
-    relationId(task.claimed_by) === ctx.userId || relationId(task.assigned_user) === ctx.userId
+    actorMatches(task.claimed_by, ctx) || relationId(task.assigned_user) === ctx.userId
   if (!manager && !involved && !(await actorIsEligible(req, ctx, task, reference))) {
     throw new TaskDomainError('task_not_found', 404, 'La tarea no existe.')
   }
@@ -152,7 +168,52 @@ async function validateOffices(
   }
 }
 
-export async function createTasks(
+export async function assertCreationOffices(
+  req: PayloadRequest,
+  ctx: TenantContext,
+  officeIds: string[]
+): Promise<void> {
+  if (!ctx.organizationId) throw new TaskDomainError('forbidden', 403)
+  if (
+    !hasOrgWideScope(ctx.role) &&
+    (!officeIds.length || officeIds.some(id => !ctx.officeIds.includes(id)))
+  )
+    throw new TaskDomainError('forbidden', 403, 'Una oficina está fuera de tu alcance.')
+  await validateOffices(req, ctx.organizationId, officeIds)
+}
+
+export async function assignmentOptionsScope(
+  req: PayloadRequest,
+  ctx: TenantContext,
+  input: { officeIds: string[]; reference?: TaskReferenceInput; taskId?: string }
+) {
+  if (input.taskId) {
+    assertAction(ctx, 'reassign')
+    const task = await loadTask(req, input.taskId)
+    assertTaskScope(ctx, task)
+    if (['completed', 'cancelled'].includes(task.status))
+      throw new TaskDomainError('task_terminal', 409)
+    const reference = await assertReferenceReadable(req, ctx, task)
+    return { offices: [task.office ? relationId(task.office) : null], reference }
+  }
+  assertAction(ctx, 'create')
+  const reference = input.reference ? await resolveTaskReference(req, input.reference) : undefined
+  if (reference && !tenantCanReadTaskReference(ctx, reference))
+    throw new TaskDomainError('related_entity_not_found', 404)
+  const offices = reference ? (reference.officeId ? [reference.officeId] : []) : input.officeIds
+  if (
+    reference &&
+    input.officeIds.length &&
+    (offices.length !== input.officeIds.length || input.officeIds.some(id => !offices.includes(id)))
+  )
+    throw new TaskDomainError('invalid_scope', 400)
+  if (!reference && !offices.length && !hasOrgWideScope(ctx.role))
+    throw new TaskDomainError('scope_required', 400)
+  await assertCreationOffices(req, ctx, offices)
+  return { offices: offices.length ? offices : [null], reference }
+}
+
+async function createTasksInTransaction(
   req: PayloadRequest,
   ctx: TenantContext,
   input: CreateTasksInput
@@ -162,6 +223,12 @@ export async function createTasks(
   const reference = input.related_entity
     ? await resolveTaskReference(req, input.related_entity)
     : undefined
+  if (reference?.unavailable)
+    throw new TaskDomainError(
+      'asset_unavailable',
+      409,
+      'No se pueden crear tareas para un activo retirado o eliminado.'
+    )
   if (reference && reference.organizationId !== organizationId) {
     throw new TaskDomainError('related_entity_not_found', 404, 'La entidad no existe.')
   }
@@ -176,23 +243,20 @@ export async function createTasks(
     : input.global
       ? []
       : [...new Set(input.office_ids)]
-  if (!hasOrgWideScope(ctx.role)) {
-    if (!targetOfficeIds.length || targetOfficeIds.some(id => !ctx.officeIds.includes(id))) {
-      throw new TaskDomainError('forbidden', 403, 'Una oficina está fuera de tu alcance.')
-    }
-  }
-  await validateOffices(req, organizationId, targetOfficeIds)
+  await assertCreationOffices(req, ctx, targetOfficeIds)
 
   const targetOffices: Array<string | null> = targetOfficeIds.length ? targetOfficeIds : [null]
   for (const officeId of targetOffices) {
     await assertTaskAssignmentHasEligibleMember(req, organizationId, officeId, input, reference)
   }
 
+  const now = new Date().toISOString()
+  const startAt = input.start_at ?? now
+  if (input.due_at && Date.parse(startAt) > Date.parse(input.due_at))
+    throw new TaskDomainError('invalid_dates', 400, 'El vencimiento precede al inicio.')
   const ownsTransaction = !req.transactionID
   const transactionID = req.transactionID ?? (await req.payload.db.beginTransaction())
   Object.assign(req, { transactionID })
-  const now = new Date().toISOString()
-  const startAt = input.start_at ?? now
   const batchId = targetOffices.length > 1 ? crypto.randomUUID() : undefined
   const created: Task[] = []
   try {
@@ -220,7 +284,7 @@ export async function createTasks(
             related_entity: input.related_entity,
             organization: organizationId,
             office: officeId,
-            created_by: ctx.userId,
+            created_by: actorRelation(req, ctx.userId),
             creation_batch_id: batchId,
           },
         })
@@ -231,10 +295,28 @@ export async function createTasks(
   } catch (error) {
     if (ownsTransaction && transactionID) await req.payload.db.rollbackTransaction(transactionID)
     throw error
+  } finally {
+    if (ownsTransaction) req.transactionID = undefined
   }
 }
 
-export async function editTask(
+export async function createTasks(
+  req: PayloadRequest,
+  ctx: TenantContext,
+  input: CreateTasksInput
+): Promise<Task[]> {
+  return withTransaction(req.payload, req, async request => {
+    const reference = input.related_entity
+    if (
+      reference &&
+      (reference.relationTo === 'assets' || reference.relationTo === 'non-network-assets')
+    )
+      await lockAssetRow(request, reference.relationTo, reference.value)
+    return createTasksInTransaction(request, ctx, input)
+  })
+}
+
+async function editTaskLocked(
   req: PayloadRequest,
   ctx: TenantContext,
   id: string,
@@ -269,11 +351,7 @@ export async function editTask(
   })
 }
 
-export async function claimTask(
-  req: PayloadRequest,
-  ctx: TenantContext,
-  id: string
-): Promise<Task> {
+async function claimTaskLocked(req: PayloadRequest, ctx: TenantContext, id: string): Promise<Task> {
   assertAction(ctx, 'claim')
   const task = await loadTask(req, id)
   assertTaskScope(ctx, task)
@@ -298,14 +376,14 @@ export async function claimTask(
     limit: 1,
     overrideAccess: true,
     req,
-    data: { status: 'in_progress', claimed_by: ctx.userId, claimed_at: now },
+    data: { status: 'in_progress', claimed_by: actorRelation(req, ctx.userId), claimed_at: now },
   })
   const updated = result.docs[0]
   if (!updated) throw new TaskDomainError('already_claimed', 409, 'La tarea ya fue reclamada.')
   return updated
 }
 
-export async function releaseTask(
+async function releaseTaskLocked(
   req: PayloadRequest,
   ctx: TenantContext,
   id: string
@@ -313,7 +391,7 @@ export async function releaseTask(
   assertAction(ctx, 'release')
   const task = await loadTask(req, id)
   assertTaskScope(ctx, task)
-  if (task.status !== 'in_progress' || relationId(task.claimed_by) !== ctx.userId) {
+  if (task.status !== 'in_progress' || !actorMatches(task.claimed_by, ctx)) {
     throw new TaskDomainError('not_claimant', 403, 'Sólo quien reclamó la tarea puede liberarla.')
   }
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {task release, claimant}, previous hash for this organization_id)
@@ -329,7 +407,7 @@ export async function releaseTask(
   })
 }
 
-export async function reassignTask(
+async function reassignTaskLocked(
   req: PayloadRequest,
   ctx: TenantContext,
   id: string,
@@ -359,6 +437,7 @@ export async function reassignTask(
     overrideAccess: true,
     req,
     data: {
+      requires_reassignment: false,
       assignment_kind: assignment.assignment_kind,
       assigned_role: assignment.assignment_kind === 'role' ? assignment.assigned_role : null,
       assigned_user: assignment.assignment_kind === 'user' ? assignment.assigned_user : null,
@@ -369,7 +448,7 @@ export async function reassignTask(
   })
 }
 
-export async function completeTask(
+async function completeTaskLocked(
   req: PayloadRequest,
   ctx: TenantContext,
   id: string
@@ -378,7 +457,7 @@ export async function completeTask(
   const task = await loadTask(req, id)
   assertTaskScope(ctx, task)
   await assertReferenceReadable(req, ctx, task)
-  if (task.status !== 'in_progress' || relationId(task.claimed_by) !== ctx.userId) {
+  if (task.status !== 'in_progress' || !actorMatches(task.claimed_by, ctx)) {
     throw new TaskDomainError(
       'not_claimant',
       403,
@@ -395,11 +474,50 @@ export async function completeTask(
     id,
     overrideAccess: true,
     req,
-    data: { status: 'completed', completed_by: ctx.userId, completed_at: now },
+    data: { status: 'completed', completed_by: actorRelation(req, ctx.userId), completed_at: now },
   })
 }
 
-export async function cancelTask(
+async function forceCompleteTaskLocked(
+  req: PayloadRequest,
+  ctx: TenantContext,
+  id: string,
+  reason: string
+): Promise<Task> {
+  assertAction(ctx, 'complete')
+  if (!ctx.isPlatformAdmin && ctx.role !== 'org_admin') {
+    throw new TaskDomainError('forbidden', 403, 'No tienes permiso para completar esta tarea.')
+  }
+  const task = await loadTask(req, id)
+  assertTaskScope(ctx, task)
+  await assertReferenceReadable(req, ctx, task)
+  if (task.status !== 'in_progress' || !task.claimed_by || actorMatches(task.claimed_by, ctx)) {
+    throw new TaskDomainError(
+      'task_not_force_completable',
+      409,
+      'Sólo puedes completar de forma forzada una tarea en progreso reclamada por otra persona.'
+    )
+  }
+  const now = new Date().toISOString()
+  // AUDIT: this action must emit an AuditLogs entry (chain_hash over {task force complete, completed_by, completed_at, completion_reason}, previous hash for this organization_id)
+  // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+  // NOTIFY: this event should trigger a Notification Bell entry for {claimant, task creator and managers}
+  // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
+  return req.payload.update({
+    collection: 'tasks',
+    id,
+    overrideAccess: true,
+    req,
+    data: {
+      status: 'completed',
+      completed_by: actorRelation(req, ctx.userId),
+      completed_at: now,
+      completion_reason: reason,
+    },
+  })
+}
+
+async function cancelTaskLocked(
   req: PayloadRequest,
   ctx: TenantContext,
   id: string,
@@ -424,14 +542,14 @@ export async function cancelTask(
     req,
     data: {
       status: 'cancelled',
-      cancelled_by: ctx.userId,
+      cancelled_by: actorRelation(req, ctx.userId),
       cancelled_at: now,
       cancellation_reason: reason,
     },
   })
 }
 
-export async function archiveTask(
+async function archiveTaskLocked(
   req: PayloadRequest,
   ctx: TenantContext,
   id: string
@@ -450,11 +568,11 @@ export async function archiveTask(
     id,
     overrideAccess: true,
     req,
-    data: { archived_by: ctx.userId, archived_at: new Date().toISOString() },
+    data: { archived_by: actorRelation(req, ctx.userId), archived_at: new Date().toISOString() },
   })
 }
 
-export async function deletePendingTask(
+async function deletePendingTaskLocked(
   req: PayloadRequest,
   ctx: TenantContext,
   id: string
@@ -489,7 +607,8 @@ export async function availableTaskActions(
   if (!organizationId || !role) return []
   const actions: string[] = []
   const terminal = task.status === 'completed' || task.status === 'cancelled'
-  const claimant = relationId(task.claimed_by) === ctx.userId
+  const claimant = actorMatches(task.claimed_by, ctx)
+  const taskAdmin = ctx.isPlatformAdmin || ctx.role === 'org_admin'
   const managerCan = (action: Action) => canDo(role, 'tasks', action, organizationId)
   if (!terminal && managerCan('edit')) actions.push('edit')
   if (
@@ -503,6 +622,15 @@ export async function availableTaskActions(
   if (task.status === 'in_progress' && claimant && managerCan('release')) actions.push('release')
   if (!terminal && managerCan('reassign')) actions.push('reassign')
   if (task.status === 'in_progress' && claimant && managerCan('complete')) actions.push('complete')
+  if (
+    task.status === 'in_progress' &&
+    task.claimed_by &&
+    !claimant &&
+    taskAdmin &&
+    managerCan('complete')
+  ) {
+    actions.push('force_complete')
+  }
   if (task.status === 'in_progress' && managerCan('cancel')) actions.push('cancel')
   if (terminal && !task.archived_at && managerCan('archive')) actions.push('archive')
   if (task.status === 'pending' && !task.claimed_at && managerCan('delete')) actions.push('delete')
@@ -515,6 +643,7 @@ export async function taskRequiresReassignment(
   reference?: ResolvedTaskReference
 ): Promise<boolean> {
   if (task.status === 'completed' || task.status === 'cancelled') return false
+  if (task.requires_reassignment) return true
   const members = await listEligibleTaskMembers(
     req,
     relationId(task.organization),
@@ -529,3 +658,30 @@ export async function taskRequiresReassignment(
     } as Parameters<typeof assignmentEligibleMembers>[1]).length === 0
   )
 }
+
+export const editTask: typeof editTaskLocked = (...args) =>
+  withTaskLock(args[0], args[2], () => editTaskLocked(...args))
+
+export const claimTask: typeof claimTaskLocked = (...args) =>
+  withTaskLock(args[0], args[2], () => claimTaskLocked(...args))
+
+export const releaseTask: typeof releaseTaskLocked = (...args) =>
+  withTaskLock(args[0], args[2], () => releaseTaskLocked(...args))
+
+export const reassignTask: typeof reassignTaskLocked = (...args) =>
+  withTaskLock(args[0], args[2], () => reassignTaskLocked(...args))
+
+export const completeTask: typeof completeTaskLocked = (...args) =>
+  withTaskLock(args[0], args[2], () => completeTaskLocked(...args))
+
+export const forceCompleteTask: typeof forceCompleteTaskLocked = (...args) =>
+  withTaskLock(args[0], args[2], () => forceCompleteTaskLocked(...args))
+
+export const cancelTask: typeof cancelTaskLocked = (...args) =>
+  withTaskLock(args[0], args[2], () => cancelTaskLocked(...args))
+
+export const archiveTask: typeof archiveTaskLocked = (...args) =>
+  withTaskLock(args[0], args[2], () => archiveTaskLocked(...args))
+
+export const deletePendingTask: typeof deletePendingTaskLocked = (...args) =>
+  withTaskLock(args[0], args[2], () => deletePendingTaskLocked(...args))

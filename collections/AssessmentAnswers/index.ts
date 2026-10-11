@@ -4,6 +4,7 @@ import { validateAssessmentAnswer } from './hooks/validateAssessmentAnswer'
 
 export const AssessmentAnswers: CollectionConfig = {
   slug: 'assessment-answers',
+  indexes: [{ fields: ['assessment', 'question_key'], unique: true }],
   admin: { useAsTitle: 'question_key' },
   access: {
     create: () => false,
@@ -36,7 +37,7 @@ export const AssessmentAnswers: CollectionConfig = {
     { name: 'option_snapshot', type: 'json', required: true },
     { name: 'justification', type: 'textarea', maxLength: 2000 },
     { name: 'evidence_note', type: 'textarea', maxLength: 4000 },
-    { name: 'answered_by', type: 'relationship', relationTo: 'users', required: true },
+    { name: 'answered_by', type: 'relationship', relationTo: ['users', 'admins'], required: true },
     { name: 'answered_at', type: 'date', required: true },
     { name: 'valid_until', type: 'date', required: true, index: true },
     { name: 'evaluation_effect_snapshot', type: 'json', required: true },

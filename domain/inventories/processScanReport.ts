@@ -1,11 +1,21 @@
 import type { Payload, PayloadRequest } from 'payload'
 import type { AgentAuthResult } from '@/access/middleware/resolveAgentAuth'
 import type { ScanReportPayload } from '@/contracts/scan-report.schema'
+import { ScanReportPayloadSchema } from '@/contracts/scan-report.schema'
 import { reevaluateComplianceAfterScan } from '@/domain/assessments/evaluateAutomaticCompliance'
 import { ingestScanReport, type IngestResult } from './ingestScanReport'
 import { maybeCreateAutoSnapshot } from './autoSnapshot'
+import { RAW_TECHNICAL_RETENTION_DAYS } from './technical-evidence'
+import { createHash } from 'node:crypto'
+import { APIError } from 'payload'
+import { relationId } from '@/lib/relationId'
+import { transactionLock, withTransaction } from '@/domain/with-transaction'
 
-const RAW_PAYLOAD_RETENTION_DAYS = 30
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
+  if (value && typeof value === 'object') return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}`
+  return JSON.stringify(value)
+}
 
 export interface ProcessScanReportResult extends IngestResult {
   reportId: string
@@ -22,16 +32,28 @@ export async function processScanReport(
   payload: Payload,
   body: ScanReportPayload,
   auth: AgentAuthResult,
-  req?: PayloadRequest
+  request?: PayloadRequest
 ): Promise<ProcessScanReportResult> {
+  const parsed = ScanReportPayloadSchema.safeParse(body)
+  if (!parsed.success) throw new APIError('invalid scan report', 400, parsed.error.issues)
+  body = parsed.data
+  if (body.agent_id !== auth.agentId || body.assets.some(asset => asset.agent_id !== auth.agentId))
+    throw new APIError('agent_id mismatch', 400)
+  // Serialize all inventory observations of an organization before identity lookup/upsert.
+  return withTransaction(payload, request, async req => {
+  await transactionLock(req, `scan-report:${body.report_id}`)
+  const fingerprint = createHash('sha256').update(canonical(body)).digest('hex')
   const existing = await payload.find({
     collection: 'scan-reports',
+    req,
     where: { id: { equals: body.report_id } },
     overrideAccess: true,
     limit: 1,
     depth: 0,
   })
   const existingReport = existing.docs[0]
+  if (existingReport && (relationId(existingReport.agent) !== auth.agentId || existingReport.content_fingerprint !== fingerprint))
+    throw new APIError('report_id already belongs to a different agent or payload', 409)
 
   if (existingReport && existingReport.status !== 'received') {
     return {
@@ -49,9 +71,12 @@ export async function processScanReport(
     // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
     await payload.create({
       collection: 'scan-reports',
+      req,
       overrideAccess: true,
       data: {
         id: body.report_id,
+        content_fingerprint: fingerprint,
+        received_at: new Date().toISOString(),
         agent: auth.agentId,
         office: auth.officeId,
         network: body.network,
@@ -65,7 +90,7 @@ export async function processScanReport(
         gateway_mac: body.gateway_mac,
         raw_payload: body,
         raw_payload_expires_at: new Date(
-          Date.now() + RAW_PAYLOAD_RETENTION_DAYS * 24 * 60 * 60 * 1000
+          Date.now() + RAW_TECHNICAL_RETENTION_DAYS * 24 * 60 * 60 * 1000
         ).toISOString(),
         status: 'received',
       },
@@ -73,13 +98,13 @@ export async function processScanReport(
   }
 
   // The snapshot intentionally represents the state immediately before applying this scan.
-  try {
-    await maybeCreateAutoSnapshot(payload, auth.officeId, auth.organizationId)
-  } catch {
-    // Snapshot creation is secondary and must never make the scanner retry a valid report.
-  }
+  if (body.execution_status !== 'failed')
+    await maybeCreateAutoSnapshot(payload, auth.officeId, auth.organizationId, req)
 
-  const result = await ingestScanReport(payload, body, auth)
+  const result: IngestResult = body.execution_status === 'failed'
+    ? { processedAssetIds: [], processedDocumentIds: [], rejectedAssets: [] }
+    : await ingestScanReport(payload, body, auth, req)
+  if (body.execution_status !== 'failed')
   await reevaluateComplianceAfterScan(
     payload,
     auth.organizationId,
@@ -93,10 +118,12 @@ export async function processScanReport(
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   await payload.update({
     collection: 'scan-reports',
+    req,
     id: body.report_id,
     overrideAccess: true,
     data: {
-      status: 'processed',
+      status: body.execution_status === 'failed' ? 'failed' : 'processed',
+      execution_status: body.execution_status === 'completed' && result.rejectedAssets.length ? 'partial' : body.execution_status,
       processed_at: new Date().toISOString(),
       error: result.rejectedAssets.length > 0 ? JSON.stringify(result.rejectedAssets) : null,
     },
@@ -105,7 +132,8 @@ export async function processScanReport(
   return {
     ...result,
     reportId: body.report_id,
-    status: 'processed',
+    status: body.execution_status === 'failed' ? 'failed' : 'processed',
     alreadyProcessed: false,
   }
+  }, { isolationLevel: 'repeatable read', lockKey: `inventory:${auth.organizationId}` })
 }

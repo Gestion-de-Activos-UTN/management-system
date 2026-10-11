@@ -90,6 +90,7 @@ function makeReport(
 
 // Payload fake mínimo: solo lo que ingestScanReport toca (find/create/update sobre 'assets').
 function makePayload(existingDoc: Record<string, unknown> | null) {
+  if (existingDoc && !existingDoc.office) existingDoc.office = AUTH.officeId
   const updates: Record<string, unknown>[] = []
   const creates: Record<string, unknown>[] = []
   const payload = {
@@ -113,14 +114,16 @@ function makePayload(existingDoc: Record<string, unknown> | null) {
 // ignora `where` a propósito porque esos tests solo verifican merge/diff asumiendo que "encontrar
 // el existingDoc correcto" ya pasó.
 function makePayloadWithDocs(docs: Array<Record<string, unknown>>) {
+  for (const doc of docs) if (!doc.office) doc.office = AUTH.officeId
   const updates: Array<{ id: unknown; data: Record<string, unknown> }> = []
   const creates: Record<string, unknown>[] = []
   const payload = {
-    async find({ where }: { where: Record<string, { equals?: unknown }> }) {
+    async find({ where }: { where: Record<string, { equals?: unknown; exists?: boolean }> }) {
       const macEquals = where.mac?.equals
       const ipEquals = where.ip?.equals
       const match = docs.find(doc => {
         if (macEquals !== undefined && doc.mac !== macEquals) return false
+        if (where.mac?.exists === false && doc.mac) return false
         if (ipEquals !== undefined && doc.ip !== ipEquals) return false
         return true
       })
@@ -179,12 +182,38 @@ test('reconciliación degradado→full: mismo dispositivo por ip, no duplica ni 
   assert.equal('criticality' in updates[0].data, false)
 })
 
-test('reconciliación full→degradado: dispositivo ya con mac matchea por ip directo, sin duplicar', async () => {
+test('un reporte sin MAC crea identidad provisional y conserva intacto el equipo confirmado no visto hace más del umbral', async () => {
   const existingDoc = {
     id: 'existing-1',
     first_viewed_at: '2025-01-01T00:00:00.000Z',
     mac: 'AA:BB:CC:DD:EE:01',
     ip: '10.0.0.5',
+    last_seen: '2025-12-01T00:00:00.000Z',
+    vendor: null,
+    hostname: null,
+    os: null,
+    os_candidates: [],
+    services: [],
+    gateway_ip: null,
+    gateway_mac: null,
+    status: 'active',
+  }
+  const { payload, updates, creates } = makePayloadWithDocs([existingDoc])
+
+  await ingestScanReport(payload, makeReport([makeAsset({ ip: '10.0.0.5', mac: '' })]), AUTH)
+
+  assert.equal(creates.length, 1)
+  assert.equal(updates.length, 0)
+  assert.equal(existingDoc.mac, 'AA:BB:CC:DD:EE:01')
+})
+
+test('un reporte sin MAC actualiza el equipo con MAC visto recientemente en la misma IP, sin duplicarlo', async () => {
+  const existingDoc = {
+    id: 'existing-1',
+    first_viewed_at: '2025-01-01T00:00:00.000Z',
+    mac: 'AA:BB:CC:DD:EE:01',
+    ip: '10.0.0.5',
+    last_seen: '2025-12-31T23:00:00.000Z',
     vendor: null,
     hostname: null,
     os: null,
@@ -201,7 +230,7 @@ test('reconciliación full→degradado: dispositivo ya con mac matchea por ip di
   assert.equal(creates.length, 0)
   assert.equal(updates.length, 1)
   assert.equal(updates[0].id, 'existing-1')
-  assert.equal(updates[0].data.mac, 'AA:BB:CC:DD:EE:01') // not-null-wins conserva la mac ya conocida
+  assert.equal(existingDoc.mac, 'AA:BB:CC:DD:EE:01')
 })
 
 test('ip reasignada por DHCP a un dispositivo con otra mac: no reconcilia, crea uno nuevo', async () => {
@@ -224,16 +253,16 @@ test('ip reasignada por DHCP a un dispositivo con otra mac: no reconcilia, crea 
 
   await ingestScanReport(
     payload,
-    makeReport([makeAsset({ ip: '10.0.0.5', mac: 'FF:FF:FF:FF:FF:FF' })]),
+    makeReport([makeAsset({ ip: '10.0.0.5', mac: '00:11:22:33:44:66' })]),
     AUTH
   )
 
   assert.equal(updates.length, 0)
   assert.equal(creates.length, 1)
-  assert.equal(creates[0].mac, 'FF:FF:FF:FF:FF:FF')
+  assert.equal(creates[0].mac, '00:11:22:33:44:66')
 })
 
-test('not-null-wins: un scan degraded (mac/vendor/hostname vacíos) no borra el valor ya conocido', async () => {
+test('not-null-wins: con identidad por MAC confirmada, vendor y hostname vacíos no borran valores conocidos', async () => {
   const existingDoc = {
     id: 'existing-1',
     first_viewed_at: '2025-01-01T00:00:00.000Z',
@@ -251,7 +280,7 @@ test('not-null-wins: un scan degraded (mac/vendor/hostname vacíos) no borra el 
 
   await ingestScanReport(
     payload,
-    makeReport([makeAsset({ mac: '', vendor: '', hostname: '' })]),
+    makeReport([makeAsset({ mac: existingDoc.mac, vendor: '', hostname: '' })]),
     AUTH
   )
 
@@ -553,6 +582,7 @@ test('retry del mismo report_id no incrementa dos veces evidence_history', async
   const doc: Record<string, unknown> = {
     id: 'existing-1',
     asset_id: 'stable-a',
+    office: AUTH.officeId,
     first_viewed_at: null,
     last_seen: '2025-12-01T00:00:00.000Z',
     mac: '00:11:22:33:44:55',
@@ -596,6 +626,7 @@ test('un reporte demorado no reemplaza evidencia dinámica más reciente', async
   const doc = {
     id: 'existing-1',
     asset_id: 'stable-a',
+    office: AUTH.officeId,
     first_viewed_at: null,
     last_seen: '2026-02-01T00:00:00.000Z',
     mac: null,

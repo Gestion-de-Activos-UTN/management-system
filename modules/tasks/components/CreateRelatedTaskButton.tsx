@@ -54,6 +54,7 @@ export function CreateRelatedTaskButton({
         onClose={() => setOpened(false)}
         title={`Nueva tarea · ${TASK_REFERENCE_TYPE_LABELS[reference.relationTo]}`}
         size="xl"
+        centered
       >
         {/* Remonta el form al abrir para tomar la referencia vigente (p. ej. otra oficina). */}
         {opened && (

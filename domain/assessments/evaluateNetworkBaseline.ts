@@ -29,8 +29,13 @@ export function evaluateNetworkBaseline(input: {
 }): NetworkEvaluation[] {
   const rules: readonly NetworkBaselineRule[] = NETWORK_BASELINE
   return input.services.flatMap<NetworkEvaluation>(service => {
-    if (service.state !== 'open' || service.port == null || !service.protocol) return []
+    if (service.port == null || !service.protocol || service.state === 'closed') return []
     const serviceKey = `${service.protocol}:${service.port}`
+    if (service.state !== 'open') return [{
+      check_key: `network.service:${serviceKey}`, control_key: 'A.8.21', service_key: serviceKey,
+      status: 'not_evaluable', severity: 'medium', reason_code: 'service_state_unconfirmed',
+      explanation: networkExplanation({ check_key: '', reason_code: 'service_state_unconfirmed' })!, evidence: service,
+    }]
     if (input.port_coverage !== 'complete' || input.service_coverage !== 'complete') {
       return [
         {

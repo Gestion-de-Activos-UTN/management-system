@@ -16,6 +16,7 @@ import {
   TextInput,
 } from '@mantine/core'
 import { useOfficesList } from '@/modules/offices/hooks/use-offices'
+import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
 import {
   formatDateInput,
   localDateEndToISOString,
@@ -52,6 +53,7 @@ export function TaskForm({
   onSaved?: () => void
 }) {
   const create = useCreateTasks()
+  const { data: tenant } = useTenantContext(asOrganization)
   const { data: offices } = useOfficesList(asOrganization)
   const [referenceType, setReferenceType] = useState<TaskReferenceInput['relationTo'] | null>(
     initialReference?.relationTo ?? null
@@ -66,13 +68,14 @@ export function TaskForm({
     formState: { errors },
   } = useForm<CreateTasksInput>({
     resolver: zodResolver(CreateTasksSchema),
+    mode: 'onChange',
     defaultValues: {
       title: '',
       description: '',
       priority: 'normal',
       start_at: undefined,
       due_at: undefined,
-      global: true,
+      global: false,
       office_ids: [],
       assignment_kind: 'open_pool',
       related_entity: initialReference?.value
@@ -93,7 +96,15 @@ export function TaskForm({
     asOrganization,
     referenceLocked ? initialReference?.value : undefined
   )
-  const assignmentOptions = useTaskAssignmentOptions(officeIds, reference, asOrganization)
+  const assignmentOptions = useTaskAssignmentOptions(officeIds, reference, asOrganization, {
+    enabled: Boolean(
+      tenant?.permissions.tasks.includes('create') &&
+      (reference || (!referenceType && (officeIds.length || (tenant.orgWide && global))))
+    ),
+  })
+  useEffect(() => {
+    if (tenant && !tenant.orgWide && global) setValue('global', false)
+  }, [tenant, global, setValue])
 
   const selectedReference = useMemo(
     () => referenceOptions.data?.find(option => option.value === reference?.value),
@@ -331,21 +342,23 @@ export function TaskForm({
           </Text>
         ) : (
           <>
-            <Controller
-              name="global"
-              control={control}
-              render={({ field }) => (
-                <Switch
-                  label="Tarea global"
-                  description="Se aplica una vez a toda la organización"
-                  checked={field.value}
-                  onChange={event => {
-                    field.onChange(event.currentTarget.checked)
-                    if (event.currentTarget.checked) setValue('office_ids', [])
-                  }}
-                />
-              )}
-            />
+            {tenant?.orgWide && (
+              <Controller
+                name="global"
+                control={control}
+                render={({ field }) => (
+                  <Switch
+                    label="Tarea global"
+                    description="Se aplica una vez a toda la organización"
+                    checked={field.value}
+                    onChange={event => {
+                      field.onChange(event.currentTarget.checked)
+                      if (event.currentTarget.checked) setValue('office_ids', [])
+                    }}
+                  />
+                )}
+              />
+            )}
             {!global && (
               <Controller
                 name="office_ids"

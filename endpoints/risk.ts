@@ -6,6 +6,7 @@ import { bandVisible, scoreVisible } from '@/domain/risk/constants'
 import { getTenantContext } from '@/access/tenant/resolveTenantContext'
 import { canDo } from '@/access/rbac/permissions'
 import { officeQueryError } from '@/access/tenant/officeQueryError'
+import { riskRecalculationStatus } from '@/domain/risk/recalculation-status'
 import type {
   LatestRiskResponse,
   RiskContributionDTO,
@@ -16,6 +17,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status })
 
 const querySchema = z.object({
   office_id: z.string().min(1).optional(),
+  evaluation_id: z.uuid().optional(),
   page: z.coerce.number().int().min(1).default(1),
 })
 
@@ -165,7 +167,7 @@ async function riskFeatureEnabled(req: Parameters<Endpoint['handler']>[0], organ
   )
 }
 
-/** Read-only: returns the latest persisted evaluation. Never calculates during a GET. */
+/** Read-only: returns the latest persisted evaluation. Also supports an explicitly selected historical evaluation in the same tenant/office. Never calculates during a GET. */
 export const latestRiskEvaluationEndpoint: Endpoint = {
   path: '/v1/risk/latest',
   method: 'get',
@@ -181,9 +183,10 @@ export const latestRiskEvaluationEndpoint: Endpoint = {
     const query = querySchema.safeParse({
       office_id: params.get('office_id') ?? undefined,
       page: params.get('page') ?? undefined,
+      evaluation_id: params.get('evaluation_id') ?? undefined,
     })
     if (!query.success) return json({ error: 'invalid_query' }, 400)
-    const { office_id: officeId, page } = query.data
+    const { office_id: officeId, page, evaluation_id: evaluationId } = query.data
     // Office-scoped roles never read the organization-wide evaluation (other offices' assets).
     const officeError = officeQueryError(ctx, officeId)
     if (officeError) return json({ error: officeError }, 403)
@@ -191,6 +194,7 @@ export const latestRiskEvaluationEndpoint: Endpoint = {
     const where: Where = {
       and: [
         { organization: { equals: ctx.organizationId } },
+        ...(evaluationId ? [{ id: { equals: evaluationId } }] : []),
         officeId ? { office: { equals: officeId } } : { office: { exists: false } },
       ],
     }
@@ -204,10 +208,15 @@ export const latestRiskEvaluationEndpoint: Endpoint = {
       where,
     })
     const evaluation = latest.docs[0]
+    if (evaluationId && !evaluation) return json({ error: 'evaluation_not_found' }, 404)
+    const recalculation = evaluationId
+      ? undefined
+      : await riskRecalculationStatus(req, ctx.organizationId, officeId, evaluation?.evaluated_at)
     const empty = { page, totalPages: 0, totalDocs: 0, hasNextPage: false }
     if (!evaluation)
       return json({
         evaluation: null,
+        recalculation,
         contributions: [],
         pagination: empty,
       } satisfies LatestRiskResponse)
@@ -235,6 +244,7 @@ export const latestRiskEvaluationEndpoint: Endpoint = {
     ])
     return json({
       evaluation: evaluationDTO(evaluation, labels),
+      recalculation,
       contributions: contributions.docs.map(row =>
         contributionDTO(row, labels, scoreVisible(evaluation.confidence))
       ),

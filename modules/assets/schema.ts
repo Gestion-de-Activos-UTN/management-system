@@ -1,47 +1,27 @@
 import { z } from 'zod'
 import { SCANNED_ASSET_TYPE_VALUES } from '@/domain/assets/asset-types'
-import { ASSESSMENT_EXCLUSION_REASON_VALUES } from '@/domain/assessments/asset-assessment-scope'
-
-const AssessmentScopeInputSchema = z
-  .object({
-    assessment_scope: z.enum(['included', 'excluded']),
-    assessment_exclusion_reason: z.enum(ASSESSMENT_EXCLUSION_REASON_VALUES).nullable(),
-    assessment_exclusion_note: z.string().trim().max(1000).nullable(),
-    assessment_excluded_until: z.iso.datetime().nullable(),
-  })
-  .superRefine((value, ctx) => {
-    if (value.assessment_scope === 'excluded' && !value.assessment_exclusion_reason)
-      ctx.addIssue({
-        code: 'custom',
-        path: ['assessment_exclusion_reason'],
-        message: 'Selecciona un motivo',
-      })
-    if (
-      value.assessment_scope === 'excluded' &&
-      value.assessment_exclusion_reason === 'other' &&
-      !value.assessment_exclusion_note
-    )
-      ctx.addIssue({
-        code: 'custom',
-        path: ['assessment_exclusion_note'],
-        message: 'Agrega una breve explicación',
-      })
-  })
+import {
+  AssessmentScopeFieldsSchema,
+  createAssessmentScopeInputSchema,
+  type AssessmentScopeBaseline,
+} from '@/domain/assessments/assessment-scope-schema'
 
 // No extiende contracts/asset.schema.ts: ese schema es el contrato Scanner↔Plataforma para el
 // bloque TÉCNICO (ip/mac/os/services...) — el bloque de negocio nunca viaja en ese payload, no
 // hay nada ahí para extender. Este schema valida exactamente lo que el PATCH de edición manual
 // acepta (RF-55: solo negocio, nunca los campos técnicos).
-export const AssetBusinessFieldsSchema = z
-  .object({
-    authorization_status: z.enum(['authorized', 'unauthorized']),
-    alias: z.string().trim().max(120).nullable(),
-    criticality: z.enum(['low', 'medium', 'high', 'critical']).nullable(),
-    owner: z.string().nullable(),
-    location: z.string().trim().max(200).nullable(),
-    status: z.enum(['active', 'retired', 'offline']),
-  })
-  .and(AssessmentScopeInputSchema)
+const AssetBusinessBaseSchema = z.object({
+  authorization_status: z.enum(['authorized', 'unauthorized']),
+  alias: z.string().trim().max(120).nullable(),
+  criticality: z.enum(['low', 'medium', 'high', 'critical']).nullable(),
+  owner: z.string().nullable(),
+  location: z.string().trim().max(200).nullable(),
+  status: z.enum(['active', 'retired', 'offline']),
+})
+
+export const createAssetBusinessFieldsSchema = (original?: AssessmentScopeBaseline) =>
+  AssetBusinessBaseSchema.and(createAssessmentScopeInputSchema(original))
+export const AssetBusinessFieldsSchema = createAssetBusinessFieldsSchema()
 
 export type AssetBusinessFields = z.infer<typeof AssetBusinessFieldsSchema>
 export const AssetBusinessUpdateSchema = z
@@ -52,10 +32,7 @@ export const AssetBusinessUpdateSchema = z
     owner: z.string().nullable().optional(),
     location: z.string().trim().max(200).nullable().optional(),
     status: z.enum(['active', 'retired', 'offline']).optional(),
-    assessment_scope: z.enum(['included', 'excluded']).optional(),
-    assessment_exclusion_reason: z.enum(ASSESSMENT_EXCLUSION_REASON_VALUES).nullable().optional(),
-    assessment_exclusion_note: z.string().trim().max(1000).nullable().optional(),
-    assessment_excluded_until: z.iso.datetime().nullable().optional(),
+    ...AssessmentScopeFieldsSchema.partial().shape,
   })
   .strict()
 
