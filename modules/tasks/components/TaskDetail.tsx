@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import {
   Alert,
-  Badge,
   Button,
   Card,
   Divider,
@@ -70,7 +69,8 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             {task.title}
           </Text>
           <Text c="dimmed" size="sm">
-            Creada {formatDateTime(task.createdAt)}
+            Creada por {task.actor_labels?.created_by ?? 'Usuario no disponible'} ·{' '}
+            {formatDateTime(task.createdAt)}
           </Text>
         </div>
         <Group gap="xs">
@@ -79,9 +79,13 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             label={TASK_STATUS_LABELS[task.effective_status]}
           />
           {task.archived_at && (
-            <Badge color="gray" variant="outline">
-              Archivada
-            </Badge>
+            <StatusBadge
+              tone="neutral"
+              label="Archivada"
+              icon={<Archive size={13} strokeWidth={1.5} />}
+              iconOnly
+              size="xs"
+            />
           )}
         </Group>
       </Group>
@@ -146,6 +150,40 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
           )}
         </Stack>
       </Card>
+      <Card withBorder padding="md">
+        <Stack gap="sm">
+          <Text fw={700} size="sm">
+            Actividad
+          </Text>
+          <Stack gap="xs">
+            <TaskActivity
+              label="Reclamada"
+              actor={task.actor_labels?.claimed_by}
+              at={task.claimed_at}
+            />
+            <TaskActivity
+              label="Completada"
+              actor={task.actor_labels?.completed_by}
+              at={task.completed_at}
+            />
+            <TaskActivity
+              label="Cancelada"
+              actor={task.actor_labels?.cancelled_by}
+              at={task.cancelled_at}
+            />
+            <TaskActivity
+              label="Archivada"
+              actor={task.actor_labels?.archived_by}
+              at={task.archived_at}
+            />
+            {task.cancelled_at && task.cancellation_reason && (
+              <Text size="sm" c="dimmed">
+                Motivo de cancelación: {task.cancellation_reason}
+              </Text>
+            )}
+          </Stack>
+        </Stack>
+      </Card>
       <Group justify="flex-end">
         {has('edit') && (
           <Button
@@ -159,7 +197,8 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
         {has('claim') && (
           <Button
             leftSection={<Hand size={16} strokeWidth={1.5} />}
-            loading={command.isPending}
+            loading={command.isPending && command.variables?.action === 'claim'}
+            disabled={command.isPending}
             onClick={() => run('claim')}
           >
             Reclamar
@@ -169,7 +208,8 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
           <Button
             variant="light"
             leftSection={<RotateCcw size={16} strokeWidth={1.5} />}
-            loading={command.isPending}
+            loading={command.isPending && command.variables?.action === 'release'}
+            disabled={command.isPending}
             onClick={() => run('release')}
           >
             Liberar tarea
@@ -184,7 +224,8 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
           <Button
             color="green"
             leftSection={<Check size={16} strokeWidth={1.5} />}
-            loading={command.isPending}
+            loading={command.isPending && command.variables?.action === 'complete'}
+            disabled={command.isPending}
             onClick={() => run('complete')}
           >
             Completar
@@ -204,7 +245,8 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
           <Button
             variant="light"
             leftSection={<Archive size={16} strokeWidth={1.5} />}
-            loading={command.isPending}
+            loading={command.isPending && command.variables?.action === 'archive'}
+            disabled={command.isPending}
             onClick={() => run('archive')}
           >
             Archivar
@@ -215,7 +257,8 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             color="red"
             variant="subtle"
             leftSection={<Trash2 size={16} strokeWidth={1.5} />}
-            loading={command.isPending}
+            loading={command.isPending && command.variables?.action === 'delete'}
+            disabled={command.isPending}
             onClick={() => window.confirm('¿Eliminar esta tarea pendiente?') && run('delete')}
           >
             Eliminar
@@ -228,6 +271,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
         onClose={() => setEditOpened(false)}
         title="Editar tarea"
         size="lg"
+        centered
       >
         <TaskEditForm task={task} onSaved={() => setEditOpened(false)} />
       </Modal>
@@ -236,6 +280,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
         onClose={() => setReassignOpened(false)}
         title="Reasignar tarea"
         size="lg"
+        centered
       >
         <Stack>
           <TaskAssignmentFields
@@ -258,7 +303,12 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
           </Group>
         </Stack>
       </Modal>
-      <Modal opened={cancelOpened} onClose={() => setCancelOpened(false)} title="Cancelar tarea">
+      <Modal
+        opened={cancelOpened}
+        onClose={() => setCancelOpened(false)}
+        title="Cancelar tarea"
+        centered
+      >
         <Stack>
           <Textarea
             label="Motivo"
@@ -283,5 +333,28 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
         </Stack>
       </Modal>
     </Stack>
+  )
+}
+
+function TaskActivity({
+  label,
+  actor,
+  at,
+}: {
+  label: string
+  actor?: string | null
+  at?: string | null
+}) {
+  if (!at) return null
+  return (
+    <Group gap="xs" wrap="wrap">
+      <Text size="sm" fw={500}>
+        {label}:
+      </Text>
+      <Text size="sm">{actor ?? 'Usuario no disponible'}</Text>
+      <Text size="sm" c="dimmed">
+        {formatDateTime(at)}
+      </Text>
+    </Group>
   )
 }

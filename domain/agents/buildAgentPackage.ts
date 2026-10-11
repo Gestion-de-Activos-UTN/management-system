@@ -75,14 +75,22 @@ const POSIX_LAUNCHER = [
   '# bin/python, and gating on that would skip the retry and start the agent without its deps.',
   'if [ ! -f "$VENV_READY" ]; then',
   '  if [ "${EUID:-$(id -u)}" -eq 0 ]; then',
-  '    echo "Prepare the environment by running ./start-agent.sh as a regular user first; dependency installation cannot run as root." >&2',
-  '    exit 1',
+  '    if [ -z "${SUDO_USER:-}" ] || [ "$SUDO_USER" = root ] || ! command -v sudo >/dev/null 2>&1; then',
+  '      echo "Prepare the environment by running ./start-agent.sh as a regular user first; dependency installation cannot run as root." >&2',
+  '      exit 1',
+  '    fi',
+  '    if [ ! -x "$VENV_DIR/bin/python" ]; then',
+  '      sudo -u "$SUDO_USER" "$PYTHON_BIN" -m venv "$VENV_DIR" || exit 1',
+  '    fi',
+  '    sudo -u "$SUDO_USER" "$VENV_DIR/bin/python" -m pip install -r "$SCRIPT_DIR/requirements.txt" || exit 1',
+  '    sudo -u "$SUDO_USER" touch "$VENV_READY" || exit 1',
+  '  else',
+  '    if [ ! -x "$VENV_DIR/bin/python" ]; then',
+  '      "$PYTHON_BIN" -m venv "$VENV_DIR" || exit 1',
+  '    fi',
+  '    "$VENV_DIR/bin/python" -m pip install -r "$SCRIPT_DIR/requirements.txt" || exit 1',
+  '    touch "$VENV_READY" || exit 1',
   '  fi',
-  '  if [ ! -x "$VENV_DIR/bin/python" ]; then',
-  '    "$PYTHON_BIN" -m venv "$VENV_DIR" || exit 1',
-  '  fi',
-  '  "$VENV_DIR/bin/python" -m pip install -r "$SCRIPT_DIR/requirements.txt" || exit 1',
-  '  touch "$VENV_READY"',
   'fi',
   'PYTHONPATH="$SCRIPT_DIR/src" exec "$VENV_DIR/bin/python" -m siam_agent.agent "$@"',
 ].join('\n')
@@ -187,13 +195,14 @@ To scan a specific network:
   ./start-agent.sh --once --network 192.168.1.0/24
 
 The first run creates a local virtual environment and installs requirements.txt.
-The launcher is a source script; this package does not contain native binaries.
+When started with sudo, the launcher installs dependencies as the invoking user,
+then runs the scan with elevated privileges. The launcher is a source script; this
+package does not contain native binaries.
 
 ## Permissions
 
 Without elevated permissions the agent falls back to an unprivileged TCP-connect
-scan. Complete the first run without sudo to prepare dependencies, then stop the agent.
-Run with sudo only when raw-socket scans or OS detection are required:
+scan. Run with sudo when raw-socket scans or OS detection are required:
 
   sudo ./start-agent.sh --once
 `

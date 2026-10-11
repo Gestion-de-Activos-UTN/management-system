@@ -136,8 +136,7 @@ export function BulkAssessmentModal({
         {step === 0 && (
           <Stack gap="md">
             <Text size="sm" c="dimmed">
-              Elige una regla para encontrar revisiones abiertas. Antes de responder podrás quitar
-              casos puntuales del conjunto.
+              Elige una regla para encontrar revisiones abiertas.
             </Text>
             <Select
               label="Tipo de activo"
@@ -210,8 +209,7 @@ export function BulkAssessmentModal({
         {step === 1 && preview && (
           <Stack gap="md">
             <Alert color="blue" icon={<Info size={16} strokeWidth={1.5} />}>
-              Se encontraron {preview.applicable.length} revisiones abiertas. Puedes quitar las que
-              no quieras responder ahora.
+              Se encontraron {preview.applicable.length} revisiones abiertas.
             </Alert>
             {preview.preserved_completed.length > 0 && (
               <Alert color="gray" icon={<CheckCheck size={16} strokeWidth={1.5} />}>

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Alert, Anchor, Button, List, Stack } from '@mantine/core'
+import { Alert, Anchor, Button, List, Stack, Text } from '@mantine/core'
 import { AlertTriangle, Radar } from 'lucide-react'
 import { controlTitle } from '../risk.columns'
 import type { RiskEvaluationDTO } from '../service'
@@ -58,21 +58,25 @@ export function RiskAlerts({
       )}
       {alerts.undetermined_exposure.length > 0 && (
         <Alert color="orange" title="Exposición no determinada" icon={<Radar size={18} />}>
-          Hay dispositivos sin identificar en la misma red que{' '}
-          {alerts.undetermined_exposure.map(item => item.asset_label).join(', ')}. Identifíquelos
-          para poder calcular su riesgo.
-          <Button
-            component={Link}
-            href={inventoryHref}
-            size="xs"
-            variant="light"
-            color="orange"
-            mt="sm"
-            display="block"
-            w="fit-content"
-          >
-            Identificar dispositivos
-          </Button>
+          <Stack gap="xs">
+            <Text size="sm">Hay dispositivos sin identificar en la misma red que:</Text>
+            <List size="sm" spacing={2}>
+              {alerts.undetermined_exposure.map(item => (
+                <List.Item key={item.asset_id}>{item.asset_label}</List.Item>
+              ))}
+            </List>
+            <Text size="sm">Identifíquelos para poder calcular su riesgo.</Text>
+            <Button
+              component={Link}
+              href={inventoryHref}
+              size="xs"
+              variant="light"
+              color="orange"
+              w="fit-content"
+            >
+              Identificar dispositivos
+            </Button>
+          </Stack>
         </Alert>
       )}
     </Stack>

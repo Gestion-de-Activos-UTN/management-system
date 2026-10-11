@@ -19,6 +19,13 @@ export type TaskReferenceInfo = TaskReferenceInput & {
 export type TaskDTO = Task & {
   effective_status: 'planned' | 'pending' | 'in_progress' | 'completed' | 'cancelled'
   related_entity_info: TaskReferenceInfo | null
+  actor_labels?: {
+    created_by: string | null
+    claimed_by: string | null
+    completed_by: string | null
+    cancelled_by: string | null
+    archived_by: string | null
+  }
   available_actions: TaskAction[]
   requires_reassignment: boolean
 }

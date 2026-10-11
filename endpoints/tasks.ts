@@ -108,6 +108,99 @@ function taskReferenceInfo(
   }
 }
 
+type TaskActorCollection = 'users' | 'admins'
+
+type TaskActorReference = { collection: TaskActorCollection | null; id: string }
+
+function taskActorReference(value: unknown): TaskActorReference | null {
+  if (value === null || value === undefined || value === '') return null
+  if (typeof value === 'object' && 'relationTo' in value && 'value' in value) {
+    const collection = value.relationTo
+    if (collection !== 'users' && collection !== 'admins') return null
+    const id = relationId(value.value)
+    return id ? { collection, id } : null
+  }
+  // At depth 0 Payload may return a polymorphic relationship as a raw id. Resolve it against
+  // both actor collections; platform admins do not have a Users document.
+  if (typeof value === 'string' || typeof value === 'number') {
+    const id = String(value)
+    return id ? { collection: null, id } : null
+  }
+  return null
+}
+
+async function taskActorLabels(req: PayloadRequest, task: Task) {
+  const actorFields = {
+    created_by: task.created_by,
+    claimed_by: task.claimed_by,
+    completed_by: task.completed_by,
+    cancelled_by: task.cancelled_by,
+    archived_by: task.archived_by,
+  } as const
+  const references = Object.fromEntries(
+    Object.entries(actorFields).map(([field, value]) => [field, taskActorReference(value)])
+  ) as Record<keyof typeof actorFields, ReturnType<typeof taskActorReference>>
+  const idsByCollection: Record<TaskActorCollection, Set<string>> = {
+    users: new Set(),
+    admins: new Set(),
+  }
+  for (const reference of Object.values(references)) {
+    if (!reference) continue
+    if (reference.collection) idsByCollection[reference.collection].add(reference.id)
+    else {
+      idsByCollection.users.add(reference.id)
+      idsByCollection.admins.add(reference.id)
+    }
+  }
+
+  const [users, admins] = await Promise.all([
+    idsByCollection.users.size
+      ? req.payload.find({
+          collection: 'users',
+          where: { id: { in: [...idsByCollection.users] } },
+          select: { name: true, email: true },
+          overrideAccess: true,
+          req,
+          depth: 0,
+          pagination: false,
+        })
+      : Promise.resolve({ docs: [] }),
+    idsByCollection.admins.size
+      ? req.payload.find({
+          collection: 'admins',
+          where: { id: { in: [...idsByCollection.admins] } },
+          select: { email: true },
+          overrideAccess: true,
+          req,
+          depth: 0,
+          pagination: false,
+        })
+      : Promise.resolve({ docs: [] }),
+  ])
+  const labels = new Map<string, string>()
+  const labelsById = new Map<string, string>()
+  for (const user of users.docs) {
+    const label = user.name || user.email
+    labels.set(`users:${user.id}`, label)
+    labelsById.set(user.id, label)
+  }
+  for (const admin of admins.docs) {
+    labels.set(`admins:${admin.id}`, admin.email)
+    if (!labelsById.has(admin.id)) labelsById.set(admin.id, admin.email)
+  }
+
+  return Object.fromEntries(
+    Object.entries(references).map(([field, reference]) => [
+      field,
+      reference
+        ? (reference.collection
+            ? (labels.get(`${reference.collection}:${reference.id}`) ?? null)
+            : (labelsById.get(reference.id) ?? null))
+        : null,
+    ])
+  ) as Record<keyof typeof actorFields, string | null>
+}
+
 const listTasksEndpoint: Endpoint = {
   path: '/v1/tasks',
   method: 'get',
@@ -194,6 +287,7 @@ const taskDetailEndpoint: Endpoint = {
       const reference = await assertCanReadTask(req, ctx, task)
       return json({
         ...taskWithDerivedState(task),
+        actor_labels: await taskActorLabels(req, task),
         related_entity_info: taskReferenceInfo(task, reference),
         available_actions: await availableTaskActions(req, ctx, task, reference),
         requires_reassignment: await taskRequiresReassignment(req, task, reference),

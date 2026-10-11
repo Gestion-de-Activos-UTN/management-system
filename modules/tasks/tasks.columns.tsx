@@ -1,6 +1,6 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { Badge, Group, Text } from '@mantine/core'
-import { AlertTriangle } from 'lucide-react'
+import { Group, Text, Tooltip } from '@mantine/core'
+import { AlertTriangle, Archive, UserRoundCog } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDate } from '@/lib/format-date'
 import type { TaskDTO } from './service'
@@ -24,10 +24,24 @@ export function getTasksColumns(asOrganization?: string): ColumnDef<TaskDTO, unk
         const Icon = reference ? TASK_REFERENCE_ICONS[reference.relationTo] : null
         return (
           <div>
-            {row.original.requires_reassignment && <StatusBadge tone="warning" label="Requiere reasignación" />}
-            <Text fw={600} size="sm" lineClamp={1}>
-              {row.original.title}
-            </Text>
+            <Group gap={6} wrap="nowrap" align="center" w="100%" miw={0}>
+              {row.original.requires_reassignment && (
+                <Tooltip label="Requiere reasignación: la asignación actual no tiene personas elegibles">
+                  <span style={{ flexShrink: 0 }}>
+                    <StatusBadge
+                      tone="warning"
+                      label="Requiere reasignación"
+                      icon={<UserRoundCog size={13} strokeWidth={1.5} />}
+                      iconOnly
+                      size="xs"
+                    />
+                  </span>
+                </Tooltip>
+              )}
+              <Text fw={600} size="sm" lineClamp={1} style={{ minWidth: 0, flex: 1 }}>
+                {row.original.title}
+              </Text>
+            </Group>
             {reference && (
               <Group gap={4} wrap="nowrap" c="dimmed">
                 {Icon && <Icon size={12} strokeWidth={1.5} style={{ flexShrink: 0 }} />}
@@ -65,9 +79,17 @@ export function getTasksColumns(asOrganization?: string): ColumnDef<TaskDTO, unk
             label={TASK_STATUS_LABELS[row.original.effective_status]}
           />
           {row.original.archived_at && (
-            <Badge color="gray" variant="outline" size="sm">
-              Archivada
-            </Badge>
+            <Tooltip label="Tarea archivada">
+              <span style={{ flexShrink: 0 }}>
+                <StatusBadge
+                  tone="neutral"
+                  label="Archivada"
+                  icon={<Archive size={13} strokeWidth={1.5} />}
+                  iconOnly
+                  size="xs"
+                />
+              </span>
+            </Tooltip>
           )}
         </Group>
       ),
