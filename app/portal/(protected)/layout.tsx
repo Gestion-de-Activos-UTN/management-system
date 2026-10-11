@@ -26,6 +26,7 @@ import {
 } from '@/modules/auth/hooks/use-tenant-context'
 import { OfficeSelector } from '@/modules/offices/components/OfficeSelector'
 import { ScanResultMonitor } from '@/modules/scan-reports/components/ScanResultMonitor'
+import { PortalMessagesRuntime } from '@/modules/portal-messages/components/PortalMessagesRuntime'
 
 // ponytail/debt: same client-side-only gate as the admin portal's (protected)/layout.tsx —
 // Loader while useSession()/useTenantContext() resolve, then redirect. The JWT lives in
@@ -150,6 +151,7 @@ function PortalProtectedLayoutInner({ children }: { children: React.ReactNode })
           asOrganization={asOrganization}
         />
       )}
+      <PortalMessagesRuntime />
       <DashboardShell
         navItems={navItems}
         sidebarFooter={<SidebarProfile title={roleLabel(tenantContext.data)} />}

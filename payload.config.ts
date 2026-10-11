@@ -27,14 +27,21 @@ import { ComplianceResults } from './collections/ComplianceResults'
 import { RiskEvaluations } from './collections/RiskEvaluations'
 import { RiskContributions } from './collections/RiskContributions'
 import { Tasks } from './collections/Tasks'
+import { PortalMessages } from './collections/PortalMessages'
+import { PortalMessageReceipts } from './collections/PortalMessageReceipts'
 import { latestRiskEvaluationEndpoint } from './endpoints/risk'
 import { taskEndpoints } from './endpoints/tasks'
+import { portalMessageEndpoints } from './endpoints/portalMessages'
 import { recalculateRisk } from './domain/risk/recalculateRisk'
 import { enqueueOrganizationRiskRecalculation } from './domain/risk/enqueueRiskRecalculation'
 import { reportsEndpoint } from './endpoints/reports'
 import { heartbeatEndpoint } from './endpoints/heartbeat'
 import { vendorEndpoint } from './endpoints/vendor'
 import { sessionEndpoint } from './endpoints/session'
+import {
+  platformAdminProfileEndpoint,
+  updatePlatformAdminProfileEndpoint,
+} from './endpoints/platformAdminProfile'
 import { nonNetworkAssetReviewEndpoint } from './endpoints/nonNetworkAssetReview'
 import { assetIdentifyEndpoint } from './endpoints/assetIdentify'
 import { assetUnidentifyEndpoint } from './endpoints/assetUnidentify'
@@ -51,6 +58,7 @@ import {
 import { agentProvisioningEndpoint } from './endpoints/agentProvisioning'
 import { officeAgentSummaryEndpoint } from './endpoints/officeAgentSummary'
 import { dashboardMetricsEndpoint } from './endpoints/dashboardMetrics'
+import { platformDashboardEndpoint } from './endpoints/platformDashboard'
 import { agentRevokeEndpoint } from './endpoints/agentRevoke'
 import { expireRawScanPayloads } from './domain/inventories/expireRawScanPayloads'
 import { reconcileExpiredAssessments } from './domain/assessments/reconcileExpiredAssessments'
@@ -115,6 +123,8 @@ export default buildConfig({
     RiskEvaluations,
     RiskContributions,
     Tasks,
+    PortalMessages,
+    PortalMessageReceipts,
     InventoryIncidents,
   ],
   // Servidos vía app/(payload)/api/[...slug]/route.ts (catch-all de Next que reexporta
@@ -126,6 +136,8 @@ export default buildConfig({
     heartbeatEndpoint,
     vendorEndpoint,
     sessionEndpoint,
+    platformAdminProfileEndpoint,
+    updatePlatformAdminProfileEndpoint,
     nonNetworkAssetReviewEndpoint,
     assetIdentifyEndpoint,
     assetUnidentifyEndpoint,
@@ -140,6 +152,7 @@ export default buildConfig({
     agentProvisioningEndpoint,
     officeAgentSummaryEndpoint,
     dashboardMetricsEndpoint,
+    platformDashboardEndpoint,
     agentRevokeEndpoint,
     // Specific bulk routes must precede /v1/assessments/:id/* or Payload treats "bulk" as an id.
     bulkAssessmentPreviewEndpoint,
@@ -153,6 +166,7 @@ export default buildConfig({
     assessmentPolicyEndpoint,
     latestRiskEvaluationEndpoint,
     ...taskEndpoints,
+    ...portalMessageEndpoints,
   ],
   jobs: {
     // Queue supersede/delete/create must use the caller's transaction, without the hook path
@@ -207,16 +221,25 @@ export default buildConfig({
           })
           const failures: unknown[] = []
           for (const organization of organizations.docs) {
-            try { await enqueueOrganizationRiskRecalculation(req.payload, String(organization.id)) }
-            catch (error) { failures.push(error) }
+            try {
+              await enqueueOrganizationRiskRecalculation(req.payload, String(organization.id))
+            } catch (error) {
+              failures.push(error)
+            }
           }
-          if (failures.length) throw new AggregateError(failures, 'Risk refresh could not queue every organization')
+          if (failures.length)
+            throw new AggregateError(failures, 'Risk refresh could not queue every organization')
           return { output: { organizations: organizations.docs.length } }
         },
       },
       {
-        slug: 'aging-sweep', label: 'Refresh offline inventory', inputSchema: [],
-        outputSchema: [{ name: 'assets_transitioned', type: 'number', required: true }, { name: 'organizations_processed', type: 'number', required: true }],
+        slug: 'aging-sweep',
+        label: 'Refresh offline inventory',
+        inputSchema: [],
+        outputSchema: [
+          { name: 'assets_transitioned', type: 'number', required: true },
+          { name: 'organizations_processed', type: 'number', required: true },
+        ],
         retries: 5,
         // Hourly: offline_after_hours is measured in hours. Offset from the exclusions job.
         schedule: [{ cron: '0 5 * * * *', queue: 'maintenance' }],

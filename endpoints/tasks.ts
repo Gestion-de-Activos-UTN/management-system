@@ -8,6 +8,7 @@ import {
   CancelTaskSchema,
   CreateTasksSchema,
   EditTaskSchema,
+  ForceCompleteTaskSchema,
   ReassignTaskSchema,
   TASK_REFERENCE_COLLECTIONS,
   TaskListQuerySchema,
@@ -22,6 +23,7 @@ import {
   cancelTask,
   claimTask,
   completeTask,
+  forceCompleteTask,
   createTasks,
   deletePendingTask,
   editTask,
@@ -169,7 +171,7 @@ async function taskActorLabels(req: PayloadRequest, task: Task) {
       ? req.payload.find({
           collection: 'admins',
           where: { id: { in: [...idsByCollection.admins] } },
-          select: { email: true },
+          select: { name: true, email: true },
           overrideAccess: true,
           req,
           depth: 0,
@@ -185,17 +187,18 @@ async function taskActorLabels(req: PayloadRequest, task: Task) {
     labelsById.set(user.id, label)
   }
   for (const admin of admins.docs) {
-    labels.set(`admins:${admin.id}`, admin.email)
-    if (!labelsById.has(admin.id)) labelsById.set(admin.id, admin.email)
+    const label = admin.name?.trim() || 'Administrador de plataforma'
+    labels.set(`admins:${admin.id}`, label)
+    if (!labelsById.has(admin.id)) labelsById.set(admin.id, label)
   }
 
   return Object.fromEntries(
     Object.entries(references).map(([field, reference]) => [
       field,
       reference
-        ? (reference.collection
-            ? (labels.get(`${reference.collection}:${reference.id}`) ?? null)
-            : (labelsById.get(reference.id) ?? null))
+        ? reference.collection
+          ? (labels.get(`${reference.collection}:${reference.id}`) ?? null)
+          : (labelsById.get(reference.id) ?? null)
         : null,
     ])
   ) as Record<keyof typeof actorFields, string | null>
@@ -252,8 +255,7 @@ const listTasksEndpoint: Endpoint = {
             if (parsed.data.status && effective.effective_status !== parsed.data.status) return null
             if (parsed.data.view === 'mine') {
               const mine =
-                actorMatches(task.claimed_by, ctx) ||
-                relationId(task.assigned_user) === ctx.userId
+                actorMatches(task.claimed_by, ctx) || relationId(task.assigned_user) === ctx.userId
               if (!mine) return null
             }
             if (parsed.data.view === 'pool') {
@@ -363,6 +365,22 @@ const cancelTaskEndpoint: Endpoint = {
       if (!parsed.success)
         return json({ error: 'invalid_reason', issues: parsed.error.issues }, 400)
       return json(taskWithDerivedState(await cancelTask(req, ctx, taskId(req), parsed.data.reason)))
+    }),
+}
+
+const forceCompleteTaskEndpoint: Endpoint = {
+  path: '/v1/tasks/:id/force-complete',
+  method: 'post',
+  handler: req =>
+    withTaskErrors(async () => {
+      const ctx = await taskContext(req)
+      if (ctx instanceof Response) return ctx
+      const parsed = ForceCompleteTaskSchema.safeParse(await req.json!().catch(() => ({})))
+      if (!parsed.success)
+        return json({ error: 'invalid_reason', issues: parsed.error.issues }, 400)
+      return json(
+        taskWithDerivedState(await forceCompleteTask(req, ctx, taskId(req), parsed.data.reason))
+      )
     }),
 }
 
@@ -504,6 +522,7 @@ export const taskEndpoints: Endpoint[] = [
   commandEndpoint('/v1/tasks/:id/release', releaseTask),
   reassignTaskEndpoint,
   commandEndpoint('/v1/tasks/:id/complete', completeTask),
+  forceCompleteTaskEndpoint,
   cancelTaskEndpoint,
   commandEndpoint('/v1/tasks/:id/archive', archiveTask),
   deleteTaskEndpoint,

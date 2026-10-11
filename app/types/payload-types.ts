@@ -88,6 +88,8 @@ export interface Config {
     'risk-evaluations': RiskEvaluation;
     'risk-contributions': RiskContribution;
     tasks: Task;
+    'portal-messages': PortalMessage;
+    'portal-message-receipts': PortalMessageReceipt;
     'inventory-incidents': InventoryIncident;
     'payload-kv': PayloadKv;
     'payload-jobs': PayloadJob;
@@ -117,6 +119,8 @@ export interface Config {
     'risk-evaluations': RiskEvaluationsSelect<false> | RiskEvaluationsSelect<true>;
     'risk-contributions': RiskContributionsSelect<false> | RiskContributionsSelect<true>;
     tasks: TasksSelect<false> | TasksSelect<true>;
+    'portal-messages': PortalMessagesSelect<false> | PortalMessagesSelect<true>;
+    'portal-message-receipts': PortalMessageReceiptsSelect<false> | PortalMessageReceiptsSelect<true>;
     'inventory-incidents': InventoryIncidentsSelect<false> | InventoryIncidentsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-jobs': PayloadJobsSelect<false> | PayloadJobsSelect<true>;
@@ -321,6 +325,7 @@ export interface Role {
  */
 export interface Admin {
   id: string;
+  name?: string | null;
   role: string | Role;
   status?: ('active' | 'inactive') | null;
   updatedAt: string;
@@ -1074,6 +1079,7 @@ export interface Task {
         value: string | Admin;
       } | null);
   completed_at?: string | null;
+  completion_reason?: string | null;
   cancelled_by?:
     | ({
         relationTo: 'users';
@@ -1144,6 +1150,99 @@ export interface Task {
         value: string | Admin;
       };
   creation_batch_id?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "portal-messages".
+ */
+export interface PortalMessage {
+  id: string;
+  title: string;
+  description: string;
+  message_type: 'notice' | 'actionable';
+  template_key?: string | null;
+  cta_label?: string | null;
+  scope: 'global' | 'organizations';
+  target_organizations?: (string | Organization)[] | null;
+  target_kind: 'all' | 'role' | 'user';
+  target_roles?: ('org_admin' | 'org_viewer' | 'office_manager')[] | null;
+  target_users?: (string | User)[] | null;
+  linked_section?: ('dashboard' | 'risk-score' | 'security-review' | 'tasks' | 'inventory' | 'administration') | null;
+  linked_entity_type?:
+    | (
+        | 'tasks'
+        | 'offices'
+        | 'assets'
+        | 'non-network-assets'
+        | 'assessment-instances'
+        | 'compliance-results'
+        | 'inventory-snapshots'
+        | 'scan-reports'
+        | 'risk-evaluations'
+        | 'agents'
+      )
+    | null;
+  linked_entity?:
+    | ({
+        relationTo: 'tasks';
+        value: string | Task;
+      } | null)
+    | ({
+        relationTo: 'offices';
+        value: string | Office;
+      } | null)
+    | ({
+        relationTo: 'assets';
+        value: string | Asset;
+      } | null)
+    | ({
+        relationTo: 'non-network-assets';
+        value: string | NonNetworkAsset;
+      } | null)
+    | ({
+        relationTo: 'assessment-instances';
+        value: string | AssessmentInstance;
+      } | null)
+    | ({
+        relationTo: 'compliance-results';
+        value: string | ComplianceResult;
+      } | null)
+    | ({
+        relationTo: 'inventory-snapshots';
+        value: string | InventorySnapshot;
+      } | null)
+    | ({
+        relationTo: 'scan-reports';
+        value: string | ScanReport;
+      } | null)
+    | ({
+        relationTo: 'risk-evaluations';
+        value: string | RiskEvaluation;
+      } | null)
+    | ({
+        relationTo: 'agents';
+        value: string | Agent;
+      } | null);
+  expires_at?: string | null;
+  is_active?: boolean | null;
+  delivery_version: number;
+  created_by?: (string | null) | Admin;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "portal-message-receipts".
+ */
+export interface PortalMessageReceipt {
+  id: string;
+  message: string | PortalMessage;
+  user: string | User;
+  delivery_version: number;
+  seen_at?: string | null;
+  dismissed_at?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -1403,6 +1502,14 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'tasks';
         value: string | Task;
+      } | null)
+    | ({
+        relationTo: 'portal-messages';
+        value: string | PortalMessage;
+      } | null)
+    | ({
+        relationTo: 'portal-message-receipts';
+        value: string | PortalMessageReceipt;
       } | null)
     | ({
         relationTo: 'inventory-incidents';
@@ -1771,6 +1878,7 @@ export interface SubscriptionsSelect<T extends boolean = true> {
  * via the `definition` "admins_select".
  */
 export interface AdminsSelect<T extends boolean = true> {
+  name?: T;
   role?: T;
   status?: T;
   updatedAt?: T;
@@ -2018,6 +2126,7 @@ export interface TasksSelect<T extends boolean = true> {
   claimed_at?: T;
   completed_by?: T;
   completed_at?: T;
+  completion_reason?: T;
   cancelled_by?: T;
   cancelled_at?: T;
   cancellation_reason?: T;
@@ -2028,6 +2137,44 @@ export interface TasksSelect<T extends boolean = true> {
   office?: T;
   created_by?: T;
   creation_batch_id?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "portal-messages_select".
+ */
+export interface PortalMessagesSelect<T extends boolean = true> {
+  title?: T;
+  description?: T;
+  message_type?: T;
+  template_key?: T;
+  cta_label?: T;
+  scope?: T;
+  target_organizations?: T;
+  target_kind?: T;
+  target_roles?: T;
+  target_users?: T;
+  linked_section?: T;
+  linked_entity_type?: T;
+  linked_entity?: T;
+  expires_at?: T;
+  is_active?: T;
+  delivery_version?: T;
+  created_by?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "portal-message-receipts_select".
+ */
+export interface PortalMessageReceiptsSelect<T extends boolean = true> {
+  message?: T;
+  user?: T;
+  delivery_version?: T;
+  seen_at?: T;
+  dismissed_at?: T;
   updatedAt?: T;
   createdAt?: T;
 }

@@ -478,6 +478,45 @@ async function completeTaskLocked(
   })
 }
 
+async function forceCompleteTaskLocked(
+  req: PayloadRequest,
+  ctx: TenantContext,
+  id: string,
+  reason: string
+): Promise<Task> {
+  assertAction(ctx, 'complete')
+  if (!ctx.isPlatformAdmin && ctx.role !== 'org_admin') {
+    throw new TaskDomainError('forbidden', 403, 'No tienes permiso para completar esta tarea.')
+  }
+  const task = await loadTask(req, id)
+  assertTaskScope(ctx, task)
+  await assertReferenceReadable(req, ctx, task)
+  if (task.status !== 'in_progress' || !task.claimed_by || actorMatches(task.claimed_by, ctx)) {
+    throw new TaskDomainError(
+      'task_not_force_completable',
+      409,
+      'Sólo puedes completar de forma forzada una tarea en progreso reclamada por otra persona.'
+    )
+  }
+  const now = new Date().toISOString()
+  // AUDIT: this action must emit an AuditLogs entry (chain_hash over {task force complete, completed_by, completed_at, completion_reason}, previous hash for this organization_id)
+  // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+  // NOTIFY: this event should trigger a Notification Bell entry for {claimant, task creator and managers}
+  // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
+  return req.payload.update({
+    collection: 'tasks',
+    id,
+    overrideAccess: true,
+    req,
+    data: {
+      status: 'completed',
+      completed_by: actorRelation(req, ctx.userId),
+      completed_at: now,
+      completion_reason: reason,
+    },
+  })
+}
+
 async function cancelTaskLocked(
   req: PayloadRequest,
   ctx: TenantContext,
@@ -569,6 +608,7 @@ export async function availableTaskActions(
   const actions: string[] = []
   const terminal = task.status === 'completed' || task.status === 'cancelled'
   const claimant = actorMatches(task.claimed_by, ctx)
+  const taskAdmin = ctx.isPlatformAdmin || ctx.role === 'org_admin'
   const managerCan = (action: Action) => canDo(role, 'tasks', action, organizationId)
   if (!terminal && managerCan('edit')) actions.push('edit')
   if (
@@ -582,6 +622,15 @@ export async function availableTaskActions(
   if (task.status === 'in_progress' && claimant && managerCan('release')) actions.push('release')
   if (!terminal && managerCan('reassign')) actions.push('reassign')
   if (task.status === 'in_progress' && claimant && managerCan('complete')) actions.push('complete')
+  if (
+    task.status === 'in_progress' &&
+    task.claimed_by &&
+    !claimant &&
+    taskAdmin &&
+    managerCan('complete')
+  ) {
+    actions.push('force_complete')
+  }
   if (task.status === 'in_progress' && managerCan('cancel')) actions.push('cancel')
   if (terminal && !task.archived_at && managerCan('archive')) actions.push('archive')
   if (task.status === 'pending' && !task.claimed_at && managerCan('delete')) actions.push('delete')
@@ -624,6 +673,9 @@ export const reassignTask: typeof reassignTaskLocked = (...args) =>
 
 export const completeTask: typeof completeTaskLocked = (...args) =>
   withTaskLock(args[0], args[2], () => completeTaskLocked(...args))
+
+export const forceCompleteTask: typeof forceCompleteTaskLocked = (...args) =>
+  withTaskLock(args[0], args[2], () => forceCompleteTaskLocked(...args))
 
 export const cancelTask: typeof cancelTaskLocked = (...args) =>
   withTaskLock(args[0], args[2], () => cancelTaskLocked(...args))

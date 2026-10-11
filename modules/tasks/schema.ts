@@ -97,6 +97,7 @@ export const EditTaskSchema = TaskBusinessFieldsSchema.partial()
 
 export const ReassignTaskSchema = TaskAssignmentSchema
 export const CancelTaskSchema = z.object({ reason: z.string().trim().min(3).max(500) })
+export const ForceCompleteTaskSchema = z.object({ reason: z.string().trim().min(3).max(500) })
 
 export const TaskAssignmentOptionsQuerySchema = z
   .object({

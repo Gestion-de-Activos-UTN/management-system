@@ -13,7 +13,7 @@ import {
   Text,
   Textarea,
 } from '@mantine/core'
-import { Archive, Check, Hand, Pencil, RotateCcw, Trash2, XCircle } from 'lucide-react'
+import { Archive, Check, Hand, Pencil, RotateCcw, ShieldAlert, Trash2, XCircle } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDate, formatDateTime } from '@/lib/format-date'
 import { relationId } from '@/lib/relationId'
@@ -33,6 +33,8 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
   const [reassignOpened, setReassignOpened] = useState(false)
   const [cancelOpened, setCancelOpened] = useState(false)
   const [cancelReason, setCancelReason] = useState('')
+  const [forceCompleteOpened, setForceCompleteOpened] = useState(false)
+  const [forceCompleteReason, setForceCompleteReason] = useState('')
   const [assignmentKind, setAssignmentKind] = useState<TaskAssignmentKind>('open_pool')
   const [assignmentTarget, setAssignmentTarget] = useState<string | null>(null)
   const reference = task.related_entity_info
@@ -166,6 +168,11 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
               actor={task.actor_labels?.completed_by}
               at={task.completed_at}
             />
+            {task.completion_reason && (
+              <Text size="sm" c="dimmed">
+                Motivo de finalización forzada: {task.completion_reason}
+              </Text>
+            )}
             <TaskActivity
               label="Cancelada"
               actor={task.actor_labels?.cancelled_by}
@@ -229,6 +236,18 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             onClick={() => run('complete')}
           >
             Completar
+          </Button>
+        )}
+        {has('force_complete') && (
+          <Button
+            color="orange"
+            variant="light"
+            leftSection={<ShieldAlert size={16} strokeWidth={1.5} />}
+            loading={command.isPending && command.variables?.action === 'force_complete'}
+            disabled={command.isPending}
+            onClick={() => setForceCompleteOpened(true)}
+          >
+            Completar como administrador
           </Button>
         )}
         {has('cancel') && (
@@ -299,6 +318,47 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
               disabled={assignmentKind !== 'open_pool' && !assignmentTarget}
             >
               Reasignar
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+      <Modal
+        opened={forceCompleteOpened}
+        onClose={() => setForceCompleteOpened(false)}
+        title="Completar tarea reclamada por otra persona"
+        centered
+      >
+        <Stack>
+          <Alert color="orange" icon={<ShieldAlert size={18} strokeWidth={1.5} />}>
+            La tarea está en progreso y fue reclamada por{' '}
+            <strong>{task.actor_labels?.claimed_by ?? 'otra persona'}</strong>. Al continuar, la
+            tarea quedará completada a tu nombre. La persona que la reclamó permanecerá registrada
+            en la actividad.
+          </Alert>
+          <Textarea
+            label="Motivo de la finalización forzada"
+            description="Este motivo quedará registrado en la actividad de la tarea."
+            required
+            minLength={3}
+            maxLength={500}
+            value={forceCompleteReason}
+            onChange={event => setForceCompleteReason(event.currentTarget.value)}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setForceCompleteOpened(false)}>
+              Volver
+            </Button>
+            <Button
+              color="orange"
+              loading={command.isPending && command.variables?.action === 'force_complete'}
+              disabled={command.isPending || forceCompleteReason.trim().length < 3}
+              onClick={() => {
+                run('force_complete', forceCompleteReason)
+                setForceCompleteOpened(false)
+                setForceCompleteReason('')
+              }}
+            >
+              Confirmar finalización
             </Button>
           </Group>
         </Stack>

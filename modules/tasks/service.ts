@@ -8,7 +8,15 @@ import type {
 } from './schema'
 
 export type TaskAction =
-  'edit' | 'claim' | 'release' | 'reassign' | 'complete' | 'cancel' | 'archive' | 'delete'
+  | 'edit'
+  | 'claim'
+  | 'release'
+  | 'reassign'
+  | 'complete'
+  | 'force_complete'
+  | 'cancel'
+  | 'archive'
+  | 'delete'
 
 export type TaskReferenceInfo = TaskReferenceInput & {
   available: boolean
@@ -74,9 +82,13 @@ export function editTask(id: string, input: EditTaskInput) {
 
 export function taskCommand(
   id: string,
-  action: Exclude<TaskAction, 'edit' | 'reassign' | 'cancel' | 'delete'>
+  action: Exclude<TaskAction, 'edit' | 'reassign' | 'cancel' | 'delete' | 'force_complete'>
 ) {
   return httpClient.post<TaskDTO>(`/api/v1/tasks/${id}/${action}`, {})
+}
+
+export function forceCompleteTask(id: string, reason: string) {
+  return httpClient.post<TaskDTO>(`/api/v1/tasks/${id}/force-complete`, { reason })
 }
 
 export function reassignTask(id: string, input: ReassignTaskInput) {

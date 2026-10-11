@@ -43,6 +43,7 @@ export const Admins: CollectionConfig = {
     afterLogout: [lockLogout],
   },
   fields: [
+    { name: 'name', type: 'text', maxLength: 120 },
     {
       name: 'role',
       type: 'relationship',

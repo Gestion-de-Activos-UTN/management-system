@@ -3,6 +3,7 @@ import type { Payload, PayloadRequest } from 'payload'
 import config from '../payload.config'
 import { createOrgWithAdmin } from '../domain/organizations/createOrgWithAdmin'
 import { initializeSeedPayload } from './seed-payload'
+import { PORTAL_MESSAGE_TEMPLATES } from '../modules/portal-messages/templates'
 
 // Único script de esta fase (modo navegación de solo lectura): siembra, en una sola
 // transacción atómica, los 4 roles base, una organización demo completa (Settings +
@@ -43,6 +44,42 @@ const ROLES = [
     is_platform_role: false,
   },
 ] as const
+
+async function ensurePortalWelcomeMessage(payload: Payload, req: PayloadRequest) {
+  const existing = await payload.find({
+    collection: 'portal-messages',
+    where: { template_key: { equals: 'portal_welcome' } },
+    overrideAccess: true,
+    req,
+    limit: 1,
+  })
+  if (existing.docs[0]) return false
+
+  const welcome = PORTAL_MESSAGE_TEMPLATES.find(template => template.key === 'portal_welcome')!
+  await payload.create({
+    collection: 'portal-messages',
+    overrideAccess: true,
+    req,
+    data: {
+      title: welcome.title,
+      description: welcome.description,
+      message_type: 'notice',
+      template_key: welcome.key,
+      scope: 'global',
+      target_organizations: [],
+      target_kind: 'all',
+      target_roles: [],
+      target_users: [],
+      linked_section: null,
+      linked_entity_type: null,
+      linked_entity: null,
+      expires_at: null,
+      is_active: true,
+      delivery_version: 1,
+    },
+  })
+  return true
+}
 
 async function findOrCreateRole(
   payload: Payload,
@@ -217,6 +254,7 @@ export async function seedNavigation(payload: Payload) {
     const req = { transactionID } as PayloadRequest
     try {
       await ensureSecondaryOfficeAndAdminScope(payload, req, String(existingOrg.docs[0].id))
+      await ensurePortalWelcomeMessage(payload, req)
       if (transactionID) await payload.db.commitTransaction(transactionID)
     } catch (err) {
       if (transactionID) await payload.db.rollbackTransaction(transactionID)
@@ -346,9 +384,12 @@ export async function seedNavigation(payload: Payload) {
       data: {
         email: CREDENTIALS.platform_admin.email,
         password: CREDENTIALS.platform_admin.password,
+        name: 'Platform Admin',
         role: platformAdminRole.id,
       },
     })
+
+    await ensurePortalWelcomeMessage(payload, req)
 
     if (transactionID) await payload.db.commitTransaction(transactionID)
   } catch (err) {

@@ -110,15 +110,15 @@ export function AgentProvisionModal({
               </Text>
               {summary && 'agents' in summary && summary.agents.map(agent => (
                 <Group key={agent.id} justify="space-between" gap="sm">
-                  <Stack gap={2} style={{ minWidth: 0 }}>
-                    <Text size="sm" truncate>
+                  <Group gap="xs" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
+                    <Text size="sm" truncate style={{ flex: 1, minWidth: 0 }}>
                       {agent.id}
                     </Text>
                     <AgentConnectivityBadge
                       connectivity={agent.connectivity}
                       revocationReason={agent.revocation_reason}
                     />
-                  </Stack>
+                  </Group>
                   {agent.lifecycle_status !== 'revoked' && (
                     <Button
                       size="xs"

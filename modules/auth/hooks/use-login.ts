@@ -3,6 +3,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import type { HttpError } from '@/lib/http-client'
 import { setSession, type Session } from '@/lib/session'
+import { resetPortalMessageSessionState } from '@/modules/portal-messages/session-state'
 import { loginAdmin, loginUser } from '../service'
 
 type Credentials = { email: string; password: string }
@@ -33,6 +34,7 @@ export function useLogin() {
       // cache entry from whoever was logged in before would otherwise render first for the
       // new account until an unrelated refetch happened to correct it.
       queryClient.clear()
+      resetPortalMessageSessionState()
       setSession(session)
     },
   })
