@@ -10,6 +10,7 @@ import {
   savePortalMessage,
   updatePortalMessageReceipt,
 } from '../service'
+import type { HttpError } from '@/lib/http-client'
 import type { PortalMessageInput } from '../schema'
 
 export function useAdminPortalMessages(organizationIds: string[]) {
@@ -38,6 +39,31 @@ export function useSavePortalMessage() {
       savePortalMessage(input, id),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: ['platform-admin', 'portal-messages'] }),
+  })
+}
+
+export function useSetPortalMessageActive() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ input, id }: { input: PortalMessageInput; id: string }) =>
+      savePortalMessage(input, id),
+    onSuccess: (_, { input }) => {
+      notifications.show({
+        color: 'green',
+        message: input.is_active ? 'Mensaje activado.' : 'Mensaje desactivado.',
+      })
+      return queryClient.invalidateQueries({ queryKey: ['platform-admin', 'portal-messages'] })
+    },
+    onError: (error: Partial<HttpError>, { input }) => {
+      notifications.show({
+        color: 'red',
+        message:
+          error.message ??
+          (input.is_active
+            ? 'No se pudo activar el mensaje.'
+            : 'No se pudo desactivar el mensaje.'),
+      })
+    },
   })
 }
 

@@ -57,9 +57,17 @@ export function PortalMessagesRuntime() {
     })
   }, [message?.id, message?.delivery_version, message?.seen])
 
+  // Al vaciarse la cola se reinicia el contador: un mensaje que llegue después por el
+  // polling abre una cola nueva ("1 de n") en lugar de continuar la anterior.
+  const endQueue = () => {
+    setActiveId(null)
+    setQueuePosition(1)
+    setQueueTotal(0)
+  }
+
   const advance = (options?: { stopQueue?: boolean }) => {
     if (options?.stopQueue) {
-      setActiveId(null)
+      endQueue()
       stopPortalMessageQueueThisSession()
       setQueuePaused(true)
       return
@@ -75,7 +83,7 @@ export function PortalMessagesRuntime() {
       setActiveId(next.id)
       setQueuePosition(position => position + 1)
     } else {
-      setActiveId(null)
+      endQueue()
     }
   }
   const actions = usePortalMessageActions(message, advance)
@@ -84,7 +92,7 @@ export function PortalMessagesRuntime() {
     <PortalMessageDialog
       message={message}
       opened={Boolean(message) && !queuePaused}
-      onClose={() => void actions.noThanks()}
+      onClose={actions.close}
       onAcknowledge={() => void actions.acknowledge()}
       onRemindLater={actions.remindLater}
       onNoThanks={() => void actions.noThanks()}

@@ -1,0 +1,44 @@
+/* Una columna en pantallas angostas, ordenada por prioridad: riesgo, pendientes y actividad,
+   y al final el contexto numérico. Desde lg, el contenido principal a la izquierda y los
+   pendientes en una columna lateral; la última fila absorbe la altura sobrante del lateral
+   para que no se abran huecos entre los bloques principales. */
+.layout {
+  display: grid;
+  gap: var(--mantine-spacing-md);
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'main'
+    'side'
+    'stats';
+}
+
+.main {
+  grid-area: main;
+}
+
+.side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+  min-width: 0;
+}
+
+.stats {
+  grid-area: stats;
+  display: flex;
+  flex-direction: column;
+  gap: var(--mantine-spacing-md);
+  min-width: 0;
+}
+
+@media (min-width: $mantine-breakpoint-lg) {
+  .layout {
+    grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+    grid-template-rows: auto auto 1fr;
+    grid-template-areas:
+      'main side'
+      'stats side'
+      '. side';
+  }
+}

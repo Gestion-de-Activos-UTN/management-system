@@ -1,7 +1,7 @@
 import { Badge, VisuallyHidden } from '@mantine/core'
 import type { ReactNode } from 'react'
 
-const TONE_COLOR = {
+export const STATUS_TONE_COLOR = {
   success: 'green',
   warning: 'yellow',
   danger: 'red',
@@ -9,7 +9,7 @@ const TONE_COLOR = {
   neutral: 'bone',
 } as const
 
-export type StatusTone = keyof typeof TONE_COLOR
+export type StatusTone = keyof typeof STATUS_TONE_COLOR
 
 /**
  * Generic tone → color badge, zero domain knowledge (SYSTEM_PROMPT.md #3).
@@ -36,7 +36,7 @@ export function StatusBadge({
 }) {
   return (
     <Badge
-      color={TONE_COLOR[tone]}
+      color={STATUS_TONE_COLOR[tone]}
       size={size}
       style={{
         display: 'inline-flex',

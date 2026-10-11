@@ -10,26 +10,27 @@ export const PORTAL_MESSAGE_SECTIONS = [
   'administration',
 ] as const
 
+export const PORTAL_MESSAGE_ROLES = ['org_admin', 'org_viewer', 'office_manager'] as const
+
+const organizationIds = z.array(z.uuid()).min(1, 'Selecciona al menos una organización.').max(500)
+
 const OrgAudienceSchema = z.discriminatedUnion('target_kind', [
   z.object({
     scope: z.literal('organizations'),
     target_kind: z.literal('all'),
-    organization_ids: z.array(z.uuid()).min(1).max(500),
+    organization_ids: organizationIds,
   }),
   z.object({
     scope: z.literal('organizations'),
     target_kind: z.literal('role'),
-    organization_ids: z.array(z.uuid()).min(1).max(500),
-    role_slugs: z
-      .array(z.enum(['org_admin', 'org_viewer', 'office_manager']))
-      .min(1)
-      .max(10),
+    organization_ids: organizationIds,
+    role_slugs: z.array(z.enum(PORTAL_MESSAGE_ROLES)).min(1, 'Selecciona al menos un rol.').max(10),
   }),
   z.object({
     scope: z.literal('organizations'),
     target_kind: z.literal('user'),
-    organization_ids: z.array(z.uuid()).min(1).max(500),
-    user_ids: z.array(z.uuid()).min(1).max(500),
+    organization_ids: organizationIds,
+    user_ids: z.array(z.uuid()).min(1, 'Selecciona al menos una persona.').max(500),
   }),
 ])
 
@@ -62,8 +63,8 @@ export const PortalMessageSpecificEntitySchema = z.object({
 
 export const PortalMessageInputSchema = z
   .object({
-    title: z.string().trim().min(1).max(100),
-    description: z.string().trim().min(1).max(500),
+    title: z.string().trim().min(1, 'Escribe un título.').max(100),
+    description: z.string().trim().min(1, 'Escribe una descripción.').max(500),
     message_type: z.enum(['notice', 'actionable']),
     template_key: z.string().min(1).optional(),
     cta_label: z.string().trim().max(30).optional().nullable(),

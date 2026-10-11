@@ -17,6 +17,7 @@ export function usePortalMessageActions(
 
   const saveDismissal = async () => {
     if (!message) return false
+    if (message.dismissed) return true
     try {
       await receipt.mutateAsync({
         id: message.id,
@@ -78,5 +79,13 @@ export function usePortalMessageActions(
     }
   }
 
-  return { acknowledge, remindLater, noThanks, primaryAction, busy }
+  // Cerrar con la X, ESC o el fondo nunca descarta un mensaje accionable: equivale a
+  // "Recordarme más tarde". Un aviso cerrado sí se da por leído. Uno ya descartado sólo se cierra.
+  const close = () => {
+    if (!message || message.dismissed) return onDone()
+    if (message.message_type === 'actionable') return remindLater()
+    void acknowledge()
+  }
+
+  return { acknowledge, remindLater, noThanks, primaryAction, close, busy }
 }
