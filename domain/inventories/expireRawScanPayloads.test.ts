@@ -16,6 +16,8 @@ test('expireRawScanPayloads clears raw data but keeps report documents', async (
       updates.push({ id, ...data })
       return { id }
     },
+    // No snapshot still holds raw evidence.
+    db: { drizzle: { execute: async () => ({ rows: [] }) } },
   } as unknown as Payload
 
   const result = await expireRawScanPayloads(payload, new Date('2026-01-01T00:00:00.000Z'))

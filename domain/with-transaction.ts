@@ -32,12 +32,13 @@ async function waitForLock(payload: Payload, key: string) {
   }
 }
 
-export async function lockAssetRow(req: PayloadRequest, collection: 'assets' | 'non-network-assets', id: string) {
-  const transactionID = await req.transactionID
-  const session = transactionID && req.payload.db.sessions?.[transactionID]
-  if (!session) throw new Error('An active PostgreSQL transaction is required')
-  const table = collection === 'assets' ? 'assets' : 'non_network_assets'
-  await (session.db as PostgresAdapter['drizzle']).execute(sql`SELECT id FROM ${sql.identifier(table)} WHERE id = ${id}::uuid FOR UPDATE`)
+export async function lockAssetRow(
+  req: PayloadRequest,
+  collection: 'assets' | 'non-network-assets' | 'inventory-snapshots',
+  id: string
+) {
+  const table = collection.replaceAll('-', '_')
+  await (await transactionDb(req)).execute(sql`SELECT id FROM ${sql.identifier(table)} WHERE id = ${id}::uuid FOR UPDATE`)
 }
 
 /** Preserve an inherited transaction; otherwise commit only after the entire command succeeds. */
