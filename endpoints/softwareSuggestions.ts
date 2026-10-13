@@ -43,6 +43,8 @@ export const softwareSuggestionsEndpoint: Endpoint = {
           { 'product_details.software_vendor': { exists: true } },
         ],
       },
+      select: { product_details: { software_vendor: true, software_product: true } },
+      pagination: false,
       overrideAccess: true,
       req,
       depth: 0,
