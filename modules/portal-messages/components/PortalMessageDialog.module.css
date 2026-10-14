@@ -1,0 +1,21 @@
+.messageContent {
+  animation: portal-message-enter 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes portal-message-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .messageContent {
+    animation: none;
+  }
+}

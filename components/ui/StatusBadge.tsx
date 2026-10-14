@@ -1,6 +1,7 @@
-import { Badge } from '@mantine/core'
+import { Badge, VisuallyHidden } from '@mantine/core'
+import type { ReactNode } from 'react'
 
-const TONE_COLOR = {
+export const STATUS_TONE_COLOR = {
   success: 'green',
   warning: 'yellow',
   danger: 'red',
@@ -8,7 +9,7 @@ const TONE_COLOR = {
   neutral: 'bone',
 } as const
 
-export type StatusTone = keyof typeof TONE_COLOR
+export type StatusTone = keyof typeof STATUS_TONE_COLOR
 
 /**
  * Generic tone → color badge, zero domain knowledge (SYSTEM_PROMPT.md #3).
@@ -20,17 +21,31 @@ export type StatusTone = keyof typeof TONE_COLOR
  * "light" reads too close-in-hue between tones (e.g. green vs yellow) in
  * dark mode; a solid, autoContrast-text fill stays legible in both schemes.
  */
-export function StatusBadge({ tone, label }: { tone: StatusTone; label: string }) {
+export function StatusBadge({
+  tone,
+  label,
+  size,
+  icon,
+  iconOnly = false,
+}: {
+  tone: StatusTone
+  label: string
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
+  icon?: ReactNode
+  iconOnly?: boolean
+}) {
   return (
     <Badge
-      color={TONE_COLOR[tone]}
+      color={STATUS_TONE_COLOR[tone]}
+      size={size}
       style={{
-        display: 'block',
+        display: 'inline-flex',
         width: 'fit-content',
-        margin: '0 auto',
+        maxWidth: '100%',
       }}
     >
-      {label}
+      {icon && <span aria-hidden="true">{icon}</span>}
+      {iconOnly && icon ? <VisuallyHidden>{label}</VisuallyHidden> : label}
     </Badge>
   )
 }

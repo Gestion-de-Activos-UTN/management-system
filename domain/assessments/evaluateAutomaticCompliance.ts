@@ -1,3 +1,4 @@
+import { networkExplanation } from './network-explanations'
 import type { Payload, PayloadRequest } from 'payload'
 import type { Agent, Asset, AssessmentInstance } from '@/app/types/payload-types'
 import { relationId } from '@/lib/relationId'
@@ -6,6 +7,9 @@ import { evaluateNetworkBaseline, type NetworkEvaluation } from './evaluateNetwo
 import type { ComplianceStatus, PolicyKey } from './catalog'
 import type { CheckEvaluation } from './evaluateCompliance'
 import { isAssetExcludedFromAssessments } from './asset-assessment-scope'
+import { findAll } from '@/lib/find-all'
+import type { ComplianceResult } from '@/app/types/payload-types'
+import { portWasCovered } from '@/domain/inventories/port-coverage'
 
 type AutomaticCheck = CheckEvaluation & {
   control_key: string
@@ -38,8 +42,8 @@ export function evaluateAssetFacts(
       severity: 'medium',
       reason_code: inventoryComplete ? 'inventory_fields_current' : 'inventory_fields_missing',
       explanation: inventoryComplete
-        ? 'This device is identified and has the basic business details needed to manage it.'
-        : 'SIAM needs the device owner, importance and authorization status before it can evaluate the inventory record.',
+        ? 'El equipo está identificado y tiene los datos de negocio necesarios para gestionarlo.'
+        : 'Falta indicar el responsable, la importancia y si el equipo está autorizado para poder evaluarlo.',
       evidence: {
         identified: asset.identified,
         owner: Boolean(asset.owner),
@@ -54,8 +58,8 @@ export function evaluateAssetFacts(
       severity: 'medium',
       reason_code: asset.criticality ? 'criticality_recorded' : 'criticality_missing',
       explanation: asset.criticality
-        ? 'The importance of this device to the business is recorded.'
-        : 'The importance of this device has not been confirmed yet.',
+        ? 'La importancia del equipo para el negocio está registrada.'
+        : 'Todavía no se confirmó la importancia del equipo para el negocio.',
       evidence: { criticality: asset.criticality },
     },
     {
@@ -71,10 +75,10 @@ export function evaluateAssetFacts(
             : 'authorization_unknown',
       explanation:
         authorizationStatus === 'compliant'
-          ? 'The company recognizes and authorizes this device.'
+          ? 'La empresa reconoce y autoriza este equipo.'
           : authorizationStatus === 'non_compliant'
-            ? 'The company marked this device as unauthorized and it requires attention.'
-            : 'The company has not confirmed whether this device is authorized.',
+            ? 'La empresa marcó este equipo como no autorizado: requiere atención.'
+            : 'La empresa todavía no confirmó si este equipo está autorizado.',
       evidence: { authorization_status: asset.authorization_status },
     },
   ]
@@ -102,10 +106,10 @@ export function evaluateOfficeMonitoring(
         ? 'agent_reporting'
         : 'agent_not_reporting',
     explanation: !activeAgents.length
-      ? 'SIAM cannot verify monitoring because this office has no active scanner.'
+      ? 'No se puede verificar el monitoreo porque la oficina no tiene un escáner activo.'
       : online
-        ? 'The office scanner is reporting normally.'
-        : 'The office scanner has stopped reporting and monitoring requires attention.',
+        ? 'El escáner de la oficina está reportando con normalidad.'
+        : 'El escáner de la oficina dejó de reportar: el monitoreo requiere atención.',
     evidence: {
       agents: activeAgents.map(agent => ({
         id: agent.id,
@@ -204,28 +208,24 @@ export async function evaluateAutomaticComplianceForAssessment(
         asset.asset_coverage?.service_detection === 'complete'
       ) {
         const currentKeys = new Set(networkChecks.map(check => check.service_key))
-        const previous = await payload.find({
-          collection: 'compliance-results',
-          overrideAccess: true,
-          req,
-          depth: 0,
-          limit: 500,
-          sort: '-evaluated_at',
-          where: { and: [{ asset: { equals: asset.id } }, { service_key: { exists: true } }] },
-        })
+        const previous = await findAll<ComplianceResult>(payload, 'compliance-results', { and: [{ asset: { equals: asset.id } }, { service_key: { exists: true } }] }, req, '-evaluated_at')
         const seen = new Set<string>()
-        for (const result of previous.docs) {
+        for (const result of previous) {
           if (!result.service_key || seen.has(result.service_key)) continue
           seen.add(result.service_key)
           if (!currentKeys.has(result.service_key) && result.status !== 'compliant') {
+            const confirmedAbsent = asset.services?.some(service => `${service.protocol}:${service.port}` === result.service_key && service.state === 'closed') || portWasCovered(asset.port_scan_coverage, result.service_key, asset.asset_coverage?.port_scan === 'complete')
             checks.push({
               control_key: result.control_key,
               check_key: result.check_key,
               service_key: result.service_key,
-              status: 'compliant',
+              status: confirmedAbsent ? 'compliant' : 'not_evaluable',
               severity: result.severity,
-              reason_code: 'service_no_longer_observed',
-              explanation: 'A complete scan no longer found this network function on the device.',
+              reason_code: confirmedAbsent ? 'service_no_longer_observed' : 'service_state_unconfirmed',
+              explanation: networkExplanation({
+                check_key: result.check_key,
+                reason_code: confirmedAbsent ? 'service_no_longer_observed' : 'service_state_unconfirmed',
+              })!,
               evidence: { previous_result_id: result.id, coverage: 'complete' },
             })
           }
@@ -234,15 +234,8 @@ export async function evaluateAutomaticComplianceForAssessment(
     }
   }
   if (assessment.scope === 'office' && assessment.office) {
-    const agents = await payload.find({
-      collection: 'agents',
-      where: { office: { equals: relationId(assessment.office) } },
-      overrideAccess: true,
-      req,
-      depth: 0,
-      limit: 100,
-    })
-    checks.push(evaluateOfficeMonitoring(agents.docs, now))
+    const agents = await findAll<Agent>(payload, 'agents', { office: { equals: relationId(assessment.office) } }, req)
+    checks.push(evaluateOfficeMonitoring(agents, now))
   }
   for (const check of checks)
     await persistResult(payload, assessment, check, now.toISOString(), req)
@@ -286,7 +279,7 @@ export async function reevaluateComplianceAfterScan(
     overrideAccess: true,
     req,
     depth: 0,
-    limit: 500,
+    pagination: false,
     sort: '-createdAt',
     where: {
       and: [

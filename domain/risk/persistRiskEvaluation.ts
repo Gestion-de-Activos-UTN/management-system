@@ -20,6 +20,7 @@ export async function persistRiskEvaluation(
   },
   externalReq?: PayloadRequest
 ) {
+  const previousTransaction = externalReq?.transactionID
   const ownsTransaction = !externalReq?.transactionID
   const transactionID = externalReq?.transactionID ?? (await payload.db.beginTransaction())
   const req = externalReq
@@ -108,5 +109,7 @@ export async function persistRiskEvaluation(
   } catch (error) {
     if (ownsTransaction && transactionID) await payload.db.rollbackTransaction(transactionID)
     throw error
+  } finally {
+    if (ownsTransaction && externalReq) externalReq.transactionID = previousTransaction
   }
 }

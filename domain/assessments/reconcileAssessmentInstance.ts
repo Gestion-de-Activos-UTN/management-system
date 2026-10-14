@@ -298,6 +298,7 @@ export async function reconcileAssetAssessmentInstance(
     assetType &&
     asset.identified &&
     asset.identification_status === 'confirmed' &&
+    asset.status !== 'retired' &&
     !isAssetExcludedFromAssessments(asset)
       ? v2Questions('asset', policy.key, assetType)
       : []
@@ -538,7 +539,7 @@ export async function reconcileOrganizationAssessments(
       overrideAccess: true,
       req,
       depth: 0,
-      limit: 1000,
+      pagination: false,
     }),
     payload.find({
       collection: 'assets',
@@ -546,7 +547,7 @@ export async function reconcileOrganizationAssessments(
       overrideAccess: true,
       req,
       depth: 0,
-      limit: 5000,
+      pagination: false,
     }),
     payload.find({
       collection: 'non-network-assets',
@@ -559,7 +560,7 @@ export async function reconcileOrganizationAssessments(
       overrideAccess: true,
       req,
       depth: 0,
-      limit: 5000,
+      pagination: false,
     }),
   ])
   await reconcileAssessmentInstance(

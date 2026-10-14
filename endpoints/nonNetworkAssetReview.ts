@@ -4,7 +4,6 @@ import { canDo } from '../access/rbac/permissions'
 import {
   assertOfficeInScope,
   canReviewNow,
-  computeNextReviewAt,
   type ReviewInterval,
 } from '../collections/NonNetworkAssets/invariants'
 import { assertOrganizationMatches } from '../access/tenant/assertOrganizationMatches'
@@ -46,8 +45,6 @@ export const nonNetworkAssetReviewEndpoint: Endpoint = {
     if (!canReviewNow(existing.next_review_at ?? null, interval, new Date())) {
       return json({ error: 'review_not_due_yet' }, 400)
     }
-    const nextReviewAt = computeNextReviewAt(interval, new Date())
-
     // AUDIT: this action must emit an AuditLogs entry (chain_hash over {id, last_reviewed_at, next_review_at}, previous hash for this organization_id)
     // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
     const updated = await req.payload.update({
@@ -55,10 +52,10 @@ export const nonNetworkAssetReviewEndpoint: Endpoint = {
       id,
       overrideAccess: true,
       req,
-      data: {
-        last_reviewed_at: new Date().toISOString(),
-        next_review_at: nextReviewAt,
-      },
+      // next_review_at lo recalcula el beforeChange (deriveNextReviewAt) al ver este flag; si se
+      // mandara en `data`, el hook lo pisaría con el valor anterior.
+      context: { reviewConfirmed: true },
+      data: { last_reviewed_at: new Date().toISOString() },
     })
 
     return json(updated)

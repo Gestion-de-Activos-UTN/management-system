@@ -1,3 +1,5 @@
+import { reconcileAssetTasks } from '@/domain/tasks/reconcile-asset-tasks'
+import { logicalDeleteEndpoint, rejectPhysicalAssetDelete, preserveDeletedAsset } from '@/domain/assets/logical-delete'
 import type { CollectionConfig } from 'payload'
 import { orgScopedAccess, canDoAccess } from '@/access/rbac/orgScopedAccess'
 import { resolveTenantAndReview } from './hooks/resolveTenant'
@@ -28,16 +30,17 @@ export const NonNetworkAssets: CollectionConfig = {
       kind: 'org_offices',
       field: 'office',
     }),
-    delete: orgScopedAccess('non-network-assets', 'delete', {
-      kind: 'org_offices',
-      field: 'office',
-    }),
+    delete: () => false,
   },
+  endpoints: [logicalDeleteEndpoint('non-network-assets')],
   hooks: {
-    beforeChange: [resolveTenantAndReview, validateCategoryGroups, validateAssetAssessmentScope],
-    afterChange: [reconcileAssessmentApplicability],
+    beforeDelete: [rejectPhysicalAssetDelete],
+    beforeChange: [preserveDeletedAsset,resolveTenantAndReview, validateAssetAssessmentScope, validateCategoryGroups],
+    afterChange: [reconcileAssessmentApplicability, reconcileAssetTasks],
   },
   fields: [
+    { name: 'deleted_at', type: 'date', index: true, access: { create: () => false, update: () => false } },
+    { name: 'seed_key', type: 'text', unique: true, admin: { hidden: true }, access: resolvedFieldAccess },
     {
       name: 'alias',
       type: 'text',
@@ -193,8 +196,7 @@ export const NonNetworkAssets: CollectionConfig = {
     },
     // NOTIFY: this event should trigger a Notification Bell entry for {owner} when a review comes due
     // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively
-    // TODO: RF-53 (Task automática al owner al vencer la revisión) requiere el patrón Tasks/TaskTemplates
-    // (RF-28), hoy sin implementar (colección stub vacía) — no se construye acá, es un módulo aparte.
+    // Overdue reviews do not create tasks: this automation is outside the agreed scope.
     {
       // Relación opcional N:M pensada para risk score (ej. licencia de Windows Server ↔ el servidor
       // que la usa) — no todo NonNetworkAsset tiene un Asset asociado (ej. backup de un SaaS que no

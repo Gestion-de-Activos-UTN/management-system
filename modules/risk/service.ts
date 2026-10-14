@@ -9,6 +9,7 @@ import type {
 } from '@/domain/risk/constants'
 import type { AssetRiskScore, ControlAggregate } from '@/domain/risk/engine'
 import type { RiskPolicyKey } from '@/domain/risk/catalog-v2/types'
+import type { RecalculationStatus } from '@/domain/risk/recalculation-status'
 
 export type RiskEvaluationDTO = {
   id: string
@@ -55,18 +56,21 @@ export type RiskContributionDTO = {
 }
 
 export type LatestRiskResponse = {
+  recalculation?: RecalculationStatus
   evaluation: RiskEvaluationDTO | null
   contributions: RiskContributionDTO[]
   pagination: { page: number; totalPages: number; totalDocs: number; hasNextPage: boolean }
 }
 
 export const getLatestRisk = (params?: {
+  evaluationId?: string
   officeId?: string | null
   asOrganization?: string
   page?: number
 }) =>
   httpClient.get<LatestRiskResponse>('/api/v1/risk/latest', {
     office_id: params?.officeId ?? undefined,
+    evaluation_id: params?.evaluationId,
     page: params?.page ? String(params.page) : undefined,
     asOrganization: params?.asOrganization,
   })

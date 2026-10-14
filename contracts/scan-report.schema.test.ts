@@ -144,3 +144,28 @@ test('rechaza scan_mode degraded sin razón', () => {
     ScanReportPayloadSchema.parse(buildReport({ scan_mode: 'degraded', scan_mode_reason: null }))
   )
 })
+
+function partialPortScan(limitations: { stage: string; code: string }[]) {
+  const raw = buildReport({ execution_status: 'partial' })
+  raw.report_coverage.ports[0].status = 'partial'
+  raw.report_coverage.service_detection.status = 'partial'
+  raw.report_coverage.os_detection.status = 'partial'
+  raw.report_coverage.limitations = limitations as never
+  return raw
+}
+
+test('acepta un asset complete en un reporte partial por host_timeout de otro host', () => {
+  const raw = partialPortScan([{ stage: 'port_scan', code: 'host_timeout' }])
+  assert.equal(ScanReportPayloadSchema.safeParse(raw).success, true)
+})
+
+test('rechaza un asset complete en un reporte partial sin host_timeout', () => {
+  const raw = partialPortScan([{ stage: 'scanner', code: 'parse_error' }])
+  assert.equal(ScanReportPayloadSchema.safeParse(raw).success, false)
+})
+
+test('host_timeout no habilita name_resolution complete sobre un reporte partial', () => {
+  const raw = partialPortScan([{ stage: 'port_scan', code: 'host_timeout' }])
+  raw.report_coverage.name_resolution.status = 'partial'
+  assert.equal(ScanReportPayloadSchema.safeParse(raw).success, false)
+})

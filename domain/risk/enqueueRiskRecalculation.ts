@@ -1,4 +1,4 @@
-import type { Payload } from 'payload'
+import { createLocalReq, type Payload, type PayloadRequest } from 'payload'
 
 /**
  * Queues the organization-wide evaluation plus one per affected office; otherwise the organization
@@ -8,31 +8,53 @@ import type { Payload } from 'payload'
 export async function enqueueRiskRecalculation(
   payload: Payload,
   organizationId: string,
-  officeIds: ReadonlyArray<string | null | undefined> = []
+  officeIds: ReadonlyArray<string | null | undefined> = [],
+  request?: PayloadRequest
 ) {
   if (process.env.PAYLOAD_DISABLE_JOBS === '1' || !payload.jobs?.queue) return
+  if (payload.config?.jobs?.runHooks)
+    throw new Error('Transactional risk queue requires jobs.runHooks=false')
+  const req = request ?? (await createLocalReq({}, payload))
+  const previous = req.transactionID
+  const ownsTransaction = !previous
+  const transactionID = await (previous ?? payload.db.beginTransaction())
+  if (!transactionID) throw new Error('Risk delivery requires PostgreSQL transactions')
+  req.transactionID = transactionID
   const offices = [...new Set(officeIds.filter((id): id is string => Boolean(id)))]
-  for (const officeId of [undefined, ...offices]) {
-    // The task's concurrency key (payload.config.ts) supersedes pending jobs for the same scope, so
-    // a burst of events collapses into one pending run instead of piling up.
-    await payload.jobs.queue({
-      task: 'recalculate-risk',
-      queue: 'risk',
-      input: { organization_id: organizationId, office_id: officeId },
-    })
+  try {
+    for (const officeId of [undefined, ...offices]) {
+      // The task's concurrency key (payload.config.ts) supersedes pending jobs for the same scope, so
+      // a burst of events collapses into one pending run instead of piling up.
+      // AUDIT: this action must emit an AuditLogs entry (organization/office risk recalculation intent)
+      // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+      await payload.jobs.queue({
+        req,
+        task: 'recalculate-risk',
+        queue: 'risk',
+        input: { organization_id: organizationId, office_id: officeId },
+      })
+    }
+    if (ownsTransaction) await payload.db.commitTransaction(transactionID)
+  } catch (error) {
+    if (ownsTransaction) await payload.db.rollbackTransaction(transactionID)
+    throw error
+  } finally {
+    if (ownsTransaction) req.transactionID = previous
   }
 }
 
 /** Organization-level events (policy, organization answers) change every office evaluation. */
 export async function enqueueOrganizationRiskRecalculation(
   payload: Payload,
-  organizationId: string
+  organizationId: string,
+  req?: PayloadRequest
 ) {
   if (process.env.PAYLOAD_DISABLE_JOBS === '1' || !payload.jobs?.queue) return
   const offices = await payload.find({
     collection: 'offices',
     where: { organization: { equals: organizationId } },
     overrideAccess: true,
+    req,
     depth: 0,
     pagination: false,
     select: {},
@@ -40,6 +62,7 @@ export async function enqueueOrganizationRiskRecalculation(
   await enqueueRiskRecalculation(
     payload,
     organizationId,
-    offices.docs.map(office => String(office.id))
+    offices.docs.map(office => String(office.id)),
+    req
   )
 }

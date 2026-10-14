@@ -9,7 +9,8 @@ export const organizationsColumns: ColumnDef<Organization, unknown>[] = [
   activeStatusColumn<Organization>(org => Boolean(org.is_active)),
   {
     id: 'actions',
-    header: '',
+    header: 'Acciones',
+    meta: { align: 'center' },
     size: 110,
     cell: ({ row }) => (
       <Button

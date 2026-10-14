@@ -23,9 +23,12 @@ import {
   ThemeIcon,
   Tooltip,
 } from '@mantine/core'
+import { InventoryIncidentsPanel } from './InventoryIncidentsPanel'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { TechnicalText } from '@/components/ui/TechnicalText'
 import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
+import { memberCoversOffice } from '@/modules/users/service'
+import { MemberSelect } from '@/modules/users/components/MemberSelect'
 import {
   ASSESSMENT_EXCLUSION_REASON_OPTIONS,
   CRITICALITY_OPTIONS,
@@ -34,7 +37,7 @@ import {
 import { formatDateInput, formatDateTime, localDateEndToISOString } from '@/lib/format-date'
 import type { Asset } from '@/app/types/payload-types'
 import {
-  AssetBusinessFieldsSchema,
+  createAssetBusinessFieldsSchema,
   type AssetBusinessFields,
   UNKNOWN_IDENTIFICATION_VALUE,
 } from '../schema'
@@ -45,6 +48,7 @@ import { useMarkAssetChangesViewed } from '../hooks/use-mark-asset-changes-viewe
 import { BadgeCheck, Fingerprint, Lock, Network, ScanSearch, Undo2 } from 'lucide-react'
 import { AssetIdentificationModal } from './AssetIdentificationModal'
 import { AssetSecurityReviewCard } from '@/modules/assessments/components/AssetSecurityReviewCard'
+import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 import {
   DEVICE_CATEGORY_HELP,
   DEVICE_CATEGORY_LABEL,
@@ -84,7 +88,7 @@ function IdentificationHelpCard({ asset }: { asset: Asset }) {
         <Group gap="xs">
           <Text fw={600}>Ayuda para la identificación</Text>
           <Badge variant="filled" color={tier === 'likely' ? 'pine' : 'gray'}>
-            {tier === 'likely' ? 'Likely' : 'Possible'}: {DEVICE_CATEGORY_LABEL[category]}
+            {tier === 'likely' ? 'Probable' : 'Posible'}: {DEVICE_CATEGORY_LABEL[category]}
           </Badge>
         </Group>
         <Text size="xs" c="dimmed">
@@ -468,6 +472,11 @@ export function AssetDetailView({
   asOrganization?: string
 }) {
   const { data: members } = useOrgMembers(asOrganization)
+  const assetOfficeId =
+    typeof asset.office === 'string' ? asset.office : asset.office ? String(asset.office.id) : ''
+  const eligibleOwnerMembers = assetOfficeId
+    ? (members ?? []).filter(member => memberCoversOffice(member, assetOfficeId))
+    : []
   const updateAsset = useUpdateAsset(asset.id)
   const unidentifyAsset = useUnidentifyAsset()
   const markViewed = useMarkAssetViewed(asset.id)
@@ -510,7 +519,8 @@ export function AssetDetailView({
     watch,
     formState: { isDirty, dirtyFields, errors },
   } = useForm<AssetBusinessFields>({
-    resolver: zodResolver(AssetBusinessFieldsSchema),
+    mode: 'onChange',
+    resolver: zodResolver(createAssetBusinessFieldsSchema(asset)),
     defaultValues: {
       authorization_status:
         asset.authorization_status === 'unauthorized' ? 'unauthorized' : 'authorized',
@@ -591,38 +601,50 @@ export function AssetDetailView({
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between" align="flex-end" wrap="wrap">
-        <PageHeader
-          title={asset.hostname || asset.alias || asset.ip || asset.asset_id}
-          description="Bloque técnico de solo lectura (detectado por el escáner) y campos de negocio editables."
-        />
-        {asset.identification_status !== 'confirmed' && (
-          <Button
-            variant="filled"
-            color="pine"
-            leftSection={<BadgeCheck size={16} strokeWidth={1.5} />}
-            onClick={() => setIdentificationOpen(true)}
-            w={{ base: '100%', sm: 'auto' }}
-          >
-            Identificar activo
-          </Button>
-        )}
-        {asset.identification_status === 'confirmed' && (
-          <Button
-            variant="subtle"
-            color="red"
-            leftSection={<Undo2 size={16} strokeWidth={1.5} />}
-            onClick={() => setUnidentifyConfirmOpen(true)}
-            w={{ base: '100%', sm: 'auto' }}
-          >
-            Quitar identificación
-          </Button>
-        )}
-      </Group>
+      <InventoryIncidentsPanel asOrganization={asOrganization} assetId={asset.id} />
+      <PageHeader
+        // Mismo nombre que la celda "Equipo" del inventario: alias confirmado, hostname o IP.
+        title={
+          (asset.identification_status === 'confirmed' && asset.alias) ||
+          asset.hostname ||
+          asset.ip ||
+          asset.asset_id
+        }
+        description="Bloque técnico de solo lectura (detectado por el escáner) y campos de negocio editables."
+        rightSection={
+          <Group gap="sm" wrap="wrap">
+            <CreateRelatedTaskButton
+              reference={{ relationTo: 'assets', value: String(asset.id) }}
+              asOrganization={asOrganization}
+            />
+            {asset.identification_status !== 'confirmed' ? (
+              <Button
+                variant="filled"
+                color="pine"
+                leftSection={<BadgeCheck size={16} strokeWidth={1.5} />}
+                onClick={() => setIdentificationOpen(true)}
+                w={{ base: '100%', sm: 'auto' }}
+              >
+                Identificar activo
+              </Button>
+            ) : (
+              <Button
+                variant="subtle"
+                color="red"
+                leftSection={<Undo2 size={16} strokeWidth={1.5} />}
+                onClick={() => setUnidentifyConfirmOpen(true)}
+                w={{ base: '100%', sm: 'auto' }}
+              >
+                Quitar identificación
+              </Button>
+            )}
+          </Group>
+        }
+      />
 
       <AssetIdentificationModal
         asset={asset}
-        members={members ?? []}
+        members={eligibleOwnerMembers}
         opened={identificationOpen}
         onClose={() => setIdentificationOpen(false)}
       />
@@ -856,15 +878,13 @@ export function AssetDetailView({
               name="owner"
               control={control}
               render={({ field }) => (
-                <Select
+                <MemberSelect
                   label="Responsable"
-                  data={[
-                    { value: UNKNOWN_IDENTIFICATION_VALUE, label: 'Sin asignar o desconocido' },
-                    ...(members ?? []).map(m => ({
-                      value: m.id,
-                      label: m.name || m.email,
-                    })),
-                  ]}
+                  members={eligibleOwnerMembers}
+                  emptyOption={{
+                    value: UNKNOWN_IDENTIFICATION_VALUE,
+                    label: 'Sin asignar o desconocido',
+                  }}
                   disabled={
                     asset.identification_status !== 'confirmed' ||
                     authorizationStatus !== 'authorized'
@@ -873,7 +893,6 @@ export function AssetDetailView({
                   onChange={value =>
                     field.onChange(value === UNKNOWN_IDENTIFICATION_VALUE ? null : value)
                   }
-                  searchable
                   error={errors.owner?.message}
                 />
               )}
@@ -968,7 +987,9 @@ export function AssetDetailView({
                   <TextInput
                     type="date"
                     label="Excluido hasta"
-                    description="Déjalo vacío para una exclusión sin vencimiento."
+                    description="Fecha obligatoria, hasta 90 días desde hoy."
+                    required
+                    error={errors.assessment_excluded_until?.message}
                     value={field.value ? formatDateInput(field.value) : ''}
                     onChange={event =>
                       field.onChange(

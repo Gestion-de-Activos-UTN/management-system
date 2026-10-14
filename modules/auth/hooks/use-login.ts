@@ -1,11 +1,14 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { notifications } from '@mantine/notifications'
 import type { HttpError } from '@/lib/http-client'
 import { setSession, type Session } from '@/lib/session'
+import { resetPortalMessageSessionState } from '@/modules/portal-messages/session-state'
 import { loginAdmin, loginUser } from '../service'
 
 type Credentials = { email: string; password: string }
+type LoginResult = { session: NonNullable<Session>; name: string | null }
 
 // Payload has no unified auth collection — admins and users are separate collections with
 // separate login endpoints. One form tries admins first, then users; whichever succeeds
@@ -17,23 +20,29 @@ type Credentials = { email: string; password: string }
 // `collection` here is just to know which login succeeded.
 export function useLogin() {
   const queryClient = useQueryClient()
-  return useMutation<NonNullable<Session>, HttpError, Credentials>({
+  return useMutation<LoginResult, HttpError, Credentials>({
     mutationFn: async ({ email, password }) => {
       try {
-        await loginAdmin(email, password)
-        return { collection: 'admins' as const }
+        const { user } = await loginAdmin(email, password)
+        return { session: { collection: 'admins' as const }, name: user.name ?? null }
       } catch {
-        await loginUser(email, password)
-        return { collection: 'users' as const }
+        const { user } = await loginUser(email, password)
+        return { session: { collection: 'users' as const }, name: user.name ?? null }
       }
     },
-    onSuccess: session => {
+    onSuccess: ({ session, name }) => {
       // Query keys (['tenant-context', asOrganization], assets/offices/organizations lists,
       // ...) don't include the user's identity, so a stale, still-non-stale-by-staleTime
       // cache entry from whoever was logged in before would otherwise render first for the
       // new account until an unrelated refetch happened to correct it.
       queryClient.clear()
+      resetPortalMessageSessionState()
       setSession(session)
+      notifications.show({
+        color: 'green',
+        title: name ? `¡Hola, ${name.split(' ')[0]}!` : '¡Bienvenido!',
+        message: 'Iniciaste sesión correctamente.',
+      })
     },
   })
 }

@@ -1,14 +1,6 @@
-import type { StatusTone } from '@/components/ui/StatusBadge'
 import type { RiskContributionDTO } from './service'
 
 // Shared by the Risk Score page and the Security Review summary so both read the same way.
-
-export const RISK_BAND_TONE: Record<string, StatusTone> = {
-  low: 'success',
-  medium: 'info',
-  high: 'warning',
-  critical: 'danger',
-}
 
 export const RISK_BAND_COLOR: Record<string, string> = {
   low: 'green',
@@ -23,7 +15,7 @@ export const RISK_SCORE_SCALE = '0 % = todo controlado · 100 % = ningún contro
 // Plain-language reason for each engine reason_code, so a user knows why a check has this state
 // and what to do next. Unknown codes fall back to the status label.
 const REASONS: Record<string, string | Partial<Record<RiskContributionDTO['status'], string>>> = {
-  asset_unconfirmed: 'Equipo sin identificar: confirmalo en el inventario',
+  asset_unconfirmed: 'Equipo sin identificar: confírmalo en el inventario',
   answer_missing: 'Falta responder la revisión o la respuesta venció',
   evaluable: 'Según la revisión respondida',
   not_evaluable: 'La revisión tiene respuestas "No lo sé"',

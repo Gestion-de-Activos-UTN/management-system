@@ -1,3 +1,5 @@
+import { enqueueRiskRecalculation } from '@/domain/risk/enqueueRiskRecalculation'
+import { relationId } from '@/lib/relationId'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import type { CollectionConfig } from 'payload'
@@ -126,7 +128,8 @@ export const Agents: CollectionConfig = {
       options: [...AGENT_REVOCATION_REASONS],
       admin: {
         readOnly: true,
-        description: 'Motivo de la revocación: manual (acción humana) o auto_lockout_abuse.',
+        description:
+          'Motivo de la revocación: manual (acción humana), auto_lockout_abuse u office_deactivated (se desactivó su oficina).',
       },
     },
     {
@@ -233,6 +236,12 @@ export const Agents: CollectionConfig = {
       },
     ],
     afterChange: [
+      async ({ doc, previousDoc, req }) => {
+        const online = getAgentLifecycleStatus(doc) !== 'revoked' && isAgentOnline(doc)
+        const wasOnline = previousDoc && getAgentLifecycleStatus(previousDoc) !== 'revoked' && isAgentOnline(previousDoc)
+        if (online !== Boolean(wasOnline) && doc.organization) await enqueueRiskRecalculation(req.payload, relationId(doc.organization), [relationId(doc.office)], req)
+        return doc
+      },
       ({ doc, operation, req }) => {
         if (operation === 'create' && req.context.plainApiKey) {
           return { ...doc, apiKey: req.context.plainApiKey }

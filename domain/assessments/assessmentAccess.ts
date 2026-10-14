@@ -18,12 +18,11 @@ export function canAnswerAssessment(
   asset?: Asset | NonNetworkAsset | null
 ): boolean {
   if (
-    ctx.isPlatformAdmin ||
     !ctx.organizationId ||
     relationId(assessment.organization) !== ctx.organizationId
   )
     return false
-  if (ctx.role === 'org_admin') return true
+  if (ctx.role === 'org_admin' || ctx.isPlatformAdmin) return true
   if (assessment.scope === 'organization') return false
   const officeAllowed = Boolean(
     assessment.office && ctx.officeIds.includes(relationId(assessment.office))

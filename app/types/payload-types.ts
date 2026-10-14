@@ -87,6 +87,10 @@ export interface Config {
     'compliance-results': ComplianceResult;
     'risk-evaluations': RiskEvaluation;
     'risk-contributions': RiskContribution;
+    tasks: Task;
+    'portal-messages': PortalMessage;
+    'portal-message-receipts': PortalMessageReceipt;
+    'inventory-incidents': InventoryIncident;
     'payload-kv': PayloadKv;
     'payload-jobs': PayloadJob;
     'payload-locked-documents': PayloadLockedDocument;
@@ -114,6 +118,10 @@ export interface Config {
     'compliance-results': ComplianceResultsSelect<false> | ComplianceResultsSelect<true>;
     'risk-evaluations': RiskEvaluationsSelect<false> | RiskEvaluationsSelect<true>;
     'risk-contributions': RiskContributionsSelect<false> | RiskContributionsSelect<true>;
+    tasks: TasksSelect<false> | TasksSelect<true>;
+    'portal-messages': PortalMessagesSelect<false> | PortalMessagesSelect<true>;
+    'portal-message-receipts': PortalMessageReceiptsSelect<false> | PortalMessageReceiptsSelect<true>;
+    'inventory-incidents': InventoryIncidentsSelect<false> | InventoryIncidentsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-jobs': PayloadJobsSelect<false> | PayloadJobsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -139,6 +147,7 @@ export interface Config {
     tasks: {
       'recalculate-risk': TaskRecalculateRisk;
       'refresh-risk': TaskRefreshRisk;
+      'aging-sweep': TaskAgingSweep;
       'expire-raw-scan-payloads': TaskExpireRawScanPayloads;
       'reconcile-expired-assessments': TaskReconcileExpiredAssessments;
       'reconcile-expired-asset-exclusions': TaskReconcileExpiredAssetExclusions;
@@ -210,11 +219,27 @@ export interface OrganizationSetting {
   assessment_policy_key: 'essential' | 'reinforced';
   assessment_policy_version: number;
   assessment_policy_selected_at: string;
-  assessment_policy_selected_by?: (string | null) | User;
+  assessment_policy_selected_by?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
   maturity_it_owner?: ('yes' | 'no') | null;
   maturity_security_budget?: ('none' | 'occasional' | 'recurring') | null;
   maturity_updated_at?: string | null;
-  maturity_updated_by?: (string | null) | User;
+  maturity_updated_by?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
   offline_after_hours?: number | null;
   snapshot_before_each_scan?: boolean | null;
   snapshot_interval_days?: number | null;
@@ -272,7 +297,8 @@ export interface Office {
   id: string;
   organization: string | Organization;
   name: string;
-  county_fips?: string | null;
+  province_id?: string | null;
+  department_id?: string | null;
   is_active?: boolean | null;
   updatedAt: string;
   createdAt: string;
@@ -293,6 +319,34 @@ export interface Role {
   is_platform_role?: boolean | null;
   updatedAt: string;
   createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "admins".
+ */
+export interface Admin {
+  id: string;
+  name?: string | null;
+  role: string | Role;
+  status?: ('active' | 'inactive') | null;
+  updatedAt: string;
+  createdAt: string;
+  email: string;
+  resetPasswordToken?: string | null;
+  resetPasswordExpiration?: string | null;
+  salt?: string | null;
+  hash?: string | null;
+  loginAttempts?: number | null;
+  lockUntil?: string | null;
+  sessions?:
+    | {
+        id: string;
+        createdAt?: string | null;
+        expiresAt: string;
+      }[]
+    | null;
+  password?: string | null;
+  collection: 'admins';
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -354,9 +408,9 @@ export interface Agent {
   is_active?: boolean | null;
   revoked_at?: string | null;
   /**
-   * Motivo de la revocación: manual (acción humana) o auto_lockout_abuse.
+   * Motivo de la revocación: manual (acción humana), auto_lockout_abuse u office_deactivated (se desactivó su oficina).
    */
-  revocation_reason?: ('manual' | 'auto_lockout_abuse') | null;
+  revocation_reason?: ('manual' | 'auto_lockout_abuse' | 'office_deactivated') | null;
   failedAttempts?: number | null;
   lockedUntil?: string | null;
   lockoutCount?: number | null;
@@ -375,6 +429,19 @@ export interface Agent {
  */
 export interface Asset {
   id: string;
+  location_pending?: boolean | null;
+  deleted_at?: string | null;
+  port_scan_coverage?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  scanner_asset_id?: string | null;
+  identity_key?: string | null;
   asset_id: string;
   agent: string | Agent;
   office?: (string | null) | Office;
@@ -519,7 +586,15 @@ export interface Asset {
   confirmed_type?:
     ('workstation' | 'mobile' | 'gateway' | 'network_device' | 'printer' | 'server' | 'iot' | 'other') | null;
   authorization_status?: ('pending' | 'authorized' | 'unauthorized') | null;
-  type_confirmed_by?: (string | null) | User;
+  type_confirmed_by?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
   type_confirmed_at?: string | null;
   alias?: string | null;
   criticality?: ('low' | 'medium' | 'high' | 'critical') | null;
@@ -553,6 +628,8 @@ export interface Asset {
  */
 export interface NonNetworkAsset {
   id: string;
+  deleted_at?: string | null;
+  seed_key?: string | null;
   alias: string;
   asset_category:
     | 'computer'
@@ -623,6 +700,8 @@ export interface NonNetworkAsset {
  * via the `definition` "scan-reports".
  */
 export interface ScanReport {
+  content_fingerprint?: string | null;
+  received_at?: string | null;
   /**
    * report_id tal cual lo manda el escáner
    */
@@ -672,33 +751,6 @@ export interface ScanReport {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "admins".
- */
-export interface Admin {
-  id: string;
-  role: string | Role;
-  status?: ('active' | 'inactive') | null;
-  updatedAt: string;
-  createdAt: string;
-  email: string;
-  resetPasswordToken?: string | null;
-  resetPasswordExpiration?: string | null;
-  salt?: string | null;
-  hash?: string | null;
-  loginAttempts?: number | null;
-  lockUntil?: string | null;
-  sessions?:
-    | {
-        id: string;
-        createdAt?: string | null;
-        expiresAt: string;
-      }[]
-    | null;
-  password?: string | null;
-  collection: 'admins';
-}
-/**
- * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "job-runs".
  */
 export interface JobRun {
@@ -730,7 +782,15 @@ export interface InventorySnapshot {
   office: string | Office;
   taken_at: string;
   generated_by: 'manual' | 'scheduled' | 'pre_audit';
-  triggered_by_user?: (string | null) | User;
+  triggered_by_user?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
   risk_score: string | RiskEvaluation;
   assessment_results_snapshot:
     | {
@@ -820,6 +880,8 @@ export interface RiskEvaluation {
  */
 export interface AssessmentInstance {
   id: string;
+  open_cycle_key?: string | null;
+  expiry_reconciled_at?: string | null;
   organization: string | Organization;
   scope: 'organization' | 'office' | 'asset';
   office?: (string | null) | Office;
@@ -850,7 +912,15 @@ export interface AssessmentInstance {
   opened_at: string;
   due_at: string;
   completed_at?: string | null;
-  completed_by?: (string | null) | User;
+  completed_by?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
   completion_summary: {
     compliant: number;
     partially_effective: number;
@@ -882,7 +952,15 @@ export interface AssessmentAnswer {
     | null;
   justification?: string | null;
   evidence_note?: string | null;
-  answered_by: string | User;
+  answered_by:
+    | {
+        relationTo: 'users';
+        value: string | User;
+      }
+    | {
+        relationTo: 'admins';
+        value: string | Admin;
+      };
   answered_at: string;
   valid_until: string;
   evaluation_effect_snapshot:
@@ -970,6 +1048,253 @@ export interface RiskContribution {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tasks".
+ */
+export interface Task {
+  id: string;
+  requires_reassignment?: boolean | null;
+  lifecycle_history?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  seed_key?: string | null;
+  title: string;
+  description?: string | null;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+  start_at: string;
+  due_at?: string | null;
+  initial_due_at?: string | null;
+  effective_status?: string | null;
+  is_overdue?: boolean | null;
+  assignment_kind: 'open_pool' | 'role' | 'user';
+  assigned_role?: (string | null) | Role;
+  assigned_user?: (string | null) | User;
+  claimed_by?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
+  claimed_at?: string | null;
+  completed_by?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
+  completed_at?: string | null;
+  completion_reason?: string | null;
+  cancelled_by?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
+  cancelled_at?: string | null;
+  cancellation_reason?: string | null;
+  archived_by?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
+  archived_at?: string | null;
+  related_entity?:
+    | ({
+        relationTo: 'offices';
+        value: string | Office;
+      } | null)
+    | ({
+        relationTo: 'assets';
+        value: string | Asset;
+      } | null)
+    | ({
+        relationTo: 'non-network-assets';
+        value: string | NonNetworkAsset;
+      } | null)
+    | ({
+        relationTo: 'assessment-instances';
+        value: string | AssessmentInstance;
+      } | null)
+    | ({
+        relationTo: 'compliance-results';
+        value: string | ComplianceResult;
+      } | null)
+    | ({
+        relationTo: 'inventory-snapshots';
+        value: string | InventorySnapshot;
+      } | null)
+    | ({
+        relationTo: 'scan-reports';
+        value: string | ScanReport;
+      } | null)
+    | ({
+        relationTo: 'risk-evaluations';
+        value: string | RiskEvaluation;
+      } | null)
+    | ({
+        relationTo: 'agents';
+        value: string | Agent;
+      } | null);
+  organization: string | Organization;
+  office?: (string | null) | Office;
+  created_by:
+    | {
+        relationTo: 'users';
+        value: string | User;
+      }
+    | {
+        relationTo: 'admins';
+        value: string | Admin;
+      };
+  creation_batch_id?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "portal-messages".
+ */
+export interface PortalMessage {
+  id: string;
+  title: string;
+  description: string;
+  message_type: 'notice' | 'actionable';
+  template_key?: string | null;
+  cta_label?: string | null;
+  scope: 'global' | 'organizations';
+  target_organizations?: (string | Organization)[] | null;
+  target_kind: 'all' | 'role' | 'user';
+  target_roles?: ('org_admin' | 'office_manager' | 'org_viewer')[] | null;
+  target_users?: (string | User)[] | null;
+  linked_section?: ('dashboard' | 'risk-score' | 'security-review' | 'tasks' | 'inventory' | 'administration') | null;
+  linked_entity_type?:
+    | (
+        | 'tasks'
+        | 'offices'
+        | 'assets'
+        | 'non-network-assets'
+        | 'assessment-instances'
+        | 'compliance-results'
+        | 'inventory-snapshots'
+        | 'scan-reports'
+        | 'risk-evaluations'
+        | 'agents'
+      )
+    | null;
+  linked_entity?:
+    | ({
+        relationTo: 'tasks';
+        value: string | Task;
+      } | null)
+    | ({
+        relationTo: 'offices';
+        value: string | Office;
+      } | null)
+    | ({
+        relationTo: 'assets';
+        value: string | Asset;
+      } | null)
+    | ({
+        relationTo: 'non-network-assets';
+        value: string | NonNetworkAsset;
+      } | null)
+    | ({
+        relationTo: 'assessment-instances';
+        value: string | AssessmentInstance;
+      } | null)
+    | ({
+        relationTo: 'compliance-results';
+        value: string | ComplianceResult;
+      } | null)
+    | ({
+        relationTo: 'inventory-snapshots';
+        value: string | InventorySnapshot;
+      } | null)
+    | ({
+        relationTo: 'scan-reports';
+        value: string | ScanReport;
+      } | null)
+    | ({
+        relationTo: 'risk-evaluations';
+        value: string | RiskEvaluation;
+      } | null)
+    | ({
+        relationTo: 'agents';
+        value: string | Agent;
+      } | null);
+  expires_at?: string | null;
+  is_active?: boolean | null;
+  delivery_version: number;
+  created_by?: (string | null) | Admin;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "portal-message-receipts".
+ */
+export interface PortalMessageReceipt {
+  id: string;
+  message: string | PortalMessage;
+  user: string | User;
+  delivery_version: number;
+  seen_at?: string | null;
+  dismissed_at?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "inventory-incidents".
+ */
+export interface InventoryIncident {
+  id: string;
+  incident_key: string;
+  organization: string | Organization;
+  office: string | Office;
+  proposed_office?: (string | null) | Office;
+  asset?: (string | null) | Asset;
+  agent?: (string | null) | Agent;
+  kind: 'location' | 'identity';
+  status: 'pending' | 'moved' | 'kept' | 'reviewed';
+  reason: string;
+  ip?: string | null;
+  report_id?: string | null;
+  observed_at: string;
+  resolved_at?: string | null;
+  resolved_by?:
+    | ({
+        relationTo: 'users';
+        value: string | User;
+      } | null)
+    | ({
+        relationTo: 'admins';
+        value: string | Admin;
+      } | null);
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -1041,6 +1366,7 @@ export interface PayloadJob {
           | 'inline'
           | 'recalculate-risk'
           | 'refresh-risk'
+          | 'aging-sweep'
           | 'expire-raw-scan-payloads'
           | 'reconcile-expired-assessments'
           | 'reconcile-expired-asset-exclusions';
@@ -1081,6 +1407,7 @@ export interface PayloadJob {
         | 'inline'
         | 'recalculate-risk'
         | 'refresh-risk'
+        | 'aging-sweep'
         | 'expire-raw-scan-payloads'
         | 'reconcile-expired-assessments'
         | 'reconcile-expired-asset-exclusions'
@@ -1187,6 +1514,22 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'risk-contributions';
         value: string | RiskContribution;
+      } | null)
+    | ({
+        relationTo: 'tasks';
+        value: string | Task;
+      } | null)
+    | ({
+        relationTo: 'portal-messages';
+        value: string | PortalMessage;
+      } | null)
+    | ({
+        relationTo: 'portal-message-receipts';
+        value: string | PortalMessageReceipt;
+      } | null)
+    | ({
+        relationTo: 'inventory-incidents';
+        value: string | InventoryIncident;
       } | null);
   globalSlug?: string | null;
   user:
@@ -1259,7 +1602,8 @@ export interface OrganizationsSelect<T extends boolean = true> {
 export interface OfficesSelect<T extends boolean = true> {
   organization?: T;
   name?: T;
-  county_fips?: T;
+  province_id?: T;
+  department_id?: T;
   is_active?: T;
   updatedAt?: T;
   createdAt?: T;
@@ -1296,6 +1640,11 @@ export interface AgentsSelect<T extends boolean = true> {
  * via the `definition` "assets_select".
  */
 export interface AssetsSelect<T extends boolean = true> {
+  location_pending?: T;
+  deleted_at?: T;
+  port_scan_coverage?: T;
+  scanner_asset_id?: T;
+  identity_key?: T;
   asset_id?: T;
   agent?: T;
   office?: T;
@@ -1441,6 +1790,8 @@ export interface AssetsSelect<T extends boolean = true> {
  * via the `definition` "non-network-assets_select".
  */
 export interface NonNetworkAssetsSelect<T extends boolean = true> {
+  deleted_at?: T;
+  seed_key?: T;
   alias?: T;
   asset_category?: T;
   product_details?:
@@ -1491,6 +1842,8 @@ export interface NonNetworkAssetsSelect<T extends boolean = true> {
  * via the `definition` "scan-reports_select".
  */
 export interface ScanReportsSelect<T extends boolean = true> {
+  content_fingerprint?: T;
+  received_at?: T;
   id?: T;
   agent?: T;
   office?: T;
@@ -1563,6 +1916,7 @@ export interface SubscriptionsSelect<T extends boolean = true> {
  * via the `definition` "admins_select".
  */
 export interface AdminsSelect<T extends boolean = true> {
+  name?: T;
   role?: T;
   status?: T;
   updatedAt?: T;
@@ -1656,6 +2010,8 @@ export interface InventorySnapshotsSelect<T extends boolean = true> {
  * via the `definition` "assessment-instances_select".
  */
 export interface AssessmentInstancesSelect<T extends boolean = true> {
+  open_cycle_key?: T;
+  expiry_reconciled_at?: T;
   organization?: T;
   scope?: T;
   office?: T;
@@ -1781,6 +2137,104 @@ export interface RiskContributionsSelect<T extends boolean = true> {
   coverage_weight?: T;
   excluded?: T;
   reason_code?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "tasks_select".
+ */
+export interface TasksSelect<T extends boolean = true> {
+  requires_reassignment?: T;
+  lifecycle_history?: T;
+  seed_key?: T;
+  title?: T;
+  description?: T;
+  priority?: T;
+  status?: T;
+  start_at?: T;
+  due_at?: T;
+  initial_due_at?: T;
+  effective_status?: T;
+  is_overdue?: T;
+  assignment_kind?: T;
+  assigned_role?: T;
+  assigned_user?: T;
+  claimed_by?: T;
+  claimed_at?: T;
+  completed_by?: T;
+  completed_at?: T;
+  completion_reason?: T;
+  cancelled_by?: T;
+  cancelled_at?: T;
+  cancellation_reason?: T;
+  archived_by?: T;
+  archived_at?: T;
+  related_entity?: T;
+  organization?: T;
+  office?: T;
+  created_by?: T;
+  creation_batch_id?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "portal-messages_select".
+ */
+export interface PortalMessagesSelect<T extends boolean = true> {
+  title?: T;
+  description?: T;
+  message_type?: T;
+  template_key?: T;
+  cta_label?: T;
+  scope?: T;
+  target_organizations?: T;
+  target_kind?: T;
+  target_roles?: T;
+  target_users?: T;
+  linked_section?: T;
+  linked_entity_type?: T;
+  linked_entity?: T;
+  expires_at?: T;
+  is_active?: T;
+  delivery_version?: T;
+  created_by?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "portal-message-receipts_select".
+ */
+export interface PortalMessageReceiptsSelect<T extends boolean = true> {
+  message?: T;
+  user?: T;
+  delivery_version?: T;
+  seen_at?: T;
+  dismissed_at?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "inventory-incidents_select".
+ */
+export interface InventoryIncidentsSelect<T extends boolean = true> {
+  incident_key?: T;
+  organization?: T;
+  office?: T;
+  proposed_office?: T;
+  asset?: T;
+  agent?: T;
+  kind?: T;
+  status?: T;
+  reason?: T;
+  ip?: T;
+  report_id?: T;
+  observed_at?: T;
+  resolved_at?: T;
+  resolved_by?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -1920,12 +2374,25 @@ export interface TaskRefreshRisk {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "TaskAging-sweep".
+ */
+export interface TaskAgingSweep {
+  input?: unknown;
+  output: {
+    assets_transitioned: number;
+    organizations_processed: number;
+  };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "TaskExpire-raw-scan-payloads".
  */
 export interface TaskExpireRawScanPayloads {
   input?: unknown;
   output: {
     expired: number;
+    asset_evidence_expired: number;
+    snapshot_evidence_expired: number;
   };
 }
 /**

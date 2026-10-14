@@ -6,15 +6,18 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
-    "test": "cross-env NODE_ENV=test PAYLOAD_DISABLE_JOBS=1 node --import tsx --test --test-force-exit $(find . -name \"*.test.ts\" -not -name \"*.integration.test.ts\" -not -path \"./node_modules/*\" -not -path \"./.next/*\")",
-    "test:integration": "cross-env NODE_ENV=test PAYLOAD_DISABLE_JOBS=1 node --import tsx --test --test-concurrency=1 --test-force-exit $(find . -name \"*.integration.test.ts\" -not -path \"./node_modules/*\" -not -path \"./.next/*\")",
+    "test": "cross-env NODE_ENV=test PAYLOAD_DISABLE_JOBS=1 node --import tsx --test --test-force-exit $(find . -name \"*.test.ts\" -not -name \"*.integration.test.ts\" -not -name \"*.audit.test.ts\" -not -name \"*.audit.integration.test.ts\" -not -path \"./node_modules/*\" -not -path \"./.next/*\")",
+    "test:integration": "cross-env NODE_ENV=test PAYLOAD_DISABLE_JOBS=1 node --import tsx --test --test-concurrency=1 --test-force-exit $(find . -name \"*.integration.test.ts\" -not -name \"*.audit.integration.test.ts\" -not -path \"./node_modules/*\" -not -path \"./.next/*\")",
     "type-check": "tsc --noEmit",
     "lint": "next lint",
     "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,scss,md}\"",
     "prepare": "husky",
     "seed:navigation": "cross-env NODE_OPTIONS=--no-deprecation node --import tsx scripts/seed-navigation.ts",
+    "seed:demo": "cross-env NODE_OPTIONS=--no-deprecation node --import tsx scripts/seed-demo.ts",
     "generate:contracts": "node --import tsx scripts/generate-contracts.ts",
-    "spell-check": "cspell \"**/*\" --config cspell.json --exclude \".git/**\" --exclude \"node_modules/**\" --exclude \".next/**\""
+    "spell-check": "cspell \"**/*\" --config cspell.json --exclude \".git/**\" --exclude \"node_modules/**\" --exclude \".next/**\"",
+    "test:audit": "vitest run --config vitest.audit.config.ts",
+    "test:audit:integration": "cross-env SIAM_AUDIT_INTEGRATION=1 vitest run --config vitest.audit.config.ts"
   },
   "dependencies": {
     "@auth0/nextjs-auth0": "^4.0.0",
@@ -23,9 +26,9 @@
     "@mantine/form": "^8.3.0",
     "@mantine/hooks": "^8.3.0",
     "@mantine/notifications": "^8.3.0",
-    "@payloadcms/db-postgres": "^3.0.0",
-    "@payloadcms/next": "^3.0.0",
-    "@payloadcms/richtext-lexical": "^3.0.0",
+    "@payloadcms/db-postgres": "3.86.0",
+    "@payloadcms/next": "3.86.0",
+    "@payloadcms/richtext-lexical": "3.86.0",
     "@tanstack/react-query": "^5.101.4",
     "@tanstack/react-table": "^8.21.3",
     "bcryptjs": "^3.0.3",
@@ -34,7 +37,7 @@
     "jszip": "^3.10.1",
     "lucide-react": "^0.400.0",
     "next": "~15.4.0",
-    "payload": "^3.0.0",
+    "payload": "3.86.0",
     "pg": "8.20.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -62,7 +65,9 @@
     "prettier": "^3.8.1",
     "tailwindcss": "^4.2.2",
     "tsx": "^4.16.0",
-    "typescript": "^5.6.0"
+    "typescript": "^5.6.0",
+    "vite": "6.4.1",
+    "vitest": "^4.0.18"
   },
   "engines": {
     "node": ">=22.0.0"
@@ -71,6 +76,10 @@
   "pnpm": {
     "overrides": {
       "pg": "8.20.0"
+    },
+    "patchedDependencies": {
+      "@payloadcms/drizzle@3.86.0": "patches/@payloadcms__drizzle@3.86.0.patch",
+      "payload@3.86.0": "patches/payload@3.86.0.patch"
     }
   },
   "lint-staged": {

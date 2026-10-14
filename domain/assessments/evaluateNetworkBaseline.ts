@@ -1,6 +1,7 @@
 import type { ScannedAssetType } from '@/domain/assets/asset-types'
 import { NETWORK_BASELINE, type NetworkBaselineRule } from './catalog'
 import type { CheckEvaluation } from './evaluateCompliance'
+import { networkExplanation } from './network-explanations'
 
 type ObservedService = {
   port?: number | null
@@ -28,8 +29,13 @@ export function evaluateNetworkBaseline(input: {
 }): NetworkEvaluation[] {
   const rules: readonly NetworkBaselineRule[] = NETWORK_BASELINE
   return input.services.flatMap<NetworkEvaluation>(service => {
-    if (service.state !== 'open' || service.port == null || !service.protocol) return []
+    if (service.port == null || !service.protocol || service.state === 'closed') return []
     const serviceKey = `${service.protocol}:${service.port}`
+    if (service.state !== 'open') return [{
+      check_key: `network.service:${serviceKey}`, control_key: 'A.8.21', service_key: serviceKey,
+      status: 'not_evaluable', severity: 'medium', reason_code: 'service_state_unconfirmed',
+      explanation: networkExplanation({ check_key: '', reason_code: 'service_state_unconfirmed' })!, evidence: service,
+    }]
     if (input.port_coverage !== 'complete' || input.service_coverage !== 'complete') {
       return [
         {
@@ -39,8 +45,10 @@ export function evaluateNetworkBaseline(input: {
           status: 'not_evaluable' as const,
           severity: 'medium' as const,
           reason_code: 'technical_coverage_insufficient',
-          explanation:
-            'SIAM observed a network function, but the scan did not have enough coverage to verify it safely.',
+          explanation: networkExplanation({
+            check_key: '',
+            reason_code: 'technical_coverage_insufficient',
+          })!,
           evidence: service,
         },
       ]
@@ -62,8 +70,10 @@ export function evaluateNetworkBaseline(input: {
           status: 'not_evaluable' as const,
           severity: 'medium' as const,
           reason_code: rule ? 'service_confidence_insufficient' : 'service_unclassified',
-          explanation:
-            'SIAM found a network function but could not identify its purpose with enough confidence. Ask whoever maintains this device to review it.',
+          explanation: networkExplanation({
+            check_key: '',
+            reason_code: rule ? 'service_confidence_insufficient' : 'service_unclassified',
+          })!,
           evidence: service,
         },
       ]

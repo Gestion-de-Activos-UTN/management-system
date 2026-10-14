@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: payload
       POSTGRES_DB: payloadcms
     ports:
-      - '5433:5432'
+      - '127.0.0.1:5433:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -22,7 +22,7 @@ services:
       dockerfile: localdev.dockerfile
     container_name: siam-app
     ports:
-      - '3001:3001'
+      - '127.0.0.1:3001:3001'
     env_file:
       # Opcional: management-system/.env.local no es necesario para levantar el stack local —
       # todo lo que Postgres/Payload necesitan ya está hardcodeado abajo en `environment:`.
@@ -53,11 +53,11 @@ services:
       - ../scanner-prototype:/scanner-prototype:ro
     # Sin migraciones: el deploy de este proyecto recrea la imagen/DB desde cero cada vez, no
     # las necesita. Payload sincroniza el schema solo con NODE_ENV=development (pushDevSchema).
-    # DEV ONLY — no copiar a un compose de producción sin sacar `pnpm seed:navigation`:
+    # DEV ONLY — no copiar a un compose de producción sin sacar `pnpm seed:navigation` y `pnpm seed:demo`:
     # `seed:navigation` crea los 4 Roles base + la única organización demo (Org/Office/Settings/
     # Subscription) + un admin/org_admin/org_viewer/office_manager de demo con credenciales fijas;
     # El agente solo se vincula desde Administration > Offices > Install scanner.
-    command: sh -c "pnpm seed:navigation && pnpm run dev"
+    command: sh -c "pnpm seed:navigation && pnpm seed:demo && pnpm run dev"
 
 volumes:
   postgres_data:

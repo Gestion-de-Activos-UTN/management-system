@@ -99,6 +99,7 @@ test('orden de creación sigue doc 04: organization -> settings+subscription -> 
     asset_inventory: true,
     security_assessments: true,
     risk_score: true,
+    tasks: true,
   })
 
   assert.deepEqual(calls, [

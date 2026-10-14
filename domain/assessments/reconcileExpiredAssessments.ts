@@ -23,7 +23,10 @@ async function reconcileExpiredAssessment(payload: Payload, assessment: Assessme
         overrideAccess: true,
         depth: 0,
       })
-      .catch(() => null)
+      .catch(error => {
+        if (error && typeof error === 'object' && 'status' in error && error.status === 404) return null
+        throw error
+      })
     return asset
       ? reconcileManualAssetAssessmentInstance(payload, asset, 'answer_expired')
       : { action: 'none' as const }
@@ -37,7 +40,10 @@ async function reconcileExpiredAssessment(payload: Payload, assessment: Assessme
         overrideAccess: true,
         depth: 0,
       })
-      .catch(() => null)
+      .catch(error => {
+        if (error && typeof error === 'object' && 'status' in error && error.status === 404) return null
+        throw error
+      })
     return asset
       ? reconcileAssetAssessmentInstance(payload, asset, 'answer_expired')
       : { action: 'none' as const }
@@ -52,7 +58,10 @@ async function reconcileExpiredAssessment(payload: Payload, assessment: Assessme
         overrideAccess: true,
         depth: 0,
       })
-      .catch(() => null)
+      .catch(error => {
+        if (error && typeof error === 'object' && 'status' in error && error.status === 404) return null
+        throw error
+      })
     return organization
       ? reconcileAssessmentInstance(
           payload,
@@ -74,7 +83,10 @@ async function reconcileExpiredAssessment(payload: Payload, assessment: Assessme
       overrideAccess: true,
       depth: 0,
     })
-    .catch(() => null)
+    .catch(error => {
+        if (error && typeof error === 'object' && 'status' in error && error.status === 404) return null
+        throw error
+      })
   return office
     ? reconcileAssessmentInstance(
         payload,
@@ -99,34 +111,40 @@ export async function reconcileExpiredAssessments(
     cycles_preserved: 0,
     cycles_skipped: 0,
   }
-  let page = 1
-  let totalPages = 1
+  let cursor: string | undefined
 
-  do {
+  for (;;) {
     const expired = await payload.find({
       collection: 'assessment-instances',
       where: {
         and: [
           { status: { equals: 'completed' } },
+          { expiry_reconciled_at: { exists: false } },
+          ...(cursor ? [{ id: { greater_than: cursor } }] : []),
           { due_at: { less_than_equal: now.toISOString() } },
         ],
       },
       overrideAccess: true,
       depth: 0,
       limit: 200,
-      page,
-      sort: 'due_at',
+      pagination: false,
+      sort: 'id',
     })
-    totalPages = expired.totalPages
+    if (!expired.docs.length) break
+    cursor = expired.docs[expired.docs.length - 1].id
     for (const assessment of expired.docs) {
       summary.expired_cycles_examined += 1
       const result = await reconcileExpiredAssessment(payload, assessment)
       if (result.action === 'created') summary.cycles_created += 1
       else if (result.action === 'preserved') summary.cycles_preserved += 1
       else summary.cycles_skipped += 1
+      // AUDIT: record successful expiry reconciliation without modifying historical answers.
+      // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+      await payload.update({ collection: 'assessment-instances', id: assessment.id, overrideAccess: true,
+        context: { assessmentExpiryMaintenance: true },
+        data: { expiry_reconciled_at: now.toISOString() } })
     }
-    page += 1
-  } while (page <= totalPages)
+  }
 
   return summary
 }

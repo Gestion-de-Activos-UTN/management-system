@@ -1,6 +1,8 @@
 import type { Endpoint } from 'payload'
 import { getTenantContext } from '../access/tenant/resolveTenantContext'
-import { hasOrgWideScope } from '../access/rbac/permissions'
+import { canDo, hasOrgWideScope, type Action } from '../access/rbac/permissions'
+import { defaultFeatures } from '../domain/subscriptions/features'
+import { planLimits } from '../domain/subscriptions/plan-limits'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
@@ -16,7 +18,7 @@ export const sessionEndpoint: Endpoint = {
   method: 'get',
   handler: async req => {
     const ctx = await getTenantContext(req)
-    if (!ctx) return json({ error: 'unauthenticated' }, 401)
+    if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
     const subscription = ctx.organizationId
       ? await req.payload.find({
           collection: 'subscriptions',
@@ -28,11 +30,42 @@ export const sessionEndpoint: Endpoint = {
         })
       : null
     const rawFeatures = subscription?.docs[0]?.features
-    const features =
+    const persistedFeatures =
       rawFeatures && typeof rawFeatures === 'object' && !Array.isArray(rawFeatures)
         ? rawFeatures
         : {}
+    // Las suscripciones anteriores a una feature no tienen su clave en el JSON. Los defaults
+    // completan esas claves sin pisar un false explícito y evitan una migración bloqueante.
+    const features = { ...defaultFeatures(), ...persistedFeatures }
     // The frontend reads the row scope from here instead of comparing role slugs.
-    return json({ ...ctx, orgWide: hasOrgWideScope(ctx.role), features })
+    const taskActions: Action[] = [
+      'create',
+      'read',
+      'edit',
+      'claim',
+      'release',
+      'assign',
+      'reassign',
+      'complete',
+      'cancel',
+      'archive',
+      'delete',
+    ]
+    return json({
+      ...ctx,
+      orgWide: hasOrgWideScope(ctx.role),
+      features,
+      // Para mostrar el uso del plan (Administración); los endpoints los hacen cumplir igual.
+      limits: subscription?.docs[0] ? planLimits(subscription.docs[0]) : null,
+      permissions: {
+        technicalEvidence: Boolean(
+          ctx.organizationId &&
+          canDo(ctx.role, 'scan-reports', 'read_technical', ctx.organizationId)
+        ),
+        tasks: taskActions.filter(action => canDo(ctx.role, 'tasks', action, ctx.organizationId)),
+        // Same rule endpoints/inventoryIncidents.ts enforces to resolve an inventory incident.
+        assets: (['update'] as const).filter(action => canDo(ctx.role, 'assets', action, ctx.organizationId)),
+      },
+    })
   },
 }

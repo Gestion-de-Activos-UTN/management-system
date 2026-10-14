@@ -15,8 +15,9 @@ export const NETWORK_BASELINE = [
     requires_complete_port_coverage: true,
     applies_to_asset_types: ['gateway'],
     message:
-      'This gateway provides the name lookup function normally used by devices in the office.',
-    recommendation: 'No action is needed while this remains an expected function of the gateway.',
+      'Este gateway ofrece la resolución de nombres (DNS) que normalmente usan los equipos de la oficina.',
+    recommendation:
+      'No hace falta hacer nada mientras siga siendo una función esperada del gateway.',
   },
   {
     key: 'network.telnet.confirmed',
@@ -29,9 +30,9 @@ export const NETWORK_BASELINE = [
     minimum_confidence: 8,
     requires_complete_port_coverage: true,
     message:
-      'This device allows connections through an old method that does not properly protect transmitted information.',
+      'Este equipo acepta conexiones por un método antiguo que no protege la información transmitida.',
     recommendation:
-      'Ask whoever maintains the device to disable it or replace it with a protected connection method.',
+      'Pide a quien mantiene el equipo que lo desactive o lo reemplace por un método de conexión protegido.',
   },
   {
     key: 'network.remote_access.review',
@@ -43,9 +44,9 @@ export const NETWORK_BASELINE = [
     severity: 'medium',
     minimum_confidence: 7,
     requires_complete_port_coverage: true,
-    message:
-      'SIAM found a remote access function but cannot verify that access is properly restricted.',
-    recommendation: 'Ask whoever maintains this device to check who can use remote access.',
+    message: 'Este equipo permite acceso remoto y no se puede verificar que esté bien restringido.',
+    recommendation:
+      'Pide a quien mantiene este equipo que revise quién puede conectarse de forma remota.',
   },
   {
     key: 'network.file_sharing.review',
@@ -58,7 +59,8 @@ export const NETWORK_BASELINE = [
     minimum_confidence: 7,
     requires_complete_port_coverage: true,
     message:
-      'SIAM found a file-sharing function but cannot verify that it is restricted correctly.',
-    recommendation: 'Ask whoever maintains this device to check who can reach its shared files.',
+      'Este equipo comparte archivos en la red y no se puede verificar que el acceso esté bien restringido.',
+    recommendation:
+      'Pide a quien mantiene este equipo que revise quién puede acceder a sus archivos compartidos.',
   },
 ] as const satisfies readonly NetworkBaselineRule[]

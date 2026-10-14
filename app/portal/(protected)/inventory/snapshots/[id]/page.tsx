@@ -1,15 +1,19 @@
 'use client'
 
 import { useParams, useSearchParams } from 'next/navigation'
-import { Card, Center, Group, Loader, RingProgress, Stack, Tabs, Text } from '@mantine/core'
+import { Center, Loader, SimpleGrid, Stack, Tabs, Text } from '@mantine/core'
+import { Gauge, Package, Server, ShieldCheck } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '@/components/ui/DataTable'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { BackButton } from '@/components/ui/BackButton'
+import { StatCard } from '@/components/ui/StatCard'
 import { TechnicalText } from '@/components/ui/TechnicalText'
+import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
 import { useSnapshot } from '@/modules/inventory-snapshots/hooks/use-snapshot'
 import { formatDateTime } from '@/lib/format-date'
-import { ASSET_CATEGORY_LABEL, CRITICALITY_LABEL } from '@/lib/enum-labels'
+import { ASSET_CATEGORY_LABEL, ASSET_STATUS_LABEL, CRITICALITY_LABEL } from '@/lib/enum-labels'
+import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 
 type DumpedAsset = {
   id?: string
@@ -28,40 +32,84 @@ type DumpedNonNetworkAsset = {
   status?: string
 }
 
+const STATUS_TONE: Record<string, StatusTone> = {
+  active: 'success',
+  offline: 'warning',
+  retired: 'neutral',
+}
+
+// Mismas celdas compactas que el inventario vivo (assets/non-network-assets columns): nombre
+// arriba, dato secundario debajo.
+const statusColumn = {
+  accessorKey: 'status',
+  header: 'Estado en la instantánea',
+  size: 180,
+  meta: { align: 'center' },
+  cell: ({ row }: { row: { original: { status?: string } } }) =>
+    row.original.status ? (
+      <StatusBadge
+        tone={STATUS_TONE[row.original.status] ?? 'neutral'}
+        label={ASSET_STATUS_LABEL[row.original.status] ?? row.original.status}
+      />
+    ) : (
+      '—'
+    ),
+}
+
+const criticalityColumn = {
+  accessorKey: 'criticality',
+  header: 'Criticidad',
+  size: 120,
+  cell: ({ row }: { row: { original: { criticality?: string } } }) =>
+    row.original.criticality ? CRITICALITY_LABEL[row.original.criticality] : '—',
+}
+
 const networkColumns: ColumnDef<DumpedAsset, unknown>[] = [
-  { accessorKey: 'alias', header: 'Alias' },
   {
-    accessorKey: 'ip',
-    header: 'IP',
-    cell: ({ row }) => <TechnicalText>{row.original.ip ?? '—'}</TechnicalText>,
+    id: 'device',
+    header: 'Equipo',
+    accessorFn: asset => asset.alias || asset.hostname || asset.ip || '',
+    cell: ({ row }) => {
+      const { alias, hostname, ip } = row.original
+      const name = alias || hostname || ip
+      const technical = [ip, hostname].filter(value => value && value !== name).join(' · ')
+      return (
+        <Stack gap={2}>
+          <Text size="sm" fw={600} ff={name && name !== alias ? 'monospace' : undefined}>
+            {name ?? '—'}
+          </Text>
+          {technical && (
+            <TechnicalText size="xs" c="dimmed">
+              {technical}
+            </TechnicalText>
+          )}
+        </Stack>
+      )
+    },
   },
-  { accessorKey: 'hostname', header: 'Nombre del host' },
-  {
-    accessorKey: 'criticality',
-    header: 'Criticidad',
-    cell: ({ row }) =>
-      row.original.criticality ? CRITICALITY_LABEL[row.original.criticality] : '—',
-  },
-  { accessorKey: 'status', header: 'Estado (al momento de la instantánea)' },
+  criticalityColumn,
+  statusColumn,
 ]
 
 const nonNetworkColumns: ColumnDef<DumpedNonNetworkAsset, unknown>[] = [
-  { accessorKey: 'alias', header: 'Alias' },
   {
-    accessorKey: 'asset_category',
-    header: 'Categoría',
-    cell: ({ row }) =>
-      row.original.asset_category
-        ? (ASSET_CATEGORY_LABEL[row.original.asset_category] ?? row.original.asset_category)
-        : '—',
+    accessorKey: 'alias',
+    header: 'Activo',
+    cell: ({ row }) => (
+      <Stack gap={2}>
+        <Text size="sm" fw={600}>
+          {row.original.alias ?? '—'}
+        </Text>
+        {row.original.asset_category && (
+          <Text size="xs" c="dimmed">
+            {ASSET_CATEGORY_LABEL[row.original.asset_category] ?? row.original.asset_category}
+          </Text>
+        )}
+      </Stack>
+    ),
   },
-  {
-    accessorKey: 'criticality',
-    header: 'Criticidad',
-    cell: ({ row }) =>
-      row.original.criticality ? CRITICALITY_LABEL[row.original.criticality] : '—',
-  },
-  { accessorKey: 'status', header: 'Estado (al momento de la instantánea)' },
+  criticalityColumn,
+  statusColumn,
 ]
 
 // Sin claim de shape estricta sobre lo que trae la DB — `assets_dump` es un campo `json` libre
@@ -108,38 +156,52 @@ export default function SnapshotDetailPage() {
       <PageHeader
         title={`Instantánea — ${formatDateTime(snapshot.taken_at)}`}
         description="Instantánea inmutable: el estado de cada activo refleja ese momento, no su estado actual."
+        rightSection={
+          <CreateRelatedTaskButton
+            reference={{ relationTo: 'inventory-snapshots', value: String(snapshot.id) }}
+            asOrganization={asOrganization}
+          />
+        }
       />
 
-      <Card withBorder padding="lg">
-        <Group align="flex-start" wrap="wrap">
-          <RingProgress
-            size={120}
-            thickness={12}
-            sections={[{ value: risk.score ?? 0, color: 'red' }]}
-            label={
-              <Text ta="center" fw={700}>
-                {risk.score == null ? '—' : Math.round(risk.score)}
-              </Text>
-            }
-          />
-          <Text c="dimmed">
-            {risk.score == null
-              ? 'El riesgo no era evaluable al momento de esta instantánea.'
-              : `Riesgo en ese momento. La cobertura de la evaluación era del ${Math.round(risk.coverage ?? 0)} %.`}
-          </Text>
-          {(risk.excluded_assets ?? 0) > 0 && (
-            <Text size="sm" c="dimmed">
-              {risk.excluded_assets} activos estaban fuera del alcance de la evaluación de seguridad
-              en ese momento.
-            </Text>
-          )}
-        </Group>
-      </Card>
+      {/* Misma grilla de métricas que el detalle de un informe de escaneo. */}
+      <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} spacing="md">
+        <StatCard
+          icon={<Gauge size={20} strokeWidth={1.5} />}
+          value={risk.score == null ? 'No evaluable' : Math.round(risk.score)}
+          label="Puntaje de riesgo en ese momento"
+        />
+        <StatCard
+          icon={<ShieldCheck size={20} strokeWidth={1.5} />}
+          value={risk.score == null ? '—' : `${Math.round(risk.coverage ?? 0)} %`}
+          label="Cobertura de la evaluación"
+        />
+        <StatCard
+          icon={<Server size={20} strokeWidth={1.5} />}
+          value={networkAssets.length}
+          label="Activos de red"
+        />
+        <StatCard
+          icon={<Package size={20} strokeWidth={1.5} />}
+          value={nonNetworkAssets.length}
+          label="Activos manuales"
+        />
+      </SimpleGrid>
+      {(risk.excluded_assets ?? 0) > 0 && (
+        <Text size="sm" c="dimmed">
+          {risk.excluded_assets} activos estaban fuera del alcance de la evaluación de seguridad en
+          ese momento.
+        </Text>
+      )}
 
       <Tabs defaultValue="network">
         <Tabs.List>
-          <Tabs.Tab value="network">Red ({networkAssets.length})</Tabs.Tab>
-          <Tabs.Tab value="non-network">Activos manuales ({nonNetworkAssets.length})</Tabs.Tab>
+          <Tabs.Tab value="network" leftSection={<Server size={16} strokeWidth={1.5} />}>
+            Red ({networkAssets.length})
+          </Tabs.Tab>
+          <Tabs.Tab value="non-network" leftSection={<Package size={16} strokeWidth={1.5} />}>
+            Activos manuales ({nonNetworkAssets.length})
+          </Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="network" pt="md">

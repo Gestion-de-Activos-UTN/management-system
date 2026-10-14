@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import { buildAssessmentOfficeScope } from './assessments'
+import { bulkAssessmentCompleteEndpoint } from './bulkAssessments'
 
 describe('assessment office filtering', () => {
   it('uses current asset relations instead of the office frozen in historical cycles', () => {
@@ -37,5 +38,12 @@ describe('assessment office filtering', () => {
     assert.deepEqual(scope.or, [
       { and: [{ scope: { equals: 'office' } }, { office: { equals: 'office-2' } }] },
     ])
+  })
+})
+
+describe('bulk assessment routing', () => {
+  it('keeps the explicit bulk completion path', () => {
+    assert.equal(bulkAssessmentCompleteEndpoint.method, 'post')
+    assert.equal(bulkAssessmentCompleteEndpoint.path, '/v1/assessments/bulk/complete')
   })
 })

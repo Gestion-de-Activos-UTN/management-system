@@ -112,4 +112,6 @@ test('GET /v1/dashboard/metrics: 200 cuenta scanners online dentro del alcance d
   const body = await res.json()
   assert.equal(body.active_offices, 1)
   assert.equal(body.online_scanners, 1)
+  assert.equal(body.total_scanners, 1)
+  assert.equal(body.overdue_manual_reviews, 0)
 })

@@ -1,14 +1,19 @@
 import type { Endpoint } from 'payload'
 import { getTenantContext } from '../access/tenant/resolveTenantContext'
 import { relationId } from '../lib/relationId'
-import { getAgentLifecycleStatus, getAgentConnectivity } from '../domain/agents/agent-state'
+import {
+  getAgentLifecycleStatus,
+  getAgentConnectivity,
+  type AgentRevocationReason,
+} from '../domain/agents/agent-state'
 import { getAgentQuota, SubscriptionNotFoundError } from '../domain/subscriptions/agent-quota'
+import { canDo } from '../access/rbac/permissions'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
 }
 
-export interface OfficeAgentSummary {
+export interface DetailedOfficeAgentSummary {
   office_id: string
   total: number
   active: number
@@ -19,10 +24,12 @@ export interface OfficeAgentSummary {
     id: string
     lifecycle_status: 'provisioned' | 'active' | 'revoked'
     connectivity: 'online' | 'offline' | 'pending' | 'revoked'
-    revocation_reason: 'manual' | 'auto_lockout_abuse' | null
+    revocation_reason: AgentRevocationReason | null
     last_heartbeat_at: string | null
   }>
 }
+
+export type OfficeAgentSummary = DetailedOfficeAgentSummary | { office_id: string; scanner_status: OfficeScannerStatus }
 
 export interface AgentQuotaSummary {
   limit: number
@@ -36,7 +43,9 @@ export type OfficeScannerStatus = 'not_installed' | 'pending' | 'online' | 'offl
 export function getOfficeScannerStatus(
   summary: OfficeAgentSummary | undefined
 ): OfficeScannerStatus {
-  if (!summary || summary.total === 0) return 'not_installed'
+  if (!summary) return 'not_installed'
+  if ('scanner_status' in summary) return summary.scanner_status
+  if (summary.total === 0) return 'not_installed'
   if (summary.active === 0) return 'inactive'
   if (summary.online > 0) return 'online'
   if (summary.never_connected === summary.active) return 'pending'
@@ -49,6 +58,7 @@ export const officeAgentSummaryEndpoint: Endpoint = {
   handler: async req => {
     const ctx = await getTenantContext(req)
     if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
+    if (!canDo(ctx.role, 'offices', 'read', ctx.organizationId)) return json({ error: 'forbidden' }, 403)
     if (!ctx.organizationId) return json({ docs: [], quota: null })
 
     const offices = await req.payload.find({
@@ -59,7 +69,7 @@ export const officeAgentSummaryEndpoint: Endpoint = {
       overrideAccess: true,
       req,
       depth: 0,
-      limit: 1000,
+      pagination: false,
     })
     const officeIds = offices.docs.map(office => String(office.id))
     if (officeIds.length === 0) return json({ docs: [], quota: null })
@@ -70,9 +80,9 @@ export const officeAgentSummaryEndpoint: Endpoint = {
       overrideAccess: true,
       req,
       depth: 0,
-      limit: 5000,
+      pagination: false,
     })
-    const summary = new Map<string, OfficeAgentSummary>()
+    const summary = new Map<string, DetailedOfficeAgentSummary>()
     for (const officeId of officeIds) {
       summary.set(officeId, {
         office_id: officeId,
@@ -105,6 +115,8 @@ export const officeAgentSummaryEndpoint: Endpoint = {
       })
     }
 
+    if (!canDo(ctx.role, 'agents', 'read', ctx.organizationId))
+      return json({ docs: [...summary.values()].map(row => ({ office_id: row.office_id, scanner_status: getOfficeScannerStatus(row) })), quota: null })
     let quota
     try {
       quota = await getAgentQuota(req.payload, ctx.organizationId, req)

@@ -14,7 +14,22 @@ export type CollectionSlug =
   | 'compliance-results'
   | 'risk-evaluations'
   | 'risk-contributions'
-export type Action = 'create' | 'read' | 'update' | 'delete'
+  | 'tasks'
+  | 'organization-memberships'
+export type Action =
+  | 'read_technical'
+  | 'create'
+  | 'read'
+  | 'update'
+  | 'delete'
+  | 'edit'
+  | 'claim'
+  | 'release'
+  | 'assign'
+  | 'reassign'
+  | 'complete'
+  | 'cancel'
+  | 'archive'
 
 // Matriz estática — decisión explícita (documentation/01-erd-core.md nota 9): el sistema no
 // tiene hoy suficientes funcionalidades como para justificar overrides dinámicos por
@@ -31,7 +46,7 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     agents: ['create', 'read', 'update'],
     assets: ['read'],
     'non-network-assets': ['read'],
-    'scan-reports': ['read'],
+    'scan-reports': ['read', 'read_technical'],
     roles: ['read'],
     'job-runs': ['read'],
     'inventory-snapshots': ['create', 'read'],
@@ -41,14 +56,18 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     'compliance-results': ['read'],
     'risk-evaluations': ['read'],
     'risk-contributions': ['read'],
+    tasks: ['read'],
   },
   org_admin: {
     organizations: ['read'],
-    offices: ['read'],
+    // Alta, edición y (des)activación de oficinas y de miembros: sólo el org_admin, vía
+    // endpoints/offices.ts y endpoints/orgMembers.ts (las colecciones siguen cerradas).
+    offices: ['create', 'read', 'update'],
+    'organization-memberships': ['read', 'update'],
     agents: ['create', 'read', 'update'],
-    assets: ['read', 'update'],
+    assets: ['read', 'update', 'delete'],
     'non-network-assets': ['create', 'read', 'update', 'delete'],
-    'scan-reports': ['read'],
+    'scan-reports': ['read', 'read_technical'],
     'inventory-snapshots': ['create', 'read'],
     'assessment-instances': ['read'],
     'assessment-answers': ['read'],
@@ -56,6 +75,19 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     'compliance-results': ['read'],
     'risk-evaluations': ['read'],
     'risk-contributions': ['read'],
+    tasks: [
+      'create',
+      'read',
+      'edit',
+      'claim',
+      'release',
+      'assign',
+      'reassign',
+      'complete',
+      'cancel',
+      'archive',
+      'delete',
+    ],
   },
   org_viewer: {
     organizations: ['read'],
@@ -70,13 +102,14 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     'compliance-results': ['read'],
     'risk-evaluations': ['read'],
     'risk-contributions': ['read'],
+    tasks: ['read', 'claim', 'release', 'complete'],
   },
   office_manager: {
     organizations: ['read'],
     offices: ['read'],
     assets: ['read', 'update'],
     'non-network-assets': ['create', 'read', 'update'],
-    'scan-reports': ['read'],
+    'scan-reports': ['read', 'read_technical'],
     'inventory-snapshots': ['read'],
     'assessment-instances': ['read'],
     'assessment-answers': ['read'],
@@ -84,6 +117,19 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     'compliance-results': ['read'],
     'risk-evaluations': ['read'],
     'risk-contributions': ['read'],
+    tasks: [
+      'create',
+      'read',
+      'edit',
+      'claim',
+      'release',
+      'assign',
+      'reassign',
+      'complete',
+      'cancel',
+      'archive',
+      'delete',
+    ],
   },
 }
 
@@ -98,7 +144,9 @@ export function canDo(
   _organizationId: string | null
 ): boolean {
   if (!roleSlug) return false
-  return MATRIX[roleSlug]?.[collection]?.includes(action) ?? false
+  if (roleSlug === 'platform_admin' && !_organizationId && action !== 'read') return false
+  const effectiveRole = roleSlug === 'platform_admin' && _organizationId ? 'org_admin' : roleSlug
+  return MATRIX[effectiveRole]?.[collection]?.includes(action) ?? false
 }
 
 // Alcance de fila por rol: org_admin/platform_admin ven toda la organización (incluidas las filas

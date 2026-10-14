@@ -81,7 +81,7 @@ export function AgentProvisionModal({
     })
   }
 
-  const hasAgents = (summary?.total ?? 0) > 0
+  const hasAgents = Boolean(summary && 'total' in summary && summary.total > 0)
 
   return (
     <>
@@ -108,30 +108,32 @@ export function AgentProvisionModal({
               <Text size="sm" fw={600}>
                 Escáneres existentes
               </Text>
-              {summary?.agents.map(agent => (
-                <Group key={agent.id} justify="space-between" gap="sm">
-                  <Stack gap={2} style={{ minWidth: 0 }}>
-                    <Text size="sm" truncate>
-                      {agent.id}
-                    </Text>
-                    <AgentConnectivityBadge
-                      connectivity={agent.connectivity}
-                      revocationReason={agent.revocation_reason}
-                    />
-                  </Stack>
-                  {agent.lifecycle_status !== 'revoked' && (
-                    <Button
-                      size="xs"
-                      color="red"
-                      variant="light"
-                      loading={revoke.isPending}
-                      onClick={() => setAgentToDeactivate(agent.id)}
-                    >
-                      Desactivar
-                    </Button>
-                  )}
-                </Group>
-              ))}
+              {summary &&
+                'agents' in summary &&
+                summary.agents.map(agent => (
+                  <Group key={agent.id} justify="space-between" gap="sm">
+                    <Group gap="xs" wrap="nowrap" style={{ flex: 1, minWidth: 0 }}>
+                      <Text size="sm" truncate style={{ flex: 1, minWidth: 0 }}>
+                        {agent.id}
+                      </Text>
+                      <AgentConnectivityBadge
+                        connectivity={agent.connectivity}
+                        revocationReason={agent.revocation_reason}
+                      />
+                    </Group>
+                    {agent.lifecycle_status !== 'revoked' && (
+                      <Button
+                        size="xs"
+                        color="red"
+                        variant="light"
+                        loading={revoke.isPending}
+                        onClick={() => setAgentToDeactivate(agent.id)}
+                      >
+                        Desactivar
+                      </Button>
+                    )}
+                  </Group>
+                ))}
             </Stack>
           )}
           {hasAgents && <Divider label="Agregar otro escáner" labelPosition="left" />}
@@ -157,7 +159,8 @@ export function AgentProvisionModal({
               </Text>
               {quota.per_office !== null && (
                 <Text size="xs" c="dimmed">
-                  Esta oficina: {summary?.active ?? 0} of {quota.per_office} en uso
+                  Esta oficina: {summary && 'active' in summary ? summary.active : 0} of{' '}
+                  {quota.per_office} en uso
                 </Text>
               )}
             </Stack>

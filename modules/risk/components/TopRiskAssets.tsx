@@ -1,7 +1,5 @@
-import { Card, Group, Progress, Stack, Text } from '@mantine/core'
-import { StatusBadge } from '@/components/ui/StatusBadge'
-import { RISK_BAND_LABEL } from '@/lib/enum-labels'
-import { RISK_BAND_TONE } from '../risk-labels'
+import { Box, Card, Center, Group, Progress, Stack, Text } from '@mantine/core'
+import { RiskBandBadge } from './RiskBandBadge'
 import type { RiskEvaluationDTO } from '../service'
 
 /** Assets with the highest residual risk, with their own score and band. */
@@ -19,17 +17,29 @@ export function TopRiskAssets({ assets }: { assets: RiskEvaluationDTO['top_asset
             <Text size="sm" style={{ flex: 1 }} truncate>
               {asset.asset_label}
             </Text>
-            <Progress value={asset.score ?? 0} w={160} color="red" aria-label="Riesgo sin tratar" />
-            <Text size="sm" w={48} ta="right">
+            <Progress
+              value={asset.score ?? 0}
+              w={160}
+              color="red"
+              aria-label="Riesgo sin tratar"
+              style={{ flexShrink: 0 }}
+            />
+            <Text size="sm" w={48} ta="right" style={{ flexShrink: 0 }}>
               {asset.score === null ? '—' : `${Math.round(asset.score)}%`}
             </Text>
-            {asset.band ? (
-              <StatusBadge tone={RISK_BAND_TONE[asset.band]} label={RISK_BAND_LABEL[asset.band]} />
-            ) : (
-              <Text size="xs" c="dimmed" w={72} ta="center">
-                Preliminar
-              </Text>
-            )}
+            {/* Columna de ancho fijo: los badges miden distinto (ALTO / CRÍTICO) y sin esto
+                desplazan la barra de cada fila. */}
+            <Box w={84} style={{ flexShrink: 0 }}>
+              {asset.band ? (
+                <Center>
+                  <RiskBandBadge band={asset.band} />
+                </Center>
+              ) : (
+                <Text size="xs" c="dimmed" ta="center">
+                  Preliminar
+                </Text>
+              )}
+            </Box>
           </Group>
         ))}
       </Stack>

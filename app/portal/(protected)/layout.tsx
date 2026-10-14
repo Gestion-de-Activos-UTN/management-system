@@ -13,6 +13,7 @@ import {
   ScanLine,
   ShieldCheck,
   ClipboardCheck,
+  ListTodo,
 } from 'lucide-react'
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { SidebarProfile } from '@/components/layout/SidebarProfile'
@@ -25,6 +26,8 @@ import {
 } from '@/modules/auth/hooks/use-tenant-context'
 import { OfficeSelector } from '@/modules/offices/components/OfficeSelector'
 import { ScanResultMonitor } from '@/modules/scan-reports/components/ScanResultMonitor'
+import { PortalMessagesRuntime } from '@/modules/portal-messages/components/PortalMessagesRuntime'
+import { useMyProfile } from '@/modules/users/hooks/use-org-members'
 
 // ponytail/debt: same client-side-only gate as the admin portal's (protected)/layout.tsx —
 // Loader while useSession()/useTenantContext() resolve, then redirect. The JWT lives in
@@ -47,6 +50,7 @@ function PortalProtectedLayoutInner({ children }: { children: React.ReactNode })
   const isAdminVisiting = session?.collection === 'admins' && !!asOrganization
   const allowed = !!session && (session.collection === 'users' || isAdminVisiting)
   const tenantContext = useTenantContext(asOrganization)
+  const profile = useMyProfile(session?.collection === 'users')
 
   useEffect(() => {
     if (session === undefined) return // still resolving — see lib/use-session.ts
@@ -104,6 +108,15 @@ function PortalProtectedLayoutInner({ children }: { children: React.ReactNode })
           },
         ]
       : []),
+    ...(tenantContext.data?.features.tasks
+      ? [
+          {
+            label: 'Tareas',
+            href: `/portal/tasks${suffix}`,
+            icon: <ListTodo size={18} strokeWidth={1.5} />,
+          },
+        ]
+      : []),
     {
       label: 'Inventario',
       href: `/portal/inventory${suffix}`,
@@ -140,9 +153,15 @@ function PortalProtectedLayoutInner({ children }: { children: React.ReactNode })
           asOrganization={asOrganization}
         />
       )}
+      <PortalMessagesRuntime />
       <DashboardShell
         navItems={navItems}
-        sidebarFooter={<SidebarProfile title={roleLabel(tenantContext.data)} />}
+        sidebarFooter={
+          <SidebarProfile
+            title={profile.data?.name || roleLabel(tenantContext.data)}
+            subtitle={profile.data?.name ? roleLabel(tenantContext.data) : undefined}
+          />
+        }
         homeHref={`/portal/dashboard${suffix}`}
         topBarRight={
           <Group gap="sm">

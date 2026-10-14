@@ -50,6 +50,7 @@ describe('reopen copies every answer into the new cycle', () => {
       question_set_snapshot: targetSnapshot,
     }
     const payload = {
+      db: { beginTransaction: async () => 'tx', commitTransaction: async () => {}, rollbackTransaction: async () => {}, sessions: { tx: { db: { execute: async () => {} } } } },
       async findByID() {
         return { ...targetAssessment }
       },
@@ -69,7 +70,7 @@ describe('reopen copies every answer into the new cycle', () => {
     } as unknown as Payload
 
     await saveAssessmentDraft(payload, 'assessment-new', copiedDraft, 'user-1', {
-      context: {},
+      context: {}, payload,
     } as PayloadRequest)
 
     assert.equal(

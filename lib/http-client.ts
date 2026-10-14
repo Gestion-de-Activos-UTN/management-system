@@ -1,4 +1,5 @@
 import { clearSession, getSession } from './session'
+import { organizationRequestPath } from './organization-request-context'
 
 export type HttpError = { status: number; code: string; message: string }
 
@@ -35,7 +36,11 @@ function refreshSession(): Promise<boolean> {
 }
 
 async function rawRequest(method: string, path: string, body?: unknown) {
-  return fetch(path, {
+  const scopedPath = organizationRequestPath(
+    path,
+    typeof window === 'undefined' ? '' : window.location.search
+  )
+  return fetch(scopedPath, {
     method,
     headers: { 'Content-Type': 'application/json' },
     // The session lives in the httpOnly `payload-token` cookie now (see collections/Users
@@ -94,8 +99,10 @@ async function requestBlob(path: string, body?: unknown): Promise<Blob> {
 export const httpClient = {
   get: <T>(path: string, params?: Record<string, string | undefined>) =>
     request<T>('GET', path, { params }),
-  post: <T>(path: string, body?: unknown) => request<T>('POST', path, { body }),
-  patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, { body }),
+  post: <T>(path: string, body?: unknown, params?: Record<string, string | undefined>) =>
+    request<T>('POST', path, { body, params }),
+  patch: <T>(path: string, body?: unknown, params?: Record<string, string | undefined>) =>
+    request<T>('PATCH', path, { body, params }),
   delete: <T>(path: string) => request<T>('DELETE', path),
   download: (path: string, body?: unknown) => requestBlob(path, body),
 }

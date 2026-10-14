@@ -88,6 +88,37 @@ describe('asset assessment reconciliation', () => {
     assert.equal(creates.length, 0)
   })
 
+  it('does not create a cycle when identification and retirement arrive together', async () => {
+    const { payload, creates } = makePayload()
+    const result = await reconcileAssetAssessmentInstance(
+      payload,
+      { ...workstation, status: 'retired' } as Asset,
+      'asset_identified'
+    )
+    assert.equal(result.action, 'none')
+    assert.equal(creates.length, 0)
+  })
+
+  it('supersedes an open cycle when its asset is retired', async () => {
+    const existing = {
+      id: 'assessment-1',
+      organization: 'org-1',
+      office: 'office-1',
+      policy_key: 'essential',
+      policy_version: 2,
+      question_set_snapshot: [{ key: 'A.8.1.exclusive_use', version: 2 }],
+    }
+    const { payload, creates, updates } = makePayload([existing])
+    const result = await reconcileAssetAssessmentInstance(
+      payload,
+      { ...workstation, status: 'retired' } as Asset,
+      'asset_identified'
+    )
+    assert.equal(result.action, 'superseded')
+    assert.equal(creates.length, 0)
+    assert.equal((updates[0].data as { status: string }).status, 'superseded')
+  })
+
   it('preserves an identical open cycle and supersedes an inapplicable one', async () => {
     const question_set_snapshot = [
       'A.7.9.physical_protection',

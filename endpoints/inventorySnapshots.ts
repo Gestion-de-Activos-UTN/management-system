@@ -46,6 +46,13 @@ export const generateInventorySnapshotEndpoint: Endpoint = {
       userId: ctx.userId,
     })
 
-    return json(snapshot, 201)
+    const visibleSnapshot = await req.payload.findByID({
+      collection: 'inventory-snapshots',
+      id: snapshot.id,
+      req,
+      overrideAccess: false,
+      depth: 0,
+    })
+    return json(visibleSnapshot, 201)
   },
 }

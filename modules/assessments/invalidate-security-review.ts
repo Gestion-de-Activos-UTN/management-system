@@ -6,8 +6,9 @@ import type { QueryClient } from '@tanstack/react-query'
  * next navigation never reuses a list captured before the asset was reconciled.
  */
 export function invalidateSecurityReview(queryClient: QueryClient) {
-  return queryClient.invalidateQueries({
-    queryKey: ['assessments'],
-    refetchType: 'all',
-  })
+  return Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['assessments'], refetchType: 'all' }),
+    queryClient.invalidateQueries({ queryKey: ['risk'], refetchType: 'all' }),
+    queryClient.invalidateQueries({ queryKey: ['tasks'], refetchType: 'all' }),
+  ])
 }

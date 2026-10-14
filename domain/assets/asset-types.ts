@@ -15,14 +15,14 @@ export const SCANNED_ASSET_TYPE_VALUES = [
 export type ScannedAssetType = (typeof SCANNED_ASSET_TYPE_VALUES)[number]
 
 export const SCANNED_ASSET_TYPE_OPTIONS = [
-  { value: 'workstation', label: 'Computer' },
-  { value: 'mobile', label: 'Phone or tablet' },
-  { value: 'gateway', label: 'Router or gateway' },
-  { value: 'network_device', label: 'Switch or access point' },
-  { value: 'printer', label: 'Printer or multifunction device' },
-  { value: 'server', label: 'Server' },
-  { value: 'iot', label: 'IoT or embedded device' },
-  { value: 'other', label: 'Other network device' },
+  { value: 'workstation', label: 'Computadora' },
+  { value: 'mobile', label: 'Teléfono o tablet' },
+  { value: 'gateway', label: 'Router o gateway' },
+  { value: 'network_device', label: 'Switch o punto de acceso' },
+  { value: 'printer', label: 'Impresora o multifunción' },
+  { value: 'server', label: 'Servidor' },
+  { value: 'iot', label: 'Dispositivo IoT o embebido' },
+  { value: 'other', label: 'Otro dispositivo de red' },
 ] as const
 
 export const MANUAL_ASSET_CATEGORY_VALUES = [
@@ -75,35 +75,35 @@ export function categoryHasSoftware(category: string | null | undefined): boolea
 }
 
 export const MANUAL_ASSET_CATEGORY_OPTIONS = [
-  { value: 'computer', label: 'Computer' },
-  { value: 'mobile_device', label: 'Phone or tablet' },
-  { value: 'server', label: 'Server' },
-  { value: 'network_device', label: 'Router, switch or access point' },
-  { value: 'printer', label: 'Printer or multifunction device' },
-  { value: 'iot', label: 'IoT or embedded device' },
-  { value: 'removable_media', label: 'Removable storage' },
-  { value: 'other_equipment', label: 'Other equipment' },
+  { value: 'computer', label: 'Computadora' },
+  { value: 'mobile_device', label: 'Teléfono o tablet' },
+  { value: 'server', label: 'Servidor' },
+  { value: 'network_device', label: 'Router, switch o punto de acceso' },
+  { value: 'printer', label: 'Impresora o multifunción' },
+  { value: 'iot', label: 'Dispositivo IoT o embebido' },
+  { value: 'removable_media', label: 'Almacenamiento extraíble' },
+  { value: 'other_equipment', label: 'Otro equipo' },
   { value: 'antivirus_edr', label: 'Antivirus / EDR' },
-  { value: 'software_license', label: 'Software license' },
-  { value: 'cloud_asset', label: 'Cloud service' },
-  { value: 'provider_service', label: 'External service' },
-  { value: 'backup', label: 'Backup' },
-  { value: 'information_repository', label: 'Information repository' },
-  { value: 'physical_record', label: 'Physical record' },
-  { value: 'other', label: 'Other' },
+  { value: 'software_license', label: 'Licencia de software' },
+  { value: 'cloud_asset', label: 'Servicio en la nube' },
+  { value: 'provider_service', label: 'Servicio externo' },
+  { value: 'backup', label: 'Copia de seguridad' },
+  { value: 'information_repository', label: 'Repositorio de información' },
+  { value: 'physical_record', label: 'Registro físico' },
+  { value: 'other', label: 'Otro' },
 ] as const
 
 export const MANUAL_ASSET_CATEGORY_GROUPS = [
   {
-    group: 'Equipment',
+    group: 'Equipos',
     items: MANUAL_ASSET_CATEGORY_OPTIONS.slice(0, 8),
   },
   {
-    group: 'Software and services',
+    group: 'Software y servicios',
     items: MANUAL_ASSET_CATEGORY_OPTIONS.slice(8, 13),
   },
   {
-    group: 'Information and physical',
+    group: 'Información y registros físicos',
     items: MANUAL_ASSET_CATEGORY_OPTIONS.slice(13),
   },
 ] as const
