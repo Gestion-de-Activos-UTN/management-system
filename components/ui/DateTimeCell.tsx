@@ -14,7 +14,17 @@ export function DateTimeCell({
   title?: string | null
 }) {
   if (!value) {
-    return (
+    // Sin fecha (p. ej. un escaneo fallido) el nombre propio igual tiene que verse.
+    return title ? (
+      <Group gap={8} align="baseline" wrap="wrap" style={{ rowGap: 0 }}>
+        <Text size="sm" fw={600}>
+          {title}
+        </Text>
+        <Text size="xs" c="dimmed">
+          —
+        </Text>
+      </Group>
+    ) : (
       <Text size="sm" c="dimmed">
         —
       </Text>

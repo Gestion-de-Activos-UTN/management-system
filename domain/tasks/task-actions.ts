@@ -624,8 +624,14 @@ async function deletePendingTaskLocked(
   return req.payload.delete({ collection: 'tasks', id, overrideAccess: true, req })
 }
 
+/**
+ * Tarea lista para responder por la API. `claim_history` queda en el servidor: guarda IDs de
+ * quienes reclamaron o liberaron, y la actividad ya recibe esos pasos con nombres en
+ * `actor_labels.claim_events`.
+ */
 export function taskWithDerivedState(task: Task) {
-  return { ...task, effective_status: effectiveTaskStatus(task) }
+  const { claim_history: _claimHistory, ...publicTask } = task
+  return { ...publicTask, effective_status: effectiveTaskStatus(task) }
 }
 
 export async function availableTaskActions(
