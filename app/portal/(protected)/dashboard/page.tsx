@@ -14,6 +14,8 @@ import {
   CalendarClock,
 } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { useSession } from '@/lib/use-session'
+import { portalHref } from '@/lib/portal-href'
 import { formatDate, formatRelativeDays } from '@/lib/format-date'
 import { useConcreteOfficeId } from '@/modules/offices/hooks/use-concrete-office-id'
 import { useDashboardMetrics } from '@/modules/dashboard/hooks/use-dashboard-metrics'
@@ -40,15 +42,12 @@ export default function PortalDashboardPage() {
   const risk = useRiskSummary({ officeId, asOrganization, enabled: ready })
   const tasks = useTasks({ view: 'mine', officeId, asOrganization })
   // Misma query que la tarjeta de mensajes (TanStack la comparte): sólo para el contador del tab.
-  const messages = usePortalMessages()
+  // Sólo miembros: un admin visitante recibiría 403 (ver PortalMessagesList).
+  const messages = usePortalMessages(useSession()?.collection === 'users')
   // Sin la funcionalidad de tareas contratada el endpoint responde 403: la tarjeta no se muestra.
   const tasksAvailable = !tasks.isError
 
-  const query = asOrganization ? `asOrganization=${asOrganization}` : ''
-  const href = (path: string, extra?: string) => {
-    const params = [extra, query].filter(Boolean).join('&')
-    return params ? `${path}?${params}` : path
-  }
+  const href = (path: string, extra?: string) => portalHref(path, asOrganization, extra)
 
   const data = metrics.data
   const overdueTasks = (tasks.data ?? []).filter(task => task.is_overdue).length

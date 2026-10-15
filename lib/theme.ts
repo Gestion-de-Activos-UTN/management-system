@@ -1,7 +1,9 @@
 import {
   Card,
+  Collapse,
   Modal,
   Select,
+  Switch,
   createTheme,
   defaultVariantColorsResolver,
   parseThemeColor,
@@ -87,6 +89,9 @@ export const theme = createTheme({
   // mismatch, not a hierarchy, so there's a single consistent 'md' (8px).
   defaultRadius: 'md',
   autoContrast: true,
+  // Mantine anima Modal, Collapse, Drawer, Menu y Notifications por JS; sin esto ignora el
+  // "reducir movimiento" del sistema (viene en false). El CSS propio lo cubre globals.css.
+  respectReducedMotion: true,
   variantColorResolver,
   // System font stack — every browser already ships one of these, no
   // webfont to load/flash.
@@ -110,12 +115,31 @@ export const theme = createTheme({
       defaultProps: { variant: 'filled', radius: 'sm' },
     },
     // Soft elevation by default — cards/modals/papers read as "raised" surfaces
-    // instead of flat outlined boxes (hover lift itself lives in globals.css).
+    // instead of flat outlined boxes (hover lift, only for link cards, lives in globals.css).
     Card: Card.extend({ defaultProps: { shadow: 'sm' } }),
     Modal: Modal.extend({ defaultProps: { shadow: 'lg' } }),
+    // Un solo ritmo para todo bloque que se muestra u oculta (submenús, campos que dependen de
+    // una elección, avisos): corto para no frenar la carga de datos, con fundido.
+    Collapse: Collapse.extend({
+      defaultProps: {
+        transitionDuration: 200,
+        transitionTimingFunction: 'cubic-bezier(0.16, 1, 0.3, 1)',
+        animateOpacity: true,
+      },
+    }),
     // Mantine deselecciona al volver a clickear la opción elegida: un campo obligatorio quedaba
     // vacío sin aviso (p. ej. la oficina preseleccionada de una tarea de inventario). Para
     // vaciar un campo opcional está `clearable`; los filtros tienen su opción "Todas/Todos".
     Select: Select.extend({ defaultProps: { allowDeselect: false } }),
+    // Toggle "bloque": pista y pulgar cuadrados (mismo radio que los badges) y un
+    // deslizamiento lineal y corto. Sólo para encender/apagar una cosa; dos opciones con
+    // nombre propio van con SegmentedControl (SYSTEM_PROMPT §3).
+    Switch: Switch.extend({
+      defaultProps: { radius: 'sm' },
+      styles: { thumb: { transitionDuration: '120ms', transitionTimingFunction: 'linear' } },
+    }),
   },
 })
+
+/** Alto del encabezado fijo del AppShell (DashboardShell); lo que flota debe dejarlo libre. */
+export const APP_HEADER_HEIGHT = 72

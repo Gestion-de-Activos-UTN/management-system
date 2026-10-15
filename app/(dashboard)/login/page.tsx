@@ -75,16 +75,7 @@ export default function LoginPage() {
         >
           <Logo height={1300} color="var(--mantine-color-pine-7)" />
         </Box>
-        <Card
-          withBorder
-          shadow="md"
-          radius="md"
-          padding="xl"
-          w="100%"
-          maw={420}
-          className="login-card"
-          pos="relative"
-        >
+        <Card withBorder shadow="md" radius="md" padding="xl" w="100%" maw={420} pos="relative">
           <form onSubmit={handleSubmit}>
             <Stack gap="md">
               <Stack gap={0}>

@@ -6,6 +6,32 @@ import { RISK_CONTROLS_V2 } from '@/domain/risk/catalog-v2'
 import { RISK_PAIR_STATUS_LABEL } from '@/lib/enum-labels'
 import { riskReasonLabel } from './risk-labels'
 import type { RiskContributionDTO } from './service'
+import { usePortalHref } from '@/lib/use-portal-href'
+
+// La clave del par ya dice de dónde viene el activo: `asset:` lo detectó el escáner,
+// `manual:` lo cargó una persona (ver domain/risk/build-pairs.ts).
+function AssetCell({ assetKey, label }: { assetKey: string; label: string }) {
+  const href = usePortalHref()
+  const scanned = assetKey.startsWith('asset:')
+  return (
+    <Stack gap={0}>
+      {scanned ? (
+        <Anchor
+          component={Link}
+          href={href(`/portal/inventory/${assetKey.slice('asset:'.length)}`)}
+          size="sm"
+        >
+          {label}
+        </Anchor>
+      ) : (
+        <Text size="sm">{label}</Text>
+      )}
+      <Text size="xs" c="dimmed">
+        {scanned ? 'Detectado por escáner' : 'Activo manual'}
+      </Text>
+    </Stack>
+  )
+}
 
 const STATUS_TONE: Record<RiskContributionDTO['status'], StatusTone> = {
   compliant: 'success',
@@ -29,9 +55,11 @@ const resultExplanation = (row: RiskContributionDTO) => {
 }
 
 export const riskContributionsColumns: ColumnDef<RiskContributionDTO, unknown>[] = [
+  // Los id coinciden con RISK_SORT_KEYS: el orden lo resuelve el servidor sobre toda la evaluación.
   {
+    id: 'control',
     accessorKey: 'control_key',
-    header: 'Qué se revisó',
+    header: 'Control',
     cell: ({ row }) => (
       <Stack gap={0}>
         <Text size="sm" fw={600}>
@@ -44,25 +72,13 @@ export const riskContributionsColumns: ColumnDef<RiskContributionDTO, unknown>[]
     ),
   },
   {
+    id: 'asset',
     accessorKey: 'asset_label',
-    header: 'Dónde',
-    cell: ({ row }) => (
-      <Stack gap={0}>
-        {row.original.asset_key.startsWith('asset:') ? (
-          <Anchor
-            component={Link}
-            href={`/portal/inventory/${row.original.asset_key.slice('asset:'.length)}`}
-            size="sm"
-          >
-            {row.original.asset_label}
-          </Anchor>
-        ) : (
-          <Text size="sm">{row.original.asset_label}</Text>
-        )}
-      </Stack>
-    ),
+    header: 'Activo',
+    cell: ({ row }) => <AssetCell assetKey={row.original.asset_key} label={row.original.asset_label} />,
   },
   {
+    id: 'status',
     accessorKey: 'status',
     header: 'Resultado',
     cell: ({ row }) =>

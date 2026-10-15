@@ -2,7 +2,14 @@ import type { ReactNode } from 'react'
 import { Group, Paper, SimpleGrid, Skeleton, Text } from '@mantine/core'
 import type { LucideIcon } from 'lucide-react'
 
-export type StripMetric = { key: string; icon: LucideIcon; value: ReactNode; label: string }
+export type StripMetric = {
+  key: string
+  icon: LucideIcon
+  value: ReactNode
+  label: string
+  /** Detalle secundario bajo la etiqueta (p. ej. "3 activas · 1 inactiva"). */
+  description?: string
+}
 
 /**
  * Franja de cifras compactas (ícono, valor, etiqueta): informa sin competir con el contenido
@@ -31,6 +38,11 @@ export function MetricsStrip({
             <Text size="xs" c="dimmed" lineClamp={2}>
               {metric.label}
             </Text>
+            {metric.description && (
+              <Text size="xs" c="dimmed" lineClamp={2} opacity={0.8}>
+                {metric.description}
+              </Text>
+            )}
           </div>
         ))}
       </SimpleGrid>

@@ -5,11 +5,12 @@ import { Center, Loader, Stack, Text } from '@mantine/core'
 import { BackButton } from '@/components/ui/BackButton'
 import { useAsset } from '@/modules/assets/hooks/use-asset'
 import { AssetDetailView } from '@/modules/assets/components/AssetDetailView'
+import { portalHref } from '@/lib/portal-href'
 
 export default function AssetDetailPage() {
   const { id } = useParams<{ id: string }>()
   const asOrganization = useSearchParams().get('asOrganization') ?? undefined
-  const backHref = `/portal/inventory${asOrganization ? `?asOrganization=${asOrganization}` : ''}`
+  const backHref = portalHref('/portal/inventory', asOrganization)
   const { data: asset, isPending, isError } = useAsset(id)
 
   if (isPending) {

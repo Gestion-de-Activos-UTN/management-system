@@ -19,7 +19,12 @@ export type TenantContext = {
   features: Record<string, boolean>
   /** Topes del plan; null sin organización o sin suscripción. */
   limits: PlanLimits | null
-  permissions: { tasks: string[]; assets: string[]; technicalEvidence?: boolean }
+  permissions: {
+    tasks: string[]
+    assets: string[]
+    technicalEvidence?: boolean
+    renameEvidence?: boolean
+  }
 }
 
 // Only place this endpoint is queried — mirrors access/tenant/resolveTenantContext.ts's

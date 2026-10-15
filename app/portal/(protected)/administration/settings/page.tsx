@@ -23,9 +23,10 @@ import { useSaveOrganizationMaturity } from '@/modules/organization-settings/hoo
 import { MaturityProfileForm } from '@/modules/organization-settings/components/MaturityProfileForm'
 import { RISK_CATALOG_V2 } from '@/domain/risk/catalog-v2'
 import { useState } from 'react'
-import { Badge, Modal, SimpleGrid } from '@mantine/core'
+import { Modal, SimpleGrid } from '@mantine/core'
 
 import { OFFLINE_AFTER_HOURS_OPTIONS, SNAPSHOT_INTERVAL_DAYS_OPTIONS } from '@/domain/organizations/settings-options'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 
 export default function AdminSettingsPage() {
   const { data: settings, isPending } = useOrganizationSettings()
@@ -111,9 +112,7 @@ export default function AdminSettingsPage() {
                 >
                   <Group justify="space-between">
                     <Text fw={650}>{option.name}</Text>
-                    <Badge color="pine" variant="light">
-                      {option.cadence}
-                    </Badge>
+                    <StatusBadge tone="info" label={option.cadence} />
                   </Group>
                   <Text size="sm" c="dimmed" my="sm">
                     {option.detail}

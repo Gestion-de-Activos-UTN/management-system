@@ -3,10 +3,11 @@
 import { useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Badge, Group, Select, Stack, Text, TextInput } from '@mantine/core'
+import { Group, Stack, Text, TextInput } from '@mantine/core'
 import { Eye, type LucideIcon, Search, ShieldCheck, Wrench } from 'lucide-react'
 import { DataTable } from '@/components/ui/DataTable'
 import { FilterBar } from '@/components/ui/FilterBar'
+import { MultiFilterSelect } from '@/components/ui/MultiFilterSelect'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { MetricsStrip } from '@/components/ui/MetricsStrip'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -21,13 +22,11 @@ import {
   ROLE_PLURAL_LABELS,
   MEMBER_STATUS_TONES,
   memberStatus,
-  type MemberStatus,
 } from '@/modules/users/member-labels'
 import { RowActions } from '@/modules/users/components/RowActions'
 import { MemberAccessModal } from '@/modules/users/components/MemberAccessModal'
 import { MemberStatusModal } from '@/modules/users/components/MemberStatusModal'
 
-const ALL = 'all'
 const ROLE_ICONS: Record<(typeof ORGANIZATION_ROLES)[number], LucideIcon> = {
   org_admin: ShieldCheck,
   office_manager: Wrench,
@@ -42,8 +41,8 @@ export default function AdminUsersPage() {
   const [editing, setEditing] = useState<OrgMember | null>(null)
   const [toggling, setToggling] = useState<OrgMember | null>(null)
   const [search, setSearch] = useState('')
-  const [role, setRole] = useState(ALL)
-  const [status, setStatus] = useState<MemberStatus | typeof ALL>(ALL)
+  const [role, setRole] = useState<string[]>([])
+  const [status, setStatus] = useState<string[]>([])
 
   const officeOptions = (offices ?? []).map(office => ({
     value: String(office.id),
@@ -56,8 +55,8 @@ export default function AdminUsersPage() {
   const term = search.trim().toLocaleLowerCase('es')
   const visible = all.filter(
     member =>
-      (role === ALL || member.role === role) &&
-      (status === ALL || memberStatus(member) === status) &&
+      (!role.length || role.includes(member.role)) &&
+      (!status.length || status.includes(memberStatus(member))) &&
       (!term || `${member.name} ${member.email}`.toLocaleLowerCase('es').includes(term))
   )
 
@@ -71,11 +70,7 @@ export default function AdminUsersPage() {
             <Text size="sm" fw={600}>
               {row.original.name || row.original.email}
             </Text>
-            {isSelf(row.original) && (
-              <Badge size="xs" variant="light" color="gray">
-                Tú
-              </Badge>
-            )}
+            {isSelf(row.original) && <StatusBadge size="xs" tone="neutral" label="Tú" />}
           </Group>
           {row.original.name && (
             <Text size="xs" c="dimmed">
@@ -168,33 +163,23 @@ export default function AdminUsersPage() {
           onChange={event => setSearch(event.currentTarget.value)}
           w="100%"
         />
-        <Select
-          placeholder="Rol"
-          aria-label="Filtrar por rol"
-          allowDeselect={false}
-          data={[
-            { value: ALL, label: 'Todos los roles' },
-            ...ORGANIZATION_ROLES.map(slug => ({ value: slug, label: ROLE_LABELS[slug] })),
-          ]}
+        <MultiFilterSelect
+          ariaLabel="Rol"
+          allLabel="Todos los roles"
+          data={ORGANIZATION_ROLES.map(slug => ({ value: slug, label: ROLE_LABELS[slug] }))}
           value={role}
-          onChange={value => setRole(value ?? ALL)}
-          w="100%"
+          onChange={setRole}
         />
         {/* Sólo cambia el resultado si hay personas en más de un estado. */}
         {statuses.size > 1 && (
-          <Select
-            placeholder="Estado"
-            aria-label="Filtrar por estado"
-            allowDeselect={false}
-            data={[
-              { value: ALL, label: 'Todos los estados' },
-              ...(['active', 'onboarding', 'inactive'] as const)
-                .filter(value => statuses.has(value))
-                .map(value => ({ value, label: MEMBER_STATUS_LABELS[value] })),
-            ]}
+          <MultiFilterSelect
+            ariaLabel="Estado"
+            allLabel="Todos los estados"
+            data={(['active', 'onboarding', 'inactive'] as const)
+              .filter(value => statuses.has(value))
+              .map(value => ({ value, label: MEMBER_STATUS_LABELS[value] }))}
             value={status}
-            onChange={value => setStatus((value as MemberStatus) ?? ALL)}
-            w="100%"
+            onChange={setStatus}
           />
         )}
       </FilterBar>

@@ -4,14 +4,15 @@ import { MapPin } from 'lucide-react'
 import type { Asset } from '@/app/types/payload-types'
 import { TechnicalText } from '@/components/ui/TechnicalText'
 import { OneLineText } from '@/components/ui/OneLineText'
-import { StatusBadge } from '@/components/ui/StatusBadge'
+import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
 import { ASSET_STATUS_LABEL, CRITICALITY_LABEL } from '@/lib/enum-labels'
 import { RowActions } from './components/RowActions'
+import { IdentificationBadge } from './components/IdentificationBadge'
 
 // Sólo los estados no activos se muestran (badge en la celda "Equipo").
-const STATUS_COLOR: Record<string, string> = {
-  offline: 'yellow',
-  retired: 'gray',
+const STATUS_TONE: Record<string, StatusTone> = {
+  offline: 'warning',
+  retired: 'neutral',
 }
 
 // El alias sólo cuenta una vez confirmada la identificación; antes, hostname y luego IP.
@@ -92,19 +93,14 @@ export function getAssetsColumns(
               {/* La tabla de activos sólo agrupa activos al cargar (useFrozenBucket): una fila
                   que cambió de estado después, y la tabla de retirados, lo indican acá. */}
               {status !== 'active' && (
-                <Badge
+                <StatusBadge
                   size="sm"
-                  color={STATUS_COLOR[status] ?? 'gray'}
-                  variant="light"
-                  style={{ flexShrink: 0 }}
-                >
-                  {ASSET_STATUS_LABEL[status] ?? status}
-                </Badge>
+                  tone={STATUS_TONE[status] ?? 'neutral'}
+                  label={ASSET_STATUS_LABEL[status] ?? status}
+                />
               )}
               {asset.assessment_scope === 'excluded' && (
-                <Badge size="sm" color="gray" variant="light" style={{ flexShrink: 0 }}>
-                  Fuera de alcance
-                </Badge>
+                <StatusBadge size="sm" tone="neutral" label="Fuera de alcance" />
               )}
             </Group>
             {technical && (
@@ -163,14 +159,7 @@ export function getAssetsColumns(
       header: 'Identificación',
       size: 160,
       meta: { align: 'center' },
-      cell: ({ row }) =>
-        row.original.identification_status === 'confirmed' ? (
-          <StatusBadge tone="success" label="Identificado" />
-        ) : row.original.identification_status === 'needs_review' ? (
-          <StatusBadge tone="warning" label="A revisar" />
-        ) : (
-          <StatusBadge tone="warning" label="No identificado" />
-        ),
+      cell: ({ row }) => <IdentificationBadge status={row.original.identification_status} />,
     },
     {
       id: 'actions',

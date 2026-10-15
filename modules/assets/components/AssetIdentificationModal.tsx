@@ -3,7 +3,17 @@
 import { useEffect } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Button, Group, Modal, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core'
+import {
+  Button,
+  Collapse,
+  Group,
+  Modal,
+  Select,
+  SimpleGrid,
+  Stack,
+  Text,
+  TextInput,
+} from '@mantine/core'
 import type { Asset } from '@/app/types/payload-types'
 import { CRITICALITY_OPTIONS } from '@/lib/enum-labels'
 import {
@@ -39,6 +49,8 @@ export function AssetIdentificationModal({
     watch,
     formState: { errors },
   } = useForm<AssetIdentificationForm>({
+    // Errores mientras se escribe (p. ej. caracteres no permitidos en alias o ubicación).
+    mode: 'onChange',
     resolver: zodResolver(AssetIdentificationFormSchema),
     defaultValues: {
       confirmed_type: (asset.confirmed_type ??
@@ -95,12 +107,12 @@ export function AssetIdentificationModal({
             {suggestionMessage} Revisa la clasificación y completa la información de negocio
             disponible.
           </Text>
-          {authorizationStatus === 'unauthorized' && (
+          <Collapse in={authorizationStatus === 'unauthorized'}>
             <Text size="sm" c="orange.8">
               Un dispositivo no autorizado no tiene responsable ni criticidad de negocio asignados.
               Esos campos se borrarán al guardar.
             </Text>
-          )}
+          </Collapse>
           <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <Controller
               name="confirmed_type"
@@ -131,43 +143,47 @@ export function AssetIdentificationModal({
                 />
               )}
             />
-            {authorizationStatus === 'authorized' && (
-              <>
-                <Controller
-                  name="owner"
-                  control={control}
-                  render={({ field }) => (
-                    <MemberSelect
-                      label="Responsable del activo"
-                      members={eligibleOwners}
-                      emptyOption={{
-                        value: UNKNOWN_IDENTIFICATION_VALUE,
-                        label: 'Sin asignar o desconocido',
-                      }}
-                      value={field.value ?? UNKNOWN_IDENTIFICATION_VALUE}
-                      onChange={field.onChange}
-                      error={errors.owner?.message}
-                    />
-                  )}
-                />
-                <Controller
-                  name="criticality"
-                  control={control}
-                  render={({ field }) => (
-                    <Select
-                      label="Criticidad de negocio"
-                      data={[
-                        { value: UNKNOWN_IDENTIFICATION_VALUE, label: 'Aún no evaluado' },
-                        ...CRITICALITY_OPTIONS,
-                      ]}
-                      value={field.value ?? UNKNOWN_IDENTIFICATION_VALUE}
-                      onChange={field.onChange}
-                      error={errors.criticality?.message}
-                    />
-                  )}
-                />
-              </>
-            )}
+          </SimpleGrid>
+          {/* Grilla propia para poder plegar responsable y criticidad juntos: el modal está
+              centrado y un cambio de alto brusco lo hacía saltar verticalmente. */}
+          <Collapse in={authorizationStatus === 'authorized'}>
+            <SimpleGrid cols={{ base: 1, sm: 2 }}>
+              <Controller
+                name="owner"
+                control={control}
+                render={({ field }) => (
+                  <MemberSelect
+                    label="Responsable del activo"
+                    members={eligibleOwners}
+                    emptyOption={{
+                      value: UNKNOWN_IDENTIFICATION_VALUE,
+                      label: 'Sin asignar o desconocido',
+                    }}
+                    value={field.value ?? UNKNOWN_IDENTIFICATION_VALUE}
+                    onChange={field.onChange}
+                    error={errors.owner?.message}
+                  />
+                )}
+              />
+              <Controller
+                name="criticality"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    label="Criticidad de negocio"
+                    data={[
+                      { value: UNKNOWN_IDENTIFICATION_VALUE, label: 'Aún no evaluado' },
+                      ...CRITICALITY_OPTIONS,
+                    ]}
+                    value={field.value ?? UNKNOWN_IDENTIFICATION_VALUE}
+                    onChange={field.onChange}
+                    error={errors.criticality?.message}
+                  />
+                )}
+              />
+            </SimpleGrid>
+          </Collapse>
+          <SimpleGrid cols={{ base: 1, sm: 2 }}>
             <Controller
               name="alias"
               control={control}

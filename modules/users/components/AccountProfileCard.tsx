@@ -1,5 +1,6 @@
 'use client'
 
+import { textRuleError } from '@/lib/text-rules'
 import { useState } from 'react'
 import { Avatar, Button, Card, Group, Skeleton, Stack, Text, TextInput } from '@mantine/core'
 import { Save } from 'lucide-react'
@@ -79,7 +80,7 @@ function ProfileForm({
             description={nameHint}
             maxLength={120}
             value={name}
-            error={error}
+            error={error || textRuleError(name, 'personName')}
             onChange={event => setName(event.currentTarget.value)}
           />
           <div>

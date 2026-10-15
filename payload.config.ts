@@ -43,6 +43,7 @@ import {
   updatePlatformAdminProfileEndpoint,
 } from './endpoints/platformAdminProfile'
 import { nonNetworkAssetReviewEndpoint } from './endpoints/nonNetworkAssetReview'
+import { inventorySnapshotNameEndpoint, scanReportNameEndpoint } from './endpoints/evidenceNames'
 import { assetIdentifyEndpoint } from './endpoints/assetIdentify'
 import { assetUnidentifyEndpoint } from './endpoints/assetUnidentify'
 import { assetBusinessEndpoint } from './endpoints/assetBusiness'
@@ -141,6 +142,8 @@ export default buildConfig({
     platformAdminProfileEndpoint,
     updatePlatformAdminProfileEndpoint,
     nonNetworkAssetReviewEndpoint,
+    scanReportNameEndpoint,
+    inventorySnapshotNameEndpoint,
     assetIdentifyEndpoint,
     assetUnidentifyEndpoint,
     assetBusinessEndpoint,

@@ -2,9 +2,9 @@ import type { ReactNode } from 'react'
 import { SimpleGrid } from '@mantine/core'
 
 /**
- * Grilla única para filtros de listados. Los controles van sin `label` (sólo placeholder /
- * `aria-label`), con `w="100%"`, y los Select arrancan con una opción explícita "Todas/Todos
- * los …" en lugar de `clearable` — ver SYSTEM_PROMPT.md §3 (UI patterns).
+ * Grilla única para filtros de listados. Cada tipo de filtro tiene un solo control: búsqueda
+ * (TextInput), varios valores (MultiFilterSelect, con `searchable` si la lista es larga) y
+ * binario (SegmentedControl) — ver SYSTEM_PROMPT.md §3, "List filters".
  */
 export function FilterBar({ children }: { children: ReactNode }) {
   return (

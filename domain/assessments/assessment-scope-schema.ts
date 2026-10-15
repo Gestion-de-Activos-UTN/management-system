@@ -1,11 +1,17 @@
 import { z } from 'zod'
+import { TEXT_RULES } from '@/lib/text-rules'
 import { ASSESSMENT_EXCLUSION_REASON_VALUES } from './asset-assessment-scope'
 import { ASSESSMENT_EXCLUSION_MAX_DAYS } from '@/domain/risk/constants'
 
 export const AssessmentScopeFieldsSchema = z.object({
   assessment_scope: z.enum(['included', 'excluded']),
   assessment_exclusion_reason: z.enum(ASSESSMENT_EXCLUSION_REASON_VALUES).nullable(),
-  assessment_exclusion_note: z.string().trim().max(1000).nullable(),
+  assessment_exclusion_note: z
+    .string()
+    .trim()
+    .max(1000)
+    .regex(...TEXT_RULES.free)
+    .nullable(),
   assessment_excluded_until: z.iso.datetime({ offset: true }).nullable(),
 })
 

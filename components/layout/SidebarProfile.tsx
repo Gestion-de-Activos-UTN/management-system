@@ -1,11 +1,12 @@
 'use client'
 
-import { useRouter, usePathname } from 'next/navigation'
+import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
 import { Avatar, Group, Menu, Stack, Text, UnstyledButton } from '@mantine/core'
 import { ChevronsUpDown, LogOut, Settings } from 'lucide-react'
 import { httpClient } from '@/lib/http-client'
 import { clearSession, getSession } from '@/lib/session'
+import { portalHref } from '@/lib/portal-href'
 
 /**
  * Account card pinned to the bottom of the sidebar — replaces a bare wordmark
@@ -17,7 +18,11 @@ export function SidebarProfile({ title, subtitle }: { title: string; subtitle?: 
   const router = useRouter()
   const pathname = usePathname()
   const queryClient = useQueryClient()
-  const accountHref = pathname.startsWith('/portal') ? '/portal/account' : '/account'
+  const asOrganization = useSearchParams().get('asOrganization')
+  // '/portal-messages' (plataforma) también empieza con '/portal': comparar el segmento entero.
+  // En el portal se conserva ?asOrganization=: sin él, el layout expulsa al admin visitante a "/".
+  const inPortal = pathname === '/portal' || pathname.startsWith('/portal/')
+  const accountHref = inPortal ? portalHref('/portal/account', asOrganization) : '/account'
 
   async function handleLogout() {
     // Real server-side logout now that the session is a cookie, not just localStorage —

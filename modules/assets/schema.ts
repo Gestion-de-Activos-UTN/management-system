@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { TEXT_RULES } from '@/lib/text-rules'
 import { SCANNED_ASSET_TYPE_VALUES } from '@/domain/assets/asset-types'
 import {
   AssessmentScopeFieldsSchema,
@@ -12,10 +13,20 @@ import {
 // acepta (RF-55: solo negocio, nunca los campos técnicos).
 const AssetBusinessBaseSchema = z.object({
   authorization_status: z.enum(['authorized', 'unauthorized']),
-  alias: z.string().trim().max(120).nullable(),
+  alias: z
+    .string()
+    .trim()
+    .max(120)
+    .regex(...TEXT_RULES.label)
+    .nullable(),
   criticality: z.enum(['low', 'medium', 'high', 'critical']).nullable(),
   owner: z.string().nullable(),
-  location: z.string().trim().max(200).nullable(),
+  location: z
+    .string()
+    .trim()
+    .max(200)
+    .regex(...TEXT_RULES.label)
+    .nullable(),
   status: z.enum(['active', 'retired', 'offline']),
 })
 
@@ -27,10 +38,22 @@ export type AssetBusinessFields = z.infer<typeof AssetBusinessFieldsSchema>
 export const AssetBusinessUpdateSchema = z
   .object({
     authorization_status: z.enum(['authorized', 'unauthorized']).optional(),
-    alias: z.string().trim().max(120).nullable().optional(),
+    alias: z
+      .string()
+      .trim()
+      .max(120)
+      .regex(...TEXT_RULES.label)
+      .nullable()
+      .optional(),
     criticality: z.enum(['low', 'medium', 'high', 'critical']).nullable().optional(),
     owner: z.string().nullable().optional(),
-    location: z.string().trim().max(200).nullable().optional(),
+    location: z
+      .string()
+      .trim()
+      .max(200)
+      .regex(...TEXT_RULES.label)
+      .nullable()
+      .optional(),
     status: z.enum(['active', 'retired', 'offline']).optional(),
     ...AssessmentScopeFieldsSchema.partial().shape,
   })
@@ -51,8 +74,20 @@ export const AssetIdentificationSchema = z
       .nullable()
       .optional(),
     criticality: z.enum(['low', 'medium', 'high', 'critical']).nullable().optional(),
-    alias: z.string().trim().max(120).nullable().optional(),
-    location: z.string().trim().max(200).nullable().optional(),
+    alias: z
+      .string()
+      .trim()
+      .max(120)
+      .regex(...TEXT_RULES.label)
+      .nullable()
+      .optional(),
+    location: z
+      .string()
+      .trim()
+      .max(200)
+      .regex(...TEXT_RULES.label)
+      .nullable()
+      .optional(),
   })
   .strict()
 

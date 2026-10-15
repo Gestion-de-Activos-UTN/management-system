@@ -1,5 +1,6 @@
 'use client'
 
+import { APP_HEADER_HEIGHT } from '@/lib/theme'
 import { AppShell, Container, Drawer, Stack } from '@mantine/core'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, type ReactNode } from 'react'
@@ -40,7 +41,7 @@ export function DashboardShell({
 
   return (
     <AppShell
-      header={{ height: 72 }}
+      header={{ height: APP_HEADER_HEIGHT }}
       navbar={{
         width: 260,
         breakpoint: 'sm',

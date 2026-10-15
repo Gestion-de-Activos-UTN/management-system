@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { TEXT_RULES } from '@/lib/text-rules'
 import { RISK_ASSET_TYPES } from '@/domain/risk/catalog-v2'
 
 export const AssessmentScopeSchema = z.enum(['organization', 'office', 'asset'])
@@ -14,8 +15,18 @@ export const AssessmentAnswerDraftSchema = z
     question_key: z.string().min(1).max(160),
     question_version: z.number().int().positive(),
     option_key: z.string().min(1).max(160),
-    justification: z.string().trim().max(2000).optional(),
-    evidence_note: z.string().trim().max(4000).optional(),
+    justification: z
+      .string()
+      .trim()
+      .max(2000)
+      .regex(...TEXT_RULES.free)
+      .optional(),
+    evidence_note: z
+      .string()
+      .trim()
+      .max(4000)
+      .regex(...TEXT_RULES.free)
+      .optional(),
   })
   .superRefine((answer, ctx) => {
     if (answer.option_key === 'not_applicable' && !answer.justification) {
@@ -34,7 +45,12 @@ export const SaveAssessmentDraftSchema = z.object({
 export const CompleteAssessmentSchema = SaveAssessmentDraftSchema
 
 export const ReopenAssessmentSchema = z.object({
-  reason: z.string().trim().min(1).max(500),
+  reason: z
+    .string()
+    .trim()
+    .min(1)
+    .max(500)
+    .regex(...TEXT_RULES.free),
 })
 
 export const UpdateAssessmentPolicySchema = z.object({

@@ -2,7 +2,14 @@ import type { Endpoint, PayloadRequest, Where } from 'payload'
 import { z } from 'zod'
 import type { RiskContribution, RiskEvaluation } from '@/app/types/payload-types'
 import type { AssetRiskScore } from '@/domain/risk/engine'
-import { bandVisible, scoreVisible } from '@/domain/risk/constants'
+import {
+  bandVisible,
+  RISK_DEFAULT_PAGE_SIZE,
+  RISK_PAGE_SIZES,
+  RISK_SORT_KEYS,
+  scoreVisible,
+} from '@/domain/risk/constants'
+import { sortContributions } from '@/domain/risk/sort-contributions'
 import { getTenantContext } from '@/access/tenant/resolveTenantContext'
 import { canDo } from '@/access/rbac/permissions'
 import { officeQueryError } from '@/access/tenant/officeQueryError'
@@ -19,12 +26,18 @@ const querySchema = z.object({
   office_id: z.string().min(1).optional(),
   evaluation_id: z.uuid().optional(),
   page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce
+    .number()
+    .refine(value => (RISK_PAGE_SIZES as readonly number[]).includes(value))
+    .default(RISK_DEFAULT_PAGE_SIZE),
+  sort: z.enum(RISK_SORT_KEYS).default('control'),
+  direction: z.enum(['asc', 'desc']).default('asc'),
 })
 
 type Labels = ReadonlyMap<string, string>
 
-// ponytail: only the assets shown on screen are resolved (one page + top list + alerts), so the
-// response stays bounded no matter how large the fleet is.
+// Resuelve los nombres visibles de los activos de toda la evaluación (hacen falta para ordenar
+// por activo antes de paginar). Dos consultas con `in`, sin importar cuántos activos haya.
 async function assetLabels(req: PayloadRequest, organizationId: string, keys: Iterable<string>) {
   const network: string[] = []
   const manual: string[] = []
@@ -183,10 +196,20 @@ export const latestRiskEvaluationEndpoint: Endpoint = {
     const query = querySchema.safeParse({
       office_id: params.get('office_id') ?? undefined,
       page: params.get('page') ?? undefined,
+      limit: params.get('limit') ?? undefined,
       evaluation_id: params.get('evaluation_id') ?? undefined,
+      sort: params.get('sort') ?? undefined,
+      direction: params.get('direction') ?? undefined,
     })
     if (!query.success) return json({ error: 'invalid_query' }, 400)
-    const { office_id: officeId, page, evaluation_id: evaluationId } = query.data
+    const {
+      office_id: officeId,
+      page,
+      limit,
+      evaluation_id: evaluationId,
+      sort,
+      direction,
+    } = query.data
     // Office-scoped roles never read the organization-wide evaluation (other offices' assets).
     const officeError = officeQueryError(ctx, officeId)
     if (officeError) return json({ error: officeError }, 403)
@@ -220,14 +243,16 @@ export const latestRiskEvaluationEndpoint: Endpoint = {
         contributions: [],
         pagination: empty,
       } satisfies LatestRiskResponse)
+    // ponytail: ordena y pagina en memoria porque el nombre del activo (alias, hostname, IP…) no
+    // está en la tabla y la base no puede ordenar por él. Escala a miles de comprobaciones por
+    // evaluación; si una organización llega a decenas de miles, guardar el nombre en cada
+    // comprobación al calcular y volver a ordenar/paginar en la consulta.
     const contributions = await req.payload.find({
       collection: 'risk-contributions',
       overrideAccess: true,
       req,
       depth: 0,
-      limit: 100,
-      page,
-      sort: 'control_key',
+      pagination: false,
       where: {
         and: [
           { organization: { equals: ctx.organizationId } },
@@ -242,18 +267,16 @@ export const latestRiskEvaluationEndpoint: Endpoint = {
       ...alerts.critical_assets.map(item => item.asset_id),
       ...alerts.undetermined_exposure.map(item => item.asset_id),
     ])
+    const sorted = sortContributions(contributions.docs, key => label(labels, key), sort, direction)
+    const totalDocs = sorted.length
+    const totalPages = Math.ceil(totalDocs / limit)
     return json({
       evaluation: evaluationDTO(evaluation, labels),
       recalculation,
-      contributions: contributions.docs.map(row =>
-        contributionDTO(row, labels, scoreVisible(evaluation.confidence))
-      ),
-      pagination: {
-        page,
-        totalPages: contributions.totalPages,
-        totalDocs: contributions.totalDocs,
-        hasNextPage: contributions.hasNextPage,
-      },
+      contributions: sorted
+        .slice((page - 1) * limit, page * limit)
+        .map(row => contributionDTO(row, labels, scoreVisible(evaluation.confidence))),
+      pagination: { page, totalPages, totalDocs, hasNextPage: page < totalPages },
     } satisfies LatestRiskResponse)
   },
 }
