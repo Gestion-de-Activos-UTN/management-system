@@ -49,6 +49,20 @@ export const ASSET_CATEGORY_OPTIONS = Object.entries(ASSET_CATEGORY_LABEL).map(
   })
 )
 
+export const CLOUD_ASSET_KIND_OPTIONS = [
+  { value: 'productivity_identity', label: 'Productividad e identidad' },
+  { value: 'infrastructure', label: 'Infraestructura' },
+  { value: 'domain_dns', label: 'Dominio y DNS' },
+] as const
+
+export const REPOSITORY_KIND_OPTIONS = [
+  { value: 'source_code', label: 'Código fuente' },
+  { value: 'secrets_vault', label: 'Bóveda de secretos' },
+  { value: 'corporate_email', label: 'Correo corporativo' },
+  { value: 'database', label: 'Base de datos' },
+  { value: 'other_digital', label: 'Otro repositorio digital' },
+] as const
+
 export const REVIEW_INTERVAL_LABEL: Record<string, string> = {
   never: 'Nunca vence',
   '1d': 'Todos los días',

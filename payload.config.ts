@@ -52,6 +52,7 @@ import { generateInventorySnapshotEndpoint } from './endpoints/inventorySnapshot
 import { orgMembersEndpoint, updateOrgMemberEndpoint } from './endpoints/orgMembers'
 import { officeEndpoints } from './endpoints/offices'
 import { myProfileEndpoints } from './endpoints/myProfile'
+import { softwareSuggestionsEndpoint } from './endpoints/softwareSuggestions'
 import {
   organizationSettingsGetEndpoint,
   organizationSettingsUpdateEndpoint,
@@ -149,6 +150,7 @@ export default buildConfig({
     generateInventorySnapshotEndpoint,
     orgMembersEndpoint,
     updateOrgMemberEndpoint,
+    softwareSuggestionsEndpoint,
     organizationSettingsGetEndpoint,
     organizationSettingsUpdateEndpoint,
     organizationMaturityUpdateEndpoint,

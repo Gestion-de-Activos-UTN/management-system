@@ -1,6 +1,15 @@
 import type { CollectionBeforeChangeHook, PayloadRequest } from 'payload'
 import { getTenantContext } from '@/access/tenant/resolveTenantContext'
-import { assertOfficeInScope, deriveNextReviewAt, type ReviewInterval } from '../invariants'
+import { categoryHasSoftware } from '@/domain/assets/asset-types'
+import {
+  assertOfficeInScope,
+  assertSoftwareIdentityComplete,
+  buildCpeCandidate,
+  computeNextReviewAt,
+  deriveNextReviewAt,
+  type ReviewInterval,
+} from '../invariants'
+
 import { relationId } from '@/lib/relationId'
 import { assertOwnerCoversOffice } from '@/access/tenant/assertOwnerCoversOffice'
 
@@ -75,6 +84,34 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
     now: effectiveNow,
   })
 
+  // Mismo criterio que review_interval arriba: `'x' in data` y no `??`, porque un PATCH que manda
+  // explícitamente null para limpiar un campo tiene que poder hacerlo — con `??` el valor viejo
+  // del originalDoc resucitaría.
+  const incoming = (key: string) =>
+    data && key in data ? (data[key] as string | null) : ((originalDoc?.[key] as string) ?? null)
+
+  type ProductKey = 'software_vendor' | 'software_product' | 'software_version'
+
+  const incomingProduct = (key: ProductKey): string | null => {
+    const sent =
+      data && 'product_details' in data
+        ? (data.product_details as Partial<Record<ProductKey, string | null>> | null)
+        : undefined
+    if (sent === null) return null // el grupo entero fue limpiado explícitamente
+    if (sent && key in sent) return sent[key] ?? null
+    return (originalDoc?.product_details?.[key] as string | undefined) ?? null
+  }
+
+  const category = incoming('asset_category') ?? null
+  const hasSoftware = categoryHasSoftware(category)
+  const identity = {
+    part: incoming('software_part') ?? 'a',
+    vendor: incomingProduct('software_vendor'),
+    product: incomingProduct('software_product'),
+    version: incomingProduct('software_version'),
+  }
+  if (hasSoftware) assertSoftwareIdentityComplete(identity.vendor, identity.product)
+
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {id, office, organization,
   // asset_category, criticality, owner, status, assessment scope and exclusion}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
@@ -83,6 +120,14 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
     office: officeId,
     organization: organizationId,
     next_review_at: nextReviewAt,
-    last_updated_at: effectiveNow.toISOString(),
+    last_updated_at: new Date().toISOString(),
+    // Cambiar a una categoría sin software limpia la identidad: si no, quedaría un cpe_candidate
+    // huérfano describiendo un producto que este activo ya no declara.
+    ...(hasSoftware
+      ? { cpe_candidate: buildCpeCandidate(identity) }
+      : {
+          software_part: null,
+          cpe_candidate: null,
+        }),
   }
 }

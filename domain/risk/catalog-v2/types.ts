@@ -9,6 +9,9 @@ export const RISK_ASSET_TYPES = [
   'server',
   'gateway',
   'network_device',
+  'software_license',
+  'cloud_asset',
+  'information_repository',
 ] as const
 export type RiskAssetType = (typeof RISK_ASSET_TYPES)[number]
 

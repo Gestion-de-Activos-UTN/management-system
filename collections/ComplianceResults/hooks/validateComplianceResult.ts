@@ -1,5 +1,6 @@
 import type { CollectionBeforeChangeHook } from 'payload'
 import { relationId } from '@/lib/relationId'
+import { isManualCategoryAssessable } from '@/domain/risk/risk-asset-type'
 
 const optionalRelationId = (value: unknown): string | null => (value ? relationId(value) : null)
 
@@ -54,8 +55,8 @@ export const validateComplianceResult: CollectionBeforeChangeHook = async ({ dat
     ) {
       throw new Error('Manual compliance asset does not belong to its organization and office')
     }
-    if (asset.asset_category !== 'computer')
-      throw new Error('Only manually entered computers can receive assessment results')
+    if (!isManualCategoryAssessable(asset.asset_category))
+      throw new Error('Only manually entered assets with assessments can receive results')
   }
   if (data?.supersedes) {
     const previous = await req.payload.findByID({
