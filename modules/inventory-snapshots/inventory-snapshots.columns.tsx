@@ -4,6 +4,24 @@ import { ActionIcon, Group, Text, Tooltip } from '@mantine/core'
 import { Eye } from 'lucide-react'
 import type { InventorySnapshot } from '@/app/types/payload-types'
 import { DateTimeCell } from '@/components/ui/DateTimeCell'
+import { portalHref } from '@/lib/portal-href'
+import { RenameAction } from '@/components/ui/RenameAction'
+import { EVIDENCE_NAME_MAX, evidenceNameError } from '@/modules/scan-reports/schema'
+import { useRenameSnapshot } from './hooks/use-snapshot'
+
+function SnapshotRename({ row }: { row: InventorySnapshot }) {
+  const rename = useRenameSnapshot(String(row.id))
+  return (
+    <RenameAction
+      value={row.display_name ?? ''}
+      fallback="Instantánea"
+      maxLength={EVIDENCE_NAME_MAX}
+      saving={rename.isPending}
+      validate={evidenceNameError}
+      onSave={rename.mutateAsync}
+    />
+  )
+}
 import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 
 const GENERATED_BY_LABEL: Record<string, string> = {
@@ -13,14 +31,17 @@ const GENERATED_BY_LABEL: Record<string, string> = {
 }
 
 export function getInventorySnapshotsColumns(
-  asOrganization?: string
+  asOrganization?: string,
+  canRename = false
 ): ColumnDef<InventorySnapshot, unknown>[] {
-  const suffix = asOrganization ? `?asOrganization=${asOrganization}` : ''
   return [
     {
       accessorKey: 'taken_at',
-      header: 'Fecha',
-      cell: ({ row }) => <DateTimeCell value={row.original.taken_at} />,
+      header: 'Instantánea',
+      // El nombre propio (si lo hay) va primero; la fecha sigue siendo el dato que ordena.
+      cell: ({ row }) => (
+        <DateTimeCell value={row.original.taken_at} title={row.original.display_name} />
+      ),
     },
     {
       accessorKey: 'generated_by',
@@ -47,13 +68,13 @@ export function getInventorySnapshotsColumns(
       id: 'actions',
       header: 'Acciones',
       meta: { align: 'center' },
-      size: 110,
+      size: 140,
       cell: ({ row }) => (
         <Group gap={6} wrap="wrap" justify="center">
           <Tooltip label="Ver instantánea">
             <ActionIcon
               component={Link}
-              href={`/portal/inventory/snapshots/${row.original.id}${suffix}`}
+              href={portalHref(`/portal/inventory/snapshots/${row.original.id}`, asOrganization)}
               variant="light"
               size="md"
               aria-label="Ver instantánea"
@@ -61,6 +82,7 @@ export function getInventorySnapshotsColumns(
               <Eye size={16} strokeWidth={1.5} />
             </ActionIcon>
           </Tooltip>
+          {canRename && <SnapshotRename row={row.original} />}
           <CreateRelatedTaskButton
             compact
             reference={{ relationTo: 'inventory-snapshots', value: String(row.original.id) }}

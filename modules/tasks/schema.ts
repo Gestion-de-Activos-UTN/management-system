@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { TEXT_RULES } from '@/lib/text-rules'
 
 export const TASK_PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const
 export const TASK_ASSIGNMENT_KINDS = ['open_pool', 'role', 'user'] as const
@@ -40,8 +41,18 @@ const TaskAssignmentSchema = z.discriminatedUnion('assignment_kind', [
 ])
 
 const TaskBusinessFieldsSchema = z.object({
-  title: z.string().trim().min(3).max(160),
-  description: z.string().trim().max(5000).optional(),
+  title: z
+    .string()
+    .trim()
+    .min(3)
+    .max(160)
+    .regex(...TEXT_RULES.title),
+  description: z
+    .string()
+    .trim()
+    .max(5000)
+    .regex(...TEXT_RULES.free)
+    .optional(),
   priority: z.enum(TASK_PRIORITIES),
   start_at: optionalDate,
   due_at: optionalDate,
@@ -96,8 +107,22 @@ export const EditTaskSchema = TaskBusinessFieldsSchema.partial()
   .superRefine(validateDates)
 
 export const ReassignTaskSchema = TaskAssignmentSchema
-export const CancelTaskSchema = z.object({ reason: z.string().trim().min(3).max(500) })
-export const ForceCompleteTaskSchema = z.object({ reason: z.string().trim().min(3).max(500) })
+export const CancelTaskSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(3)
+    .max(500)
+    .regex(...TEXT_RULES.free),
+})
+export const ForceCompleteTaskSchema = z.object({
+  reason: z
+    .string()
+    .trim()
+    .min(3)
+    .max(500)
+    .regex(...TEXT_RULES.free),
+})
 
 export const TaskAssignmentOptionsQuerySchema = z
   .object({
@@ -124,10 +149,25 @@ export const TaskAssignmentOptionsQuerySchema = z
       ctx.addIssue({ code: 'custom', path: ['office_ids'], message: 'Los alcances no coinciden.' })
   })
 
+export const TASK_EFFECTIVE_STATUSES = [
+  'planned',
+  'pending',
+  'in_progress',
+  'completed',
+  'cancelled',
+] as const
+
+const commaList = <T extends readonly [string, ...string[]]>(values: T) =>
+  z.preprocess(
+    value => (typeof value === 'string' && value ? value.split(',') : undefined),
+    z.array(z.enum(values)).min(1).max(values.length).optional()
+  )
+
 export const TaskListQuerySchema = z.object({
   view: z.enum(['mine', 'pool', 'all']).default('mine'),
-  status: z.enum(['planned', 'pending', 'in_progress', 'completed', 'cancelled']).optional(),
-  priority: z.enum(TASK_PRIORITIES).optional(),
+  // Uno o varios valores separados por coma (`planned,pending`); ausente = todos.
+  status: commaList(TASK_EFFECTIVE_STATUSES),
+  priority: commaList(TASK_PRIORITIES),
   office_id: z.string().min(1).optional(),
   include_archived: z.coerce.boolean().default(false),
 })

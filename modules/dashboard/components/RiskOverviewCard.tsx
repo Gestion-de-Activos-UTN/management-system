@@ -1,5 +1,13 @@
 import Link from 'next/link'
-import { Badge, Button, Card, Group, Paper, Skeleton, Stack, Text } from '@mantine/core'
+import {
+  Button,
+  Card,
+  Group,
+  Paper,
+  Skeleton,
+  Stack,
+  Text,
+} from '@mantine/core'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { ArrowRight } from 'lucide-react'
 import { RiskBandBadge } from '@/modules/risk/components/RiskBandBadge'
@@ -48,9 +56,11 @@ export function RiskOverviewCard({
             {band ? (
               <RiskBandBadge band={band} size="lg" />
             ) : (
-              <Badge size="lg" color="gray" variant="light">
-                {score === null ? 'Sin datos suficientes' : 'Preliminar'}
-              </Badge>
+              <StatusBadge
+                size="lg"
+                tone="neutral"
+                label={score === null ? 'Sin datos suficientes' : 'Preliminar'}
+              />
             )}
           </Group>
           {/* Lo que "dice" el robot: globo de diálogo apuntando hacia él. */}

@@ -1,3 +1,4 @@
+import type { RiskSortKey } from '@/domain/risk/constants'
 import { httpClient } from '@/lib/http-client'
 import type {
   ConfidenceBand,
@@ -67,10 +68,16 @@ export const getLatestRisk = (params?: {
   officeId?: string | null
   asOrganization?: string
   page?: number
+  limit?: number
+  sort?: RiskSortKey
+  direction?: 'asc' | 'desc'
 }) =>
   httpClient.get<LatestRiskResponse>('/api/v1/risk/latest', {
     office_id: params?.officeId ?? undefined,
     evaluation_id: params?.evaluationId,
     page: params?.page ? String(params.page) : undefined,
+    limit: params?.limit ? String(params.limit) : undefined,
+    sort: params?.sort,
+    direction: params?.direction,
     asOrganization: params?.asOrganization,
   })

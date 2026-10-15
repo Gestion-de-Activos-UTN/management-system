@@ -63,6 +63,11 @@ export const sessionEndpoint: Endpoint = {
           canDo(ctx.role, 'scan-reports', 'read_technical', ctx.organizationId)
         ),
         tasks: taskActions.filter(action => canDo(ctx.role, 'tasks', action, ctx.organizationId)),
+        // Same rule endpoints/evidenceNames.ts enforces (row scope aside: the actor only ever
+        // sees reports/snapshots of its own offices).
+        renameEvidence: Boolean(
+          ctx.organizationId && canDo(ctx.role, 'scan-reports', 'update', ctx.organizationId)
+        ),
         // Same rule endpoints/inventoryIncidents.ts enforces to resolve an inventory incident.
         assets: (['update'] as const).filter(action => canDo(ctx.role, 'assets', action, ctx.organizationId)),
       },

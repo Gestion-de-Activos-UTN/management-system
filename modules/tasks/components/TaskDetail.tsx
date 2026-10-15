@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { textRuleError } from '@/lib/text-rules'
+import { useState, type CSSProperties } from 'react'
 import {
   Alert,
   Button,
@@ -8,13 +9,15 @@ import {
   Divider,
   Group,
   Modal,
+  ScrollArea,
   SimpleGrid,
   Stack,
   Text,
   Textarea,
+  Timeline,
 } from '@mantine/core'
 import { Archive, Check, Hand, Pencil, RotateCcw, ShieldAlert, Trash2, XCircle } from 'lucide-react'
-import { StatusBadge } from '@/components/ui/StatusBadge'
+import { STATUS_TONE_COLOR, StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDate, formatDateTime } from '@/lib/format-date'
 import { relationId } from '@/lib/relationId'
 import type { ReassignTaskInput } from '../schema'
@@ -26,6 +29,7 @@ import { useTaskAssignmentOptions } from '../hooks/use-task-options'
 import { TaskEditForm } from './TaskEditForm'
 import { TaskAssignmentFields, type TaskAssignmentKind } from './TaskAssignmentFields'
 import { TaskReferenceSummary } from './TaskReferenceSummary'
+import { taskActivity } from '../task-activity'
 
 export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganization?: string }) {
   const command = useTaskCommand(task.id)
@@ -63,19 +67,15 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
     setReassignOpened(false)
   }
 
+  const activity = taskActivity(task)
+
   return (
     <Stack gap="md">
-      <Group justify="space-between" align="flex-start">
-        <div>
+      <div>
+        <Group gap="sm" wrap="wrap">
           <Text fw={700} fz="xl">
             {task.title}
           </Text>
-          <Text c="dimmed" size="sm">
-            Creada por {task.actor_labels?.created_by ?? 'Usuario no disponible'} ·{' '}
-            {formatDateTime(task.createdAt)}
-          </Text>
-        </div>
-        <Group gap="xs">
           <StatusBadge
             tone={TASK_STATUS_TONES[task.effective_status]}
             label={TASK_STATUS_LABELS[task.effective_status]}
@@ -90,7 +90,11 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             />
           )}
         </Group>
-      </Group>
+        <Text c="dimmed" size="sm">
+          Creada por {task.actor_labels?.created_by ?? 'Usuario no disponible'} ·{' '}
+          {formatDateTime(task.createdAt)}
+        </Text>
+      </div>
       {task.is_overdue && (
         <Alert color="red">
           La tarea está vencida, pero todavía puede reclamarse y completarse.
@@ -101,46 +105,17 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
           La asignación actual ya no tiene personas elegibles. Reasigna la tarea.
         </Alert>
       )}
-      {Array.isArray(task.lifecycle_history) && task.lifecycle_history.length > 0 && (
-        <Card withBorder padding="md">
-          <Stack gap="xs">
-            <Text fw={600} size="sm">
-              Cambios vinculados al activo
-            </Text>
-            {task.lifecycle_history.map((event, index) => {
-              if (!event || typeof event !== 'object' || !('reason' in event)) return null
-              return (
-                <Text key={index} size="sm">
-                  {String(event.reason)} {'at' in event ? formatDateTime(String(event.at)) : ''}
-                </Text>
-              )
-            })}
-          </Stack>
-        </Card>
-      )}
+      {/* Una sola superficie: descripción, datos, referencia y actividad separados por líneas. */}
       <Card withBorder padding="lg">
         <Stack gap="md">
           <Text style={{ whiteSpace: 'pre-wrap' }}>{task.description || 'Sin descripción.'}</Text>
-          <Divider />
-          <SimpleGrid cols={{ base: 1, sm: 3 }}>
-            <div>
-              <Text size="xs" c="dimmed">
-                Prioridad
-              </Text>
-              <Text>{TASK_PRIORITY_LABELS[task.priority]}</Text>
-            </div>
-            <div>
-              <Text size="xs" c="dimmed">
-                Inicio
-              </Text>
-              <Text>{formatDate(task.start_at)}</Text>
-            </div>
-            <div>
-              <Text size="xs" c="dimmed">
-                Vencimiento
-              </Text>
-              <Text>{task.due_at ? formatDate(task.due_at) : 'Sin vencimiento'}</Text>
-            </div>
+          <SimpleGrid cols={{ base: 1, xs: 3 }}>
+            <Fact label="Prioridad" value={TASK_PRIORITY_LABELS[task.priority]} />
+            <Fact label="Inicio" value={formatDate(task.start_at)} />
+            <Fact
+              label="Vencimiento"
+              value={task.due_at ? formatDate(task.due_at) : 'Sin vencimiento'}
+            />
           </SimpleGrid>
           {task.related_entity_info && (
             <TaskReferenceSummary
@@ -150,45 +125,49 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
               currentHref={getTaskCurrentReferenceHref(task.related_entity_info, asOrganization)}
             />
           )}
-        </Stack>
-      </Card>
-      <Card withBorder padding="md">
-        <Stack gap="sm">
+          <Divider />
           <Text fw={700} size="sm">
             Actividad
           </Text>
-          <Stack gap="xs">
-            <TaskActivity
-              label="Reclamada"
-              actor={task.actor_labels?.claimed_by}
-              at={task.claimed_at}
-            />
-            <TaskActivity
-              label="Completada"
-              actor={task.actor_labels?.completed_by}
-              at={task.completed_at}
-            />
-            {task.completion_reason && (
-              <Text size="sm" c="dimmed">
-                Motivo de finalización forzada: {task.completion_reason}
-              </Text>
-            )}
-            <TaskActivity
-              label="Cancelada"
-              actor={task.actor_labels?.cancelled_by}
-              at={task.cancelled_at}
-            />
-            <TaskActivity
-              label="Archivada"
-              actor={task.actor_labels?.archived_by}
-              at={task.archived_at}
-            />
-            {task.cancelled_at && task.cancellation_reason && (
-              <Text size="sm" c="dimmed">
-                Motivo de cancelación: {task.cancellation_reason}
-              </Text>
-            )}
-          </Stack>
+          {/* Reclamar y liberar pueden repetirse: la actividad tiene su propio scroll. */}
+          <ScrollArea.Autosize mah={360} type="auto" offsetScrollbars>
+            {/* Círculo y línea pares (18/4): el centro de ambos cae en un píxel entero y no se
+                desalinean al redondear con zoom. */}
+            <Timeline
+              active={activity.length - 1}
+              bulletSize={18}
+              lineWidth={4}
+              color="pine"
+              className="task-activity"
+            >
+              {activity.map(event => (
+                <Timeline.Item
+                  key={`${event.label}-${event.at}`}
+                  title={event.label}
+                  // Los cierres llevan el círculo relleno con el color de su estado (el mismo del
+                  // badge) y su tramo de línea pasa de ese color al de la línea (globals.css,
+                  // .activity-closing); el resto de los pasos queda hueco.
+                  {...(event.tone && {
+                    color: STATUS_TONE_COLOR[event.tone],
+                    className: 'activity-closing',
+                    style: {
+                      '--activity-tone': `var(--mantine-color-${STATUS_TONE_COLOR[event.tone]}-filled)`,
+                    } as CSSProperties,
+                    styles: { itemBullet: { backgroundColor: 'var(--activity-tone)' } },
+                  })}
+                >
+                  <Text size="xs" c="dimmed">
+                    {[event.actor, formatDateTime(event.at)].filter(Boolean).join(' · ')}
+                  </Text>
+                  {event.note && (
+                    <Text size="sm" c="dimmed" mt={2}>
+                      {event.note}
+                    </Text>
+                  )}
+                </Timeline.Item>
+              ))}
+            </Timeline>
+          </ScrollArea.Autosize>
         </Stack>
       </Card>
       <Group justify="flex-end">
@@ -342,6 +321,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             minLength={3}
             maxLength={500}
             value={forceCompleteReason}
+            error={textRuleError(forceCompleteReason, 'free')}
             onChange={event => setForceCompleteReason(event.currentTarget.value)}
           />
           <Group justify="flex-end">
@@ -351,7 +331,11 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             <Button
               color="orange"
               loading={command.isPending && command.variables?.action === 'force_complete'}
-              disabled={command.isPending || forceCompleteReason.trim().length < 3}
+              disabled={
+                command.isPending ||
+                forceCompleteReason.trim().length < 3 ||
+                Boolean(textRuleError(forceCompleteReason, 'free'))
+              }
               onClick={() => {
                 run('force_complete', forceCompleteReason)
                 setForceCompleteOpened(false)
@@ -376,12 +360,15 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             minLength={3}
             maxLength={500}
             value={cancelReason}
+            error={textRuleError(cancelReason, 'free')}
             onChange={event => setCancelReason(event.currentTarget.value)}
           />
           <Group justify="flex-end">
             <Button
               color="red"
-              disabled={cancelReason.trim().length < 3}
+              disabled={
+                cancelReason.trim().length < 3 || Boolean(textRuleError(cancelReason, 'free'))
+              }
               onClick={() => {
                 run('cancel', cancelReason)
                 setCancelOpened(false)
@@ -396,25 +383,13 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
   )
 }
 
-function TaskActivity({
-  label,
-  actor,
-  at,
-}: {
-  label: string
-  actor?: string | null
-  at?: string | null
-}) {
-  if (!at) return null
+function Fact({ label, value }: { label: string; value: string }) {
   return (
-    <Group gap="xs" wrap="wrap">
-      <Text size="sm" fw={500}>
-        {label}:
+    <div>
+      <Text size="xs" c="dimmed">
+        {label}
       </Text>
-      <Text size="sm">{actor ?? 'Usuario no disponible'}</Text>
-      <Text size="sm" c="dimmed">
-        {formatDateTime(at)}
-      </Text>
-    </Group>
+      <Text>{value}</Text>
+    </div>
   )
 }

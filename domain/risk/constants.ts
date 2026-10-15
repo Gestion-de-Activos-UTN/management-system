@@ -34,6 +34,13 @@ export const SCORE_THRESHOLDS = { medium: 25, high: 50, critical: 75 } as const
 export const SYSTEMIC_FAILURE_THRESHOLD = 20
 export const SEVERE_CONCENTRATION_THRESHOLD = 30
 
+// Tamaños de página de "Qué necesita atención": acotados para que el endpoint no pagine sin límite.
+export const RISK_PAGE_SIZES = [10, 25, 50] as const
+export const RISK_DEFAULT_PAGE_SIZE = 25
+/** Columnas de "Qué necesita atención" que se ordenan en el servidor (sobre toda la evaluación). */
+export const RISK_SORT_KEYS = ['control', 'asset', 'status'] as const
+export type RiskSortKey = (typeof RISK_SORT_KEYS)[number]
+
 export type Criticality = keyof typeof CRITICALITY_WEIGHTS
 export type RiskSeverity = keyof typeof SEVERITY_WEIGHTS
 export type Exposure = keyof typeof EXPOSURE_WEIGHTS

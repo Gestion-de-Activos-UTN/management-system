@@ -3,17 +3,7 @@
 import { useEffect } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import {
-  Button,
-  Divider,
-  Group,
-  Select,
-  SimpleGrid,
-  Stack,
-  Text,
-  Textarea,
-  TextInput,
-} from '@mantine/core'
+import { Button, Divider, Group, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core'
 import { useOfficesList } from '@/modules/offices/hooks/use-offices'
 import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
 import { memberCoversOffice } from '@/modules/users/service'
@@ -22,13 +12,12 @@ import {
   CRITICALITY_OPTIONS,
   NON_NETWORK_ASSET_STATUS_OPTIONS,
   REVIEW_INTERVAL_OPTIONS,
-  ASSESSMENT_EXCLUSION_REASON_OPTIONS,
 } from '@/lib/enum-labels'
 import type { NonNetworkAsset } from '@/app/types/payload-types'
 import { MANUAL_ASSET_CATEGORY_GROUPS } from '@/domain/assets/asset-types'
 import { createNonNetworkAssetSchema, type NonNetworkAssetFormValues } from '../schema'
 import { useSaveNonNetworkAsset } from '../hooks/use-save-non-network-asset'
-import { formatDateInput, localDateEndToISOString } from '@/lib/format-date'
+import { AssessmentExclusionFields } from '@/modules/assessments/components/AssessmentExclusionFields'
 
 function relationIdOf(value: string | { id: string } | null | undefined): string {
   if (!value) return ''
@@ -248,62 +237,13 @@ export function NonNetworkAssetForm({
               />
             )}
           />
-          {assessmentScope === 'excluded' && (
-            <Controller
-              name="assessment_exclusion_reason"
-              control={control}
-              render={({ field }) => (
-                <Select
-                  label="Motivo de exclusión"
-                  required
-                  data={[...ASSESSMENT_EXCLUSION_REASON_OPTIONS]}
-                  value={field.value}
-                  onChange={field.onChange}
-                  error={errors.assessment_exclusion_reason?.message}
-                />
-              )}
-            />
-          )}
-          {assessmentScope === 'excluded' && (
-            <Controller
-              name="assessment_excluded_until"
-              control={control}
-              render={({ field }) => (
-                <TextInput
-                  type="date"
-                  label="Excluido hasta"
-                  description="Fecha obligatoria, hasta 90 días desde hoy."
-                  required
-                  error={errors.assessment_excluded_until?.message}
-                  value={field.value ? formatDateInput(field.value) : ''}
-                  onChange={event =>
-                    field.onChange(
-                      event.currentTarget.value
-                        ? localDateEndToISOString(event.currentTarget.value)
-                        : null
-                    )
-                  }
-                />
-              )}
-            />
-          )}
         </SimpleGrid>
-        {assessmentScope === 'excluded' && (
-          <Controller
-            name="assessment_exclusion_note"
-            control={control}
-            render={({ field }) => (
-              <Textarea
-                label="Nota de exclusión"
-                description="Agrega contexto para quienes revisen cuando sea útil."
-                required={exclusionReason === 'other'}
-                value={field.value ?? ''}
-                onChange={field.onChange}
-                error={errors.assessment_exclusion_note?.message}
-              />
-            )}
-          />
-        )}
+        <AssessmentExclusionFields
+          control={control}
+          errors={errors}
+          excluded={assessmentScope === 'excluded'}
+          noteRequired={exclusionReason === 'other'}
+        />
         <Group justify="flex-end">
           <Button type="submit" loading={save.isPending} w={{ base: '100%', sm: 'auto' }}>
             {asset ? 'Guardar cambios' : 'Crear activo'}

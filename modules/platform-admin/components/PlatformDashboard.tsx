@@ -1,9 +1,9 @@
 'use client'
 
-import { Alert, Button, Group, SimpleGrid, Skeleton, Stack, Text } from '@mantine/core'
+import { Alert, Button, Stack } from '@mantine/core'
 import { Building2, MapPin, Radio, RefreshCw, TriangleAlert } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { StatCard } from '@/components/ui/StatCard'
+import { MetricsStrip } from '@/components/ui/MetricsStrip'
 import { usePlatformDashboard } from '../hooks/use-platform-dashboard'
 
 export function PlatformDashboard() {
@@ -36,69 +36,39 @@ export function PlatformDashboard() {
         </Alert>
       )}
 
-      <SimpleGrid cols={{ base: 1, xs: 2, xl: 4 }}>
-        <MetricCard
-          loading={metrics.isPending}
-          icon={<Building2 size={18} strokeWidth={1.5} />}
-          title="Organizaciones"
-          value={totalOrganizations}
-          description={`${activeOrganizations} activas · ${Math.max(0, totalOrganizations - activeOrganizations)} inactivas`}
-        />
-        <MetricCard
-          loading={metrics.isPending}
-          icon={<MapPin size={18} strokeWidth={1.5} />}
-          title="Oficinas activas"
-          value={metrics.data?.active_offices ?? 0}
-          description="En todas las organizaciones"
-        />
-        <MetricCard
-          loading={metrics.isPending}
-          icon={<Radio size={18} strokeWidth={1.5} />}
-          title="Agentes conectados"
-          value={onlineAgents}
-          description={`De ${activeAgents} agentes activos`}
-        />
-        <MetricCard
-          loading={metrics.isPending}
-          icon={<TriangleAlert size={18} strokeWidth={1.5} />}
-          title="Incidentes pendientes"
-          value={metrics.data?.pending_incidents ?? 0}
-          description="En todas las organizaciones"
-          emphasis={(metrics.data?.pending_incidents ?? 0) > 0}
-        />
-      </SimpleGrid>
+      <MetricsStrip
+        isPending={metrics.isPending}
+        metrics={[
+          {
+            key: 'organizations',
+            icon: Building2,
+            value: totalOrganizations,
+            label: 'organizaciones',
+            description: `${activeOrganizations} activas · ${Math.max(0, totalOrganizations - activeOrganizations)} inactivas`,
+          },
+          {
+            key: 'offices',
+            icon: MapPin,
+            value: metrics.data?.active_offices ?? 0,
+            label: 'oficinas activas',
+            description: 'En todas las organizaciones',
+          },
+          {
+            key: 'agents',
+            icon: Radio,
+            value: onlineAgents,
+            label: 'agentes conectados',
+            description: `De ${activeAgents} agentes activos`,
+          },
+          {
+            key: 'incidents',
+            icon: TriangleAlert,
+            value: metrics.data?.pending_incidents ?? 0,
+            label: 'incidentes pendientes',
+            description: 'En todas las organizaciones',
+          },
+        ]}
+      />
     </Stack>
-  )
-}
-
-function MetricCard({
-  loading,
-  icon,
-  title,
-  value,
-  description,
-  emphasis = false,
-}: {
-  loading: boolean
-  icon: React.ReactNode
-  title: string
-  value: React.ReactNode
-  description: string
-  emphasis?: boolean
-}) {
-  if (loading) return <Skeleton h={116} radius="md" />
-  return (
-    <StatCard
-      icon={
-        <Group c={emphasis ? 'orange' : 'teal'} gap="xs">
-          {icon}
-          <Text size="sm" fw={600} c="dimmed">
-            {title}
-          </Text>
-        </Group>
-      }
-      value={value}
-      label={description}
-    />
   )
 }

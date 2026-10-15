@@ -1,5 +1,6 @@
 'use client'
 
+import { textRuleError } from '@/lib/text-rules'
 import { useState } from 'react'
 import { Alert, Button, Group, Modal, Select, SimpleGrid, Stack, TextInput } from '@mantine/core'
 import { Plus, Save } from 'lucide-react'
@@ -95,7 +96,7 @@ function OfficeForm({
         required
         maxLength={120}
         value={name}
-        error={errors.name}
+        error={errors.name ?? textRuleError(name, 'label')}
         onChange={event => setName(event.currentTarget.value)}
         data-autofocus
       />

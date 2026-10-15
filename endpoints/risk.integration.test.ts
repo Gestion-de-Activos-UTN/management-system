@@ -77,6 +77,8 @@ test('risk endpoint: rejects invalid pagination instead of guessing', async () =
   const admin = await member(payload, String(a.organization.id), [String(a.office.id)], 'org_admin')
   assert.equal((await call(payload, admin, '?page=0')).status, 400)
   assert.equal((await call(payload, admin, '?page=abc')).status, 400)
+  assert.equal((await call(payload, admin, '?sort=residual_risk')).status, 400)
+  assert.equal((await call(payload, admin, '?sort=asset&direction=up')).status, 400)
 })
 
 test('risk endpoint and REST: a hidden evaluation never exposes numbers', async () => {

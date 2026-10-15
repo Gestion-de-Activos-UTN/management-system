@@ -1,5 +1,6 @@
 import { listResource } from '@/lib/list-resource'
 import { httpClient } from '@/lib/http-client'
+import type { EvidenceNameInput } from '@/modules/scan-reports/schema'
 import type { InventorySnapshot } from '@/app/types/payload-types'
 
 export function listSnapshots(params?: { asOrganization?: string; officeId?: string | null }) {
@@ -21,4 +22,12 @@ export function generateSnapshot(officeId: string) {
   return httpClient.post<InventorySnapshot>('/api/v1/inventory-snapshots/generate', {
     office_id: officeId,
   })
+}
+
+// Sólo el nombre visible: la instantánea en sí es evidencia inmutable (endpoints/evidenceNames.ts).
+export function renameSnapshot(id: string, input: EvidenceNameInput) {
+  return httpClient.patch<{ id: string; display_name: string | null }>(
+    `/api/v1/inventory-snapshots/${id}/name`,
+    input
+  )
 }

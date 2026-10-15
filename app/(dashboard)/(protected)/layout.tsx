@@ -64,7 +64,7 @@ function AdminProtectedLayoutInner({ children }: { children: React.ReactNode }) 
     },
     {
       label: 'Mensajes',
-      href: '/portal-messages',
+      href: `/portal-messages${suffix}`,
       icon: <BellRing size={18} strokeWidth={1.5} />,
     },
   ]
@@ -76,7 +76,7 @@ function AdminProtectedLayoutInner({ children }: { children: React.ReactNode }) 
       topBarRight={
         asOrganization ? (
           <Group gap={4}>
-            <Badge variant="light" ff="monospace" tt="none">
+            <Badge variant="outline" ff="monospace" tt="none">
               Visualizando: {asOrganization}
             </Badge>
             <ActionIcon

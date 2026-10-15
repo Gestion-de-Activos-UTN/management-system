@@ -4,9 +4,21 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { useUiStore } from '@/lib/ui-store'
-import { Button, Divider, Group, Modal, Select, Stack, Tabs, TextInput } from '@mantine/core'
+import {
+  Button,
+  Divider,
+  Group,
+  Modal,
+  SegmentedControl,
+  Stack,
+  Tabs,
+  TextInput,
+  Tooltip,
+} from '@mantine/core'
 import { History, Package, Plus, Search, Server } from 'lucide-react'
 import { FilterBar } from '@/components/ui/FilterBar'
+import { MultiFilterSelect } from '@/components/ui/MultiFilterSelect'
+import { MANUAL_ASSET_CATEGORY_GROUPS } from '@/domain/assets/asset-types'
 import { DataTable } from '@/components/ui/DataTable'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { InventoryIncidentsPanel } from '@/modules/assets/components/InventoryIncidentsPanel'
@@ -16,13 +28,10 @@ import { useNonNetworkAssetsList } from '@/modules/non-network-assets/hooks/use-
 import { getNonNetworkAssetsColumns } from '@/modules/non-network-assets/non-network-assets.columns'
 import { NonNetworkAssetForm } from '@/modules/non-network-assets/components/NonNetworkAssetForm'
 import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
-import {
-  ASSET_CATEGORY_OPTIONS,
-  ASSET_STATUS_OPTIONS,
-  CRITICALITY_OPTIONS,
-} from '@/lib/enum-labels'
+import { ASSET_STATUS_OPTIONS, CRITICALITY_OPTIONS } from '@/lib/enum-labels'
 import type { Asset, NonNetworkAsset } from '@/app/types/payload-types'
 import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
+import { portalHref } from '@/lib/portal-href'
 
 const ALL = ''
 
@@ -95,8 +104,8 @@ export default function InventoryPage() {
   }, [linkedNonNetworkAssetId, nonNetworkAssets])
 
   const [assetSearch, setAssetSearch] = useState('')
-  const [assetCriticality, setAssetCriticality] = useState<string>(ALL)
-  const [assetStatus, setAssetStatus] = useState<string>(ALL)
+  const [assetCriticality, setAssetCriticality] = useState<string[]>([])
+  const [assetStatus, setAssetStatus] = useState<string[]>([])
   const [assetIdentified, setAssetIdentified] = useState<string>(ALL)
 
   const assetBucket = useFrozenBucket(assets, a => (a.status ?? 'active') === 'active')
@@ -106,8 +115,9 @@ export default function InventoryPage() {
       const isIdentified = a.identification_status === 'confirmed'
       return (
         matchesSearch([isIdentified ? a.alias : null, a.hostname, a.ip], assetSearch) &&
-        (assetCriticality === ALL || (isIdentified && a.criticality === assetCriticality)) &&
-        (assetStatus === ALL || (a.status ?? 'active') === assetStatus) &&
+        (!assetCriticality.length ||
+          (isIdentified && assetCriticality.includes(a.criticality ?? ''))) &&
+        (!assetStatus.length || assetStatus.includes(a.status ?? 'active')) &&
         (assetIdentified === ALL || String(Boolean(a.identified)) === assetIdentified)
       )
     })
@@ -119,8 +129,8 @@ export default function InventoryPage() {
   )
 
   const [nnaSearch, setNnaSearch] = useState('')
-  const [nnaCategory, setNnaCategory] = useState<string>(ALL)
-  const [nnaCriticality, setNnaCriticality] = useState<string>(ALL)
+  const [nnaCategory, setNnaCategory] = useState<string[]>([])
+  const [nnaCriticality, setNnaCriticality] = useState<string[]>([])
   const [nnaReviewStatus, setNnaReviewStatus] = useState<string>(ALL)
 
   const nnaBucket = useFrozenBucket(nonNetworkAssets, a => (a.status ?? 'active') === 'active')
@@ -129,8 +139,8 @@ export default function InventoryPage() {
     return (nonNetworkAssets ?? []).filter(
       (a: NonNetworkAsset) =>
         matchesSearch([a.alias], nnaSearch) &&
-        (nnaCategory === ALL || a.asset_category === nnaCategory) &&
-        (nnaCriticality === ALL || a.criticality === nnaCriticality) &&
+        (!nnaCategory.length || nnaCategory.includes(a.asset_category)) &&
+        (!nnaCriticality.length || nnaCriticality.includes(a.criticality)) &&
         (nnaReviewStatus === ALL || a.review_status === nnaReviewStatus)
     )
   }, [nonNetworkAssets, nnaSearch, nnaCategory, nnaCriticality, nnaReviewStatus])
@@ -165,7 +175,7 @@ export default function InventoryPage() {
             />
             <Button
               component={Link}
-              href={`/portal/inventory/snapshots${asOrganization ? `?asOrganization=${asOrganization}` : ''}`}
+              href={portalHref('/portal/inventory/snapshots', asOrganization)}
               variant="light"
               leftSection={<History size={16} strokeWidth={1.5} />}
               w={{ base: '100%', sm: 'auto' }}
@@ -199,31 +209,34 @@ export default function InventoryPage() {
                 onChange={e => setAssetSearch(e.currentTarget.value)}
                 w="100%"
               />
-              <Select
-                placeholder="Criticidad"
-                data={[{ value: ALL, label: 'Todas las criticidades' }, ...CRITICALITY_OPTIONS]}
+              <MultiFilterSelect
+                ariaLabel="Criticidad"
+                allLabel="Todas las criticidades"
+                data={CRITICALITY_OPTIONS}
                 value={assetCriticality}
-                onChange={v => setAssetCriticality(v ?? ALL)}
-                w="100%"
+                onChange={setAssetCriticality}
               />
-              <Select
-                placeholder="Estado"
-                data={[{ value: ALL, label: 'Todos los estados' }, ...ASSET_STATUS_OPTIONS]}
+              <MultiFilterSelect
+                ariaLabel="Estado"
+                allLabel="Todos los estados"
+                data={ASSET_STATUS_OPTIONS}
                 value={assetStatus}
-                onChange={v => setAssetStatus(v ?? ALL)}
-                w="100%"
+                onChange={setAssetStatus}
               />
-              <Select
-                placeholder="Identificación"
-                data={[
-                  { value: ALL, label: 'Todos los estados de identificación' },
-                  { value: 'true', label: 'Identificado' },
-                  { value: 'false', label: 'No identificado' },
-                ]}
-                value={assetIdentified}
-                onChange={v => setAssetIdentified(v ?? ALL)}
-                w="100%"
-              />
+              {/* Textos cortos: tres segmentos iguales en una columna de FilterBar. */}
+              <Tooltip label="Identificación">
+                <SegmentedControl
+                  aria-label="Identificación"
+                  fullWidth
+                  data={[
+                    { value: ALL, label: 'Todos' },
+                    { value: 'true', label: 'Sí' },
+                    { value: 'false', label: 'No' },
+                  ]}
+                  value={assetIdentified}
+                  onChange={setAssetIdentified}
+                />
+              </Tooltip>
             </FilterBar>
             <DataTable
               columns={assetsColumns}
@@ -259,33 +272,34 @@ export default function InventoryPage() {
                   onChange={e => setNnaSearch(e.currentTarget.value)}
                   w="100%"
                 />
-                <Select
-                  placeholder="Categoría"
-                  searchable
-                  nothingFoundMessage="No se encontró ninguna categoría"
-                  data={[{ value: ALL, label: 'Todas las categorías' }, ...ASSET_CATEGORY_OPTIONS]}
+                <MultiFilterSelect
+                  ariaLabel="Categoría"
+                  allLabel="Todas las categorías"
+                  data={MANUAL_ASSET_CATEGORY_GROUPS}
                   value={nnaCategory}
-                  onChange={v => setNnaCategory(v ?? ALL)}
-                  w="100%"
+                  onChange={setNnaCategory}
+                  searchable
                 />
-                <Select
-                  placeholder="Criticidad"
-                  data={[{ value: ALL, label: 'Todas las criticidades' }, ...CRITICALITY_OPTIONS]}
+                <MultiFilterSelect
+                  ariaLabel="Criticidad"
+                  allLabel="Todas las criticidades"
+                  data={CRITICALITY_OPTIONS}
                   value={nnaCriticality}
-                  onChange={v => setNnaCriticality(v ?? ALL)}
-                  w="100%"
+                  onChange={setNnaCriticality}
                 />
-                <Select
-                  placeholder="Revisión"
-                  data={[
-                    { value: ALL, label: 'Todos los estados de revisión' },
-                    { value: 'ok', label: 'Al día' },
-                    { value: 'overdue', label: 'Revisión vencida' },
-                  ]}
-                  value={nnaReviewStatus}
-                  onChange={v => setNnaReviewStatus(v ?? ALL)}
-                  w="100%"
-                />
+                <Tooltip label="Estado de revisión">
+                  <SegmentedControl
+                    aria-label="Estado de revisión"
+                    fullWidth
+                    data={[
+                      { value: ALL, label: 'Todas' },
+                      { value: 'ok', label: 'Al día' },
+                      { value: 'overdue', label: 'Vencidas' },
+                    ]}
+                    value={nnaReviewStatus}
+                    onChange={setNnaReviewStatus}
+                  />
+                </Tooltip>
               </FilterBar>
               <Button
                 leftSection={<Plus size={16} strokeWidth={1.5} />}

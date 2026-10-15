@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { TEXT_RULES } from '@/lib/text-rules'
 import { MANUAL_ASSET_CATEGORY_VALUES } from '@/domain/assets/asset-types'
 import {
   AssessmentScopeFieldsSchema,
@@ -8,11 +9,21 @@ import {
 } from '@/domain/assessments/assessment-scope-schema'
 
 const NonNetworkAssetFieldsSchema = z.object({
-  alias: z.string().trim().min(1, 'El alias es obligatorio').max(120),
+  alias: z
+    .string()
+    .trim()
+    .min(1, 'El alias es obligatorio')
+    .max(120)
+    .regex(...TEXT_RULES.label),
   asset_category: z.enum(MANUAL_ASSET_CATEGORY_VALUES),
   criticality: z.enum(['low', 'medium', 'high', 'critical']),
   owner: z.string().min(1, 'El responsable es obligatorio'),
-  location: z.string().trim().max(200).nullable(),
+  location: z
+    .string()
+    .trim()
+    .max(200)
+    .regex(...TEXT_RULES.label)
+    .nullable(),
   status: z.enum(['active', 'retired']),
   office: z.string().min(1, 'La oficina es obligatoria'),
   // next_review_at ya no se edita a mano — se deriva de este intervalo (ver

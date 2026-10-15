@@ -1,7 +1,7 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
   Anchor,
-  Badge,
   Box,
   Button,
   Card,
@@ -10,23 +10,22 @@ import {
   Progress,
   Stack,
   Text,
+  TextInput,
   Tooltip,
 } from '@mantine/core'
-import { ArrowRight, Building2, ChevronDown, Info, Monitor, type LucideIcon } from 'lucide-react'
+import { ArrowRight, Building2, Info, Monitor, Search, type LucideIcon } from 'lucide-react'
 import type { AssessmentInstance } from '@/app/types/payload-types'
 import type { SecurityReviewSummary as SecurityReviewSummaryData } from '@/modules/assessments/service'
-import { formatDateTime } from '@/lib/format-date'
+import { formatDate } from '@/lib/format-date'
+import { portalHref } from '@/lib/portal-href'
 import { RISK_SCORE_SCALE } from '@/modules/risk/risk-labels'
 import { RiskBandBadge } from '@/modules/risk/components/RiskBandBadge'
 import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
-
-const statusMeta = {
-  pending: ['Sin iniciar', 'gray'],
-  in_progress: ['En curso', 'blue'],
-  completed: ['Completada', 'green'],
-  expired: ['Revisión vencida', 'orange'],
-  superseded: ['Reemplazada', 'gray'],
-} as const
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import { ASSESSMENT_STATUS_LABEL, ASSESSMENT_STATUS_TONE } from '../assessment-labels'
+import { groupAssessments, type AssessmentGroup } from '../assessment-groups'
+import { getDeviceReviewColumns } from '../assessments.columns'
+import { DataTable } from '@/components/ui/DataTable'
 
 export function SecurityReviewSummary({
   assessments,
@@ -91,9 +90,7 @@ export function SecurityReviewSummary({
                   <RiskBandBadge band={band} />
                 ) : (
                   <Tooltip label="La cobertura es baja: el valor es orientativo y todavía no se clasifica.">
-                    <Badge color="gray" variant="light">
-                      Preliminar
-                    </Badge>
+                    <StatusBadge tone="neutral" label="Preliminar" />
                   </Tooltip>
                 ))}
             </Group>
@@ -125,169 +122,141 @@ function Stat({ label, value, hint }: { label: string; value: number; hint: stri
   )
 }
 
+/** Ancla de la sección de dispositivos: volver desde la revisión de un dispositivo baja hasta acá. */
+export const DEVICES_ANCHOR = 'dispositivos'
+
 export function SecurityReviewList({
   assessments,
-  suffix = '',
   asOrganization,
 }: {
   assessments: AssessmentInstance[]
-  suffix?: string
   asOrganization?: string
 }) {
+  const [search, setSearch] = useState('')
   const groups = groupAssessments(assessments)
   const primary = groups.filter(group => group.scope !== 'asset')
   const devices = groups.filter(group => group.scope === 'asset')
+  const term = search.trim().toLocaleLowerCase('es')
+  const visibleDevices = term
+    ? devices.filter(group => group.target.toLocaleLowerCase('es').includes(term))
+    : devices
+  const columns = useMemo(() => getDeviceReviewColumns(asOrganization), [asOrganization])
+  const devicesRef = useRef<HTMLDivElement>(null)
+
+  // La lista se monta cuando llegan los datos, después de la navegación: el salto nativo al
+  // ancla ya pasó y no encontró la sección, así que se hace acá.
+  useEffect(() => {
+    if (window.location.hash === `#${DEVICES_ANCHOR}`) devicesRef.current?.scrollIntoView()
+  }, [])
 
   return (
     <Stack gap="xl">
-      {primary.length > 0 && (
-        <AssessmentSection
-          title="Empresa y oficinas"
-          description={`${primary.length} ${primary.length === 1 ? 'revisión' : 'revisiones'} · rutinas de toda la empresa y de las oficinas`}
+      <Stack gap="sm">
+        <SectionTitle
           icon={Building2}
-          groups={primary}
-          suffix={suffix}
-          asOrganization={asOrganization}
-          initiallyOpen
+          title={`Empresa y oficinas (${primary.length})`}
+          description="Rutinas de toda la empresa y de cada oficina."
         />
-      )}
-      {devices.length > 0 && (
-        <AssessmentSection
-          title="Revisiones de dispositivos"
-          description={`${devices.length} ${devices.length === 1 ? 'dispositivo' : 'dispositivos'} · expande solo cuando necesites el detalle`}
-          icon={Monitor}
-          groups={devices}
-          suffix={suffix}
-          asOrganization={asOrganization}
-        />
-      )}
-      {!groups.length && (
-        <Card withBorder p="xl" ta="center">
-          <Text fw={600}>No hay revisiones en esta vista</Text>
-          <Text size="sm" c="dimmed">
-            Prueba con otro estado o asignación.
-          </Text>
-        </Card>
-      )}
+        {primary.length ? (
+          <Card withBorder radius="lg" p="md">
+            <Stack gap={0}>
+              {primary.map((group, index) => (
+                <AssessmentGroup
+                  key={group.key}
+                  group={group}
+                  asOrganization={asOrganization}
+                  divider={index > 0}
+                />
+              ))}
+            </Stack>
+          </Card>
+        ) : (
+          <EmptyReviews />
+        )}
+      </Stack>
+      <Stack
+        gap="sm"
+        id={DEVICES_ANCHOR}
+        ref={devicesRef}
+        style={{ scrollMarginTop: 'calc(var(--app-shell-header-height, 0px) + 16px)' }}
+      >
+        <Group justify="space-between" align="flex-end" gap="sm">
+          <SectionTitle
+            icon={Monitor}
+            title={`Dispositivos (${devices.length})`}
+            description="Una revisión por equipo, detectado por el escáner o cargado a mano."
+          />
+          {devices.length > 0 && (
+            <TextInput
+              placeholder="Buscar dispositivo"
+              aria-label="Buscar dispositivo"
+              leftSection={<Search size={16} strokeWidth={1.5} />}
+              value={search}
+              onChange={event => setSearch(event.currentTarget.value)}
+              w={{ base: '100%', sm: 260 }}
+            />
+          )}
+        </Group>
+        {devices.length ? (
+          <Card withBorder radius="lg" p="md">
+            <DataTable
+              columns={columns}
+              data={visibleDevices}
+              emptyLabel="Ningún dispositivo coincide con la búsqueda"
+              minWidth={680}
+            />
+          </Card>
+        ) : (
+          <EmptyReviews />
+        )}
+      </Stack>
     </Stack>
   )
 }
 
-function AssessmentSection({
+function SectionTitle({
+  icon: Icon,
   title,
   description,
-  icon: Icon,
-  groups,
-  suffix,
-  asOrganization,
-  initiallyOpen = false,
 }: {
+  icon: LucideIcon
   title: string
   description: string
-  icon: LucideIcon
-  groups: AssessmentGroup[]
-  suffix: string
-  asOrganization?: string
-  initiallyOpen?: boolean
 }) {
   return (
-    <Card component="details" open={initiallyOpen || undefined} withBorder radius="lg" p="md">
-      <Box component="summary" style={{ cursor: 'pointer', listStyle: 'none' }}>
-        <Group justify="space-between" wrap="nowrap">
-          <Group gap="sm" wrap="nowrap">
-            <Icon size={18} />
-            <div>
-              <Text fw={750}>{title}</Text>
-              <Text size="sm" c="dimmed">
-                {description}
-              </Text>
-            </div>
-          </Group>
-          <ChevronDown size={18} />
-        </Group>
-      </Box>
-      <Stack gap={0} mt="md">
-        {groups.map((group, index) => (
-          <AssessmentGroup
-            key={group.key}
-            group={group}
-            suffix={suffix}
-            asOrganization={asOrganization}
-            divider={index > 0}
-          />
-        ))}
-      </Stack>
+    <Group gap="sm" wrap="nowrap" align="flex-start">
+      <Icon size={18} strokeWidth={1.5} style={{ marginTop: 3 }} />
+      <div>
+        <Text fw={750}>{title}</Text>
+        <Text size="sm" c="dimmed">
+          {description}
+        </Text>
+      </div>
+    </Group>
+  )
+}
+
+function EmptyReviews() {
+  return (
+    <Card withBorder p="xl" ta="center">
+      <Text fw={600}>No hay revisiones en esta vista</Text>
+      <Text size="sm" c="dimmed">
+        Prueba con otro estado o asignación.
+      </Text>
     </Card>
   )
 }
 
-type AssessmentGroup = {
-  key: string
-  target: string
-  scope: AssessmentInstance['scope']
-  cycles: AssessmentInstance[]
-  manuallyEntered: boolean
-}
-
-function groupAssessments(assessments: AssessmentInstance[]): AssessmentGroup[] {
-  const groups = new Map<string, AssessmentGroup>()
-  for (const item of assessments) {
-    const relation =
-      item.scope === 'organization'
-        ? 'organization'
-        : item.scope === 'office'
-          ? String(item.office && typeof item.office === 'object' ? item.office.id : item.office)
-          : item.manual_asset
-            ? `manual:${String(
-                typeof item.manual_asset === 'object' ? item.manual_asset.id : item.manual_asset
-              )}`
-            : String(item.asset && typeof item.asset === 'object' ? item.asset.id : item.asset)
-    const key = `${item.scope}:${relation}`
-    const target =
-      item.scope === 'organization'
-        ? item.organization && typeof item.organization === 'object'
-          ? item.organization.name
-          : 'Empresa'
-        : item.scope === 'office'
-          ? item.office && typeof item.office === 'object'
-            ? item.office.name
-            : 'Oficina'
-          : item.manual_asset && typeof item.manual_asset === 'object'
-            ? item.manual_asset.alias || 'Computadora'
-            : item.asset && typeof item.asset === 'object'
-              ? item.asset.alias || item.asset.hostname || item.asset.ip || 'Dispositivo'
-              : 'Dispositivo'
-    const group = groups.get(key) ?? {
-      key,
-      target,
-      scope: item.scope,
-      cycles: [],
-      manuallyEntered: Boolean(item.manual_asset),
-    }
-    group.cycles.push(item)
-    groups.set(key, group)
-  }
-  return [...groups.values()].map(group => ({
-    ...group,
-    cycles: group.cycles.sort(
-      (left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt)
-    ),
-  }))
-}
-
 function AssessmentGroup({
   group,
-  suffix,
   asOrganization,
   divider,
 }: {
   group: AssessmentGroup
-  suffix: string
   asOrganization?: string
   divider: boolean
 }) {
   const latest = group.cycles[0]
-  const [label, color] = statusMeta[latest.status]
   return (
     <Box py="sm">
       {divider && <Divider mb="md" />}
@@ -295,22 +264,20 @@ function AssessmentGroup({
         <div>
           <Group gap="xs">
             <Text fw={650}>{group.target}</Text>
-            <Badge color={color} variant="light">
-              {label}
-            </Badge>
-            {group.manuallyEntered && (
-              <Badge color="gray" variant="light">
-                Manual
-              </Badge>
-            )}
+            <StatusBadge
+              tone={ASSESSMENT_STATUS_TONE[latest.status]}
+              label={ASSESSMENT_STATUS_LABEL[latest.status]}
+            />
+            {group.manuallyEntered && <StatusBadge tone="neutral" label="Activo manual" />}
           </Group>
+          {/* El historial completo de ciclos está en el detalle (Drawer "Historial de revisiones"). */}
           <Text size="xs" c="dimmed">
             {group.scope === 'organization'
               ? 'Revisión de toda la empresa'
               : group.scope === 'office'
                 ? 'Revisión de oficina'
                 : 'Revisión de dispositivo'}{' '}
-            · {group.cycles.length} {group.cycles.length === 1 ? 'cycle' : 'cycles'}
+            · Ciclo {group.cycles.length} · {formatDate(latest.opened_at)}
           </Text>
         </div>
         <Group gap="xs">
@@ -321,7 +288,7 @@ function AssessmentGroup({
           />
           <Button
             component={Link}
-            href={'/portal/security-review/' + latest.id + suffix}
+            href={portalHref(`/portal/security-review/${latest.id}`, asOrganization)}
             variant="subtle"
             rightSection={<ArrowRight size={16} />}
           >
@@ -329,31 +296,6 @@ function AssessmentGroup({
           </Button>
         </Group>
       </Group>
-      {group.cycles.length > 1 && (
-        <Box mt="sm" style={{ overflowX: 'auto' }}>
-          <Group gap="xs" wrap="nowrap">
-            <Text size="xs" c="dimmed" fw={650} mr={4} style={{ whiteSpace: 'nowrap' }}>
-              Historial
-            </Text>
-            {group.cycles.slice(1, 3).map((cycle, index) => (
-              <Badge
-                key={cycle.id}
-                variant="outline"
-                color="gray"
-                radius="sm"
-                style={{ whiteSpace: 'nowrap' }}
-              >
-                Ciclo {group.cycles.length - index - 1} · {formatDateTime(cycle.opened_at)}
-              </Badge>
-            ))}
-            {group.cycles.length > 3 && (
-              <Badge variant="outline" color="gray" radius="sm">
-                …
-              </Badge>
-            )}
-          </Group>
-        </Box>
-      )}
     </Box>
   )
 }
