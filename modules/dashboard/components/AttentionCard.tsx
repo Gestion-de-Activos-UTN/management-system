@@ -1,7 +1,16 @@
 import Link from 'next/link'
 import type { LucideIcon } from 'lucide-react'
 import { CircleCheck, ChevronRight } from 'lucide-react'
-import { Badge, Card, Group, Skeleton, Stack, Text, ThemeIcon, UnstyledButton } from '@mantine/core'
+import {
+  Card,
+  Group,
+  Skeleton,
+  Stack,
+  Text,
+  ThemeIcon,
+  UnstyledButton,
+} from '@mantine/core'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 
 export type AttentionItem = {
   key: string
@@ -28,9 +37,10 @@ export function AttentionCard({
         <Group justify="space-between">
           <Text fw={700}>Requiere atención</Text>
           {!isPending && pending.length > 0 && (
-            <Badge color="red" variant="light">
-              {pending.length} {pending.length === 1 ? 'tema' : 'temas'}
-            </Badge>
+            <StatusBadge
+              tone="danger"
+              label={`${pending.length} ${pending.length === 1 ? 'tema' : 'temas'}`}
+            />
           )}
         </Group>
         {isPending ? (

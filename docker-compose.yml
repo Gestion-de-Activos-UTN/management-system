@@ -57,7 +57,10 @@ services:
     # `seed:navigation` crea los 4 Roles base + la única organización demo (Org/Office/Settings/
     # Subscription) + un admin/org_admin/org_viewer/office_manager de demo con credenciales fijas;
     # El agente solo se vincula desde Administration > Offices > Install scanner.
-    command: sh -c "pnpm seed:navigation && pnpm seed:demo && pnpm run dev"
+    # `pnpm warmup` corre en segundo plano y pide cada sección apenas `next dev` responde, para que
+    # la compilación de cada ruta ocurra durante el arranque y no en la primera visita del usuario
+    # (ver scripts/warmup-routes.mjs). El log muestra "[warmup] listo" cuando terminó.
+    command: sh -c "pnpm seed:navigation && pnpm seed:demo && (pnpm warmup &) && pnpm run dev"
 
 volumes:
   postgres_data:

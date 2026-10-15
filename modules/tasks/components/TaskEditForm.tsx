@@ -19,6 +19,7 @@ export function TaskEditForm({ task, onSaved }: { task: TaskDTO; onSaved: () => 
     handleSubmit,
     formState: { errors },
   } = useForm<EditTaskInput>({
+    mode: 'onChange',
     resolver: zodResolver(EditTaskSchema),
     defaultValues: {
       title: task.title,

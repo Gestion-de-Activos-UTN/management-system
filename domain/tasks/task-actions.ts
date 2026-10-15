@@ -351,6 +351,22 @@ async function editTaskLocked(
   })
 }
 
+export type ClaimEvent = {
+  action: 'claimed' | 'released'
+  at: string
+  by: ReturnType<typeof actorRelation>
+}
+
+const withClaimEvent = (
+  task: Task,
+  action: ClaimEvent['action'],
+  by: ClaimEvent['by'],
+  at: string
+): ClaimEvent[] => [
+  ...(Array.isArray(task.claim_history) ? (task.claim_history as ClaimEvent[]) : []),
+  { action, at, by },
+]
+
 async function claimTaskLocked(req: PayloadRequest, ctx: TenantContext, id: string): Promise<Task> {
   assertAction(ctx, 'claim')
   const task = await loadTask(req, id)
@@ -376,7 +392,12 @@ async function claimTaskLocked(req: PayloadRequest, ctx: TenantContext, id: stri
     limit: 1,
     overrideAccess: true,
     req,
-    data: { status: 'in_progress', claimed_by: actorRelation(req, ctx.userId), claimed_at: now },
+    data: {
+      status: 'in_progress',
+      claimed_by: actorRelation(req, ctx.userId),
+      claimed_at: now,
+      claim_history: withClaimEvent(task, 'claimed', actorRelation(req, ctx.userId), now),
+    },
   })
   const updated = result.docs[0]
   if (!updated) throw new TaskDomainError('already_claimed', 409, 'La tarea ya fue reclamada.')
@@ -403,7 +424,18 @@ async function releaseTaskLocked(
     id,
     overrideAccess: true,
     req,
-    data: { status: 'pending', claimed_by: null, claimed_at: null },
+    data: {
+      status: 'pending',
+      claimed_by: null,
+      claimed_at: null,
+      // Liberar suma un paso a la actividad en vez de borrar quién la tenía.
+      claim_history: withClaimEvent(
+        task,
+        'released',
+        actorRelation(req, ctx.userId),
+        new Date().toISOString()
+      ),
+    },
   })
 }
 
@@ -592,8 +624,14 @@ async function deletePendingTaskLocked(
   return req.payload.delete({ collection: 'tasks', id, overrideAccess: true, req })
 }
 
+/**
+ * Tarea lista para responder por la API. `claim_history` queda en el servidor: guarda IDs de
+ * quienes reclamaron o liberaron, y la actividad ya recibe esos pasos con nombres en
+ * `actor_labels.claim_events`.
+ */
 export function taskWithDerivedState(task: Task) {
-  return { ...task, effective_status: effectiveTaskStatus(task) }
+  const { claim_history: _claimHistory, ...publicTask } = task
+  return { ...publicTask, effective_status: effectiveTaskStatus(task) }
 }
 
 export async function availableTaskActions(

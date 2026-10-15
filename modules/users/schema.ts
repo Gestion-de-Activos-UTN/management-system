@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { TEXT_RULES } from '@/lib/text-rules'
 
 /** Roles de una organización, de mayor a menor autoridad (rank 1, 5, 10). */
 export const ORGANIZATION_ROLES = ['org_admin', 'office_manager', 'org_viewer'] as const
@@ -16,7 +17,12 @@ export const MemberUpdateSchema = z
   })
 
 export const ProfileUpdateSchema = z.object({
-  name: z.string().trim().min(1, 'Escribe tu nombre.').max(120),
+  name: z
+    .string()
+    .trim()
+    .min(1, 'Escribe tu nombre.')
+    .max(120)
+    .regex(...TEXT_RULES.personName),
 })
 
 export type MemberUpdate = z.infer<typeof MemberUpdateSchema>

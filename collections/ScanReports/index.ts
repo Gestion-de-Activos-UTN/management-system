@@ -16,6 +16,13 @@ export const ScanReports: CollectionConfig = {
     delete: () => false,
   },
   fields: [
+    {
+      // Único campo editable: un nombre para reconocer la evidencia. Se escribe sólo vía
+      // endpoints/evidenceNames.ts; el resto del documento sigue inmutable.
+      name: 'display_name',
+      type: 'text',
+      maxLength: 80,
+    },
     { name: 'content_fingerprint', type: 'text', admin: { readOnly: true } },
     { name: 'received_at', type: 'date', index: true, admin: { readOnly: true } },
     {

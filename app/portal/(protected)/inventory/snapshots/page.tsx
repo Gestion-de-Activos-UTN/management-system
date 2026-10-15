@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Button, Group, Select, Stack, Tooltip } from '@mantine/core'
+import { Button, Stack, Tooltip } from '@mantine/core'
+import { MultiFilterSelect } from '@/components/ui/MultiFilterSelect'
 import { Camera } from 'lucide-react'
 import { FilterBar } from '@/components/ui/FilterBar'
 import { DataTable } from '@/components/ui/DataTable'
@@ -14,10 +15,7 @@ import { getInventorySnapshotsColumns } from '@/modules/inventory-snapshots/inve
 import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
 import { canDo } from '@/access/rbac/permissions'
 
-const ALL = ''
-
 const GENERATED_BY_OPTIONS = [
-  { value: ALL, label: 'Todos los orígenes' },
   { value: 'manual', label: 'Manual' },
   { value: 'scheduled', label: 'Programada' },
   { value: 'pre_audit', label: 'Preauditoría' },
@@ -36,11 +34,15 @@ export default function InventorySnapshotsPage() {
     tenantContext.data?.organizationId ?? null
   )
 
-  const [generatedBy, setGeneratedBy] = useState<string>(ALL)
-  const columns = useMemo(() => getInventorySnapshotsColumns(asOrganization), [asOrganization])
+  const [generatedBy, setGeneratedBy] = useState<string[]>([])
+  const canRename = Boolean(tenantContext.data?.permissions.renameEvidence)
+  const columns = useMemo(
+    () => getInventorySnapshotsColumns(asOrganization, canRename),
+    [asOrganization, canRename]
+  )
 
   const filteredSnapshots = useMemo(
-    () => (data ?? []).filter(s => generatedBy === ALL || s.generated_by === generatedBy),
+    () => (data ?? []).filter(s => !generatedBy.length || generatedBy.includes(s.generated_by)),
     [data, generatedBy]
   )
 
@@ -73,12 +75,12 @@ export default function InventorySnapshotsPage() {
         }
       />
       <FilterBar>
-        <Select
-          placeholder="Origen"
+        <MultiFilterSelect
+          ariaLabel="Origen"
+          allLabel="Todos los orígenes"
           data={GENERATED_BY_OPTIONS}
           value={generatedBy}
-          onChange={v => setGeneratedBy(v ?? ALL)}
-          w="100%"
+          onChange={setGeneratedBy}
         />
       </FilterBar>
       <DataTable

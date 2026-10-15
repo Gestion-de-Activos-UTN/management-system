@@ -32,6 +32,7 @@ import {
   releaseTask,
   taskWithDerivedState,
   taskRequiresReassignment,
+  type ClaimEvent,
 } from '@/domain/tasks/task-actions'
 import { TaskDomainError, taskErrorResponse } from '@/domain/tasks/task-error'
 import { listEligibleTaskMembers } from '@/domain/tasks/task-eligibility'
@@ -142,11 +143,13 @@ async function taskActorLabels(req: PayloadRequest, task: Task) {
   const references = Object.fromEntries(
     Object.entries(actorFields).map(([field, value]) => [field, taskActorReference(value)])
   ) as Record<keyof typeof actorFields, ReturnType<typeof taskActorReference>>
+  const claimHistory = (Array.isArray(task.claim_history) ? task.claim_history : []) as ClaimEvent[]
+  const claimReferences = claimHistory.map(event => taskActorReference(event.by))
   const idsByCollection: Record<TaskActorCollection, Set<string>> = {
     users: new Set(),
     admins: new Set(),
   }
-  for (const reference of Object.values(references)) {
+  for (const reference of [...Object.values(references), ...claimReferences]) {
     if (!reference) continue
     if (reference.collection) idsByCollection[reference.collection].add(reference.id)
     else {
@@ -192,16 +195,22 @@ async function taskActorLabels(req: PayloadRequest, task: Task) {
     if (!labelsById.has(admin.id)) labelsById.set(admin.id, label)
   }
 
-  return Object.fromEntries(
-    Object.entries(references).map(([field, reference]) => [
-      field,
-      reference
-        ? reference.collection
-          ? (labels.get(`${reference.collection}:${reference.id}`) ?? null)
-          : (labelsById.get(reference.id) ?? null)
-        : null,
-    ])
-  ) as Record<keyof typeof actorFields, string | null>
+  const resolve = (reference: TaskActorReference | null) =>
+    reference
+      ? reference.collection
+        ? (labels.get(`${reference.collection}:${reference.id}`) ?? null)
+        : (labelsById.get(reference.id) ?? null)
+      : null
+  return {
+    ...(Object.fromEntries(
+      Object.entries(references).map(([field, reference]) => [field, resolve(reference)])
+    ) as Record<keyof typeof actorFields, string | null>),
+    claim_events: claimHistory.map((event, index) => ({
+      action: event.action,
+      at: event.at,
+      actor: resolve(claimReferences[index]),
+    })),
+  }
 }
 
 const listTasksEndpoint: Endpoint = {
@@ -231,10 +240,14 @@ const listTasksEndpoint: Endpoint = {
         })
       }
       if (parsed.data.office_id) clauses.push({ office: { equals: parsed.data.office_id } })
-      if (parsed.data.priority) clauses.push({ priority: { equals: parsed.data.priority } })
+      if (parsed.data.priority) clauses.push({ priority: { in: parsed.data.priority } })
       if (!parsed.data.include_archived) clauses.push({ archived_at: { exists: false } })
-      if (parsed.data.status && parsed.data.status !== 'planned') {
-        clauses.push({ status: { equals: parsed.data.status } })
+      // "Planificada" no se guarda: es una pendiente con inicio futuro, así que en la base se
+      // busca como pendiente y después se filtra por el estado efectivo.
+      const statuses: readonly string[] | null = parsed.data.status ?? null
+      if (statuses) {
+        const stored = statuses.map(value => (value === 'planned' ? 'pending' : value))
+        clauses.push({ status: { in: [...new Set(stored)] } })
       }
 
       const result = await req.payload.find({
@@ -252,7 +265,7 @@ const listTasksEndpoint: Endpoint = {
           try {
             const reference = await assertCanReadTask(req, ctx, task)
             const effective = taskWithDerivedState(task)
-            if (parsed.data.status && effective.effective_status !== parsed.data.status) return null
+            if (statuses && !statuses.includes(effective.effective_status)) return null
             if (parsed.data.view === 'mine') {
               const mine =
                 actorMatches(task.claimed_by, ctx) || relationId(task.assigned_user) === ctx.userId

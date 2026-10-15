@@ -67,8 +67,10 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     agents: ['create', 'read', 'update'],
     assets: ['read', 'update', 'delete'],
     'non-network-assets': ['create', 'read', 'update', 'delete'],
-    'scan-reports': ['read', 'read_technical'],
-    'inventory-snapshots': ['create', 'read'],
+    // 'update' = sólo renombrar (display_name) vía endpoints/evidenceNames.ts; la evidencia en sí
+    // sigue inmutable (las colecciones mantienen update: () => false).
+    'scan-reports': ['read', 'read_technical', 'update'],
+    'inventory-snapshots': ['create', 'read', 'update'],
     'assessment-instances': ['read'],
     'assessment-answers': ['read'],
 
@@ -109,8 +111,9 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     offices: ['read'],
     assets: ['read', 'update'],
     'non-network-assets': ['create', 'read', 'update'],
-    'scan-reports': ['read', 'read_technical'],
-    'inventory-snapshots': ['read'],
+    // 'update' = sólo renombrar, en sus oficinas (ver org_admin).
+    'scan-reports': ['read', 'read_technical', 'update'],
+    'inventory-snapshots': ['read', 'update'],
     'assessment-instances': ['read'],
     'assessment-answers': ['read'],
 

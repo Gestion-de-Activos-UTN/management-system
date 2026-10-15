@@ -41,6 +41,9 @@ export function DataTable<T>({
   /** Caps vertical overflow inside the table's own scroll container instead of the page body. */
   maxHeight?: number | string
 }) {
+  // Loader only for the first load. With rows already on screen (next page, new page size) the
+  // table stays put and dims: swapping it for a Loader collapsed its height and jumped the page.
+  const refreshing = Boolean(isLoading) && data.length > 0
   const [internalSorting, setInternalSorting] = useState<SortingState>([])
   const sorting = controlledSorting ?? internalSorting
 
@@ -57,7 +60,7 @@ export function DataTable<T>({
     getSortedRowModel: manualSorting ? undefined : getSortedRowModel(),
   })
 
-  if (isLoading) {
+  if (isLoading && !refreshing) {
     return (
       <Center py="xl">
         <Loader color="pine" />
@@ -74,7 +77,16 @@ export function DataTable<T>({
   }
 
   return (
-    <Table.ScrollContainer minWidth={minWidth} mah={maxHeight} style={{ overflowY: 'auto' }}>
+    <Table.ScrollContainer
+      minWidth={minWidth}
+      mah={maxHeight}
+      aria-busy={refreshing}
+      style={{
+        overflowY: 'auto',
+        opacity: refreshing ? 0.55 : 1,
+        transition: 'opacity 150ms ease',
+      }}
+    >
       <Table highlightOnHover verticalSpacing="sm">
         <Table.Thead>
           {table.getHeaderGroups().map(headerGroup => (

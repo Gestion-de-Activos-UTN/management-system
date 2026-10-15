@@ -1,6 +1,6 @@
 'use client'
 
-import { Badge, Button, Center, Drawer, Group, Loader, Stack, Text } from '@mantine/core'
+import { Button, Center, Drawer, Group, Loader, Stack, Text } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
@@ -12,8 +12,15 @@ import { useAssessmentActions } from '@/modules/assessments/hooks/use-assessment
 import { AssessmentForm } from '@/modules/assessments/components/AssessmentForm'
 import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
 import { relationId } from '@/lib/relationId'
+import { portalHref } from '@/lib/portal-href'
+import { DEVICES_ANCHOR } from '@/modules/assessments/components/SecurityReviewOverview'
 import { formatDateTime } from '@/lib/format-date'
 import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import {
+  ASSESSMENT_STATUS_LABEL,
+  ASSESSMENT_STATUS_TONE,
+} from '@/modules/assessments/assessment-labels'
 
 export default function AssessmentDetailPage() {
   const [historyOpened, { open: openHistory, close: closeHistory }] = useDisclosure(false)
@@ -24,7 +31,6 @@ export default function AssessmentDetailPage() {
   const detail = useAssessment(id, asOrganization)
   const actions = useAssessmentActions(id)
   const tenant = useTenantContext(asOrganization)
-  const suffix = asOrganization ? '?asOrganization=' + asOrganization : ''
 
   if (detail.isPending || tenant.isPending)
     return (
@@ -50,15 +56,22 @@ export default function AssessmentDetailPage() {
   const isLatestCycle = String(history[0]?.id) === String(data.assessment.id)
   const currentCycleNumber =
     history.length - history.findIndex(cycle => String(cycle.id) === String(data.assessment.id))
+  // Volver a la lista a la altura de la sección de dispositivos si la revisión es de uno.
+  const listHref = `${portalHref('/portal/security-review', asOrganization)}${
+    data.assessment.scope === 'asset' ? `#${DEVICES_ANCHOR}` : ''
+  }`
 
   return (
     <Stack gap="lg">
-      <BackButton
-        href={'/portal/security-review' + suffix}
-        label="Volver a Revisión de seguridad"
-      />
+      <BackButton href={listHref} label="Volver a Revisión de seguridad" />
       <PageHeader
         title="Revisa las rutinas cotidianas de seguridad"
+        badge={
+          <StatusBadge
+            tone={ASSESSMENT_STATUS_TONE[data.assessment.status]}
+            label={ASSESSMENT_STATUS_LABEL[data.assessment.status]}
+          />
+        }
         description="Elige Sí solo cuando la rutina se cumpla de forma constante. Si se cumple solo algunas veces, elige No."
         rightSection={
           <CreateRelatedTaskButton
@@ -85,7 +98,7 @@ export default function AssessmentDetailPage() {
             {!isLatestCycle && history[0] && (
               <Button
                 component={Link}
-                href={`/portal/security-review/${history[0].id}${suffix}`}
+                href={portalHref(`/portal/security-review/${history[0].id}`, asOrganization)}
                 color="pine"
                 rightSection={<ArrowRight size={16} />}
               >
@@ -101,7 +114,10 @@ export default function AssessmentDetailPage() {
                 onClick={() =>
                   actions.startNewCycle.mutate('Solicitado desde una revisión completada', {
                     onSuccess: result => {
-                      if (result.id) router.push(`/portal/security-review/${result.id}${suffix}`)
+                      if (result.id)
+                        router.push(
+                          portalHref(`/portal/security-review/${result.id}`, asOrganization)
+                        )
                     },
                   })
                 }
@@ -126,7 +142,7 @@ export default function AssessmentDetailPage() {
               <Button
                 key={cycle.id}
                 component={Link}
-                href={`/portal/security-review/${cycle.id}${suffix}`}
+                href={portalHref(`/portal/security-review/${cycle.id}`, asOrganization)}
                 onClick={closeHistory}
                 variant={current ? 'light' : 'subtle'}
                 color={current ? 'pine' : 'gray'}
@@ -135,9 +151,11 @@ export default function AssessmentDetailPage() {
                 py="sm"
                 justify="space-between"
                 rightSection={
-                  <Badge color={statusColor(cycle.status)} variant="light" size="sm">
-                    {statusLabel(cycle.status)}
-                  </Badge>
+                  <StatusBadge
+                    size="sm"
+                    tone={ASSESSMENT_STATUS_TONE[cycle.status]}
+                    label={ASSESSMENT_STATUS_LABEL[cycle.status]}
+                  />
                 }
               >
                 <Stack gap={2} align="flex-start">
@@ -168,28 +186,13 @@ export default function AssessmentDetailPage() {
         saving={actions.saveDraft.isPending}
         completing={actions.complete.isPending}
         onSave={command => actions.saveDraft.mutate(command)}
-        onComplete={command => actions.complete.mutate(command)}
+        // Completar cierra el trabajo: se vuelve a la lista (el toast confirma).
+        onComplete={command =>
+          actions.complete.mutate(command, { onSuccess: () => router.push(listHref) })
+        }
+        backHref={listHref}
+        backLabel="Volver a Revisión de seguridad"
       />
     </Stack>
   )
 }
-
-const statusLabel = (status: string) =>
-  status === 'pending'
-    ? 'Sin iniciar'
-    : status === 'in_progress'
-      ? 'En curso'
-      : status === 'completed'
-        ? 'Completada'
-        : status === 'expired'
-          ? 'Revisión vencida'
-          : 'Reemplazada'
-
-const statusColor = (status: string) =>
-  status === 'completed'
-    ? 'green'
-    : status === 'in_progress'
-      ? 'blue'
-      : status === 'expired'
-        ? 'orange'
-        : 'gray'

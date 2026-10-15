@@ -1,27 +1,11 @@
 'use client'
 
 import Link from 'next/link'
-import {
-  Badge,
-  Button,
-  Card,
-  Group,
-  Progress,
-  Skeleton,
-  Stack,
-  Text,
-  ThemeIcon,
-} from '@mantine/core'
+import { Button, Card, Group, Progress, Skeleton, Stack, Text, ThemeIcon } from '@mantine/core'
 import { ArrowRight, ClipboardCheck } from 'lucide-react'
 import { useAssessments } from '../hooks/use-assessments'
-
-const STATUS_LABEL = {
-  pending: 'Sin iniciar',
-  in_progress: 'En curso',
-  completed: 'Completada',
-  expired: 'Vencida',
-  superseded: 'Reemplazada',
-} as const
+import { StatusBadge } from '@/components/ui/StatusBadge'
+import { ASSESSMENT_STATUS_LABEL, ASSESSMENT_STATUS_TONE } from '../assessment-labels'
 
 export function AssetSecurityReviewCard({
   assetId,
@@ -87,9 +71,10 @@ export function AssetSecurityReviewCard({
               <ClipboardCheck size={18} />
             </ThemeIcon>
             <Text fw={700}>Revisión de seguridad</Text>
-            <Badge variant="filled" color={assessment.status === 'completed' ? 'green' : 'orange'}>
-              {STATUS_LABEL[assessment.status]}
-            </Badge>
+            <StatusBadge
+              tone={ASSESSMENT_STATUS_TONE[assessment.status]}
+              label={ASSESSMENT_STATUS_LABEL[assessment.status]}
+            />
           </Group>
           <Text size="sm" c="dimmed">
             Preguntas sencillas sobre cómo se usa y protege esta computadora.

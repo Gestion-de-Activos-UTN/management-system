@@ -1,5 +1,5 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { Badge, Group, Stack, Text, Tooltip } from '@mantine/core'
+import { Group, Stack, Text, Tooltip } from '@mantine/core'
 import { OneLineText } from '@/components/ui/OneLineText'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import type { NonNetworkAsset } from '@/app/types/payload-types'
@@ -33,14 +33,10 @@ export function getNonNetworkAssetsColumns(
                 </Text>
               </Tooltip>
               {asset.status === 'retired' && (
-                <Badge size="sm" color="gray" variant="light" style={{ flexShrink: 0 }}>
-                  Retirado
-                </Badge>
+                <StatusBadge size="sm" tone="neutral" label="Retirado" />
               )}
               {asset.assessment_scope === 'excluded' && (
-                <Badge size="sm" color="gray" variant="light" style={{ flexShrink: 0 }}>
-                  Fuera de alcance
-                </Badge>
+                <StatusBadge size="sm" tone="neutral" label="Fuera de alcance" />
               )}
             </Group>
             <Text size="xs" c="dimmed" truncate>

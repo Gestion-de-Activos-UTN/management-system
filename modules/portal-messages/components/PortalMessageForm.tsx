@@ -1,5 +1,6 @@
 'use client'
 
+import { textRuleError } from '@/lib/text-rules'
 import { useMemo, useState } from 'react'
 import {
   Alert,
@@ -9,6 +10,7 @@ import {
   Group,
   MultiSelect,
   Paper,
+  SegmentedControl,
   Select,
   SimpleGrid,
   Stack,
@@ -19,6 +21,7 @@ import {
   Textarea,
 } from '@mantine/core'
 import { ChevronDown, Eye, FileText, Link2, Plus, Save, UsersRound } from 'lucide-react'
+import { SettingRow } from '@/components/ui/SettingRow'
 import { formatDateInput, localDateEndToISOString } from '@/lib/format-date'
 import type { HttpError } from '@/lib/http-client'
 import { ROLE_LABELS } from '@/lib/role-labels'
@@ -422,7 +425,7 @@ export function PortalMessageForm({
               maxLength={100}
               description={`${form.title.length}/100 caracteres`}
               value={form.title}
-              error={fieldErrors.title}
+              error={fieldErrors.title ?? textRuleError(form.title, 'title')}
               onChange={event => update('title', event.currentTarget.value)}
             />
             <Textarea
@@ -433,35 +436,45 @@ export function PortalMessageForm({
               autosize
               description={`${form.description.length}/500 caracteres`}
               value={form.description}
-              error={fieldErrors.description}
+              error={fieldErrors.description ?? textRuleError(form.description, 'free')}
               onChange={event => update('description', event.currentTarget.value)}
             />
-            {form.messageType === 'actionable' && (
+            <Collapse in={form.messageType === 'actionable'}>
               <TextInput
                 label="Texto de la acción"
                 maxLength={30}
                 description={`${form.ctaLabel.length}/30 caracteres. Si queda vacío, se muestra “Ver”.`}
                 value={form.ctaLabel}
-                error={fieldErrors.ctaLabel}
+                error={fieldErrors.ctaLabel ?? textRuleError(form.ctaLabel, 'title')}
                 onChange={event => update('ctaLabel', event.currentTarget.value)}
               />
-            )}
+            </Collapse>
           </Stack>
         </Tabs.Panel>
 
         <Tabs.Panel value="audience" pt="md">
           <Stack gap="md">
-            <Paper withBorder radius="md" p="md">
-              <Switch
-                label="Mensaje global"
-                description="Se dirige a todas las organizaciones activas."
-                checked={form.scope === 'global'}
-                onChange={event => {
-                  const checked = event.currentTarget.checked
+            <SettingRow
+              label="Alcance"
+              labelId="portal-message-scope"
+              description={
+                form.scope === 'global'
+                  ? 'Se dirige a todas las organizaciones activas.'
+                  : 'Se dirige sólo a las organizaciones que elijas.'
+              }
+            >
+              <SegmentedControl
+                aria-labelledby="portal-message-scope"
+                data={[
+                  { value: 'organizations', label: 'Organizaciones específicas' },
+                  { value: 'global', label: 'Todas las organizaciones' },
+                ]}
+                value={form.scope}
+                onChange={value => {
                   setFieldErrors({})
                   setForm(current => ({
                     ...current,
-                    scope: checked ? 'global' : 'organizations',
+                    scope: value as typeof current.scope,
                     organizationIds: [],
                     roleSlugs: [],
                     userIds: [],
@@ -469,8 +482,8 @@ export function PortalMessageForm({
                   }))
                 }}
               />
-            </Paper>
-            {form.scope === 'organizations' && (
+            </SettingRow>
+            <Collapse in={form.scope === 'organizations'}>
               <Stack gap="md">
                 {(staleOrganizations > 0 || staleUsers > 0) && (
                   <Alert color="yellow" title="Destinatarios que ya no están disponibles">
@@ -559,7 +572,7 @@ export function PortalMessageForm({
                   />
                 )}
               </Stack>
-            )}
+            </Collapse>
           </Stack>
         </Tabs.Panel>
 
@@ -620,22 +633,29 @@ export function PortalMessageForm({
                 Puedes enlazar la sección.
               </Text>
             )}
-            <SimpleGrid cols={{ base: 1, sm: 2 }}>
-              <TextInput
-                label="Fecha de expiración"
-                description="Se muestra hasta el final de ese día."
-                type="date"
-                value={form.expiresAt}
-                error={fieldErrors.expiresAt}
-                onChange={event => update('expiresAt', event.currentTarget.value)}
-              />
+            <TextInput
+              label="Fecha de expiración"
+              description="Se muestra hasta el final de ese día."
+              type="date"
+              value={form.expiresAt}
+              error={fieldErrors.expiresAt}
+              onChange={event => update('expiresAt', event.currentTarget.value)}
+            />
+            <SettingRow
+              label="Mensaje activo"
+              labelId="portal-message-active"
+              description={
+                form.isActive
+                  ? 'Se muestra a sus destinatarios hasta la fecha de expiración.'
+                  : 'No se muestra a nadie hasta que lo actives.'
+              }
+            >
               <Switch
-                mt="xl"
-                label="Mensaje activo"
+                aria-labelledby="portal-message-active"
                 checked={form.isActive}
                 onChange={event => update('isActive', event.currentTarget.checked)}
               />
-            </SimpleGrid>
+            </SettingRow>
           </Stack>
         </Tabs.Panel>
       </Tabs>
@@ -652,7 +672,7 @@ export function PortalMessageForm({
               strokeWidth={1.5}
               style={{
                 transform: previewOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                transition: 'transform 280ms cubic-bezier(0.16, 1, 0.3, 1)',
+                transition: 'transform 200ms cubic-bezier(0.16, 1, 0.3, 1)',
               }}
             />
           }
@@ -673,13 +693,7 @@ export function PortalMessageForm({
         </Button>
       </Group>
 
-      <Collapse
-        id="portal-message-preview"
-        in={previewOpen}
-        transitionDuration={320}
-        transitionTimingFunction="cubic-bezier(0.16, 1, 0.3, 1)"
-        animateOpacity
-      >
+      <Collapse id="portal-message-preview" in={previewOpen}>
         <Paper withBorder radius="md" p="md" bg="var(--mantine-color-default-hover)">
           <Stack gap="sm">
             <Text size="sm" fw={600} c="dimmed" ta="center">

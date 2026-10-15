@@ -685,6 +685,7 @@ export interface NonNetworkAsset {
  * via the `definition` "scan-reports".
  */
 export interface ScanReport {
+  display_name?: string | null;
   content_fingerprint?: string | null;
   received_at?: string | null;
   /**
@@ -763,6 +764,7 @@ export interface JobRun {
  */
 export interface InventorySnapshot {
   id: string;
+  display_name?: string | null;
   organization: string | Organization;
   office: string | Office;
   taken_at: string;
@@ -1039,6 +1041,15 @@ export interface Task {
   id: string;
   requires_reassignment?: boolean | null;
   lifecycle_history?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  claim_history?:
     | {
         [k: string]: unknown;
       }
@@ -1806,6 +1817,7 @@ export interface NonNetworkAssetsSelect<T extends boolean = true> {
  * via the `definition` "scan-reports_select".
  */
 export interface ScanReportsSelect<T extends boolean = true> {
+  display_name?: T;
   content_fingerprint?: T;
   received_at?: T;
   id?: T;
@@ -1958,6 +1970,7 @@ export interface JobRunsSelect<T extends boolean = true> {
  * via the `definition` "inventory-snapshots_select".
  */
 export interface InventorySnapshotsSelect<T extends boolean = true> {
+  display_name?: T;
   organization?: T;
   office?: T;
   taken_at?: T;
@@ -2111,6 +2124,7 @@ export interface RiskContributionsSelect<T extends boolean = true> {
 export interface TasksSelect<T extends boolean = true> {
   requires_reassignment?: T;
   lifecycle_history?: T;
+  claim_history?: T;
   seed_key?: T;
   title?: T;
   description?: T;

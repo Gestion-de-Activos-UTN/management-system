@@ -21,7 +21,7 @@ import { reconcileExpiredAssessments } from '@/domain/assessments/reconcileExpir
 import { RISK_QUESTIONS_V2 } from '@/domain/risk/catalog-v2'
 import { evaluateAutomaticComplianceForAssessment } from '@/domain/assessments/evaluateAutomaticCompliance'
 import { getTenantContext } from '@/access/tenant/resolveTenantContext'
-import { createTasks, assertCanReadTask, claimTask } from '@/domain/tasks/task-actions'
+import { createTasks, assertCanReadTask, claimTask, releaseTask } from '@/domain/tasks/task-actions'
 import { handleEndpoints } from 'payload'
 import { seedDemoData } from '@/domain/demo/seedDemoData'
 
@@ -1046,6 +1046,18 @@ it('SEC-01: selected PlatformAdmin creates, claims and completes with its own ac
   const claimed = await claimTask(claimReq, (await getTenantContext(claimReq))!, String(task.id))
   expect(claimed.claimed_by?.relationTo).toBe('admins')
   expect(relationId(claimed.claimed_by)).toBe(String(admin.id))
+  // Liberar y volver a reclamar suma pasos al historial en vez de pisar el reclamo anterior.
+  const releaseReq = await request()
+  await releaseTask(releaseReq, (await getTenantContext(releaseReq))!, String(task.id))
+  const reclaimReq = await request()
+  const reclaimed = await claimTask(
+    reclaimReq,
+    (await getTenantContext(reclaimReq))!,
+    String(task.id)
+  )
+  expect((reclaimed.claim_history as Array<{ action: string }>).map(event => event.action)).toEqual(
+    ['claimed', 'released', 'claimed']
+  )
   const completeReq = await request()
   const completed = await completeTask(
     completeReq,

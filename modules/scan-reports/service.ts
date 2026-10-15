@@ -1,5 +1,6 @@
 import { listResource } from '@/lib/list-resource'
 import { httpClient } from '@/lib/http-client'
+import type { EvidenceNameInput } from './schema'
 import type { ScanReport } from '@/app/types/payload-types'
 
 export function listScanReports(params?: { asOrganization?: string; officeId?: string | null }) {
@@ -66,4 +67,12 @@ export function acceptedAssetsInReport(
 ): ReportedAsset[] {
   const rejectedIds = new Set(rejected.map(r => r.asset_id))
   return rawAssets(rawPayload).filter(a => !rejectedIds.has(a.asset_id))
+}
+
+// Sólo el nombre visible: el informe en sí es evidencia inmutable (endpoints/evidenceNames.ts).
+export function renameScanReport(id: string, input: EvidenceNameInput) {
+  return httpClient.patch<{ id: string; display_name: string | null }>(
+    `/api/v1/scan-reports/${id}/name`,
+    input
+  )
 }
