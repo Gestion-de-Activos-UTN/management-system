@@ -3,7 +3,7 @@
 import { useEffect } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Button, Divider, Group, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core'
+import { Box, Button, Divider, Group, Select, SimpleGrid, Stack, TextInput } from '@mantine/core'
 import { useOfficesList } from '@/modules/offices/hooks/use-offices'
 import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
 import { memberCoversOffice } from '@/modules/users/service'
@@ -17,7 +17,10 @@ import type { NonNetworkAsset } from '@/app/types/payload-types'
 import { MANUAL_ASSET_CATEGORY_GROUPS } from '@/domain/assets/asset-types'
 import { createNonNetworkAssetSchema, type NonNetworkAssetFormValues } from '../schema'
 import { useSaveNonNetworkAsset } from '../hooks/use-save-non-network-asset'
-import { AssessmentExclusionFields } from '@/modules/assessments/components/AssessmentExclusionFields'
+import {
+  AssessmentExclusionFields,
+  AssessmentScopeHint,
+} from '@/modules/assessments/components/AssessmentExclusionFields'
 
 function relationIdOf(value: string | { id: string } | null | undefined): string {
   if (!value) return ''
@@ -42,7 +45,7 @@ export function NonNetworkAssetForm({
     handleSubmit,
     watch,
     setValue,
-    formState: { errors },
+    formState: { errors, isValid },
   } = useForm<NonNetworkAssetFormValues>({
     mode: 'onChange',
     resolver: zodResolver(createNonNetworkAssetSchema(asset)),
@@ -217,11 +220,7 @@ export function NonNetworkAssetForm({
           />
         </SimpleGrid>
         <Divider label="Alcance de la evaluación de seguridad" labelPosition="left" />
-        <Text size="sm" c="dimmed">
-          Los activos excluidos permanecen en el inventario, pero no afectan las revisiones ni el
-          puntaje de riesgo.
-        </Text>
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+        <Box w={{ base: '100%', sm: '50%' }}>
           <Controller
             name="assessment_scope"
             control={control}
@@ -237,7 +236,8 @@ export function NonNetworkAssetForm({
               />
             )}
           />
-        </SimpleGrid>
+        </Box>
+        <AssessmentScopeHint />
         <AssessmentExclusionFields
           control={control}
           errors={errors}
@@ -245,7 +245,12 @@ export function NonNetworkAssetForm({
           noteRequired={exclusionReason === 'other'}
         />
         <Group justify="flex-end">
-          <Button type="submit" loading={save.isPending} w={{ base: '100%', sm: 'auto' }}>
+          <Button
+            type="submit"
+            loading={save.isPending}
+            disabled={!isValid}
+            w={{ base: '100%', sm: 'auto' }}
+          >
             {asset ? 'Guardar cambios' : 'Crear activo'}
           </Button>
         </Group>

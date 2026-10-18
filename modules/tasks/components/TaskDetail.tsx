@@ -13,9 +13,9 @@ import {
   SimpleGrid,
   Stack,
   Text,
-  Textarea,
   Timeline,
 } from '@mantine/core'
+import { CharacterCountTextarea } from '@/components/ui/CharacterCountTextarea'
 import { Archive, Check, Hand, Pencil, RotateCcw, ShieldAlert, Trash2, XCircle } from 'lucide-react'
 import { STATUS_TONE_COLOR, StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDate, formatDateTime } from '@/lib/format-date'
@@ -314,7 +314,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             tarea quedará completada a tu nombre. La persona que la reclamó permanecerá registrada
             en la actividad.
           </Alert>
-          <Textarea
+          <CharacterCountTextarea
             label="Motivo de la finalización forzada"
             description="Este motivo quedará registrado en la actividad de la tarea."
             required
@@ -354,7 +354,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
         centered
       >
         <Stack>
-          <Textarea
+          <CharacterCountTextarea
             label="Motivo"
             required
             minLength={3}

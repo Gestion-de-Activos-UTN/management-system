@@ -14,8 +14,8 @@ import {
   Radio,
   Stack,
   Text,
-  Textarea,
 } from '@mantine/core'
+import { CharacterCountTextarea } from '@/components/ui/CharacterCountTextarea'
 import { ArrowLeft, Save } from 'lucide-react'
 import type { AssessmentAnswer, AssessmentInstance } from '@/app/types/payload-types'
 import { RISK_QUESTIONS_V2, type RiskQuestionV2 } from '@/domain/risk/catalog-v2'
@@ -187,7 +187,7 @@ export function AssessmentForm(props: {
                     }
                     control={control}
                     render={({ field, fieldState }) => (
-                      <Textarea
+                      <CharacterCountTextarea
                         {...field}
                         value={field.value ?? ''}
                         label="¿Por qué no aplica?"

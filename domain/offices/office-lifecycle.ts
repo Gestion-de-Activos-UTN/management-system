@@ -2,6 +2,7 @@ import type { PayloadRequest } from 'payload'
 import { relationId } from '@/lib/relationId'
 import { buildRevocationData, getAgentLifecycleStatus } from '@/domain/agents/agent-state'
 import { AdminDomainError, subscriptionLimits } from '@/domain/organizations/admin-actions'
+import { reconcileAssessmentInstance } from '@/domain/assessments/reconcileAssessmentInstance'
 
 export type OfficeLocation = { province_id?: string | null; department_id?: string | null }
 type OfficeDoc = {
@@ -66,13 +67,25 @@ export async function createOffice(
   // AUDIT: this action must emit an AuditLogs entry (office.create, chain_hash over {office, name, location}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   // El hook afterChange de Offices (syncOrgAdminMemberships) la asigna a todos los org_admin.
-  return req.payload.create({
+  const office = await req.payload.create({
     collection: 'offices',
     data: { organization: organizationId, is_active: true, ...input },
     overrideAccess: true,
     req,
     depth: 0,
   })
+  await reconcileAssessmentInstance(
+    req.payload,
+    {
+      scope: 'office',
+      id: String(office.id),
+      organizationId,
+      is_active: true,
+    },
+    'initial',
+    req
+  )
+  return office
 }
 
 export async function updateOfficeDetails(

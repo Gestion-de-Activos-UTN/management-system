@@ -18,10 +18,10 @@ import {
   Tabs,
   Text,
   TextInput,
-  Textarea,
 } from '@mantine/core'
 import { ChevronDown, Eye, FileText, Link2, Plus, Save, UsersRound } from 'lucide-react'
 import { SettingRow } from '@/components/ui/SettingRow'
+import { CharacterCountTextarea } from '@/components/ui/CharacterCountTextarea'
 import { formatDateInput, localDateEndToISOString } from '@/lib/format-date'
 import type { HttpError } from '@/lib/http-client'
 import { ROLE_LABELS } from '@/lib/role-labels'
@@ -428,13 +428,12 @@ export function PortalMessageForm({
               error={fieldErrors.title ?? textRuleError(form.title, 'title')}
               onChange={event => update('title', event.currentTarget.value)}
             />
-            <Textarea
+            <CharacterCountTextarea
               label="Descripción"
               required
               maxLength={500}
               minRows={3}
               autosize
-              description={`${form.description.length}/500 caracteres`}
               value={form.description}
               error={fieldErrors.description ?? textRuleError(form.description, 'free')}
               onChange={event => update('description', event.currentTarget.value)}

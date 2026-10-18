@@ -3,6 +3,7 @@ import { pathToFileURL } from 'node:url'
 import type { Payload, PayloadRequest, Where } from 'payload'
 import config from '../payload.config'
 import { createOrgWithAdmin } from '../domain/organizations/createOrgWithAdmin'
+import { reconcileAssessmentInstance } from '../domain/assessments/reconcileAssessmentInstance'
 import { initializeSeedPayload } from './seed-payload'
 import { DEMO_OFFICES, type DemoOffice } from '../domain/demo/demo-offices'
 import { PORTAL_MESSAGE_TEMPLATES } from '../modules/portal-messages/templates'
@@ -309,14 +310,26 @@ async function ensureSecondaryOfficeAndAdminScope(
   organizationId: string
 ) {
   const { legacyName: _, ...secondary } = DEMO_OFFICES.secondary
-  const secondaryOffice =
-    (await findDemoOffice(payload, req, organizationId, DEMO_OFFICES.secondary)) ??
-    (await payload.create({
+  let secondaryOffice = await findDemoOffice(payload, req, organizationId, DEMO_OFFICES.secondary)
+  if (!secondaryOffice) {
+    secondaryOffice = await payload.create({
       collection: 'offices',
       overrideAccess: true,
       req,
-      data: { organization: organizationId, ...secondary },
-    }))
+      data: { organization: organizationId, is_active: true, ...secondary },
+    })
+    await reconcileAssessmentInstance(
+      payload,
+      {
+        scope: 'office',
+        id: String(secondaryOffice.id),
+        organizationId,
+        is_active: true,
+      },
+      'initial',
+      req
+    )
+  }
 
   const adminUsers = await payload.find({
     collection: 'users',
@@ -480,8 +493,19 @@ export async function seedNavigation(payload: Payload) {
       collection: 'offices',
       overrideAccess: true,
       req,
-      data: { organization: organization.id, ...secondary },
+      data: { organization: organization.id, is_active: true, ...secondary },
     })
+    await reconcileAssessmentInstance(
+      payload,
+      {
+        scope: 'office',
+        id: String(secondaryOffice.id),
+        organizationId: String(organization.id),
+        is_active: true,
+      },
+      'initial',
+      req
+    )
 
     await payload.update({
       collection: 'organization-memberships',

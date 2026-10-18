@@ -1,19 +1,35 @@
 import Link from 'next/link'
-import { Button } from '@mantine/core'
+import { Button, type ButtonProps } from '@mantine/core'
 import { ArrowLeft } from 'lucide-react'
 
 // Mismo estilo que "Back to Platform Portal" en app/portal/(protected)/layout.tsx — un <Link>
 // explícito a la lista padre, no router.back(): un detail page puede llegar de una URL directa
 // (notificación, favorito) sin historial previo, donde back() no tendría a dónde volver.
-export function BackButton({ href, label = 'Volver' }: { href: string; label?: string }) {
+export function BackButton({
+  href,
+  label = 'Volver',
+  variant = 'subtle',
+  color,
+  size = 'sm',
+  fullWidth = true,
+}: {
+  href: string
+  label?: string
+  variant?: ButtonProps['variant']
+  color?: ButtonProps['color']
+  size?: ButtonProps['size']
+  fullWidth?: boolean
+}) {
   return (
     <Button
       component={Link}
       href={href}
-      variant="subtle"
-      size="sm"
+      variant={variant}
+      color={color}
+      size={size}
       leftSection={<ArrowLeft size={16} strokeWidth={1.5} />}
-      w={{ base: '100%', sm: 'auto' }}
+      w={fullWidth ? { base: '100%', sm: 'auto' } : 'fit-content'}
+      style={fullWidth ? undefined : { alignSelf: 'center' }}
     >
       {label}
     </Button>

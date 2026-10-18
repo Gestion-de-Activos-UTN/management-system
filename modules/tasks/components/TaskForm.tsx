@@ -13,9 +13,9 @@ import {
   SimpleGrid,
   Stack,
   Text,
-  Textarea,
   TextInput,
 } from '@mantine/core'
+import { CharacterCountTextarea } from '@/components/ui/CharacterCountTextarea'
 import { SettingRow } from '@/components/ui/SettingRow'
 import { useOfficesList } from '@/modules/offices/hooks/use-offices'
 import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
@@ -237,7 +237,7 @@ export function TaskForm({
           name="description"
           control={control}
           render={({ field }) => (
-            <Textarea
+            <CharacterCountTextarea
               label="Descripción"
               autosize
               minRows={3}

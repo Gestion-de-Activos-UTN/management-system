@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import {
   Alert,
   Badge,
+  Box,
   Button,
   Card,
   Divider,
@@ -24,6 +25,7 @@ import {
   Tooltip,
 } from '@mantine/core'
 import { InventoryIncidentsPanel } from './InventoryIncidentsPanel'
+import { BackButton } from '@/components/ui/BackButton'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { TechnicalText } from '@/components/ui/TechnicalText'
 import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
@@ -54,7 +56,10 @@ import {
   inferDeviceCategory,
 } from '../inferDeviceCategory'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { AssessmentExclusionFields } from '@/modules/assessments/components/AssessmentExclusionFields'
+import {
+  AssessmentExclusionFields,
+  AssessmentScopeHint,
+} from '@/modules/assessments/components/AssessmentExclusionFields'
 
 // Tentativa siempre, nunca se escribe a ningún campo — solo orienta al usuario en qué mirar para
 // confirmar el tipo real de dispositivo. IP-only/IP+vendor es el caso común de un scan real (doc
@@ -381,9 +386,11 @@ const ASSET_TABS = ['datos', 'red'] as const
 export function AssetDetailView({
   asset,
   asOrganization,
+  backHref,
 }: {
   asset: Asset
   asOrganization?: string
+  backHref: string
 }) {
   const { data: members } = useOrgMembers(asOrganization)
   const assetOfficeId =
@@ -443,7 +450,7 @@ export function AssetDetailView({
     reset,
     setValue,
     watch,
-    formState: { isDirty, dirtyFields, errors },
+    formState: { isDirty, isValid, dirtyFields, errors },
   } = useForm<AssetBusinessFields>({
     mode: 'onChange',
     resolver: zodResolver(createAssetBusinessFieldsSchema(asset)),
@@ -778,11 +785,7 @@ export function AssetDetailView({
                   />
                 </SimpleGrid>
                 <Divider label="Alcance de la evaluación de seguridad" labelPosition="left" />
-                <Text size="sm" c="dimmed">
-                  Los activos excluidos permanecen visibles y continúan escaneándose, pero no
-                  afectan las revisiones ni el puntaje de riesgo.
-                </Text>
-                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                <Box w={{ base: '100%', sm: '50%' }}>
                   <Controller
                     name="assessment_scope"
                     control={control}
@@ -805,18 +808,26 @@ export function AssetDetailView({
                       />
                     )}
                   />
-                </SimpleGrid>
+                </Box>
+                <AssessmentScopeHint />
                 <AssessmentExclusionFields
                   control={control}
                   errors={errors}
                   excluded={assessmentScope === 'excluded'}
                   noteRequired={exclusionReason === 'other'}
                 />
-                <Group justify="flex-end">
+                <Group justify="space-between" align="center" gap="sm" wrap="wrap">
+                  <BackButton
+                    href={backHref}
+                    label="Volver al inventario"
+                    variant="subtle"
+                    color="gray"
+                    fullWidth={false}
+                  />
                   <Button
                     type="submit"
                     loading={updateAsset.isPending}
-                    disabled={!isDirty}
+                    disabled={!isDirty || !isValid}
                     w={{ base: '100%', sm: 'auto' }}
                   >
                     Guardar cambios

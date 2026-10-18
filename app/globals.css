@@ -270,9 +270,11 @@ a.mantine-Card-root:focus-visible {
 }
 
 /* Cambio de pestaña: el panel que aparece entra con un fundido corto. Mantine oculta los paneles
-   inactivos con display: none, y al volver a mostrarse la animación arranca de nuevo. Sólo
-   define el punto de partida: al terminar no queda ningún transform aplicado. */
-.mantine-Tabs-panel {
+   inactivos con display: none, y al volver a mostrarse la animación arranca de nuevo. Las vistas
+   controladas fuera de Tabs.Panel usan .tab-panel-enter y se remontan al cambiar. Sólo define el
+   punto de partida: al terminar no queda ningún transform aplicado. */
+.mantine-Tabs-panel,
+.tab-panel-enter {
   animation: tab-panel-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 

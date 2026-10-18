@@ -39,8 +39,9 @@ export default function SecurityReviewPage() {
   const [status, setStatus] = useState<string[]>(CURRENT_STATUSES)
   const [assignment, setAssignment] = useState('all')
   const tenant = useTenantContext(asOrganization)
+  // La lista respeta el alcance del rol: toda la organización o todas sus oficinas asignadas.
+  // selectedOfficeId se reserva para el resumen de riesgo, que se calcula por oficina.
   const query = useAssessments({
-    officeId: selectedOfficeId,
     asOrganization,
   })
   const risk = useRiskSummary({ officeId: selectedOfficeId, asOrganization, enabled: ready })

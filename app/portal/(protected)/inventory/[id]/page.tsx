@@ -32,7 +32,7 @@ export default function AssetDetailPage() {
   return (
     <Stack gap="md">
       <BackButton href={backHref} label="Volver al inventario" />
-      <AssetDetailView asset={asset} asOrganization={asOrganization} />
+      <AssetDetailView asset={asset} asOrganization={asOrganization} backHref={backHref} />
     </Stack>
   )
 }
