@@ -15,6 +15,8 @@ import { reconcileAssessmentInstance } from '@/domain/assessments/reconcileAsses
 import { enqueueRiskRecalculation } from '@/domain/risk/enqueueRiskRecalculation'
 import { cancelOpenTasks } from '@/domain/tasks/task-actions'
 import { lockAssetRow } from '@/domain/with-transaction'
+import { findActiveOffices } from '@/domain/offices/active-offices'
+import { withDeferredTaskReleases } from '@/domain/organizations/member-responsibilities'
 import type { OfficeDeactivationInput } from '@/modules/offices/schema'
 
 export type OfficeLocation = { province_id?: string | null; department_id?: string | null }
@@ -51,17 +53,8 @@ export type OfficeDeactivationImpact = {
   destination_offices: { id: string; name: string }[]
 }
 
-async function activeOffices(req: PayloadRequest, organizationId: string) {
-  const found = await req.payload.find({
-    collection: 'offices',
-    where: { and: [{ organization: { equals: organizationId } }, { is_active: { equals: true } }] },
-    overrideAccess: true,
-    req,
-    depth: 0,
-    pagination: false,
-  })
-  return found.docs
-}
+const activeOffices = (req: PayloadRequest, organizationId: string) =>
+  findActiveOffices(req.payload, organizationId, req)
 
 async function activeOfficeIds(req: PayloadRequest, organizationId: string) {
   return (await activeOffices(req, organizationId)).map(office => String(office.id))
@@ -469,34 +462,37 @@ export async function deactivateOffice(
   await revokeOfficeAgents(req, officeId, 'office_deactivated')
 
   const remainingActive = new Set(destinations)
-  for (const membership of await officeMemberships(req, organizationId, officeId)) {
-    if (membership.role === 'org_admin') continue // cubren todas las oficinas, activas o no
-    if (!membership.offices.some(id => remainingActive.has(id))) {
-      // AUDIT: this action must emit an AuditLogs entry (membership.deactivate, cascaded from office.deactivate, chain_hash over {membership, office}, previous hash for this organization_id)
-      // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
-      // NOTIFY: this event should trigger a Notification Bell entry for {the deactivated user, org_admins of this organization}
-      // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
-      // Las cascadas de OrganizationMemberships pasan el usuario a inactive, cierran sus sesiones,
-      // liberan sus tareas en curso y dejan sus activos sin responsable.
-      await req.payload.update({
-        collection: 'organization-memberships',
-        id: membership.id,
-        data: { is_active: false },
-        overrideAccess: true,
-        req,
-      })
-    } else {
-      // AUDIT: this action must emit an AuditLogs entry (membership.offices, cascaded from office.deactivate, chain_hash over {membership, offices}, previous hash for this organization_id)
-      // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
-      await req.payload.update({
-        collection: 'organization-memberships',
-        id: membership.id,
-        data: { offices: membership.offices.filter(id => id !== officeId) },
-        overrideAccess: true,
-        req,
-      })
+  // Las tareas se liberan después de todas las escrituras de activos (orden activo→tarea).
+  await withDeferredTaskReleases(req, async () => {
+    for (const membership of await officeMemberships(req, organizationId, officeId)) {
+      if (membership.role === 'org_admin') continue // cubren todas las oficinas, activas o no
+      if (!membership.offices.some(id => remainingActive.has(id))) {
+        // AUDIT: this action must emit an AuditLogs entry (membership.deactivate, cascaded from office.deactivate, chain_hash over {membership, office}, previous hash for this organization_id)
+        // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+        // NOTIFY: this event should trigger a Notification Bell entry for {the deactivated user, org_admins of this organization}
+        // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
+        // Las cascadas de OrganizationMemberships pasan el usuario a inactive, cierran sus sesiones,
+        // liberan sus tareas en curso y dejan sus activos sin responsable.
+        await req.payload.update({
+          collection: 'organization-memberships',
+          id: membership.id,
+          data: { is_active: false },
+          overrideAccess: true,
+          req,
+        })
+      } else {
+        // AUDIT: this action must emit an AuditLogs entry (membership.offices, cascaded from office.deactivate, chain_hash over {membership, offices}, previous hash for this organization_id)
+        // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+        await req.payload.update({
+          collection: 'organization-memberships',
+          id: membership.id,
+          data: { offices: membership.offices.filter(id => id !== officeId) },
+          overrideAccess: true,
+          req,
+        })
+      }
     }
-  }
+  })
 
   // Las tareas de los activos movidos ya cambiaron de oficina: quedan sólo las de esta.
   await cancelOpenTasks(req, { organizationId, officeId }, 'Oficina desactivada.')

@@ -42,7 +42,7 @@ export default function SecurityReviewPage() {
   const [officeState, setOfficeState] = useState('active')
   const tenant = useTenantContext(asOrganization)
   // La lista respeta el alcance del rol: toda la organización o todas sus oficinas asignadas.
-  // selectedOfficeId se reserva para el resumen de riesgo, que se calcula por oficina.
+  // selectedOfficeId sólo acota el resumen, porque el riesgo se calcula por oficina.
   const query = useAssessments({
     asOrganization,
   })
@@ -51,6 +51,15 @@ export default function SecurityReviewPage() {
   const fromInactiveOffice = (item: (typeof docs)[number]) =>
     typeof item.office === 'object' && item.office?.is_active === false
   const hasInactiveOffices = docs.some(fromInactiveOffice)
+  // Con una oficina elegida, el resumen cuenta las de esa oficina y las de la organización (que
+  // también pesan en su evaluación), igual que la tarjeta de riesgo de al lado.
+  const summaryDocs = docs.filter(
+    item =>
+      !fromInactiveOffice(item) &&
+      (!selectedOfficeId ||
+        item.scope === 'organization' ||
+        (item.office && relationId(item.office) === selectedOfficeId))
+  )
   const scoped = officeState === 'all' ? docs : docs.filter(item => !fromInactiveOffice(item))
   const rows = scoped.filter(
     item =>
@@ -81,7 +90,7 @@ export default function SecurityReviewPage() {
       />
       {!query.isPending && !query.isError && (
         <SecurityReviewSummary
-          assessments={docs.filter(item => !fromInactiveOffice(item))}
+          assessments={summaryDocs}
           riskSummary={risk.data}
           riskHref={portalHref('/portal/risk-score', asOrganization)}
         />

@@ -203,6 +203,7 @@ export interface Organization {
   id: string;
   name: string;
   is_active?: boolean | null;
+  deactivated_at?: string | null;
   settings?: (string | null) | OrganizationSetting;
   subscription?: (string | null) | Subscription;
   updatedAt: string;
@@ -286,6 +287,7 @@ export interface OrganizationMembership {
   role: string | Role;
   status?: ('onboarding' | 'active') | null;
   is_active?: boolean | null;
+  deactivated_at?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -1588,6 +1590,7 @@ export interface PayloadMigration {
 export interface OrganizationsSelect<T extends boolean = true> {
   name?: T;
   is_active?: T;
+  deactivated_at?: T;
   settings?: T;
   subscription?: T;
   updatedAt?: T;
@@ -1950,6 +1953,7 @@ export interface OrganizationMembershipsSelect<T extends boolean = true> {
   role?: T;
   status?: T;
   is_active?: T;
+  deactivated_at?: T;
   updatedAt?: T;
   createdAt?: T;
 }

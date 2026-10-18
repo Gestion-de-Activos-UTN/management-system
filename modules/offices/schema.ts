@@ -38,7 +38,9 @@ export const OfficeStatusSchema = z.discriminatedUnion('is_active', [
       .trim()
       .min(1, 'Escribe el nombre de la oficina para confirmar.')
       .max(120)
-      .regex(...TEXT_RULES.label),
+      // `free` y no `label`: se compara contra el nombre guardado, que puede venir del admin o
+      // del seed con caracteres que `label` rechaza; si no, esa oficina no podría desactivarse.
+      .regex(...TEXT_RULES.free),
     manual_asset_moves: z
       .array(z.object({ asset_id: z.uuid(), office_id: z.uuid() }))
       .max(5000)

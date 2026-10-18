@@ -1,4 +1,5 @@
 import { createLocalReq, type Payload, type PayloadRequest } from 'payload'
+import { findActiveOffices } from '@/domain/offices/active-offices'
 
 /**
  * Queues the organization-wide evaluation plus one per affected office; otherwise the organization
@@ -15,37 +16,14 @@ export async function enqueueRiskRecalculation(
   if (payload.config?.jobs?.runHooks)
     throw new Error('Transactional risk queue requires jobs.runHooks=false')
   const req = request ?? (await createLocalReq({}, payload))
-  // Inactive organizations and offices never count in risk (domain/risk/recalculateRisk.ts).
-  const [organization, activeOffices] = await Promise.all([
-    payload.findByID({
-      collection: 'organizations',
-      id: organizationId,
-      overrideAccess: true,
-      req,
-      depth: 0,
-    }),
-    payload.find({
-      collection: 'offices',
-      where: {
-        and: [{ organization: { equals: organizationId } }, { is_active: { equals: true } }],
-      },
-      overrideAccess: true,
-      req,
-      depth: 0,
-      pagination: false,
-      select: {},
-    }),
-  ])
-  if (organization.is_active === false) return
-  const activeIds = new Set(activeOffices.docs.map(office => String(office.id)))
+  // ponytail: no filtra organizaciones ni oficinas inactivas acá; el handler de 'recalculate-risk'
+  // (payload.config.ts) las descarta al correr, sin sumar queries en cada evento de activo.
   const previous = req.transactionID
   const ownsTransaction = !previous
   const transactionID = await (previous ?? payload.db.beginTransaction())
   if (!transactionID) throw new Error('Risk delivery requires PostgreSQL transactions')
   req.transactionID = transactionID
-  const offices = [
-    ...new Set(officeIds.filter((id): id is string => Boolean(id) && activeIds.has(String(id)))),
-  ]
+  const offices = [...new Set(officeIds.filter((id): id is string => Boolean(id)))]
   try {
     for (const officeId of [undefined, ...offices]) {
       // The task's concurrency key (payload.config.ts) supersedes pending jobs for the same scope, so
@@ -75,21 +53,11 @@ export async function enqueueOrganizationRiskRecalculation(
   req?: PayloadRequest
 ) {
   if (process.env.PAYLOAD_DISABLE_JOBS === '1' || !payload.jobs?.queue) return
-  const offices = await payload.find({
-    collection: 'offices',
-    where: {
-      and: [{ organization: { equals: organizationId } }, { is_active: { equals: true } }],
-    },
-    overrideAccess: true,
-    req,
-    depth: 0,
-    pagination: false,
-    select: {},
-  })
+  const offices = await findActiveOffices(payload, organizationId, req)
   await enqueueRiskRecalculation(
     payload,
     organizationId,
-    offices.docs.map(office => String(office.id)),
+    offices.map(office => String(office.id)),
     req
   )
 }

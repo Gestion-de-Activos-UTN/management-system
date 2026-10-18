@@ -286,3 +286,59 @@ test('Organizaciones: sin ningún OrgAdmin no se puede reactivar', async () => {
   assert.equal(reactivated.status, 409)
   assert.equal(((await reactivated.json()) as { error: string }).error, 'no_admin_available')
 })
+
+test('Organizaciones: reactivar no revive a un OrgAdmin que se dio de baja antes que la organización', async () => {
+  const payload = await getPayload({ config })
+  const { organization, office } = await seedRiskOrganization(payload)
+  const orgId = String(organization.id)
+  const officeId = String(office.id)
+  const formerAdminId = await member(payload, orgId, [officeId], 'org_admin')
+  const currentAdminId = await member(payload, orgId, [officeId], 'org_admin')
+  const membershipOf = async (userId: string) =>
+    (
+      await payload.find({
+        collection: 'organization-memberships',
+        where: { user: { equals: userId } },
+        overrideAccess: true,
+        depth: 0,
+        limit: 1,
+      })
+    ).docs[0]
+  // El más antiguo se fue de la empresa: se lo desactiva a mano mientras la organización sigue activa.
+  await payload.update({
+    collection: 'organization-memberships',
+    id: (await membershipOf(formerAdminId)).id,
+    data: { is_active: false },
+    overrideAccess: true,
+  })
+
+  const admin = await platformAdmin(payload)
+  const status = (body: unknown) =>
+    endpoint('post', '/v1/platform-admin/organizations/:id/status').handler(
+      request(payload, admin, { id: orgId, body })
+    )
+  assert.equal((await status({ is_active: false, confirm_name: organization.name })).status, 200)
+
+  const currentUser = await payload.findByID({
+    collection: 'users',
+    id: currentAdminId,
+    overrideAccess: true,
+  })
+  const preview = (await (
+    await endpoint('get', '/v1/platform-admin/organizations/:id/status-impact').handler(
+      request(payload, admin, { id: orgId })
+    )
+  ).json()) as OrganizationStatusImpact
+  assert.ok(!preview.is_active)
+  assert.equal(preview.reactivation.admin?.email, currentUser.email)
+
+  assert.equal((await status({ is_active: true })).status, 200)
+  assert.equal((await membershipOf(currentAdminId)).is_active, true)
+  assert.equal((await membershipOf(formerAdminId)).is_active, false, 'sigue afuera')
+  const formerUser = await payload.findByID({
+    collection: 'users',
+    id: formerAdminId,
+    overrideAccess: true,
+  })
+  assert.equal(formerUser.status, 'inactive')
+})

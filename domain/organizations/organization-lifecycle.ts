@@ -6,6 +6,7 @@ import { assertUserLimit } from '@/domain/organizations/member-admin'
 import { reconcileAssessmentInstance } from '@/domain/assessments/reconcileAssessmentInstance'
 import { enqueueRiskRecalculation } from '@/domain/risk/enqueueRiskRecalculation'
 import { cancelOpenTasks } from '@/domain/tasks/task-actions'
+import { withDeferredTaskReleases } from '@/domain/organizations/member-responsibilities'
 import {
   reactivateOffice,
   retireOfficeAssets,
@@ -124,11 +125,18 @@ async function deactivationImpact(
 }
 
 /**
- * OrgAdmin a reactivar: el más antiguo de la organización cuyo usuario todavía existe. Un usuario
+ * OrgAdmin a reactivar: el más antiguo de los que se dieron de baja con la organización (los que
+ * se desactivaron antes, a mano, siguen afuera) cuyo usuario todavía existe. Un usuario
  * nunca tiene otra membership (OrganizationMemberships.user es unique), así que no hay que mirar
  * si quedó activo en otro lado.
  */
-async function oldestAvailableAdmin(req: PayloadRequest, organizationId: string) {
+async function oldestAvailableAdmin(
+  req: PayloadRequest,
+  organization: { id: string | number; deactivated_at?: string | null }
+) {
+  // Sólo deactivateOrganization desactiva una organización, y siempre escribe la marca.
+  if (!organization.deactivated_at) return null
+  const organizationId = String(organization.id)
   const roles = await req.payload.find({
     collection: 'roles',
     where: { and: [{ slug: { equals: 'org_admin' } }, { is_platform_role: { equals: false } }] },
@@ -142,7 +150,11 @@ async function oldestAvailableAdmin(req: PayloadRequest, organizationId: string)
   const memberships = await req.payload.find({
     collection: 'organization-memberships',
     where: {
-      and: [{ organization: { equals: organizationId } }, { role: { equals: role.id } }],
+      and: [
+        { organization: { equals: organizationId } },
+        { role: { equals: role.id } },
+        { deactivated_at: { greater_than_equal: organization.deactivated_at } },
+      ],
     },
     overrideAccess: true,
     req,
@@ -174,7 +186,7 @@ export async function organizationStatusImpact(
     return { is_active: true, deactivation: await deactivationImpact(req, organizationId) }
   }
   const [admin, offices] = await Promise.all([
-    oldestAvailableAdmin(req, organizationId),
+    oldestAvailableAdmin(req, organization),
     organizationOffices(req, organizationId),
   ])
   return {
@@ -201,7 +213,7 @@ export async function deactivateOrganization(
 ) {
   const organization = await loadOrganization(req, organizationId)
   if (organization.is_active === false) return
-  // Sin TEXT_RULES: los nombres de organización no tienen regla de texto y podrían no pasarla.
+  // Comparación exacta (con trim); el schema sólo descarta caracteres de control (TEXT_RULES.free).
   if (confirm_name.trim() !== organization.name.trim()) {
     throw new AdminDomainError(
       'confirmation_mismatch',
@@ -209,6 +221,8 @@ export async function deactivateOrganization(
       'El nombre escrito no coincide con el de la organización.'
     )
   }
+  // Mismo instante en la organización y en cada membership que se da de baja con ella.
+  const deactivatedAt = new Date().toISOString()
 
   // AUDIT: this action must emit an AuditLogs entry (organization.deactivate, chain_hash over {organization, offices, members, agents, retired assets, cancelled tasks}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
@@ -217,7 +231,7 @@ export async function deactivateOrganization(
   await req.payload.update({
     collection: 'organizations',
     id: organization.id,
-    data: { is_active: false },
+    data: { is_active: false, deactivated_at: deactivatedAt },
     overrideAccess: true,
     req,
   })
@@ -240,19 +254,22 @@ export async function deactivateOrganization(
     depth: 0,
     pagination: false,
   })
-  for (const membership of memberships.docs) {
-    // AUDIT: this action must emit an AuditLogs entry (membership.deactivate, cascaded from organization.deactivate, chain_hash over {membership, organization}, previous hash for this organization_id)
-    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
-    // Las cascadas de OrganizationMemberships pasan el usuario a inactive, cierran sus sesiones,
-    // liberan sus tareas y dejan sus activos sin responsable.
-    await req.payload.update({
-      collection: 'organization-memberships',
-      id: membership.id,
-      data: { is_active: false },
-      overrideAccess: true,
-      req,
-    })
-  }
+  // Las tareas se liberan después de todas las escrituras de activos (orden activo→tarea).
+  await withDeferredTaskReleases(req, async () => {
+    for (const membership of memberships.docs) {
+      // AUDIT: this action must emit an AuditLogs entry (membership.deactivate, cascaded from organization.deactivate, chain_hash over {membership, organization}, previous hash for this organization_id)
+      // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+      // Las cascadas de OrganizationMemberships pasan el usuario a inactive, cierran sus sesiones,
+      // liberan sus tareas y dejan sus activos sin responsable.
+      await req.payload.update({
+        collection: 'organization-memberships',
+        id: membership.id,
+        data: { is_active: false, deactivated_at: deactivatedAt },
+        overrideAccess: true,
+        req,
+      })
+    }
+  })
 
   await cancelOpenTasks(req, { organizationId }, 'Organización desactivada.')
 
@@ -292,7 +309,7 @@ export async function reactivateOrganization(req: PayloadRequest, organizationId
   const organization = await loadOrganization(req, organizationId)
   if (organization.is_active !== false) return
   const [admin, offices] = await Promise.all([
-    oldestAvailableAdmin(req, organizationId),
+    oldestAvailableAdmin(req, organization),
     organizationOffices(req, organizationId),
   ])
   if (!admin) {
@@ -334,6 +351,8 @@ export async function reactivateOrganization(req: PayloadRequest, organizationId
     })
   }
   // La cascada de desactivación pasó al usuario a inactive y a propósito no lo revierte sola.
+  // AUDIT: this action must emit an AuditLogs entry (user.reactivate, cascaded from organization.reactivate, chain_hash over {user, status}, previous hash for this organization_id)
+  // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   await req.payload.update({
     collection: 'users',
     id: admin.user.id,

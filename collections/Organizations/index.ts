@@ -28,6 +28,11 @@ export const Organizations: CollectionConfig = {
       defaultValue: true,
     },
     {
+      // Última desactivación: reactivar sólo revive a los OrgAdmin que se dieron de baja con ella.
+      name: 'deactivated_at',
+      type: 'date',
+    },
+    {
       // 1:1, bloqueado a escritura directa — solo lo setea createOrgWithAdmin (overrideAccess).
       name: 'settings',
       type: 'relationship',

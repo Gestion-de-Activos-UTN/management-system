@@ -1,6 +1,7 @@
 import type { CollectionSlug, Payload, PayloadRequest, Where } from 'payload'
 import type { Asset, ComplianceResult, NonNetworkAsset } from '@/app/types/payload-types'
 import { relationId } from '@/lib/relationId'
+import { findActiveOffices } from '@/domain/offices/active-offices'
 import { evaluateNetworkBaseline } from '@/domain/assessments/evaluateNetworkBaseline'
 import { evaluateOfficeMonitoring } from '@/domain/assessments/evaluateAutomaticCompliance'
 import { isAssetExcludedFromAssessments } from '@/domain/assessments/asset-assessment-scope'
@@ -139,16 +140,7 @@ export async function recalculateRisk(
   const now = input.now ?? new Date()
   const organization = { organization: { equals: input.organizationId } }
   // Inactive offices never count: their assets left the organization's exposure.
-  const activeOffices = await payload.find({
-    collection: 'offices',
-    where: { and: [organization, { is_active: { equals: true } }] },
-    overrideAccess: true,
-    req,
-    depth: 0,
-    pagination: false,
-    select: {},
-  })
-  const activeOfficeIds = activeOffices.docs
+  const activeOfficeIds = (await findActiveOffices(payload, input.organizationId, req))
     .map(office => String(office.id))
     .filter(id => !input.officeId || id === input.officeId)
   const scope: Where[] = [organization, { office: { in: activeOfficeIds } }]

@@ -63,6 +63,11 @@ export const OrganizationMemberships: CollectionConfig = {
       type: 'checkbox',
       defaultValue: true,
     },
+    {
+      // Lo escribe la desactivación de la organización (mismo valor que Organizations.deactivated_at).
+      name: 'deactivated_at',
+      type: 'date',
+    },
   ],
   hooks: {
     beforeValidate: [enforceImmutableOrgAndUser],

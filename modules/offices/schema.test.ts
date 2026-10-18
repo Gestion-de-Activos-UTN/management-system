@@ -39,3 +39,12 @@ test('OfficeStatusSchema: rechaza destinos que no son ids', () => {
   })
   assert.equal(result.success, false)
 })
+
+test('OfficeStatusSchema: confirma nombres guardados con símbolos, pero no caracteres de control', () => {
+  const parsed = OfficeStatusSchema.parse({ is_active: false, confirm_name: 'I+D: Centro' })
+  assert.equal(parsed.is_active === false && parsed.confirm_name, 'I+D: Centro')
+  assert.equal(
+    OfficeStatusSchema.safeParse({ is_active: false, confirm_name: 'Sede\u0000' }).success,
+    false
+  )
+})

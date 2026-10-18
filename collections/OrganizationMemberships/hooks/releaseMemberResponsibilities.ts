@@ -3,10 +3,12 @@ import { relationId } from '@/lib/relationId'
 import { hasOrgWideScope, type RoleSlug } from '@/access/rbac/permissions'
 import {
   lostCoverage,
+  releaseMemberTasks,
   releaseOwnedAssets,
+  sameCoverageInputs,
   type MemberCoverage,
 } from '@/domain/organizations/member-responsibilities'
-import { releaseClaimedTasks } from '@/domain/tasks/task-actions'
+import { findActiveOffices } from '@/domain/offices/active-offices'
 
 // Cuando una persona deja de cubrir oficinas (desactivación, cambio de oficinas o de rol, oficina
 // desactivada, organización desactivada) sus activos quedan sin responsable y sus tareas en curso
@@ -19,6 +21,8 @@ export const releaseMemberResponsibilities: CollectionAfterChangeHook = async ({
   req,
 }) => {
   if (operation !== 'update' || !previousDoc || previousDoc.is_active !== true) return doc
+  // Updates que no tocan la cobertura (p. ej. `status` de onboarding): no hay nada que liberar.
+  if (sameCoverageInputs(previousDoc, doc)) return doc
   const organizationId = relationId(doc.organization)
   const userId = relationId(doc.user)
   // previousDoc llega con ids y doc puede llegar poblado: se normaliza todo con relationId.
@@ -32,17 +36,7 @@ export const releaseMemberResponsibilities: CollectionAfterChangeHook = async ({
       depth: 0,
       pagination: false,
     }),
-    req.payload.find({
-      collection: 'offices',
-      where: {
-        and: [{ organization: { equals: organizationId } }, { is_active: { equals: true } }],
-      },
-      overrideAccess: true,
-      req,
-      depth: 0,
-      pagination: false,
-      select: {},
-    }),
+    findActiveOffices(req.payload, organizationId, req),
   ])
   const slugById = new Map(roles.docs.map(role => [String(role.id), role.slug as RoleSlug]))
   const coverage = (membership: typeof doc): MemberCoverage => ({
@@ -53,17 +47,16 @@ export const releaseMemberResponsibilities: CollectionAfterChangeHook = async ({
   const lost = lostCoverage(
     coverage(previousDoc),
     coverage(doc),
-    activeOffices.docs.map(office => String(office.id))
+    activeOffices.map(office => String(office.id))
   )
   if (Array.isArray(lost) && !lost.length) return doc
 
   await releaseOwnedAssets(req, organizationId, userId, lost)
-  await releaseClaimedTasks(
-    req,
+  await releaseMemberTasks(req, {
     organizationId,
     userId,
-    lost,
-    lost === 'all' ? 'member_deactivated' : 'office_access_removed'
-  )
+    offices: lost,
+    reason: lost === 'all' ? 'member_deactivated' : 'office_access_removed',
+  })
   return doc
 }

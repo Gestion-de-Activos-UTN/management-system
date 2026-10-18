@@ -3,6 +3,8 @@ import type { Asset, NonNetworkAsset } from '@/app/types/payload-types'
 import { relationId } from '@/lib/relationId'
 import { withSystemContext } from '@/lib/system-context'
 import { lockAssetRow } from '@/domain/with-transaction'
+import { findActiveOffices } from '@/domain/offices/active-offices'
+import { releaseClaimedTasks, type ClaimReleaseReason } from '@/domain/tasks/task-actions'
 
 export type MemberCoverage = { isActive: boolean; orgWide: boolean; officeIds: string[] }
 
@@ -23,6 +25,72 @@ export function lostCoverage(
     coverage.orgWide ? [...active] : coverage.officeIds.filter(id => active.has(id))
   const kept = new Set(covered(next))
   return covered(previous).filter(id => !kept.has(id))
+}
+
+type CoverageInputs = { is_active?: boolean | null; role: unknown; offices?: unknown[] | null }
+
+/** Si no cambió nada de lo que define la cobertura, la persona no pierde oficinas. */
+export function sameCoverageInputs(previous: CoverageInputs, next: CoverageInputs): boolean {
+  const offices = (membership: CoverageInputs) =>
+    [...new Set((membership.offices ?? []).map(relationId))].sort().join(',')
+  return (
+    (previous.is_active === true) === (next.is_active === true) &&
+    relationId(previous.role) === relationId(next.role) &&
+    offices(previous) === offices(next)
+  )
+}
+
+type TaskRelease = {
+  organizationId: string
+  userId: string
+  offices: 'all' | string[]
+  reason: ClaimReleaseReason
+}
+const DEFERRED_TASK_RELEASES = 'deferredTaskReleases'
+
+/**
+ * Libera las tareas de las personas que deja de cubrir `fn` recién al final, después de todas
+ * sus escrituras de activos. Sin esto, cada membership tomaría locks de tareas antes que los de
+ * los activos de la siguiente, cruzando el orden activo→tarea de la ingesta y del PATCH de un
+ * activo (deadlock). Mismo criterio de req.context que lib/system-context.ts.
+ */
+export async function withDeferredTaskReleases(
+  req: PayloadRequest,
+  fn: () => Promise<void>
+): Promise<void> {
+  const previous = req.context[DEFERRED_TASK_RELEASES]
+  const pending: TaskRelease[] = []
+  req.context[DEFERRED_TASK_RELEASES] = pending
+  try {
+    await fn()
+  } finally {
+    req.context[DEFERRED_TASK_RELEASES] = previous
+  }
+  for (const release of pending) {
+    await releaseClaimedTasks(
+      req,
+      release.organizationId,
+      release.userId,
+      release.offices,
+      release.reason
+    )
+  }
+}
+
+/** Libera ya, o al final de withDeferredTaskReleases si hay uno en curso. */
+export async function releaseMemberTasks(req: PayloadRequest, release: TaskRelease) {
+  const pending = req.context[DEFERRED_TASK_RELEASES] as TaskRelease[] | undefined
+  if (pending) {
+    pending.push(release)
+    return
+  }
+  await releaseClaimedTasks(
+    req,
+    release.organizationId,
+    release.userId,
+    release.offices,
+    release.reason
+  )
 }
 
 const ASSET_COLLECTIONS = ['assets', 'non-network-assets'] as const
@@ -109,18 +177,8 @@ export async function reassignOwnedAssets(
   fromUserId: string,
   toUserId: string
 ): Promise<void> {
-  const activeOffices = await req.payload.find({
-    collection: 'offices',
-    where: {
-      and: [{ organization: { equals: organizationId } }, { is_active: { equals: true } }],
-    },
-    overrideAccess: true,
-    req,
-    depth: 0,
-    pagination: false,
-    select: {},
-  })
-  const active = new Set(activeOffices.docs.map(office => String(office.id)))
+  const activeOffices = await findActiveOffices(req.payload, organizationId, req)
+  const active = new Set(activeOffices.map(office => String(office.id)))
   for (const { collection, doc } of await ownedAssets(req, organizationId, fromUserId, 'all')) {
     const identified =
       collection === 'non-network-assets' || doc.identification_status === 'confirmed'

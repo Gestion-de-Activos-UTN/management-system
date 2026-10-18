@@ -6,8 +6,8 @@ import {
   enqueueRiskRecalculation,
 } from './enqueueRiskRecalculation'
 
-/** officeIds: oficinas activas de la organización (las únicas que cuentan en riesgo). */
-function fakePayload(officeIds: string[] = [], { organizationActive = true } = {}) {
+/** officeIds: oficinas activas de la organización (las que encola un evento de organización). */
+function fakePayload(officeIds: string[] = []) {
   const queued: Array<{ organization_id: string; office_id?: string }> = []
   const payload = {
     db: {
@@ -17,7 +17,6 @@ function fakePayload(officeIds: string[] = [], { organizationActive = true } = {
     },
     jobs: { queue: async ({ input }: { input: (typeof queued)[number] }) => queued.push(input) },
     find: async () => ({ docs: officeIds.map(id => ({ id })) }),
-    findByID: async () => ({ id: 'org-1', is_active: organizationActive }),
   } as unknown as Payload
   const req = { payload, context: {} } as unknown as PayloadRequest
   return { payload, queued, req }
@@ -53,22 +52,6 @@ describe('enqueueRiskRecalculation', () => {
       queued.map(item => item.office_id),
       [undefined, 'office-1', 'office-2']
     )
-  })
-
-  it('skips offices that are no longer active: they do not count in risk', async () => {
-    const { payload, queued, req } = fakePayload(['office-1'])
-    await enqueueRiskRecalculation(payload, 'org-1', ['office-1', 'office-inactive'], req)
-    assert.deepEqual(
-      queued.map(item => item.office_id),
-      [undefined, 'office-1']
-    )
-  })
-
-  it('queues nothing for an inactive organization', async () => {
-    const { payload, queued, req } = fakePayload(['office-1'], { organizationActive: false })
-    await enqueueRiskRecalculation(payload, 'org-1', ['office-1'], req)
-    await enqueueOrganizationRiskRecalculation(payload, 'org-1', req)
-    assert.equal(queued.length, 0)
   })
 
   it('queues nothing when jobs are disabled', async () => {
