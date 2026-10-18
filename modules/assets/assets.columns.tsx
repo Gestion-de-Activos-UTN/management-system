@@ -129,7 +129,11 @@ export function getAssetsColumns(
           cell: ({ row }) => {
             const office = row.original.office
             return (
-              <OneLineText>{typeof office === 'object' && office ? office.name : null}</OneLineText>
+              <OneLineText>
+                {typeof office === 'object' && office
+                  ? `${office.name}${office.is_active === false ? ' (inactiva)' : ''}`
+                  : null}
+              </OneLineText>
             )
           },
         }

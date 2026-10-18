@@ -28,6 +28,15 @@ export const TASK_STATUS_TONES: Record<string, StatusTone> = {
   cancelled: 'danger',
 }
 
+/** Por qué el sistema liberó una tarea tomada (domain/tasks/task-actions.ts::releaseClaimedTasks). */
+export const CLAIM_RELEASE_REASON_LABEL: Record<
+  'member_deactivated' | 'office_access_removed',
+  string
+> = {
+  member_deactivated: 'Persona desactivada',
+  office_access_removed: 'Sin acceso a la oficina',
+}
+
 export const TASK_PRIORITY_LABELS: Record<string, string> = {
   low: 'Baja',
   normal: 'Normal',
@@ -86,8 +95,10 @@ export const TASK_REFERENCE_HELP: Record<string, string> = {
   'assessment-instances':
     'Las tareas abiertas siguen el ciclo que lo reemplaza cuando cambia el activo; el historial conserva la referencia anterior.',
   'compliance-results': 'El resultado puntual de un control evaluado.',
-  'inventory-snapshots': 'Conserva la evidencia de origen y permite abrir el inventario vigente de la oficina.',
+  'inventory-snapshots':
+    'Conserva la evidencia de origen y permite abrir el inventario vigente de la oficina.',
   'scan-reports': 'Un reporte generado por una ejecución concreta del agente.',
-  'risk-evaluations': 'Conserva la evaluación de origen y permite abrir el puntaje vigente del mismo ámbito.',
+  'risk-evaluations':
+    'Conserva la evaluación de origen y permite abrir el puntaje vigente del mismo ámbito.',
   agents: 'La instalación del agente de escaneo de una oficina.',
 }

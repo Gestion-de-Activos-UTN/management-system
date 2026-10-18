@@ -30,6 +30,8 @@ export type AssessmentDetailResponse = {
   answers: AssessmentAnswer[]
   previous_answers?: AssessmentAnswer[]
   assessment_history?: AssessmentInstance[]
+  /** Oficina u organización inactiva: la revisión queda de solo lectura. */
+  inactive_subject: 'office_inactive' | 'organization_inactive' | null
   effective_evidence: Record<string, EffectiveAnswer>
 }
 

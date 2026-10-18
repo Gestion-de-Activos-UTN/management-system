@@ -40,6 +40,8 @@ export const generateInventorySnapshotEndpoint: Endpoint = {
       depth: 0,
     })
     assertOrganizationMatches(relationId(office.organization), ctx.organizationId, unrestricted)
+    // Una oficina inactiva no cuenta en riesgo: su snapshot no tendría evaluación que asociar.
+    if (office.is_active === false) return json({ error: 'office_inactive' }, 409)
 
     const snapshot = await createInventorySnapshot(req.payload, officeId, {
       type: 'manual',

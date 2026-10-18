@@ -1,4 +1,4 @@
-import type { PayloadRequest } from 'payload'
+import { APIError, type PayloadRequest } from 'payload'
 import { planLimits } from '@/domain/subscriptions/plan-limits'
 import type { OrganizationRoleSlug } from '@/modules/users/schema'
 import {
@@ -30,7 +30,29 @@ export function adminErrorResponse(error: unknown): Response {
     return json({ error: 'rank_escalation', message: error.message }, 403)
   if (error instanceof LastActiveOrgAdminError)
     return json({ error: 'last_active_org_admin', message: error.message }, 409)
+  // Reglas de los hooks de activos que corren en cascada (p. ej. el reemplazo de responsable no
+  // cubre la oficina de un activo): su mensaje ya es público y explica qué corregir.
+  if (error instanceof APIError && error.isPublic)
+    return json({ error: 'invalid_request', message: error.message }, error.status)
   throw error
+}
+
+/** Una organización inactiva no reactiva ni suma nada: sólo un PlatformAdmin la reactiva. */
+export async function assertOrganizationActive(req: PayloadRequest, organizationId: string) {
+  const organization = await req.payload.findByID({
+    collection: 'organizations',
+    id: organizationId,
+    overrideAccess: true,
+    req,
+    depth: 0,
+  })
+  if (organization.is_active === false) {
+    throw new AdminDomainError(
+      'organization_inactive',
+      409,
+      'La organización está inactiva. Sólo un administrador de la plataforma puede reactivarla.'
+    )
+  }
 }
 
 /**

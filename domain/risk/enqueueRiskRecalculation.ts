@@ -15,12 +15,37 @@ export async function enqueueRiskRecalculation(
   if (payload.config?.jobs?.runHooks)
     throw new Error('Transactional risk queue requires jobs.runHooks=false')
   const req = request ?? (await createLocalReq({}, payload))
+  // Inactive organizations and offices never count in risk (domain/risk/recalculateRisk.ts).
+  const [organization, activeOffices] = await Promise.all([
+    payload.findByID({
+      collection: 'organizations',
+      id: organizationId,
+      overrideAccess: true,
+      req,
+      depth: 0,
+    }),
+    payload.find({
+      collection: 'offices',
+      where: {
+        and: [{ organization: { equals: organizationId } }, { is_active: { equals: true } }],
+      },
+      overrideAccess: true,
+      req,
+      depth: 0,
+      pagination: false,
+      select: {},
+    }),
+  ])
+  if (organization.is_active === false) return
+  const activeIds = new Set(activeOffices.docs.map(office => String(office.id)))
   const previous = req.transactionID
   const ownsTransaction = !previous
   const transactionID = await (previous ?? payload.db.beginTransaction())
   if (!transactionID) throw new Error('Risk delivery requires PostgreSQL transactions')
   req.transactionID = transactionID
-  const offices = [...new Set(officeIds.filter((id): id is string => Boolean(id)))]
+  const offices = [
+    ...new Set(officeIds.filter((id): id is string => Boolean(id) && activeIds.has(String(id)))),
+  ]
   try {
     for (const officeId of [undefined, ...offices]) {
       // The task's concurrency key (payload.config.ts) supersedes pending jobs for the same scope, so
@@ -52,7 +77,9 @@ export async function enqueueOrganizationRiskRecalculation(
   if (process.env.PAYLOAD_DISABLE_JOBS === '1' || !payload.jobs?.queue) return
   const offices = await payload.find({
     collection: 'offices',
-    where: { organization: { equals: organizationId } },
+    where: {
+      and: [{ organization: { equals: organizationId } }, { is_active: { equals: true } }],
+    },
     overrideAccess: true,
     req,
     depth: 0,

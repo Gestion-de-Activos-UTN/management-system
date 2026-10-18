@@ -1,10 +1,10 @@
 'use client'
 
-import { Button, Center, Drawer, Group, Loader, Stack, Text } from '@mantine/core'
+import { Alert, Button, Center, Drawer, Group, Loader, Stack, Text } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowRight, History, RefreshCw } from 'lucide-react'
+import { Archive, ArrowRight, History, RefreshCw } from 'lucide-react'
 import { BackButton } from '@/components/ui/BackButton'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useAssessment } from '@/modules/assessments/hooks/use-assessment'
@@ -44,14 +44,17 @@ export default function AssessmentDetailPage() {
     data.assessment.status === 'completed' ||
     data.assessment.status === 'expired' ||
     data.assessment.status === 'superseded' ||
+    Boolean(data.inactive_subject) ||
     Boolean(tenant.data?.isPlatformAdmin)
   const canStartNewCycle =
-    tenant.data?.role === 'org_admin' ||
-    (tenant.data?.role === 'office_manager' &&
-      data.assessment.scope !== 'organization' &&
-      Boolean(
-        data.assessment.office && tenant.data.officeIds.includes(relationId(data.assessment.office))
-      ))
+    !data.inactive_subject &&
+    (tenant.data?.role === 'org_admin' ||
+      (tenant.data?.role === 'office_manager' &&
+        data.assessment.scope !== 'organization' &&
+        Boolean(
+          data.assessment.office &&
+          tenant.data.officeIds.includes(relationId(data.assessment.office))
+        )))
   const history = data.assessment_history ?? [data.assessment]
   const isLatestCycle = String(history[0]?.id) === String(data.assessment.id)
   const currentCycleNumber =
@@ -80,6 +83,13 @@ export default function AssessmentDetailPage() {
           />
         }
       />
+      {data.inactive_subject && (
+        <Alert color="gray" icon={<Archive size={16} strokeWidth={1.5} />}>
+          {data.inactive_subject === 'office_inactive'
+            ? 'La oficina está inactiva: esta revisión se conserva solo como historial.'
+            : 'La organización está inactiva: esta revisión se conserva solo como historial.'}
+        </Alert>
+      )}
       {(history.length > 1 || data.assessment.status === 'completed') && (
         <Group justify="space-between" gap="md" wrap="wrap">
           <Text size="sm" c="dimmed">

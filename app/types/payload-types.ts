@@ -408,9 +408,9 @@ export interface Agent {
   is_active?: boolean | null;
   revoked_at?: string | null;
   /**
-   * Motivo de la revocación: manual (acción humana), auto_lockout_abuse u office_deactivated (se desactivó su oficina).
+   * Motivo de la revocación: manual (acción humana), auto_lockout_abuse, office_deactivated (se desactivó su oficina) u organization_deactivated (se desactivó su organización).
    */
-  revocation_reason?: ('manual' | 'auto_lockout_abuse' | 'office_deactivated') | null;
+  revocation_reason?: ('manual' | 'auto_lockout_abuse' | 'office_deactivated' | 'organization_deactivated') | null;
   failedAttempts?: number | null;
   lockedUntil?: string | null;
   lockoutCount?: number | null;
@@ -649,7 +649,7 @@ export interface NonNetworkAsset {
     | 'physical_record'
     | 'other';
   criticality: 'low' | 'medium' | 'high' | 'critical';
-  owner: string | User;
+  owner?: (string | null) | User;
   location?: string | null;
   assessment_scope?: ('included' | 'excluded') | null;
   assessment_exclusion_reason?:
@@ -895,7 +895,9 @@ export interface AssessmentInstance {
     | 'office_changed'
     | 'policy_changed'
     | 'answer_expired'
-    | 'manual_review';
+    | 'manual_review'
+    | 'office_reactivated'
+    | 'organization_reactivated';
   opened_at: string;
   due_at: string;
   completed_at?: string | null;
@@ -2337,7 +2339,7 @@ export interface TaskRecalculateRisk {
     office_id?: string | null;
   };
   output: {
-    evaluation_id: string;
+    evaluation_id?: string | null;
   };
 }
 /**

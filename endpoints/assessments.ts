@@ -265,7 +265,12 @@ export const securityReviewSummaryEndpoint: Endpoint = {
       },
     })
     const evaluation = evaluations.docs[0]
-    const recalculation = await riskRecalculationStatus(req, ctx.organizationId, officeId ?? undefined, evaluation?.evaluated_at)
+    const recalculation = await riskRecalculationStatus(
+      req,
+      ctx.organizationId,
+      officeId ?? undefined,
+      evaluation?.evaluated_at
+    )
     if (!evaluation)
       return json({
         risk_score: null,
@@ -402,8 +407,13 @@ export const assessmentDetailEndpoint: Endpoint = {
         includeOrganization: hasOrgWideScope(ctx.role),
       }
     )
+    const subjectAsset =
+      (await loadAsset(req, assessment.asset)) ??
+      (await loadManualAsset(req, assessment.manual_asset))
     return json({
       assessment: withDerivedAssessmentStatus(assessment),
+      // La UI lo muestra de solo lectura; draft/complete/reopen lo rechazan igual (writableAssessment).
+      inactive_subject: await inactiveSubject(req, assessment, subjectAsset),
       answers: answers.docs,
       previous_answers: previousAnswers,
       assessment_history: assessmentHistory.docs.map(item => withDerivedAssessmentStatus(item)),
@@ -437,7 +447,41 @@ async function writableAssessment(
     return { ok: false, response: json({ error: 'forbidden' }, 403) }
   if (!(await featureEnabled(req, relationId(assessment.organization))))
     return { ok: false, response: json({ error: 'feature_disabled' }, 403) }
+  const inactive = await inactiveSubject(req, assessment, asset ?? manualAsset)
+  if (inactive) return { ok: false, response: json({ error: inactive }, 409) }
   return { ok: true, assessment, asset, manualAsset }
+}
+
+// Una oficina u organización inactiva no cuenta: sus assessments quedan de solo lectura. Para un
+// activo vale su oficina actual, no la del assessment (un activo movido abre uno nuevo en destino).
+async function inactiveSubject(
+  req: PayloadRequest,
+  assessment: AssessmentInstance,
+  asset: Asset | NonNetworkAsset | null
+): Promise<'office_inactive' | 'organization_inactive' | null> {
+  const officeId = asset
+    ? relationId(asset.office)
+    : assessment.office
+      ? relationId(assessment.office)
+      : null
+  if (officeId) {
+    const office = await req.payload.findByID({
+      collection: 'offices',
+      id: officeId,
+      overrideAccess: true,
+      req,
+      depth: 0,
+    })
+    return office.is_active === false ? 'office_inactive' : null
+  }
+  const organization = await req.payload.findByID({
+    collection: 'organizations',
+    id: relationId(assessment.organization),
+    overrideAccess: true,
+    req,
+    depth: 0,
+  })
+  return organization.is_active === false ? 'organization_inactive' : null
 }
 
 export const assessmentDraftEndpoint: Endpoint = {
@@ -526,7 +570,9 @@ export const assessmentReopenEndpoint: Endpoint = {
               'manual_review',
               req
             )
-          : await reconcileAssessmentInstance(
+          : // is_active: true es real, no supuesto: writableAssessment ya rechazó (409) la
+            // oficina u organización inactiva.
+            await reconcileAssessmentInstance(
               req.payload,
               assessment.scope === 'organization'
                 ? {

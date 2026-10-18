@@ -38,6 +38,8 @@ export default function SecurityReviewPage() {
   // Abre con las revisiones vigentes: todo menos las reemplazadas por un ciclo nuevo.
   const [status, setStatus] = useState<string[]>(CURRENT_STATUSES)
   const [assignment, setAssignment] = useState('all')
+  // Las oficinas inactivas no cuentan: sus revisiones quedan ocultas salvo que se pidan.
+  const [officeState, setOfficeState] = useState('active')
   const tenant = useTenantContext(asOrganization)
   // La lista respeta el alcance del rol: toda la organización o todas sus oficinas asignadas.
   // selectedOfficeId se reserva para el resumen de riesgo, que se calcula por oficina.
@@ -45,7 +47,12 @@ export default function SecurityReviewPage() {
     asOrganization,
   })
   const risk = useRiskSummary({ officeId: selectedOfficeId, asOrganization, enabled: ready })
-  const rows = (query.data?.docs ?? []).filter(
+  const docs = query.data?.docs ?? []
+  const fromInactiveOffice = (item: (typeof docs)[number]) =>
+    typeof item.office === 'object' && item.office?.is_active === false
+  const hasInactiveOffices = docs.some(fromInactiveOffice)
+  const scoped = officeState === 'all' ? docs : docs.filter(item => !fromInactiveOffice(item))
+  const rows = scoped.filter(
     item =>
       (!status.length || status.includes(item.status)) &&
       (assignment === 'mine'
@@ -74,7 +81,7 @@ export default function SecurityReviewPage() {
       />
       {!query.isPending && !query.isError && (
         <SecurityReviewSummary
-          assessments={query.data?.docs ?? []}
+          assessments={docs.filter(item => !fromInactiveOffice(item))}
           riskSummary={risk.data}
           riskHref={portalHref('/portal/risk-score', asOrganization)}
         />
@@ -100,6 +107,20 @@ export default function SecurityReviewPage() {
               onChange={setAssignment}
             />
           </Tooltip>
+          {hasInactiveOffices && (
+            <Tooltip label="Oficinas">
+              <SegmentedControl
+                aria-label="Oficinas"
+                fullWidth
+                data={[
+                  { value: 'active', label: 'Activas' },
+                  { value: 'all', label: 'Todas' },
+                ]}
+                value={officeState}
+                onChange={setOfficeState}
+              />
+            </Tooltip>
+          )}
         </FilterBar>
       </Stack>
       {query.isPending ? (

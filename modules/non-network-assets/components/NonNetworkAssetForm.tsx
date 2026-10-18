@@ -9,6 +9,7 @@ import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
 import { memberCoversOffice } from '@/modules/users/service'
 import { MemberSelect } from '@/modules/users/components/MemberSelect'
 import {
+  NO_OWNER_LABEL,
   CRITICALITY_OPTIONS,
   NON_NETWORK_ASSET_STATUS_OPTIONS,
   REVIEW_INTERVAL_OPTIONS,
@@ -21,6 +22,8 @@ import {
   AssessmentExclusionFields,
   AssessmentScopeHint,
 } from '@/modules/assessments/components/AssessmentExclusionFields'
+
+const NO_OWNER = '__no_owner__'
 
 function relationIdOf(value: string | { id: string } | null | undefined): string {
   if (!value) return ''
@@ -53,7 +56,10 @@ export function NonNetworkAssetForm({
       alias: asset?.alias ?? '',
       asset_category: asset?.asset_category,
       criticality: asset?.criticality ?? 'medium',
-      owner: relationIdOf(asset?.owner as string | { id: string } | null | undefined),
+      // En el alta '' obliga a elegir; al editar un activo sin responsable se conserva el null.
+      owner: asset
+        ? relationIdOf(asset.owner as string | { id: string } | null | undefined) || null
+        : '',
       location: asset?.location ?? '',
       status: asset?.status ?? 'active',
       office: relationIdOf(asset?.office as string | { id: string } | null | undefined),
@@ -72,12 +78,17 @@ export function NonNetworkAssetForm({
     ? (members ?? []).filter(member => memberCoversOffice(member, selectedOffice))
     : []
 
+  const originalOffice = relationIdOf(asset?.office as string | { id: string } | null | undefined)
   useEffect(() => {
-    if (!members || !selectedOwner || !selectedOffice) return
-    if (!eligibleOwners.some(member => member.id === selectedOwner)) {
+    if (!members || !selectedOffice) return
+    // Cambiar de oficina obliga a elegir un responsable que la cubra, también si no tenía.
+    const ownerless = selectedOwner === null && selectedOffice !== originalOffice
+    const uncovered =
+      Boolean(selectedOwner) && !eligibleOwners.some(member => member.id === selectedOwner)
+    if (ownerless || uncovered) {
       setValue('owner', '', { shouldDirty: true, shouldValidate: true })
     }
-  }, [eligibleOwners, members, selectedOffice, selectedOwner, setValue])
+  }, [eligibleOwners, members, originalOffice, selectedOffice, selectedOwner, setValue])
 
   const onSubmit = handleSubmit(values => {
     save.mutate(values, { onSuccess: onSaved })
@@ -162,14 +173,16 @@ export function NonNetworkAssetForm({
               <MemberSelect
                 label="Responsable"
                 members={eligibleOwners}
+                // Visible para entender el estado, nunca elegible: sólo el sistema lo asigna.
+                emptyOption={{ value: NO_OWNER, label: NO_OWNER_LABEL, disabled: true }}
                 required
                 placeholder={
                   selectedOffice
                     ? 'Selecciona un responsable de esta oficina'
                     : 'Selecciona primero una oficina'
                 }
-                value={field.value || null}
-                onChange={field.onChange}
+                value={field.value === null ? NO_OWNER : field.value || null}
+                onChange={value => field.onChange(value === NO_OWNER ? null : value)}
                 disabled={!selectedOffice}
                 error={errors.owner?.message}
               />

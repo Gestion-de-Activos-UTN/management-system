@@ -209,6 +209,7 @@ async function taskActorLabels(req: PayloadRequest, task: Task) {
       action: event.action,
       at: event.at,
       actor: resolve(claimReferences[index]),
+      ...(event.reason ? { reason: event.reason } : {}),
     })),
   }
 }

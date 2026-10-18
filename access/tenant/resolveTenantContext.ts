@@ -72,7 +72,7 @@ export async function resolveTenantContext(
 
   // Re-derivado en cada llamada, nunca cacheado entre requests: si la membership se
   // desactivó, esta query ya no la encuentra — el JWT sigue siendo válido pero deja de
-  // resolver contexto (doc 04 regla 5, ciclo de vida de membership desactivada).
+  // resolver contexto (doc 03, ciclo de vida de membership desactivada).
   const membership = await deps.findActiveMembershipByUserId(identity.externalId)
   if (!membership) return null
 

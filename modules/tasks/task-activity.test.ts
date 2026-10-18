@@ -33,3 +33,48 @@ test('taskActivity junta eventos de la tarea, sus reclamos y liberaciones y los 
   assert.equal(events[0].tone, 'danger')
   assert.equal(events[1].tone, undefined)
 })
+
+test('taskActivity explica por qué el sistema liberó una tarea tomada', () => {
+  const events = taskActivity({
+    createdAt: '2026-10-10T16:00:00.000Z',
+    completed_at: null,
+    completion_reason: null,
+    cancelled_at: null,
+    cancellation_reason: null,
+    archived_at: null,
+    actor_labels: {
+      created_by: 'Marcos',
+      claimed_by: null,
+      completed_by: null,
+      cancelled_by: null,
+      archived_by: null,
+      claim_events: [
+        { action: 'claimed', at: '2026-10-11T09:00:00.000Z', actor: 'Ana' },
+        {
+          action: 'released',
+          at: '2026-10-12T09:00:00.000Z',
+          actor: 'Marcos',
+          reason: 'member_deactivated',
+        },
+        { action: 'claimed', at: '2026-10-13T09:00:00.000Z', actor: 'Lucía' },
+        {
+          action: 'released',
+          at: '2026-10-14T09:00:00.000Z',
+          actor: 'Marcos',
+          reason: 'office_access_removed',
+        },
+      ],
+    },
+    lifecycle_history: [],
+  })
+  assert.deepEqual(
+    events.map(event => [event.label, event.note ?? null]),
+    [
+      ['Liberada', 'Sin acceso a la oficina'],
+      ['Reclamada', null],
+      ['Liberada', 'Persona desactivada'],
+      ['Reclamada', null],
+      ['Creada', null],
+    ]
+  )
+})

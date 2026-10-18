@@ -1,6 +1,6 @@
 import type { StatusTone } from '@/components/ui/StatusBadge'
 import type { TaskDTO } from './service'
-import { TASK_STATUS_TONES } from './task-labels'
+import { CLAIM_RELEASE_REASON_LABEL, TASK_STATUS_TONES } from './task-labels'
 
 export type ActivityEvent = {
   label: string
@@ -32,6 +32,7 @@ export function taskActivity(
       label: event.action === 'claimed' ? 'Reclamada' : 'Liberada',
       at: event.at,
       actor: event.actor,
+      note: event.reason ? CLAIM_RELEASE_REASON_LABEL[event.reason] : null,
     })),
     task.completed_at
       ? {

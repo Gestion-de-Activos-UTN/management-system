@@ -34,7 +34,13 @@ export type TaskDTO = Task & {
     cancelled_by: string | null
     archived_by: string | null
     /** Cada reclamo y liberación, en el orden en que ocurrieron. */
-    claim_events: Array<{ action: 'claimed' | 'released'; at: string; actor: string | null }>
+    claim_events: Array<{
+      action: 'claimed' | 'released'
+      at: string
+      actor: string | null
+      /** Liberada por el sistema: la persona se desactivó o perdió acceso a la oficina. */
+      reason?: 'member_deactivated' | 'office_access_removed'
+    }>
   }
   available_actions: TaskAction[]
   requires_reassignment: boolean

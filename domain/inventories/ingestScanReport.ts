@@ -1,3 +1,4 @@
+import { relationId } from '../../lib/relationId'
 import { recordInventoryIncident } from './inventory-incidents'
 import type { Payload, PayloadRequest } from 'payload'
 import type { Asset } from '../../app/types/payload-types'
@@ -68,7 +69,9 @@ function resolveOsStatus(
 ): 'identified' | 'indeterminate' {
   const top = [...osCandidates].sort((a, b) => b.accuracy - a.accuracy)
   return (top[0]?.accuracy ?? 0) >= OS_ACCURACY_THRESHOLD &&
-    (top.length === 1 || top[0].accuracy > top[1].accuracy) ? 'identified' : 'indeterminate'
+    (top.length === 1 || top[0].accuracy > top[1].accuracy)
+    ? 'identified'
+    : 'indeterminate'
 }
 
 function sanitizeTechnicalBlock(
@@ -103,14 +106,22 @@ function sanitizeTechnicalBlock(
     // El scanner manda "" cuando no pudo resolverlos (ver nota arriba) — se normaliza a `null`
     // acá, no en el scanner, para que Assets guarde exactamente lo que su propio contrato
     // documenta (`mac: string | null`, doc 05 §5.1), no un string vacío disfrazado de dato.
-    mac: (incomingIsLatest ? asset.mac || null : null) ?? (existingDoc?.mac as string | null | undefined) ?? null,
-    vendor: (incomingIsLatest ? asset.vendor || null : null) ?? (existingDoc?.vendor as string | null | undefined) ?? null,
+    mac:
+      (incomingIsLatest ? asset.mac || null : null) ??
+      (existingDoc?.mac as string | null | undefined) ??
+      null,
+    vendor:
+      (incomingIsLatest ? asset.vendor || null : null) ??
+      (existingDoc?.vendor as string | null | undefined) ??
+      null,
     hostname:
-      (incomingIsLatest ? asset.hostname || null : null) ?? (existingDoc?.hostname as string | null | undefined) ?? null,
+      (incomingIsLatest ? asset.hostname || null : null) ??
+      (existingDoc?.hostname as string | null | undefined) ??
+      null,
     // Payload tipa el group field como opcional (undefined), no nullable — el wire protocol
     // sí manda `null` cuando nmap no detecta OS (models.py::Asset.os: Optional[...]).
     os:
-      (incomingIsLatest ? osCandidates[0] ?? asset.os : undefined) ??
+      (incomingIsLatest ? (osCandidates[0] ?? asset.os) : undefined) ??
       (existingDoc?.os as AssetPayload['os'] | undefined) ??
       undefined,
     os_candidates: osCandidates,
@@ -137,7 +148,9 @@ function sanitizeTechnicalBlock(
     names: incomingIsLatest ? asset.names : (existingDoc?.names ?? []),
     mac_metadata: incomingIsLatest ? asset.mac_metadata : existingDoc?.mac_metadata,
     asset_coverage: incomingIsLatest ? asset.asset_coverage : existingDoc?.asset_coverage,
-    port_scan_coverage: incomingIsLatest ? report.report_coverage.ports : existingDoc?.port_scan_coverage,
+    port_scan_coverage: incomingIsLatest
+      ? report.report_coverage.ports
+      : existingDoc?.port_scan_coverage,
     scan_issues: incomingIsLatest ? asset.scan_issues : (existingDoc?.scan_issues ?? []),
     is_scanner_host: incomingIsLatest
       ? scannerHostMatch !== 'none' &&
@@ -184,7 +197,9 @@ function mergeObservedAgents(
   const rows: ObservedAgentRow[] = (existingRows ?? []).map(({ id: _id, ...row }) => row)
   const existing = rows.find(row => {
     const agent = row.agent
-    return typeof agent === 'string' ? agent === observation.agentId : agent?.id === observation.agentId
+    return typeof agent === 'string'
+      ? agent === observation.agentId
+      : agent?.id === observation.agentId
   })
 
   if (existing) {
@@ -364,6 +379,22 @@ function hasTechnicalChanged(
 // (bug reportado: "todo dispositivo que cambia algo aparece como New y pierde sus datos").
 // `mac`/`ip` ya son columnas separadas — se busca directo por ellas, acotado a `agent` para no
 // cruzar oficinas que reusan el mismo rango privado (mismo motivo por el que existía el hash).
+// Un registro dado de baja o eliminado en OTRA oficina (p. ej. de una oficina desactivada) ya es
+// historial: si el equipo aparece en otra oficina se carga como nuevo ahí. Matchearlo abría un
+// incidente de ubicación imposible de mover, y "mantener" lo dejaba invisible para siempre en la
+// oficina donde está. En la misma oficina sigue matcheando: un dado de baja no revive solo
+// (doc05§5.1, sticky). Entre varios candidatos gana el de la oficina que escanea.
+export function pickMacMatch<
+  T extends { office?: unknown; status?: string | null; deleted_at?: string | null },
+>(docs: T[], officeId: string): { match: T | undefined; historical: T[] } {
+  const sameOffice = (doc: T) => relationId(doc.office) === officeId
+  const historical = docs.filter(
+    doc => !sameOffice(doc) && (doc.status === 'retired' || Boolean(doc.deleted_at))
+  )
+  const usable = docs.filter(doc => !historical.includes(doc))
+  return { match: usable.find(sameOffice) ?? usable[0], historical }
+}
+
 async function findExistingAsset(
   payload: Payload,
   officeId: string,
@@ -382,10 +413,26 @@ async function findExistingAsset(
         ...(kind === 'locally_administered' ? { office: { equals: officeId } } : {}),
       },
       overrideAccess: true,
-      limit: 1,
+      limit: 10,
       depth: 0,
     })
-    if (byMac.docs[0]) return byMac.docs[0]
+    const { match, historical } = pickMacMatch(byMac.docs, officeId)
+    // identity_key es único por organización para una MAC global: el registro histórico la suelta
+    // para que la tome el equipo que se crea (o actualiza) en la oficina donde se lo ve.
+    for (const doc of historical) {
+      if (!doc.identity_key) continue
+      // AUDIT: this action must emit an AuditLogs entry (historical asset releases its identity_key, chain_hash over {asset, identity_key}, previous hash for this organization_id)
+      // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+      await payload.update({
+        collection: 'assets',
+        id: doc.id,
+        req,
+        overrideAccess: true,
+        context: { systemJob: true },
+        data: { identity_key: null },
+      })
+    }
+    if (match) return match
   }
 
   const byIp = await payload.find({
@@ -412,7 +459,11 @@ async function findExistingAsset(
   // solo mientras siga vigente; si ya superó offline_after_hours, queda como identidad provisional.
   // not-null-wins conserva la mac guardada en el update.
   const offlineAfterHours = await fetchOfflineAfterHours(payload, organizationId, req)
-  return shouldGoOffline(candidate.last_seen ?? null, offlineAfterHours, Date.parse(asset.scan_time))
+  return shouldGoOffline(
+    candidate.last_seen ?? null,
+    offlineAfterHours,
+    Date.parse(asset.scan_time)
+  )
     ? undefined
     : candidate
 }
@@ -432,13 +483,31 @@ export async function ingestScanReport(
   const presenceOffices = new Set<string>()
 
   const grouped = new Map<string, AssetPayload[]>()
-  for (const asset of report.assets) grouped.set(asset.ip, [...(grouped.get(asset.ip) ?? []), asset])
+  for (const asset of report.assets)
+    grouped.set(asset.ip, [...(grouped.get(asset.ip) ?? []), asset])
   const observations: AssetPayload[] = []
   for (const rows of grouped.values()) {
-    if (rows.every(row => JSON.stringify(row) === JSON.stringify(rows[0]))) observations.push(rows[0])
+    if (rows.every(row => JSON.stringify(row) === JSON.stringify(rows[0])))
+      observations.push(rows[0])
     else {
-      await recordInventoryIncident(payload, { organization: auth.organizationId, office: auth.officeId, kind: 'identity', reason: 'Equipo por revisar: observaciones contradictorias para la misma dirección.', ip: rows[0].ip, report_id: report.report_id, observed_at: rows[0].scan_time }, req)
-      for (const row of rows) rejectedAssets.push({ asset_id: row.asset_id, error: 'Equipo por revisar: observaciones contradictorias para la misma dirección.' })
+      await recordInventoryIncident(
+        payload,
+        {
+          organization: auth.organizationId,
+          office: auth.officeId,
+          kind: 'identity',
+          reason: 'Equipo por revisar: observaciones contradictorias para la misma dirección.',
+          ip: rows[0].ip,
+          report_id: report.report_id,
+          observed_at: rows[0].scan_time,
+        },
+        req
+      )
+      for (const row of rows)
+        rejectedAssets.push({
+          asset_id: row.asset_id,
+          error: 'Equipo por revisar: observaciones contradictorias para la misma dirección.',
+        })
     }
   }
   for (const rawAsset of observations) {
@@ -460,23 +529,62 @@ export async function ingestScanReport(
       req
     )
     const technical = sanitizeTechnicalBlock(asset, report, existingDoc, auth.agentId)
-    const incomingIsLatest = !existingDoc?.last_seen || Date.parse(asset.scan_time) >= Date.parse(existingDoc.last_seen)
+    const incomingIsLatest =
+      !existingDoc?.last_seen || Date.parse(asset.scan_time) >= Date.parse(existingDoc.last_seen)
 
-    const existingOfficeId = existingDoc && String(typeof existingDoc.office === 'object' ? existingDoc.office?.id : existingDoc.office)
+    const existingOfficeId =
+      existingDoc &&
+      String(typeof existingDoc.office === 'object' ? existingDoc.office?.id : existingDoc.office)
     if (existingDoc && existingOfficeId && incomingIsLatest && existingOfficeId !== auth.officeId) {
-      const incident = await recordInventoryIncident(payload, { organization: auth.organizationId, office: existingOfficeId, proposed_office: auth.officeId, asset: String(existingDoc.id), agent: auth.agentId, kind: 'location', reason: 'Ubicación por confirmar: el equipo fue observado en otra oficina.', ip: asset.ip, report_id: report.report_id, observed_at: asset.scan_time }, req)
-      if (incident.status === 'pending') await payload.update({ collection: 'assets', id: existingDoc.id, req, overrideAccess: true, context: { systemJob: true }, data: { location_pending: true } })
+      const incident = await recordInventoryIncident(
+        payload,
+        {
+          organization: auth.organizationId,
+          office: existingOfficeId,
+          proposed_office: auth.officeId,
+          asset: String(existingDoc.id),
+          agent: auth.agentId,
+          kind: 'location',
+          reason: 'Ubicación por confirmar: el equipo fue observado en otra oficina.',
+          ip: asset.ip,
+          report_id: report.report_id,
+          observed_at: asset.scan_time,
+        },
+        req
+      )
+      if (incident.status === 'pending')
+        await payload.update({
+          collection: 'assets',
+          id: existingDoc.id,
+          req,
+          overrideAccess: true,
+          context: { systemJob: true },
+          data: { location_pending: true },
+        })
       if (incident.status === 'kept') {
         // A responsible person kept the current office: the device is still seen, so only its
         // presence is refreshed. Office, agent, identity and technical data stay as they were.
         // AUDIT: this action must emit an AuditLogs entry (chain_hash over {asset, last_seen, status}, previous hash for this organization_id)
         // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
-        await payload.update({ collection: 'assets', id: existingDoc.id, req, overrideAccess: true, context: { systemJob: true },
-          data: { last_seen: asset.scan_time, ...(existingDoc.status === 'retired' ? {} : { status: 'active' }) } })
+        await payload.update({
+          collection: 'assets',
+          id: existingDoc.id,
+          req,
+          overrideAccess: true,
+          context: { systemJob: true },
+          data: {
+            last_seen: asset.scan_time,
+            ...(existingDoc.status === 'retired' ? {} : { status: 'active' }),
+          },
+        })
         presenceOffices.add(existingOfficeId)
         continue
       }
-      rejectedAssets.push({ asset_id: asset.asset_id, error: 'Ubicación por confirmar. Se conserva la oficina actual hasta que un responsable confirme el traslado.' })
+      rejectedAssets.push({
+        asset_id: asset.asset_id,
+        error:
+          'Ubicación por confirmar. Se conserva la oficina actual hasta que un responsable confirme el traslado.',
+      })
       continue
     }
     if (existingDoc) {
@@ -496,8 +604,16 @@ export async function ingestScanReport(
         context: { systemJob: true },
         data: {
           ...technical,
-          ...(incomingIsLatest ? { agent: auth.agentId, office: auth.officeId,
-            identity_key: assetIdentityKey(auth.organizationId, auth.officeId, { ...asset, mac: technical.mac ?? '' }) } : {}),
+          ...(incomingIsLatest
+            ? {
+                agent: auth.agentId,
+                office: auth.officeId,
+                identity_key: assetIdentityKey(auth.organizationId, auth.officeId, {
+                  ...asset,
+                  mac: technical.mac ?? '',
+                }),
+              }
+            : {}),
           organization: auth.organizationId,
           ...(existingDoc.status === 'retired' || !incomingIsLatest ? {} : { status: 'active' }),
           ...(existingDoc.identification_status === 'confirmed' &&
@@ -532,6 +648,11 @@ export async function ingestScanReport(
     processedAssetIds.push(technical.asset_id)
   }
 
-  await enqueueRiskRecalculation(payload, auth.organizationId, [auth.officeId, ...presenceOffices], req)
+  await enqueueRiskRecalculation(
+    payload,
+    auth.organizationId,
+    [auth.officeId, ...presenceOffices],
+    req
+  )
   return { processedAssetIds, processedDocumentIds, rejectedAssets }
 }

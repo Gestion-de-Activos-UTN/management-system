@@ -50,7 +50,11 @@ import { assetBusinessEndpoint } from './endpoints/assetBusiness'
 import { agingSweepEndpoint, expireRawScanPayloadsEndpoint } from './endpoints/internalJobs'
 import { agingSweep } from './domain/inventories/agingSweep'
 import { generateInventorySnapshotEndpoint } from './endpoints/inventorySnapshots'
-import { orgMembersEndpoint, updateOrgMemberEndpoint } from './endpoints/orgMembers'
+import {
+  orgMemberDeactivationImpactEndpoint,
+  orgMembersEndpoint,
+  updateOrgMemberEndpoint,
+} from './endpoints/orgMembers'
 import { officeEndpoints } from './endpoints/offices'
 import { myProfileEndpoints } from './endpoints/myProfile'
 import {
@@ -62,6 +66,7 @@ import { agentProvisioningEndpoint } from './endpoints/agentProvisioning'
 import { officeAgentSummaryEndpoint } from './endpoints/officeAgentSummary'
 import { dashboardMetricsEndpoint } from './endpoints/dashboardMetrics'
 import { platformDashboardEndpoint } from './endpoints/platformDashboard'
+import { platformOrganizationEndpoints } from './endpoints/platformOrganizations'
 import { agentRevokeEndpoint } from './endpoints/agentRevoke'
 import { expireRawScanPayloads } from './domain/inventories/expireRawScanPayloads'
 import { reconcileExpiredAssessments } from './domain/assessments/reconcileExpiredAssessments'
@@ -152,6 +157,7 @@ export default buildConfig({
     generateInventorySnapshotEndpoint,
     orgMembersEndpoint,
     updateOrgMemberEndpoint,
+    orgMemberDeactivationImpactEndpoint,
     organizationSettingsGetEndpoint,
     organizationSettingsUpdateEndpoint,
     organizationMaturityUpdateEndpoint,
@@ -159,6 +165,7 @@ export default buildConfig({
     officeAgentSummaryEndpoint,
     dashboardMetricsEndpoint,
     platformDashboardEndpoint,
+    ...platformOrganizationEndpoints,
     agentRevokeEndpoint,
     // Specific bulk routes must precede /v1/assessments/:id/* or Payload treats "bulk" as an id.
     bulkAssessmentPreviewEndpoint,
@@ -198,8 +205,29 @@ export default buildConfig({
           { name: 'organization_id', type: 'text', required: true },
           { name: 'office_id', type: 'text' },
         ],
-        outputSchema: [{ name: 'evaluation_id', type: 'text', required: true }],
+        // Sin evaluation_id cuando la organización o la oficina quedaron inactivas entre el
+        // encolado y la corrida: no cuentan en riesgo y no se persiste nada.
+        outputSchema: [{ name: 'evaluation_id', type: 'text' }],
         handler: async ({ input, req }) => {
+          const [organization, office] = await Promise.all([
+            req.payload.findByID({
+              collection: 'organizations',
+              id: input.organization_id,
+              overrideAccess: true,
+              req,
+              depth: 0,
+            }),
+            input.office_id
+              ? req.payload.findByID({
+                  collection: 'offices',
+                  id: input.office_id,
+                  overrideAccess: true,
+                  req,
+                  depth: 0,
+                })
+              : null,
+          ])
+          if (organization.is_active === false || office?.is_active === false) return { output: {} }
           const evaluation = await recalculateRisk(
             req.payload,
             { organizationId: input.organization_id, officeId: input.office_id || undefined },

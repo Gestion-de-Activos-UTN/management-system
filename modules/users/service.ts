@@ -50,6 +50,27 @@ export function updateOrgMember(userId: string, input: MemberUpdate, asOrganizat
   })
 }
 
+/** Lo que pasa al desactivar a una persona (endpoints/orgMembers.ts). */
+export type MemberDeactivationImpact = {
+  owned_assets: Array<{
+    id: string
+    collection: 'assets' | 'non-network-assets'
+    name: string
+    office_id: string
+    office_name: string
+    office_active: boolean
+  }>
+  in_progress_tasks: number
+  assigned_tasks: number
+}
+
+export function getMemberDeactivationImpact(userId: string, asOrganization?: string) {
+  return httpClient.get<MemberDeactivationImpact>(
+    `/api/v1/org-members/${userId}/deactivation-impact`,
+    { asOrganization }
+  )
+}
+
 export function getMyProfile() {
   return httpClient.get<MyProfile>('/api/v1/me/profile')
 }
