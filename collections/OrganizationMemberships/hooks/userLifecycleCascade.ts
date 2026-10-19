@@ -14,7 +14,7 @@ export const linkMembershipToUser: CollectionAfterChangeHook = async ({ doc, ope
   return doc
 }
 
-// Cascada: is_active true->false desactiva Users.status (ciclo de vida, doc 04 regla 5).
+// Cascada: is_active true->false desactiva Users.status (ciclo de vida, doc 03 "Desactivación de oficina y de personas").
 // Reactivar la membership NO revierte esto automáticamente (mismo criterio que
 // la desactivación de organización, doc 03 — exige revisión manual explícita).
 export const cascadeDeactivationToUser: CollectionAfterChangeHook = async ({

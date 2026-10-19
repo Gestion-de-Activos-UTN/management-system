@@ -1401,8 +1401,8 @@ it('FOLLOWUP: compact enriched seed covers reassignment, automatic cancellation 
   expect(
     (await payload.count({ collection: 'non-network-assets', overrideAccess: true, where: scope }))
       .totalDocs
-  ).toBe(18)
-  expect(tasks).toHaveLength(22)
+  ).toBe(21) // 18 de la demo + 3 del cierre de Córdoba (seedLifecycleScenario, ya aplicado antes)
+  expect(tasks).toHaveLength(24) // 22 de la demo + 2 de Lucía (liberada y cancelada)
   const repeat = await seedDemoData(payload, { profile: 'expanded' })
   expect(repeat).toMatchObject({
     reportsProcessed: 0,

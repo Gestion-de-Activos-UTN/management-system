@@ -27,7 +27,15 @@ import {
 import { relationId } from '@/lib/relationId'
 import { createHash } from 'node:crypto'
 import { withTransaction } from '@/domain/with-transaction'
-import { DEMO_OFFICES, isDemoOffice } from './demo-offices'
+import {
+  DEMO_OFFICES,
+  LIFECYCLE_DEMO_MANAGER,
+  LIFECYCLE_DEMO_OFFICE,
+  isDemoOffice,
+} from './demo-offices'
+import { deactivateOffice } from '@/domain/offices/office-lifecycle'
+import { updateMember } from '@/domain/organizations/member-admin'
+import { organizationAdminLock } from '@/domain/organizations/admin-actions'
 
 const seedKey = (organization: string, kind: string, label: string) =>
   createHash('sha256')
@@ -56,6 +64,8 @@ export interface SeedDemoDataSummary {
   assessmentsCompleted: number
   tasksCreated: number
   snapshotsCreated: number
+  /** Se cerró Córdoba y se desactivó a Lucía con el flujo real (sólo la primera vez). */
+  lifecycleScenarioApplied: boolean
 }
 
 const at = (now: Date, offsetMs: number) => new Date(now.getTime() + offsetMs).toISOString()
@@ -530,15 +540,7 @@ async function ensureManualAsset(
   req: PayloadRequest,
   input: {
     alias: string
-    category:
-      | 'computer'
-      | 'software_license'
-      | 'cloud_asset'
-      | 'provider_service'
-      | 'backup'
-      | 'information_repository'
-      | 'physical_record'
-      | 'removable_media'
+    category: NonNetworkAsset['asset_category']
     criticality: 'low' | 'medium' | 'high' | 'critical'
     ownerId: string
     officeId: string
@@ -639,6 +641,102 @@ async function seedAssessment(
       req
     )
   return complete
+}
+
+/**
+ * Cierre de una oficina con el flujo real de la app, para que la demo muestre lo que deja:
+ * Córdoba (de Lucía) se desactiva moviendo un activo a Rosario y dando otro de baja, y después
+ * se desactiva a Lucía. Quedan activos "Sin responsable", tareas liberadas y canceladas, y
+ * revisiones de una oficina inactiva. Sólo corre mientras Córdoba sigue activa (idempotente).
+ */
+async function seedLifecycleScenario(
+  payload: Payload,
+  core: Awaited<ReturnType<typeof requiredCore>>,
+  summary: SeedDemoDataSummary
+): Promise<boolean> {
+  const organizationId = core.organizationId
+  const [office, manager] = await Promise.all([
+    findOne<Office>(payload, 'offices', {
+      and: [
+        { organization: { equals: organizationId } },
+        { name: { equals: LIFECYCLE_DEMO_OFFICE.name } },
+      ],
+    }),
+    findOne<User>(payload, 'users', { email: { equals: LIFECYCLE_DEMO_MANAGER.email } }),
+  ])
+  if (!office || office.is_active === false || !manager) return false
+  const officeId = String(office.id)
+  const managerId = String(manager.id)
+  const secondaryOfficeId = String(core.secondaryOffice.id)
+  const adminId = String(core.users.admin.id)
+  const ctx = tenantContext(adminId, organizationId, [
+    String(core.mainOffice.id),
+    secondaryOfficeId,
+    officeId,
+  ])
+  const manual = async (
+    alias: string,
+    officeIdFor: string,
+    category: 'computer' | 'printer' | 'mobile_device'
+  ) => {
+    const result = await ensureManualAsset(payload, humanRequest(payload, adminId), {
+      organizationId,
+      officeId: officeIdFor,
+      ownerId: managerId,
+      alias,
+      category,
+      criticality: 'medium',
+      location: 'Mostrador',
+      reviewInterval: '1m',
+    })
+    if (result.created) summary.manualAssetsCreated += 1
+    return result
+  }
+  const notebook = await manual('Córdoba · Notebook del mostrador', officeId, 'computer')
+  const printer = await manual('Córdoba · Impresora del depósito', officeId, 'printer')
+  await manual('Depósito · Tablet de inventario', secondaryOfficeId, 'mobile_device')
+  const startAt = new Date(Date.now() - 2 * DAY).toISOString()
+  for (const task of [
+    { title: 'Córdoba · Inventariar el mostrador', officeId },
+    { title: 'Depósito · Etiquetar las tablets', officeId: secondaryOfficeId },
+  ])
+    summary.tasksCreated += Number(
+      await ensureTask(payload, ctx, {
+        ...task,
+        description: 'Tarea tomada por quien administraba la sucursal de Córdoba.',
+        priority: 'normal',
+        startAt,
+        finalState: 'in_progress',
+        assignedUserId: managerId,
+      })
+    )
+
+  const req = humanRequest(payload, adminId)
+  const lock = { lockKey: organizationAdminLock(organizationId) }
+  await withTransaction(
+    payload,
+    req,
+    () =>
+      deactivateOffice(req, organizationId, officeId, {
+        confirm_name: office.name,
+        manual_asset_decisions: [
+          { asset_id: String(notebook.doc.id), destination: secondaryOfficeId },
+          { asset_id: String(printer.doc.id), destination: 'retire' },
+        ],
+      }),
+    lock
+  )
+  const memberReq = humanRequest(payload, adminId)
+  await withTransaction(
+    payload,
+    memberReq,
+    () =>
+      updateMember(memberReq, { ...ctx, organizationId }, managerId, {
+        is_active: false,
+      }),
+    lock
+  )
+  return true
 }
 
 function tenantContext(userId: string, organizationId: string, officeIds: string[]): TenantContext {
@@ -891,6 +989,7 @@ export async function seedDemoData(
     assessmentsCompleted: 0,
     tasksCreated: 0,
     snapshotsCreated: 0,
+    lifecycleScenarioApplied: false,
   }
 
   const settings = await findOne<OrganizationSetting>(payload, 'organization-settings', {
@@ -1589,5 +1688,6 @@ export async function seedDemoData(
     }
   }
   await ensureDemoPortalMessages(payload, core, now)
+  summary.lifecycleScenarioApplied = await seedLifecycleScenario(payload, core, summary)
   return summary
 }

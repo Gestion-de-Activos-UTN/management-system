@@ -14,7 +14,8 @@ export function MemberSelect({
   ...props
 }: Omit<SelectProps, 'data'> & {
   members: MemberOption[]
-  emptyOption?: { value: string; label: string }
+  /** `disabled`: se muestra para explicar el valor actual, pero la persona no puede elegirla. */
+  emptyOption?: { value: string; label: string; disabled?: boolean }
 }) {
   return (
     <Select

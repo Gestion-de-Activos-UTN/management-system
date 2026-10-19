@@ -1,6 +1,7 @@
 import type { CollectionSlug, Payload, PayloadRequest, Where } from 'payload'
 import type { Asset, ComplianceResult, NonNetworkAsset } from '@/app/types/payload-types'
 import { relationId } from '@/lib/relationId'
+import { findActiveOffices } from '@/domain/offices/active-offices'
 import { evaluateNetworkBaseline } from '@/domain/assessments/evaluateNetworkBaseline'
 import { evaluateOfficeMonitoring } from '@/domain/assessments/evaluateAutomaticCompliance'
 import { isAssetExcludedFromAssessments } from '@/domain/assessments/asset-assessment-scope'
@@ -83,8 +84,12 @@ function networkAsset(doc: Asset, now: Date): RiskInputAsset {
     excluded: isAssetExcludedFromAssessments(doc, now),
     network: {
       current: doc.status !== 'offline',
-      complete: coverage?.port_scan === 'complete' && coverage?.service_detection === 'complete' &&
-        !(doc.services ?? []).some(service => !['open', 'closed'].includes(service.state ?? 'unknown')),
+      complete:
+        coverage?.port_scan === 'complete' &&
+        coverage?.service_detection === 'complete' &&
+        !(doc.services ?? []).some(
+          service => !['open', 'closed'].includes(service.state ?? 'unknown')
+        ),
       services: classified,
     },
   }
@@ -134,9 +139,11 @@ export async function recalculateRisk(
 ) {
   const now = input.now ?? new Date()
   const organization = { organization: { equals: input.organizationId } }
-  const scope: Where[] = input.officeId
-    ? [organization, { office: { equals: input.officeId } }]
-    : [organization]
+  // Inactive offices never count: their assets left the organization's exposure.
+  const activeOfficeIds = (await findActiveOffices(payload, input.organizationId, req))
+    .map(office => String(office.id))
+    .filter(id => !input.officeId || id === input.officeId)
+  const scope: Where[] = [organization, { office: { in: activeOfficeIds } }]
   const notRetired = { status: { not_equals: 'retired' } }
 
   const [settings, networkDocs, manualDocs, results] = await Promise.all([
@@ -148,8 +155,17 @@ export async function recalculateRisk(
       depth: 0,
       limit: 1,
     }),
-    findAll<Asset>(payload, 'assets', { and: [...scope, notRetired] }, req),
-    findAll<NonNetworkAsset>(payload, 'non-network-assets', { and: [...scope, notRetired] }, req),
+    activeOfficeIds.length
+      ? findAll<Asset>(payload, 'assets', { and: [...scope, notRetired] }, req)
+      : Promise.resolve([] as Asset[]),
+    activeOfficeIds.length
+      ? findAll<NonNetworkAsset>(
+          payload,
+          'non-network-assets',
+          { and: [...scope, notRetired] },
+          req
+        )
+      : Promise.resolve([] as NonNetworkAsset[]),
     // Organization-wide on purpose: an office evaluation still inherits organization answers.
     // Only current answers are loaded; expired ones leave the pair not evaluable (aging, §3.10).
     findAll<ComplianceResult>(

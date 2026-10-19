@@ -128,64 +128,66 @@ export default function TasksPage() {
           )}
         </Tabs.List>
       </Tabs>
-      <FilterBar>
-        <TextInput
-          placeholder="Buscar tarea o entidad..."
-          aria-label="Buscar"
-          leftSection={<Search size={16} strokeWidth={1.5} />}
-          value={search}
-          onChange={event => setSearch(event.currentTarget.value)}
-          w="100%"
-        />
-        {view !== 'pool' && (
-          <MultiFilterSelect
-            ariaLabel="Estado"
-            allLabel="Todos los estados"
-            data={ALL_STATUSES}
-            value={status}
-            onChange={setStatus}
+      <Stack key={view} gap="md" className="tab-panel-enter">
+        <FilterBar>
+          <TextInput
+            placeholder="Buscar tarea o entidad..."
+            aria-label="Buscar"
+            leftSection={<Search size={16} strokeWidth={1.5} />}
+            value={search}
+            onChange={event => setSearch(event.currentTarget.value)}
+            w="100%"
           />
-        )}
-        <MultiFilterSelect
-          ariaLabel="Prioridad"
-          allLabel="Todas las prioridades"
-          data={PRIORITY_OPTIONS}
-          value={priority}
-          onChange={setPriority}
+          {view !== 'pool' && (
+            <MultiFilterSelect
+              ariaLabel="Estado"
+              allLabel="Todos los estados"
+              data={ALL_STATUSES}
+              value={status}
+              onChange={setStatus}
+            />
+          )}
+          <MultiFilterSelect
+            ariaLabel="Prioridad"
+            allLabel="Todas las prioridades"
+            data={PRIORITY_OPTIONS}
+            value={priority}
+            onChange={setPriority}
+          />
+          {view === 'pool' && (
+            <Tooltip label="Disponibilidad">
+              <SegmentedControl
+                aria-label="Disponibilidad"
+                fullWidth
+                data={POOL_STATUS_OPTIONS}
+                value={status[0] ?? 'all'}
+                onChange={value => setStatus(value === 'all' ? [] : [value])}
+              />
+            </Tooltip>
+          )}
+          {showArchivedToggle && (
+            <Tooltip label="Las tareas completadas o canceladas se archivan para despejar la lista">
+              <SegmentedControl
+                aria-label="Tareas archivadas"
+                fullWidth
+                data={[
+                  { value: 'hide', label: 'Sin archivar' },
+                  { value: 'include', label: 'Todas' },
+                ]}
+                value={includeArchived ? 'include' : 'hide'}
+                onChange={value => setIncludeArchived(value === 'include')}
+              />
+            </Tooltip>
+          )}
+        </FilterBar>
+        <DataTable
+          columns={columns}
+          data={visibleTasks}
+          isLoading={tasks.isPending}
+          emptyLabel={EMPTY_LABELS[view]}
+          minWidth={850}
         />
-        {view === 'pool' && (
-          <Tooltip label="Disponibilidad">
-            <SegmentedControl
-              aria-label="Disponibilidad"
-              fullWidth
-              data={POOL_STATUS_OPTIONS}
-              value={status[0] ?? 'all'}
-              onChange={value => setStatus(value === 'all' ? [] : [value])}
-            />
-          </Tooltip>
-        )}
-        {showArchivedToggle && (
-          <Tooltip label="Las tareas completadas o canceladas se archivan para despejar la lista">
-            <SegmentedControl
-              aria-label="Tareas archivadas"
-              fullWidth
-              data={[
-                { value: 'hide', label: 'Sin archivar' },
-                { value: 'include', label: 'Todas' },
-              ]}
-              value={includeArchived ? 'include' : 'hide'}
-              onChange={value => setIncludeArchived(value === 'include')}
-            />
-          </Tooltip>
-        )}
-      </FilterBar>
-      <DataTable
-        columns={columns}
-        data={visibleTasks}
-        isLoading={tasks.isPending}
-        emptyLabel={EMPTY_LABELS[view]}
-        minWidth={850}
-      />
+      </Stack>
       <Modal
         opened={opened}
         onClose={() => setOpened(false)}

@@ -6,6 +6,7 @@ import { adminErrorResponse, organizationAdminLock } from '../domain/organizatio
 import { withTransaction } from '../domain/with-transaction'
 import { updateMember } from '../domain/organizations/member-admin'
 import { MemberUpdateSchema } from '../modules/users/schema'
+import { ownedAssetsSummary } from '../domain/organizations/member-responsibilities'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
@@ -109,5 +110,69 @@ export const updateOrgMemberEndpoint: Endpoint = {
     } catch (error) {
       return adminErrorResponse(error)
     }
+  },
+}
+
+// Qué pasa al desactivar a una persona: sus activos a cargo (para elegir un reemplazo), las
+// tareas en curso que vuelven a pendientes y las asignadas que van a pedir reasignación.
+export const orgMemberDeactivationImpactEndpoint: Endpoint = {
+  path: '/v1/org-members/:id/deactivation-impact',
+  method: 'get',
+  handler: async req => {
+    const ctx = await getTenantContext(req)
+    if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
+    if (
+      !ctx.organizationId ||
+      !canDo(ctx.role, 'organization-memberships', 'update', ctx.organizationId)
+    ) {
+      return json({ error: 'forbidden' }, 403)
+    }
+    const organizationId = ctx.organizationId
+    const userId = String(req.routeParams?.id ?? '')
+    const membership = await req.payload.find({
+      collection: 'organization-memberships',
+      where: {
+        and: [{ organization: { equals: organizationId } }, { user: { equals: userId } }],
+      },
+      overrideAccess: true,
+      req,
+      depth: 0,
+      limit: 1,
+    })
+    if (!membership.docs[0]) return json({ error: 'member_not_found' }, 404)
+    const openTasks = { organization: { equals: organizationId } }
+    const [ownedAssets, inProgress, assigned] = await Promise.all([
+      ownedAssetsSummary(req, organizationId, userId),
+      req.payload.count({
+        collection: 'tasks',
+        where: {
+          and: [
+            openTasks,
+            { status: { equals: 'in_progress' } },
+            { 'claimed_by.relationTo': { equals: 'users' } },
+            { 'claimed_by.value': { equals: userId } },
+          ],
+        },
+        overrideAccess: true,
+        req,
+      }),
+      req.payload.count({
+        collection: 'tasks',
+        where: {
+          and: [
+            openTasks,
+            { status: { in: ['pending', 'in_progress'] } },
+            { assigned_user: { equals: userId } },
+          ],
+        },
+        overrideAccess: true,
+        req,
+      }),
+    ])
+    return json({
+      owned_assets: ownedAssets,
+      in_progress_tasks: inProgress.totalDocs,
+      assigned_tasks: assigned.totalDocs,
+    })
   },
 }

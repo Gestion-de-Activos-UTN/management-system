@@ -38,13 +38,30 @@ export default function SecurityReviewPage() {
   // Abre con las revisiones vigentes: todo menos las reemplazadas por un ciclo nuevo.
   const [status, setStatus] = useState<string[]>(CURRENT_STATUSES)
   const [assignment, setAssignment] = useState('all')
+  // Las oficinas inactivas no cuentan: sus revisiones quedan ocultas salvo que se pidan.
+  const [officeState, setOfficeState] = useState('active')
   const tenant = useTenantContext(asOrganization)
+  // La lista respeta el alcance del rol: toda la organización o todas sus oficinas asignadas.
+  // selectedOfficeId sólo acota el resumen, porque el riesgo se calcula por oficina.
   const query = useAssessments({
-    officeId: selectedOfficeId,
     asOrganization,
   })
   const risk = useRiskSummary({ officeId: selectedOfficeId, asOrganization, enabled: ready })
-  const rows = (query.data?.docs ?? []).filter(
+  const docs = query.data?.docs ?? []
+  const fromInactiveOffice = (item: (typeof docs)[number]) =>
+    typeof item.office === 'object' && item.office?.is_active === false
+  const hasInactiveOffices = docs.some(fromInactiveOffice)
+  // Con una oficina elegida, el resumen cuenta las de esa oficina y las de la organización (que
+  // también pesan en su evaluación), igual que la tarjeta de riesgo de al lado.
+  const summaryDocs = docs.filter(
+    item =>
+      !fromInactiveOffice(item) &&
+      (!selectedOfficeId ||
+        item.scope === 'organization' ||
+        (item.office && relationId(item.office) === selectedOfficeId))
+  )
+  const scoped = officeState === 'all' ? docs : docs.filter(item => !fromInactiveOffice(item))
+  const rows = scoped.filter(
     item =>
       (!status.length || status.includes(item.status)) &&
       (assignment === 'mine'
@@ -73,7 +90,7 @@ export default function SecurityReviewPage() {
       />
       {!query.isPending && !query.isError && (
         <SecurityReviewSummary
-          assessments={query.data?.docs ?? []}
+          assessments={summaryDocs}
           riskSummary={risk.data}
           riskHref={portalHref('/portal/risk-score', asOrganization)}
         />
@@ -99,6 +116,20 @@ export default function SecurityReviewPage() {
               onChange={setAssignment}
             />
           </Tooltip>
+          {hasInactiveOffices && (
+            <Tooltip label="Oficinas">
+              <SegmentedControl
+                aria-label="Oficinas"
+                fullWidth
+                data={[
+                  { value: 'active', label: 'Activas' },
+                  { value: 'all', label: 'Todas' },
+                ]}
+                value={officeState}
+                onChange={setOfficeState}
+              />
+            </Tooltip>
+          )}
         </FilterBar>
       </Stack>
       {query.isPending ? (

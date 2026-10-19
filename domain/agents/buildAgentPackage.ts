@@ -194,6 +194,9 @@ To scan a specific network:
 
   ./start-agent.sh --once --network 192.168.1.0/24
 
+If the platform deactivates this scanner (for example, its office was deactivated), it stops
+by itself within a few minutes, exits with code 3 and does not scan again. Uninstall it then.
+
 The first run creates a local virtual environment and installs requirements.txt.
 When started with sudo, the launcher installs dependencies as the invoking user,
 then runs the scan with elevated privileges. The launcher is a source script; this
@@ -232,6 +235,9 @@ Run continuously:
 To scan a specific network:
 
   .\\start-agent.cmd --once --network 192.168.1.0/24
+
+If the platform deactivates this scanner (for example, its office was deactivated), it stops
+by itself within a few minutes, exits with code 3 and does not scan again. Uninstall it then.
 
 start-agent.cmd only forwards to start-agent.ps1, which does the real work: it reads
 .env, and on the first run creates a local virtual environment and installs

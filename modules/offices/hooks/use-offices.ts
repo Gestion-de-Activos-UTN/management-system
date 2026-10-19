@@ -7,9 +7,9 @@ import {
   listOffices,
   revokeAgent,
   saveOffice,
-  setOfficeActive,
+  setOfficeStatus,
 } from '../service'
-import type { OfficeInput } from '../schema'
+import type { OfficeInput, OfficeStatusInput } from '../schema'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Office } from '@/app/types/payload-types'
 import { notifications } from '@mantine/notifications'
@@ -61,12 +61,22 @@ export function useRevokeAgent() {
 }
 
 // Una oficina nueva o (des)activada cambia el selector de oficinas, el tenant context (oficinas
-// de cada persona), los escáneres y la lista de miembros (desactivados en cascada).
+// de cada persona), los escáneres, la lista de miembros (desactivados en cascada) y, al
+// desactivarla, activos (movidos o dados de baja), tareas (canceladas), revisiones y riesgo.
 function invalidateOfficeScope(queryClient: ReturnType<typeof useQueryClient>) {
   return Promise.all(
-    ['offices', 'office-agent-summary', 'tenant-context', 'org-members'].map(key =>
-      queryClient.invalidateQueries({ queryKey: [key] })
-    )
+    [
+      'offices',
+      'office-agent-summary',
+      'tenant-context',
+      'org-members',
+      'assets',
+      'non-network-assets',
+      'tasks',
+      'assessments',
+      'risk',
+      'dashboard-metrics',
+    ].map(key => queryClient.invalidateQueries({ queryKey: [key] }))
   )
 }
 
@@ -94,19 +104,14 @@ export function useOfficeDeactivationImpact(officeId: string | null, asOrganizat
   })
 }
 
-export function useSetOfficeActive(asOrganization?: string) {
+export function useSetOfficeStatus(asOrganization?: string) {
   const queryClient = useQueryClient()
-  return useMutation<
-    unknown,
-    HttpError,
-    { id: string; isActive: boolean; confirmMemberDeactivation?: boolean }
-  >({
-    mutationFn: ({ id, isActive, confirmMemberDeactivation = false }) =>
-      setOfficeActive(id, isActive, confirmMemberDeactivation, asOrganization),
-    onSuccess: (_, { isActive }) => {
+  return useMutation<unknown, HttpError, { id: string; input: OfficeStatusInput }>({
+    mutationFn: ({ id, input }) => setOfficeStatus(id, input, asOrganization),
+    onSuccess: (_, { input }) => {
       notifications.show({
         color: 'green',
-        message: isActive ? 'Oficina reactivada.' : 'Oficina desactivada.',
+        message: input.is_active ? 'Oficina reactivada.' : 'Oficina desactivada.',
       })
       return invalidateOfficeScope(queryClient)
     },

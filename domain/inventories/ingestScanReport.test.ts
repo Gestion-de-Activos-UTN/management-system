@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import type { Payload } from 'payload'
-import { ingestScanReport } from './ingestScanReport'
+import { ingestScanReport, pickMacMatch } from './ingestScanReport'
 import type { AssetPayload } from '../../contracts/asset.schema'
 import type { ScanReportPayload } from '../../contracts/scan-report.schema'
 import type { AgentAuthResult } from '../../access/middleware/resolveAgentAuth'
@@ -121,13 +121,14 @@ function makePayloadWithDocs(docs: Array<Record<string, unknown>>) {
     async find({ where }: { where: Record<string, { equals?: unknown; exists?: boolean }> }) {
       const macEquals = where.mac?.equals
       const ipEquals = where.ip?.equals
-      const match = docs.find(doc => {
-        if (macEquals !== undefined && doc.mac !== macEquals) return false
-        if (where.mac?.exists === false && doc.mac) return false
-        if (ipEquals !== undefined && doc.ip !== ipEquals) return false
-        return true
-      })
-      return { docs: match ? [match] : [] }
+      return {
+        docs: docs.filter(doc => {
+          if (macEquals !== undefined && doc.mac !== macEquals) return false
+          if (where.mac?.exists === false && doc.mac) return false
+          if (ipEquals !== undefined && doc.ip !== ipEquals) return false
+          return true
+        }),
+      }
     },
     async update({ id, data }: { id: unknown; data: Record<string, unknown> }) {
       updates.push({ id, data })
@@ -755,4 +756,58 @@ test('reconcilia el mismo host por MAC aunque lo reporten agentes distintos', as
     (updates[0].data.observed_agents as Array<{ agent: string }>).map(row => row.agent),
     ['agent-1', 'agent-2']
   )
+})
+
+test('pickMacMatch: un registro dado de baja o eliminado en otra oficina es historial, no el mismo equipo', () => {
+  const retiredElsewhere = { id: 'old', office: 'office-gone', status: 'retired', deleted_at: null }
+  const deletedElsewhere = {
+    id: 'del',
+    office: 'office-gone',
+    status: 'active',
+    deleted_at: '2026-01-01',
+  }
+  const activeElsewhere = { id: 'moved', office: 'office-2', status: 'active', deleted_at: null }
+  const retiredHere = { id: 'here', office: 'office-1', status: 'retired', deleted_at: null }
+
+  assert.deepEqual(pickMacMatch([retiredElsewhere, deletedElsewhere], 'office-1'), {
+    match: undefined,
+    historical: [retiredElsewhere, deletedElsewhere],
+  })
+  assert.equal(
+    pickMacMatch([retiredElsewhere, activeElsewhere], 'office-1').match,
+    activeElsewhere,
+    'un equipo vigente en otra oficina sigue siendo el mismo (incidente de ubicación)'
+  )
+  assert.equal(
+    pickMacMatch([activeElsewhere, retiredHere], 'office-1').match,
+    retiredHere,
+    'en la misma oficina un dado de baja sigue matcheando: no revive solo'
+  )
+})
+
+test('un equipo dado de baja en otra oficina que aparece acá se carga como nuevo y el registro viejo suelta su clave', async () => {
+  const mac = '00:11:22:33:44:55' // MAC global: la búsqueda cruza oficinas
+  const historical = {
+    id: 'retired-1',
+    office: 'office-gone',
+    mac,
+    ip: '10.9.9.9',
+    status: 'retired',
+    identity_key: `${AUTH.organizationId}:mac:${mac}`,
+    alias: 'Notebook de la oficina cerrada',
+  }
+  const { payload, updates, creates } = makePayloadWithDocs([historical])
+
+  await ingestScanReport(payload, makeReport([makeAsset({ ip: '10.0.0.7', mac })]), AUTH)
+
+  assert.equal(creates.length, 1, 'se crea en la oficina donde se lo ve')
+  assert.equal(creates[0].office, AUTH.officeId)
+  assert.equal(creates[0].identity_key, `${AUTH.organizationId}:mac:${mac}`)
+  assert.deepEqual(
+    updates.find(update => update.id === 'retired-1')?.data,
+    { identity_key: null },
+    'el registro histórico sólo suelta la clave: no se mueve ni revive'
+  )
+  assert.equal(historical.status, 'retired')
+  assert.equal(historical.office, 'office-gone')
 })

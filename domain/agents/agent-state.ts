@@ -7,7 +7,12 @@ export type AgentLifecycleStatus = (typeof AGENT_LIFECYCLE_STATUSES)[number]
 export const AGENT_RUNTIME_STATUSES = ['idle', 'scanning', 'unknown'] as const
 export type AgentRuntimeStatus = (typeof AGENT_RUNTIME_STATUSES)[number]
 
-export const AGENT_REVOCATION_REASONS = ['manual', 'auto_lockout_abuse', 'office_deactivated'] as const
+export const AGENT_REVOCATION_REASONS = [
+  'manual',
+  'auto_lockout_abuse',
+  'office_deactivated',
+  'organization_deactivated',
+] as const
 export type AgentRevocationReason = (typeof AGENT_REVOCATION_REASONS)[number]
 
 // Umbrales del lockout escalonado por intentos fallidos (ver resolveAgentAuth.ts). El lockout
@@ -71,10 +76,7 @@ export type AgentConnectivity = (typeof AGENT_CONNECTIVITY_STATUSES)[number]
 // Presentación derivada del mismo estado autoritativo — colección (afterRead de `status`), cuota
 // y UI (officeAgentSummary.ts, AgentProvisionModal.tsx) deben llamar a esto en vez de reimplementar
 // la combinación lifecycle/heartbeat cada uno por su lado.
-export function getAgentConnectivity(
-  agent: AgentStateInput,
-  now = new Date()
-): AgentConnectivity {
+export function getAgentConnectivity(agent: AgentStateInput, now = new Date()): AgentConnectivity {
   if (getAgentLifecycleStatus(agent) === 'revoked') return 'revoked'
   if (!agent.last_heartbeat_at) return 'pending'
   return isAgentOnline(agent, now) ? 'online' : 'offline'

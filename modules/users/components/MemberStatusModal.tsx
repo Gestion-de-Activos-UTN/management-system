@@ -1,10 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import { Alert, Button, Group, Modal, MultiSelect, Stack, Text } from '@mantine/core'
-import { UserCheck, UserX } from 'lucide-react'
-import type { OrgMember } from '../service'
-import { useUpdateOrgMember } from '../hooks/use-org-members'
+import { Alert, Button, Group, Loader, Modal, MultiSelect, Stack, Text } from '@mantine/core'
+import { ClipboardList, Package, UserCheck, UserX } from 'lucide-react'
+import { MetricsStrip } from '@/components/ui/MetricsStrip'
+import { memberCoversOffice, type OrgMember } from '../service'
+import {
+  useMemberDeactivationImpact,
+  useOrgMembers,
+  useUpdateOrgMember,
+} from '../hooks/use-org-members'
+import { MemberSelect } from './MemberSelect'
+
+const NO_REPLACEMENT = '__no_replacement__'
 
 type OfficeOption = { value: string; label: string }
 
@@ -61,12 +69,29 @@ function MemberStatusForm({
   // se desactivaron mientras tanto, se le asignan acá.
   const needsOffices = !deactivating && member.role !== 'org_admin' && !keptOffices.length
   const [officeIds, setOfficeIds] = useState<string[]>([])
+  const [replacementId, setReplacementId] = useState<string | null>(null)
+  const impact = useMemberDeactivationImpact(deactivating ? member.id : null, asOrganization)
+  const { data: members } = useOrgMembers(asOrganization)
+  const ownedAssets = impact.data?.owned_assets ?? []
+  // Sólo los activos de oficinas activas cambian de responsable; el reemplazo tiene que cubrirlas.
+  const reassignableOffices = [
+    ...new Set(ownedAssets.filter(asset => asset.office_active).map(asset => asset.office_id)),
+  ]
+  const candidates = (members ?? []).filter(
+    candidate =>
+      candidate.id !== member.id &&
+      reassignableOffices.every(officeId => memberCoversOffice(candidate, officeId))
+  )
 
   const confirm = () =>
     update.mutate(
       {
         userId: member.id,
-        input: { is_active: !deactivating, ...(needsOffices ? { office_ids: officeIds } : {}) },
+        input: {
+          is_active: !deactivating,
+          ...(needsOffices ? { office_ids: officeIds } : {}),
+          ...(deactivating && replacementId ? { replacement_owner_id: replacementId } : {}),
+        },
         message: deactivating ? `${name} quedó desactivada.` : `${name} quedó reactivada.`,
       },
       { onSuccess: onDone }
@@ -75,10 +100,62 @@ function MemberStatusForm({
   return (
     <Stack gap="md">
       {deactivating ? (
-        <Text size="sm">
-          <strong>{name}</strong> pierde el acceso de inmediato y se cierran sus sesiones abiertas.
-          Su historial se conserva y puedes reactivarla más adelante.
-        </Text>
+        <>
+          <Text size="sm">
+            <strong>{name}</strong> pierde el acceso de inmediato y se cierran sus sesiones
+            abiertas. Su historial se conserva y puedes reactivarla más adelante.
+          </Text>
+          {impact.isPending ? (
+            <Group gap="xs">
+              <Loader size="xs" />
+              <Text size="sm" c="dimmed">
+                Revisando sus activos y tareas…
+              </Text>
+            </Group>
+          ) : impact.data ? (
+            <>
+              <MetricsStrip
+                isPending={false}
+                metrics={[
+                  {
+                    key: 'assets',
+                    icon: Package,
+                    value: ownedAssets.length,
+                    label: 'Activos a su cargo',
+                  },
+                  {
+                    key: 'in-progress',
+                    icon: ClipboardList,
+                    value: impact.data.in_progress_tasks,
+                    label: 'Tareas en curso que vuelven a pendientes',
+                  },
+                  {
+                    key: 'assigned',
+                    icon: ClipboardList,
+                    value: impact.data.assigned_tasks,
+                    label: 'Tareas asignadas que piden reasignación',
+                  },
+                ]}
+              />
+              {ownedAssets.length > 0 && (
+                <MemberSelect
+                  label="Nuevo responsable de sus activos"
+                  description="Debe cubrir las oficinas de esos activos. Si no eliges a nadie, quedan sin responsable."
+                  members={candidates}
+                  emptyOption={{
+                    value: NO_REPLACEMENT,
+                    label: 'No asignar (quedan sin responsable)',
+                  }}
+                  value={replacementId ?? NO_REPLACEMENT}
+                  onChange={value =>
+                    setReplacementId(value && value !== NO_REPLACEMENT ? value : null)
+                  }
+                  comboboxProps={{ withinPortal: true }}
+                />
+              )}
+            </>
+          ) : null}
+        </>
       ) : (
         <Text size="sm">
           <strong>{name}</strong> vuelve a tener acceso con su rol anterior.
@@ -107,7 +184,7 @@ function MemberStatusForm({
         <Button
           color={deactivating ? 'red' : undefined}
           loading={update.isPending}
-          disabled={needsOffices && !officeIds.length}
+          disabled={(needsOffices && !officeIds.length) || (deactivating && impact.isPending)}
           leftSection={
             deactivating ? (
               <UserX size={16} strokeWidth={1.5} />

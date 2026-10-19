@@ -17,7 +17,9 @@ const NonNetworkAssetFieldsSchema = z.object({
     .regex(...TEXT_RULES.label),
   asset_category: z.enum(MANUAL_ASSET_CATEGORY_VALUES),
   criticality: z.enum(['low', 'medium', 'high', 'critical']),
-  owner: z.string().min(1, 'El responsable es obligatorio'),
+  // null = "Sin responsable": sólo lo pone el sistema (persona desactivada, activo movido de una
+  // oficina desactivada). Se puede conservar al editar; elegirlo no (la opción está deshabilitada).
+  owner: z.string().min(1, 'El responsable es obligatorio').nullable(),
   location: z
     .string()
     .trim()

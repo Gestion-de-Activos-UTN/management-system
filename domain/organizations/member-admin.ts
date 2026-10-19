@@ -2,7 +2,12 @@ import type { PayloadRequest } from 'payload'
 import type { TenantContext } from '@/access/tenant/resolveTenantContext'
 import { relationId } from '@/lib/relationId'
 import { ROLE_LABELS } from '@/lib/role-labels'
-import { AdminDomainError, subscriptionLimits } from '@/domain/organizations/admin-actions'
+import {
+  AdminDomainError,
+  assertOrganizationActive,
+  subscriptionLimits,
+} from '@/domain/organizations/admin-actions'
+import { reassignOwnedAssets } from '@/domain/organizations/member-responsibilities'
 import type { MemberUpdate, OrganizationRoleSlug } from '@/modules/users/schema'
 
 type Membership = {
@@ -51,7 +56,7 @@ async function roleBySlug(req: PayloadRequest, slug: OrganizationRoleSlug) {
   return { id: String(found.docs[0].id), slug, rank: Number(found.docs[0].rank) }
 }
 
-async function assertUserLimit(
+export async function assertUserLimit(
   req: PayloadRequest,
   organizationId: string,
   role: { id: string; slug: OrganizationRoleSlug },
@@ -120,6 +125,18 @@ export async function updateMember(
   if (userId === ctx.userId && input.is_active === false) {
     throw new AdminDomainError('cannot_deactivate_self', 409, 'No puedes desactivarte a ti mismo.')
   }
+  const replacementId = input.replacement_owner_id
+  if (replacementId) {
+    const replacement =
+      replacementId === userId ? null : await loadMembership(req, organizationId, replacementId)
+    if (!replacement?.is_active) {
+      throw new AdminDomainError(
+        'invalid_replacement',
+        400,
+        'El nuevo responsable tiene que ser otra persona activa de la organización.'
+      )
+    }
+  }
 
   const role =
     input.role && input.role !== membership.role.slug
@@ -129,6 +146,7 @@ export async function updateMember(
   const active = input.is_active ?? membership.is_active
   const reactivating = active && !membership.is_active
 
+  if (reactivating) await assertOrganizationActive(req, organizationId)
   if (active && (reactivating || roleChanged)) {
     await assertUserLimit(req, organizationId, role, membership.id)
   }
@@ -152,6 +170,12 @@ export async function updateMember(
     }
   }
 
+  // Antes de desactivar: el reemplazo todavía valida contra la persona activa, y después el hook
+  // releaseMemberResponsibilities ya no encuentra activos que dejar sin responsable.
+  if (replacementId && membership.is_active && !active) {
+    await reassignOwnedAssets(req, organizationId, userId, replacementId)
+  }
+
   // AUDIT: this action must emit an AuditLogs entry (membership.update — activate/deactivate/role/offices, chain_hash over {membership, role, offices, is_active}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   // NOTIFY: this event should trigger a Notification Bell entry for {the affected user, org_admins of this organization}
@@ -170,7 +194,7 @@ export async function updateMember(
   })
 
   // La cascada de desactivación pasa Users.status a inactive pero, a propósito, no lo revierte
-  // (doc 04 regla 5): reactivar es esta decisión explícita.
+  // (doc 03, cascada de personas): reactivar es esta decisión explícita.
   if (reactivating) {
     await req.payload.update({
       collection: 'users',

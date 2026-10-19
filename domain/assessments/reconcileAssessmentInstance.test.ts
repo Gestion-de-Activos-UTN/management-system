@@ -28,7 +28,7 @@ const manualComputer = {
   asset_category: 'computer',
 } as NonNetworkAsset
 
-function makePayload(openDocs: Array<Record<string, unknown>> = []) {
+function makePayload(openDocs: Array<Record<string, unknown>> = [], { officeActive = true } = {}) {
   const creates: Array<Record<string, unknown>> = []
   const updates: Array<Record<string, unknown>> = []
   const payload = {
@@ -40,6 +40,10 @@ function makePayload(openDocs: Array<Record<string, unknown>> = []) {
         return { docs: [{ features: { security_assessments: true } }] }
       }
       return { docs: openDocs }
+    },
+    async findByID({ collection, id }: { collection: string; id: string }) {
+      if (collection === 'offices') return { id, is_active: officeActive }
+      throw new Error(`unexpected findByID ${collection}`)
     },
     async create({ data }: { data: Record<string, unknown> }) {
       creates.push(data)
@@ -119,6 +123,22 @@ describe('asset assessment reconciliation', () => {
     assert.equal((updates[0].data as { status: string }).status, 'superseded')
   })
 
+  it('closes the open cycle and creates none when the office is inactive', async () => {
+    const existing = {
+      id: 'assessment-1',
+      organization: 'org-1',
+      office: 'office-1',
+      policy_key: 'essential',
+      policy_version: 2,
+      question_set_snapshot: [{ key: 'A.8.1.exclusive_use', version: 2 }],
+    }
+    const { payload, creates, updates } = makePayload([existing], { officeActive: false })
+    const result = await reconcileAssetAssessmentInstance(payload, workstation, 'policy_changed')
+    assert.equal(result.action, 'superseded')
+    assert.equal(creates.length, 0)
+    assert.equal((updates[0].data as { status: string }).status, 'superseded')
+  })
+
   it('preserves an identical open cycle and supersedes an inapplicable one', async () => {
     const question_set_snapshot = [
       'A.7.9.physical_protection',
@@ -192,6 +212,17 @@ describe('manually entered computer assessment reconciliation', () => {
       snapshot.some(question => question.key.startsWith('network.')),
       false
     )
+  })
+
+  it('creates no review for a manual computer in an inactive office', async () => {
+    const { payload, creates } = makePayload([], { officeActive: false })
+    const result = await reconcileManualAssetAssessmentInstance(
+      payload,
+      manualComputer,
+      'policy_changed'
+    )
+    assert.equal(result.action, 'none')
+    assert.equal(creates.length, 0)
   })
 
   it('creates the applicable v2 review for a manual mobile device', async () => {

@@ -100,20 +100,16 @@ const officeStatusEndpoint: Endpoint = {
       const parsed = OfficeStatusSchema.safeParse(await req.json!().catch(() => ({})))
       if (!parsed.success)
         return json({ error: 'invalid_status', issues: parsed.error.issues }, 400)
-      const office = await loadOrganizationOffice(
-        req,
-        ctx.organizationId,
-        String(req.routeParams?.id ?? '')
-      )
+      const officeId = String(req.routeParams?.id ?? '')
+      const status = parsed.data
+      // La oficina se lee dentro de la transacción (deactivateOffice/reactivateOffice).
       await withTransaction(
         req.payload,
         req,
         () =>
-          parsed.data.is_active
-            ? reactivateOffice(req, ctx.organizationId, office)
-            : deactivateOffice(req, ctx.organizationId, office, {
-                confirmMemberDeactivation: parsed.data.confirm_member_deactivation,
-              }),
+          status.is_active
+            ? reactivateOffice(req, ctx.organizationId, officeId)
+            : deactivateOffice(req, ctx.organizationId, officeId, status),
         { lockKey: organizationAdminLock(ctx.organizationId) }
       )
       return json({ ok: true })
