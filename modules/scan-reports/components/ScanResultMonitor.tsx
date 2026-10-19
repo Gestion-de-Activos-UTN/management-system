@@ -40,7 +40,7 @@ export function ScanResultMonitor({
     })
 
     const office =
-      typeof result.office === 'object' && result.office ? result.office.name : 'your organization'
+      typeof result.office === 'object' && result.office ? result.office.name : 'tu organización'
     const href = portalHref('/portal/inventory', asOrganization)
 
     // Una sola notificación global: un resultado posterior reemplaza al anterior. autoClose=false

@@ -12,7 +12,7 @@ export const rejectManualOfflineStatus: CollectionBeforeChangeHook = ({
 }) => {
   if (data?.status === 'offline' && originalDoc?.status !== 'offline' && !req.context?.systemJob) {
     throw new APIError(
-      "status 'offline' solo puede fijarlo un proceso automático (ingesta/aging), nunca una edición manual.",
+      'El estado «sin conexión» solo puede establecerlo un proceso automático, no una edición manual.',
       400
     )
   }

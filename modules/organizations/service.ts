@@ -4,11 +4,24 @@ import { httpClient } from '@/lib/http-client'
 import type { OrganizationStatusImpact } from '@/domain/organizations/organization-lifecycle'
 import type { OrganizationStatusInput } from './schema'
 
+export type OrganizationOperationalCounts = {
+  counts: {
+    offices: Record<string, number>
+    agents: Record<string, { active: number; online: number }>
+  }
+}
+
 export function listOrganizations(params?: { asOrganization?: string }) {
   return listResource<Organization>('/api/organizations', {
     depth: '1',
     asOrganization: params?.asOrganization,
   })
+}
+
+export function getOrganizationOperationalSummary() {
+  return httpClient.get<OrganizationOperationalCounts>(
+    '/api/v1/platform-admin/organizations/operational-summary'
+  )
 }
 
 export function getOrganizationStatusImpact(id: string) {

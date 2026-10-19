@@ -507,7 +507,7 @@ export const assessmentDraftEndpoint: Endpoint = {
       return json(
         {
           error: 'draft_rejected',
-          message: error instanceof Error ? error.message : 'Invalid draft',
+          message: error instanceof Error ? error.message : 'No se pudo guardar el borrador.',
         },
         400
       )
@@ -539,7 +539,7 @@ export const assessmentCompleteEndpoint: Endpoint = {
       return json(
         {
           error: 'completion_rejected',
-          message: error instanceof Error ? error.message : 'Invalid completion',
+          message: error instanceof Error ? error.message : 'No se pudo completar la revisión.',
         },
         400
       )
@@ -687,7 +687,7 @@ export const assessmentPolicyEndpoint: Endpoint = {
       return json(
         {
           error: 'policy_change_failed',
-          message: error instanceof Error ? error.message : 'Policy change failed',
+          message: error instanceof Error ? error.message : 'No se pudo cambiar la política de revisión.',
         },
         400
       )

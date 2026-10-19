@@ -1,5 +1,6 @@
 import type { Endpoint, PayloadRequest } from 'payload'
 import { getTenantContext } from '@/access/tenant/resolveTenantContext'
+import { isAgentOnline } from '@/domain/agents/agent-state'
 import { adminErrorResponse, organizationAdminLock } from '@/domain/organizations/admin-actions'
 import { withTransaction } from '@/domain/with-transaction'
 import {
@@ -17,6 +18,80 @@ async function platformAdmin(req: PayloadRequest): Promise<Response | null> {
   const ctx = await getTenantContext(req)
   if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
   if (!ctx.isPlatformAdmin || ctx.organizationId) return json({ error: 'forbidden' }, 403)
+  return null
+}
+
+const organizationOperationalSummaryEndpoint: Endpoint = {
+  path: '/v1/platform-admin/organizations/operational-summary',
+  method: 'get',
+  handler: async req => {
+    const denied = await platformAdmin(req)
+    if (denied) return denied
+
+    const officeCounts: Record<string, number> = {}
+    const agentCounts: Record<string, { active: number; online: number }> = {}
+
+    let officePage = 1
+    let hasMoreOffices = true
+    while (hasMoreOffices) {
+      const offices = await req.payload.find({
+        collection: 'offices',
+        where: { is_active: { equals: true } },
+        depth: 0,
+        limit: 1000,
+        page: officePage,
+        select: { organization: true },
+        overrideAccess: true,
+        req,
+      })
+
+      for (const office of offices.docs) {
+        const organizationId = relationId(office.organization)
+        if (organizationId) {
+          officeCounts[organizationId] = (officeCounts[organizationId] ?? 0) + 1
+        }
+      }
+
+      hasMoreOffices = offices.hasNextPage
+      officePage += 1
+    }
+
+    let agentPage = 1
+    let hasMoreAgents = true
+    while (hasMoreAgents) {
+      const agents = await req.payload.find({
+        collection: 'agents',
+        where: { is_active: { equals: true } },
+        depth: 0,
+        limit: 1000,
+        page: agentPage,
+        select: { organization: true, last_heartbeat_at: true },
+        overrideAccess: true,
+        req,
+      })
+
+      for (const agent of agents.docs) {
+        const organizationId = relationId(agent.organization)
+        if (!organizationId) continue
+        const counts = (agentCounts[organizationId] ??= { active: 0, online: 0 })
+        counts.active += 1
+        if (isAgentOnline({ last_heartbeat_at: agent.last_heartbeat_at })) counts.online += 1
+      }
+
+      hasMoreAgents = agents.hasNextPage
+      agentPage += 1
+    }
+
+    return json({ counts: { offices: officeCounts, agents: agentCounts } })
+  },
+}
+
+function relationId(relation: unknown): string | null {
+  if (typeof relation === 'string' || typeof relation === 'number') return String(relation)
+  if (relation && typeof relation === 'object' && 'id' in relation) {
+    const id = relation.id
+    return typeof id === 'string' || typeof id === 'number' ? String(id) : null
+  }
   return null
 }
 
@@ -65,6 +140,7 @@ const organizationStatusEndpoint: Endpoint = {
 }
 
 export const platformOrganizationEndpoints: Endpoint[] = [
+  organizationOperationalSummaryEndpoint,
   organizationStatusImpactEndpoint,
   organizationStatusEndpoint,
 ]

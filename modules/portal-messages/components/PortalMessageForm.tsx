@@ -23,7 +23,7 @@ import { ChevronDown, Eye, FileText, Link2, Plus, Save, UsersRound } from 'lucid
 import { SettingRow } from '@/components/ui/SettingRow'
 import { CharacterCountTextarea } from '@/components/ui/CharacterCountTextarea'
 import { formatDateInput, localDateEndToISOString } from '@/lib/format-date'
-import type { HttpError } from '@/lib/http-client'
+import { userFacingErrorMessage } from '@/lib/user-facing-error'
 import { ROLE_LABELS } from '@/lib/role-labels'
 import {
   PortalMessageInputSchema,
@@ -314,7 +314,7 @@ export function PortalMessageForm({
       await save.mutateAsync({ input: parsed.data, id: message?.id })
       onSaved()
     } catch (error) {
-      setErrorMessage((error as Partial<HttpError>)?.message || 'No se pudo guardar el mensaje.')
+      setErrorMessage(userFacingErrorMessage(error, 'No se pudo guardar el mensaje.'))
     }
   }
 

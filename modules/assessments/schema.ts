@@ -85,7 +85,7 @@ export const BulkAssessmentCompleteSchema = z.object({
     .array(z.string().min(1))
     .min(1)
     .max(100)
-    .refine(ids => new Set(ids).size === ids.length, 'Assessment IDs must be unique'),
+    .refine(ids => new Set(ids).size === ids.length, 'La selección contiene revisiones repetidas.'),
   question_set_signature: z.string().min(1).max(4000),
   answers: z.array(AssessmentAnswerDraftSchema).max(100),
 })

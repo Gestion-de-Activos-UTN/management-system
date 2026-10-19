@@ -136,6 +136,7 @@ function DeactivateOffice({
   const [decisions, setDecisions] = useState<Record<string, string>>({})
   // Activos marcados en la tabla: sobre ellos se aplica la acción en bloque.
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [movingAssetId, setMovingAssetId] = useState<string | null>(null)
   const [confirmName, setConfirmName] = useState('')
 
   if (impact.isPending)
@@ -157,18 +158,37 @@ function DeactivateOffice({
   // todos, para poder cambiar una decisión en bloque.
   const undecided = data.manual_assets.filter(asset => !decisions[asset.id]).map(a => a.id)
   const bulkIds = undecided.length ? undecided : data.manual_assets.map(asset => asset.id)
-  // La acción se aplica a lo marcado y libera la selección para la siguiente tanda.
-  const decide = (destination: string) => {
+  // La decisión queda pendiente hasta confirmar la baja; al aplicarla se libera la selección.
+  const decideAssets = (assetIds: string[], destination: string) => {
     setDecisions(current => ({
       ...current,
-      ...Object.fromEntries([...selected].map(id => [id, destination])),
+      ...Object.fromEntries(assetIds.map(id => [id, destination])),
     }))
-    setSelected(new Set())
+    setSelected(current => {
+      const next = new Set(current)
+      assetIds.forEach(id => next.delete(id))
+      return next
+    })
+    setMovingAssetId(null)
   }
+  const decide = (destination: string) => {
+    decideAssets([...selected], destination)
+  }
+  const clearDecision = (assetId: string) =>
+    setDecisions(current => {
+      const next = { ...current }
+      delete next[assetId]
+      return next
+    })
   const columns = getManualAssetDecisionColumns({
     selected,
     decisions,
     officeName,
+    destinations,
+    movingAssetId,
+    onMoveOpen: (assetId, opened) => setMovingAssetId(opened ? assetId : null),
+    onDecide: (assetId, destination) => decideAssets([assetId], destination),
+    onClearDecision: clearDecision,
     bulkIds,
     onToggle: (id, checked) =>
       setSelected(current => {
@@ -214,37 +234,54 @@ function DeactivateOffice({
       {data.manual_assets.length > 0 && (
         <Stack gap="xs">
           <Divider label="Activos manuales: decide qué pasa con cada uno" labelPosition="left" />
-          <Text size="xs" c="dimmed">
-            Marca activos y elige una acción. Los que se mueven llegan sin responsable ni ubicación;
-            el resto de sus datos y sus tareas se conservan. Los que se dan de baja quedan como
-            historial y sus tareas se cancelan.
+          <Text size="sm" c="dimmed">
+            Decide desde cada fila o selecciona varias para aplicarles la misma acción. Mover conserva
+            el historial y las tareas, pero quita responsable y ubicación; dar de baja cancela las
+            tareas abiertas. Los cambios se aplican al confirmar.
           </Text>
-          <Group gap="sm" align="flex-end" wrap="wrap">
-            <Select
-              aria-label="Mover los activos marcados a otra oficina"
-              placeholder={
-                selected.size
-                  ? `Mover ${selected.size === 1 ? 'el marcado' : `los ${selected.size} marcados`} a…`
-                  : 'Marca activos para moverlos'
-              }
-              data={destinations}
-              value={null}
-              disabled={!selected.size}
-              onChange={value => value && decide(value)}
-              w={280}
-              leftSection={<ArrowRightLeft size={16} strokeWidth={1.5} />}
-            />
-            <Button
-              variant="light"
-              color="orange"
-              disabled={!selected.size}
-              leftSection={<Archive size={16} strokeWidth={1.5} />}
-              onClick={() => decide(RETIRE_MANUAL_ASSET)}
-            >
-              Dar de baja
-            </Button>
-          </Group>
-          <DataTable columns={columns} data={data.manual_assets} minWidth={480} maxHeight={260} />
+          {selected.size > 0 && (
+            <Group gap="xs" align="center" wrap="wrap">
+              <Text size="sm" fw={600}>
+                {selected.size} {selected.size === 1 ? 'seleccionado' : 'seleccionados'}
+              </Text>
+              {destinations.length > 0 && (
+                <Select
+                  aria-label="Mover los activos seleccionados a otra oficina"
+                  placeholder="Mover a otra oficina…"
+                  data={destinations}
+                  value={null}
+                  onChange={value => value && decide(value)}
+                  size="sm"
+                  w={280}
+                  leftSection={<ArrowRightLeft size={16} strokeWidth={1.5} />}
+                />
+              )}
+              <Button
+                size="sm"
+                variant="light"
+                color="orange"
+                leftSection={<Archive size={16} strokeWidth={1.5} />}
+                onClick={() => decide(RETIRE_MANUAL_ASSET)}
+              >
+                Dar de baja
+              </Button>
+              <Button size="sm" variant="subtle" onClick={() => setSelected(new Set())}>
+                Limpiar selección
+              </Button>
+            </Group>
+          )}
+          {destinations.length === 0 && (
+            <Text size="xs" c="dimmed">
+              No hay otra oficina activa a la que mover estos activos.
+            </Text>
+          )}
+          <DataTable
+            columns={columns}
+            data={data.manual_assets}
+            minWidth={540}
+            maxHeight={data.manual_assets.length > 5 ? 'min(360px, 48vh)' : 'none'}
+            stickyHeader={data.manual_assets.length > 5}
+          />
         </Stack>
       )}
 

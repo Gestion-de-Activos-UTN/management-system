@@ -20,7 +20,8 @@ import { transactionLock, withTransaction } from '@/domain/with-transaction'
 
 function questionDefinition(key: string, version: number): RiskQuestionV2 {
   const definition = RISK_QUESTIONS_V2.find(item => item.key === key && item.version === version)
-  if (!definition) throw new Error(`Question ${key} v${version} is unavailable`)
+  if (!definition)
+    throw new Error(`La pregunta ${key} (versión ${version}) ya no está disponible.`)
   return definition
 }
 
@@ -71,11 +72,12 @@ function assertAnswerAllowed(
 ) {
   const definition = questionDefinition(answer.question_key, answer.question_version)
   if (!definition.policies.includes(policyKey))
-    throw new Error(`Question  is not available for this policy`)
+    throw new Error(`La pregunta ${answer.question_key} no está disponible para esta política.`)
   const option = definition.options.find(item => item.key === answer.option_key)
-  if (!option) throw new Error(`Option  is not available for `)
+  if (!option)
+    throw new Error(`La respuesta elegida ya no está disponible para la pregunta ${answer.question_key}.`)
   if (option.requires_justification && !answer.justification?.trim())
-    throw new Error('Not applicable answers require a justification')
+    throw new Error('Justifica por qué esta respuesta no aplica.')
   const status =
     option.efficacy === null
       ? 'not_evaluable'
@@ -136,7 +138,7 @@ async function assertTargetIncluded(
         })
       : null
   if (target && isAssetExcludedFromAssessments(target))
-    throw new Error('asset_excluded_from_assessments')
+    throw new Error('Este activo está excluido de las revisiones de seguridad y no admite respuestas.')
 }
 
 async function upsertAnswers(
@@ -147,7 +149,9 @@ async function upsertAnswers(
   req: PayloadRequest
 ): Promise<AssessmentAnswer[]> {
   if (!['pending', 'in_progress'].includes(assessment.status))
-    throw new Error(`Assessment in status ${assessment.status} cannot be changed`)
+    throw new Error(
+      `La revisión ${assessment.status === 'pending' ? 'pendiente' : 'en curso'} no se puede modificar.`
+    )
   const snapshot = Array.isArray(assessment.question_set_snapshot)
     ? assessment.question_set_snapshot
     : []
@@ -162,7 +166,7 @@ async function upsertAnswers(
   const saved: AssessmentAnswer[] = []
   for (const answer of command.answers) {
     if (!allowed.has(`${answer.question_key}@${answer.question_version}`))
-      throw new Error(`Question ${answer.question_key} is not part of this review`)
+      throw new Error(`La pregunta ${answer.question_key} no forma parte de esta revisión.`)
     const { effect, option, validityDays } = assertAnswerAllowed(
       answer,
       assessment.policy_key as RiskPolicyKey
@@ -293,7 +297,9 @@ export async function completeAssessment(
     const requiredKeys = snapshotKeys.map(item => item.key)
     const missing = requiredKeys.filter(key => !answerByKey.has(key))
     if (missing.length)
-      throw new Error(`Every visible question must be answered: ${missing.join(', ')}`)
+      throw new Error(
+        `Responde todas las preguntas visibles para completar la revisión: ${missing.join(', ')}.`
+      )
 
     const policyKey = assessment.policy_key as RiskPolicyKey
     const optionKeys = Object.fromEntries(

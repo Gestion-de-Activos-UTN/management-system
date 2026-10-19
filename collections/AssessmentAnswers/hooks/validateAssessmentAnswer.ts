@@ -23,7 +23,7 @@ export const validateAssessmentAnswer: CollectionBeforeChangeHook = async ({
       'question_version',
     ] as const) {
       if (field in data && String(data[field] ?? '') !== String(originalDoc?.[field] ?? '')) {
-        throw new Error(`Assessment answer field ${field} is immutable`)
+        throw new Error(`El campo ${field} de la respuesta de revisión no se puede modificar.`)
       }
     }
   }
@@ -36,7 +36,7 @@ export const validateAssessmentAnswer: CollectionBeforeChangeHook = async ({
     depth: 0,
   })
   if (relationId(assessment.organization) !== organizationId)
-    throw new Error('Assessment answer belongs to another organization')
+    throw new Error('La respuesta de revisión pertenece a otra organización.')
   assertAssessmentMutable(assessment.status as AssessmentStatus)
 
   const snapshot = Array.isArray(assessment.question_set_snapshot)
@@ -48,11 +48,11 @@ export const validateAssessmentAnswer: CollectionBeforeChangeHook = async ({
     return candidate.key === merged.question_key && candidate.version === merged.question_version
   })
   if (!expected) {
-    throw new Error('Assessment answer question is not part of the frozen question set')
+    throw new Error('La pregunta respondida no forma parte del conjunto definido para esta revisión.')
   }
 
   if (merged.option_key === 'not_applicable' && !String(merged.justification ?? '').trim()) {
-    throw new Error('Not applicable answers require a justification')
+    throw new Error('Justifica por qué esta respuesta no aplica.')
   }
 
   if (operation === 'create') {
@@ -70,7 +70,7 @@ export const validateAssessmentAnswer: CollectionBeforeChangeHook = async ({
       },
     })
     if (duplicate.docs.length)
-      throw new Error('An answer already exists for this assessment question')
+      throw new Error('Ya existe una respuesta para esta pregunta de revisión.')
   }
 
   return data

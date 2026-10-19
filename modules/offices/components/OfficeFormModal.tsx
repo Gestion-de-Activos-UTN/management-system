@@ -1,6 +1,7 @@
 'use client'
 
 import { textRuleError } from '@/lib/text-rules'
+import { userFacingErrorMessage } from '@/lib/user-facing-error'
 import { useState } from 'react'
 import { Alert, Button, Group, Modal, Select, SimpleGrid, Stack, TextInput } from '@mantine/core'
 import { Plus, Save } from 'lucide-react'
@@ -84,7 +85,7 @@ function OfficeForm({
       await save.mutateAsync({ input: parsed.data, id: office ? String(office.id) : undefined })
       onDone()
     } catch (error) {
-      setServerError((error as { message?: string }).message || 'No se pudo guardar la oficina.')
+      setServerError(userFacingErrorMessage(error, 'No se pudo guardar la oficina.'))
     }
   }
 

@@ -166,7 +166,7 @@ describe('assessment lifecycle', () => {
         payload: setup.payload,
         context: {},
       } as PayloadRequest),
-      /Every visible question/
+      /Responde todas las preguntas visibles/
     )
     assert.notEqual(setup.state().assessment.status, 'completed')
     assert.equal(setup.results.length, 0)

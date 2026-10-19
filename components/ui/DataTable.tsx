@@ -28,6 +28,7 @@ export function DataTable<T>({
   onSortingChange,
   minWidth = 640,
   maxHeight = 'calc(100vh - 320px)',
+  stickyHeader = false,
 }: {
   columns: ColumnDef<T, unknown>[]
   data: T[]
@@ -40,6 +41,8 @@ export function DataTable<T>({
   minWidth?: number
   /** Caps vertical overflow inside the table's own scroll container instead of the page body. */
   maxHeight?: number | string
+  /** Keeps the table headings visible while its scroll container moves. */
+  stickyHeader?: boolean
 }) {
   // Loader only for the first load. With rows already on screen (next page, new page size) the
   // table stays put and dims: swapping it for a Loader collapsed its height and jumped the page.
@@ -87,7 +90,7 @@ export function DataTable<T>({
         transition: 'opacity 150ms ease',
       }}
     >
-      <Table highlightOnHover verticalSpacing="sm">
+      <Table highlightOnHover verticalSpacing="sm" stickyHeader={stickyHeader}>
         <Table.Thead>
           {table.getHeaderGroups().map(headerGroup => (
             <Table.Tr key={headerGroup.id}>

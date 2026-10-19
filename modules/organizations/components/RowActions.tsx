@@ -13,25 +13,26 @@ export function RowActions({
   onToggleActive: (organization: Organization) => void
 }) {
   const active = organization.is_active !== false
+  const statusAction = active ? 'Desactivar organización' : 'Reactivar organización'
   return (
     <Group gap={6} wrap="wrap" justify="center">
-      <Tooltip label="Visitar">
+      <Tooltip label="Abrir portal de la organización">
         <ActionIcon
           component={Link}
           href={`/portal/dashboard?asOrganization=${organization.id}`}
           variant="light"
           size="md"
-          aria-label={`Visitar ${organization.name}`}
+          aria-label={`Abrir el portal de la organización ${organization.name}`}
         >
           <ExternalLink size={16} strokeWidth={1.5} />
         </ActionIcon>
       </Tooltip>
-      <Tooltip label={active ? 'Desactivar' : 'Reactivar'}>
+      <Tooltip label={statusAction}>
         <ActionIcon
           variant="light"
           size="md"
           color={active ? 'red' : undefined}
-          aria-label={`${active ? 'Desactivar' : 'Reactivar'} ${organization.name}`}
+          aria-label={`${statusAction} ${organization.name}`}
           onClick={() => onToggleActive(organization)}
         >
           {active ? (

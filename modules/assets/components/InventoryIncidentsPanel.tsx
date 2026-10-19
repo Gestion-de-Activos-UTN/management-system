@@ -1,6 +1,7 @@
 'use client'
 import { Alert, Button, Group, Stack, Text } from '@mantine/core'
 import { formatDateTime } from '@/lib/format-date'
+import { userFacingErrorMessage } from '@/lib/user-facing-error'
 import { relationId } from '@/lib/relationId'
 import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
 import { useInventoryIncidents } from '../hooks/use-inventory-incidents'
@@ -89,8 +90,10 @@ export function InventoryIncidentsPanel({
               )}
               {resolution.isError && (
                 <Text size="sm" c="red">
-                  {(resolution.error as { message?: string }).message ??
-                    'No se pudo guardar la decisión. Actualiza la vista e inténtalo nuevamente.'}
+                  {userFacingErrorMessage(
+                    resolution.error,
+                    'No se pudo guardar la decisión. Actualiza la vista e inténtalo nuevamente.'
+                  )}
                 </Text>
               )}
             </Stack>
