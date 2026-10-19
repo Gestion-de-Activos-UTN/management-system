@@ -8,12 +8,12 @@ describe('assessment instance invariants', () => {
     assert.doesNotThrow(() => assertAssessmentTarget('office', 'office-1', null))
     assert.doesNotThrow(() => assertAssessmentTarget('asset', 'office-1', 'asset-1'))
     assert.doesNotThrow(() => assertAssessmentTarget('asset', 'office-1', null, 'manual-1'))
-    assert.throws(() => assertAssessmentTarget('organization', 'office-1', null), /incompatible/)
-    assert.throws(() => assertAssessmentTarget('office', null, null), /incompatible/)
-    assert.throws(() => assertAssessmentTarget('asset', 'office-1', null), /incompatible/)
+    assert.throws(() => assertAssessmentTarget('organization', 'office-1', null), /no es compatible/)
+    assert.throws(() => assertAssessmentTarget('office', null, null), /no es compatible/)
+    assert.throws(() => assertAssessmentTarget('asset', 'office-1', null), /no es compatible/)
     assert.throws(
       () => assertAssessmentTarget('asset', 'office-1', 'asset-1', 'manual-1'),
-      /incompatible/
+      /no es compatible/
     )
   })
 
@@ -21,7 +21,7 @@ describe('assessment instance invariants', () => {
     assert.doesNotThrow(() => assertAssessmentMutable('pending'))
     assert.doesNotThrow(() => assertAssessmentMutable('in_progress'))
     for (const status of ['completed', 'expired', 'superseded'] as const) {
-      assert.throws(() => assertAssessmentMutable(status), /immutable/, status)
+      assert.throws(() => assertAssessmentMutable(status), /no se puede modificar/, status)
     }
   })
 })
