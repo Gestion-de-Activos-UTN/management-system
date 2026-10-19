@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { notifications } from '@mantine/notifications'
+import { userFacingErrorMessage } from '@/lib/user-facing-error'
 import type { SaveAssessmentDraft } from '../schema'
 import { completeAssessment, reopenAssessment, saveAssessmentDraft } from '../service'
 
@@ -20,7 +21,7 @@ export function useAssessmentActions(id: string) {
       onError: error =>
         notifications.show({
           color: 'red',
-          message: error.message || 'No se pudo guardar el borrador',
+          message: userFacingErrorMessage(error, 'No se pudo guardar el borrador.'),
         }),
     }),
     complete: useMutation({
@@ -32,7 +33,7 @@ export function useAssessmentActions(id: string) {
       onError: error =>
         notifications.show({
           color: 'red',
-          message: error.message || 'No se pudo completar la revisión',
+          message: userFacingErrorMessage(error, 'No se pudo completar la revisión.'),
         }),
     }),
     startNewCycle: useMutation({
@@ -44,7 +45,7 @@ export function useAssessmentActions(id: string) {
       onError: error =>
         notifications.show({
           color: 'red',
-          message: error.message || 'No se pudo crear un nuevo ciclo de revisión',
+          message: userFacingErrorMessage(error, 'No se pudo crear un nuevo ciclo de revisión.'),
         }),
     }),
   }

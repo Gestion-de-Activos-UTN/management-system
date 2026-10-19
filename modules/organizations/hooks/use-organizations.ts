@@ -5,13 +5,26 @@ import { notifications } from '@mantine/notifications'
 import type { HttpError } from '@/lib/http-client'
 import { showApiError } from '@/lib/notify-error'
 import { useListQuery } from '@/lib/use-list-query'
-import { getOrganizationStatusImpact, listOrganizations, setOrganizationStatus } from '../service'
+import {
+  getOrganizationOperationalSummary,
+  getOrganizationStatusImpact,
+  listOrganizations,
+  setOrganizationStatus,
+} from '../service'
 import type { OrganizationStatusInput } from '../schema'
 
 export function useOrganizationsList(asOrganization?: string) {
   return useListQuery('organizations', () => listOrganizations({ asOrganization }), [
     asOrganization,
   ])
+}
+
+export function useOrganizationOperationalSummary() {
+  return useQuery({
+    queryKey: ['platform-admin', 'organizations', 'operational-summary'],
+    queryFn: getOrganizationOperationalSummary,
+    refetchInterval: 60_000,
+  })
 }
 
 export function useOrganizationStatusImpact(organizationId: string | null) {

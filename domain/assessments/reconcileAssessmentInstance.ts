@@ -185,7 +185,7 @@ export async function reconcileAssessmentInstance(
   if (!settings || features?.security_assessments !== true) return { action: 'none' }
   const policy = POLICY_CATALOG.find(item => item.key === settings.assessment_policy_key)
   if (!policy)
-    throw new Error('Selected assessment policy is not available in the deployed catalog')
+    throw new Error('La política de revisión seleccionada no está disponible en el catálogo actual.')
 
   const applicable = v2Questions(subject.scope, policy.key)
   const expectedKeys = applicable.map(question => `${question.key}@${question.version}`).sort()
@@ -318,7 +318,7 @@ export async function reconcileAssetAssessmentInstance(
     item => item.key === (settings.assessment_policy_key as RiskPolicyKey)
   )
   if (!policy)
-    throw new Error('Selected assessment policy is not available in the deployed catalog')
+    throw new Error('La política de revisión seleccionada no está disponible en el catálogo actual.')
 
   // El assessment manual de activo está limitado a endpoints de usuario: workstation para
   // Assets descubiertos y computer (mapeado a workstation) para NonNetworkAssets. Los demás
@@ -476,7 +476,7 @@ export async function reconcileManualAssetAssessmentInstance(
     eligible && policy && assetType ? v2Questions('asset', policy.key, assetType) : []
 
   if (eligible && settings && !policy)
-    throw new Error('Selected assessment policy is not available in the deployed catalog')
+    throw new Error('La política de revisión seleccionada no está disponible en el catálogo actual.')
 
   const expectedKeys = applicable.map(question => `${question.key}@${question.version}`).sort()
   const matching = openResult.docs.find(instance => {

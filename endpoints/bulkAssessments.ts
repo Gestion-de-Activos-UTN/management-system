@@ -78,7 +78,7 @@ export const bulkAssessmentCompleteEndpoint: Endpoint = {
     try {
       return json(await completeBulkAssessments(req.payload, ctx, parsed.data, ctx.userId, req))
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Bulk completion failed'
+      const message = error instanceof Error ? error.message : 'No se pudieron completar las revisiones seleccionadas.'
       const stale = ['bulk_preview_stale', 'bulk_selection_stale'].includes(message)
       return json(
         {

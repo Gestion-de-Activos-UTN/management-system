@@ -1,5 +1,6 @@
 import { notifications } from '@mantine/notifications'
 import type { HttpError } from './http-client'
+import { userFacingErrorMessage } from './user-facing-error'
 
 // A 4xx is the user's own input (missing field, bad value) — they can read it and
 // move on, a brief toast is enough. A 5xx or a thrown non-HttpError (network down,
@@ -9,7 +10,7 @@ import type { HttpError } from './http-client'
 export function showApiError(error: unknown, fallback: string) {
   const status = (error as Partial<HttpError> | undefined)?.status
   const isValidation = typeof status === 'number' && status >= 400 && status < 500
-  const message = (error as Partial<HttpError> | undefined)?.message || fallback
+  const message = userFacingErrorMessage(error, fallback)
 
   notifications.show({
     color: isValidation ? 'orange' : 'red',
