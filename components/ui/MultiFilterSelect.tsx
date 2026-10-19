@@ -97,6 +97,9 @@ export function MultiFilterSelect({
           tabIndex={-1}
           size="xs"
           style={{ pointerEvents: 'none' }}
+          // Siempre visible (indica que se puede marcar más de una, también en táctil), pero el
+          // vacío más tenue para que resalten las marcadas.
+          styles={checked ? undefined : { input: { borderColor: 'var(--mantine-color-gray-3)' } }}
         />
         <span>{option.label}</span>
       </Group>

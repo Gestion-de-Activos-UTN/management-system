@@ -17,7 +17,7 @@ import { cancelOpenTasks } from '@/domain/tasks/task-actions'
 import { lockAssetRow } from '@/domain/with-transaction'
 import { findActiveOffices } from '@/domain/offices/active-offices'
 import { withDeferredTaskReleases } from '@/domain/organizations/member-responsibilities'
-import type { OfficeDeactivationInput } from '@/modules/offices/schema'
+import { RETIRE_MANUAL_ASSET, type OfficeDeactivationInput } from '@/modules/offices/schema'
 
 export type OfficeLocation = { province_id?: string | null; department_id?: string | null }
 type OfficeDoc = {
@@ -33,6 +33,8 @@ export type ImpactedManualAsset = {
   name: string
   category: string
   owner_name: string | null
+  /** Tareas abiertas del activo: se mueven con él, o se cancelan si se da de baja. */
+  open_tasks: number
 }
 export type OfficeDeactivationImpact = {
   /** Agentes no revocados de la oficina: se revocan al desactivarla. */
@@ -43,9 +45,12 @@ export type OfficeDeactivationImpact = {
   members_losing_office: AffectedMember[]
   /** Activos de red vigentes: se dan de baja (status 'retired'). */
   network_assets: number
-  /** Activos manuales vigentes: se mueven a la oficina que se elija, sin responsable ni ubicación. */
+  /**
+   * Activos manuales vigentes: cada uno se mueve a la oficina que se elija (sin responsable ni
+   * ubicación) o se da de baja.
+   */
   manual_assets: ImpactedManualAsset[]
-  /** Tareas abiertas que se cancelan (las de activos manuales se mueven con el activo). */
+  /** Tareas abiertas de la oficina que se cancelan, sin contar las de sus activos manuales. */
   open_tasks: number
   /** La oficina tiene un assessment abierto: se cierra. */
   open_assessment: boolean
@@ -237,7 +242,7 @@ export async function retireOfficeAssets(
   officeId: string,
   { includeManual }: { includeManual: boolean }
 ) {
-  const targets = [
+  await retireAssets(req, [
     ...(await liveNetworkAssets(req, officeId)).map(doc => ({
       collection: 'assets' as const,
       id: String(doc.id),
@@ -246,7 +251,13 @@ export async function retireOfficeAssets(
       collection: 'non-network-assets' as const,
       id: String(doc.id),
     })),
-  ]
+  ])
+}
+
+async function retireAssets(
+  req: PayloadRequest,
+  targets: { collection: 'assets' | 'non-network-assets'; id: string }[]
+) {
   // ponytail: uno por uno para que corran los hooks de cada activo; por lotes si llega a medirse lento.
   for (const { collection, id } of targets) {
     await lockAssetRow(req, collection, id)
@@ -289,8 +300,11 @@ async function moveManualAssets(
   })
 }
 
-/** Tareas abiertas de la oficina, sin las de los activos manuales que se van a mover con ellos. */
-async function cancellableTaskCount(req: PayloadRequest, officeId: string, manualIds: string[]) {
+/**
+ * Tareas abiertas de la oficina, separadas: las de cada activo manual (o de su assessment), que
+ * siguen la decisión sobre ese activo, y el resto, que se cancela con la oficina.
+ */
+async function openTaskCounts(req: PayloadRequest, officeId: string, manualIds: string[]) {
   const [tasks, manualAssessments] = await Promise.all([
     req.payload.find({
       collection: 'tasks',
@@ -311,14 +325,24 @@ async function cancellableTaskCount(req: PayloadRequest, officeId: string, manua
           req,
           depth: 0,
           pagination: false,
-          select: {},
+          select: { manual_asset: true },
         })
       : { docs: [] },
   ])
-  const moving = new Set([...manualIds, ...manualAssessments.docs.map(doc => String(doc.id))])
-  return tasks.docs.filter(
-    task => !task.related_entity || !moving.has(relationId(task.related_entity.value))
-  ).length
+  // Entidad relacionada (activo o assessment) → activo manual al que pertenece.
+  const assetOf = new Map(manualIds.map(id => [id, id]))
+  for (const assessment of manualAssessments.docs)
+    assetOf.set(String(assessment.id), relationId(assessment.manual_asset))
+  const byManualAsset = new Map<string, number>()
+  let office = 0
+  for (const task of tasks.docs) {
+    const asset = task.related_entity
+      ? assetOf.get(relationId(task.related_entity.value))
+      : undefined
+    if (asset) byManualAsset.set(asset, (byManualAsset.get(asset) ?? 0) + 1)
+    else office += 1
+  }
+  return { office, byManualAsset }
 }
 
 /**
@@ -379,7 +403,11 @@ export async function officeDeactivationImpact(
       })
     : { docs: [] }
   const ownerName = new Map(owners.docs.map(user => [String(user.id), user.name]))
-  const manualIds = manualAssets.map(asset => String(asset.id))
+  const taskCounts = await openTaskCounts(
+    req,
+    officeId,
+    manualAssets.map(asset => String(asset.id))
+  )
   return {
     agents: agents.length,
     members_without_office: affected.filter(a => !a.keepsAnOffice).map(a => a.member),
@@ -390,8 +418,9 @@ export async function officeDeactivationImpact(
       name: asset.alias,
       category: asset.asset_category,
       owner_name: asset.owner ? (ownerName.get(relationId(asset.owner)) ?? null) : null,
+      open_tasks: taskCounts.byManualAsset.get(String(asset.id)) ?? 0,
     })),
-    open_tasks: await cancellableTaskCount(req, officeId, manualIds),
+    open_tasks: taskCounts.office,
     open_assessment: openAssessment.totalDocs > 0,
     destination_offices: destinations.map(candidate => ({
       id: String(candidate.id),
@@ -401,8 +430,8 @@ export async function officeDeactivationImpact(
 }
 
 /**
- * Desactiva la oficina en un solo paso (la transacción la abre el endpoint): mueve los activos
- * manuales, da de baja los de red, revoca los escáneres, saca la oficina a las personas (y
+ * Desactiva la oficina en un solo paso (la transacción la abre el endpoint): mueve o da de baja
+ * cada activo manual según se eligió, da de baja los de red, revoca los escáneres, saca la oficina a las personas (y
  * desactiva a quienes se quedan sin ninguna), cancela las tareas que quedan y cierra su
  * assessment. Reactivar no restaura nada de esto.
  *
@@ -434,13 +463,14 @@ export async function deactivateOffice(
     )
   }
 
-  // Cada activo manual vigente necesita exactamente un destino activo, distinto de esta oficina.
+  // Cada activo manual vigente necesita exactamente una decisión: moverse a otra oficina activa
+  // o darse de baja. Nunca queda sin definir en una oficina inactiva.
   const manualIds = new Set((await liveManualAssets(req, officeId)).map(doc => String(doc.id)))
-  const movedIds = input.manual_asset_moves.map(move => move.asset_id)
+  const decidedIds = input.manual_asset_decisions.map(decision => decision.asset_id)
   if (
-    movedIds.length !== manualIds.size ||
-    new Set(movedIds).size !== movedIds.length ||
-    movedIds.some(id => !manualIds.has(id))
+    decidedIds.length !== manualIds.size ||
+    new Set(decidedIds).size !== decidedIds.length ||
+    decidedIds.some(id => !manualIds.has(id))
   ) {
     throw new AdminDomainError(
       'impact_changed',
@@ -449,7 +479,17 @@ export async function deactivateOffice(
     )
   }
   const destinations = new Set(activeIds.filter(id => id !== officeId))
-  if (input.manual_asset_moves.some(move => !destinations.has(move.office_id))) {
+  const moves = input.manual_asset_decisions.flatMap(decision =>
+    decision.destination === RETIRE_MANUAL_ASSET
+      ? []
+      : [{ asset_id: decision.asset_id, office_id: decision.destination }]
+  )
+  const retired = input.manual_asset_decisions.flatMap(decision =>
+    decision.destination === RETIRE_MANUAL_ASSET
+      ? [{ collection: 'non-network-assets' as const, id: decision.asset_id }]
+      : []
+  )
+  if (moves.some(move => !destinations.has(move.office_id))) {
     throw new AdminDomainError(
       'invalid_destination',
       400,
@@ -457,7 +497,8 @@ export async function deactivateOffice(
     )
   }
 
-  await moveManualAssets(req, input.manual_asset_moves)
+  await moveManualAssets(req, moves)
+  await retireAssets(req, retired)
   await retireOfficeAssets(req, officeId, { includeManual: false })
   await revokeOfficeAgents(req, officeId, 'office_deactivated')
 

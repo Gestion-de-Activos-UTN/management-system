@@ -8,13 +8,14 @@ import {
   Group,
   Loader,
   Modal,
-  ScrollArea,
   Select,
   Stack,
   Text,
   TextInput,
 } from '@mantine/core'
 import {
+  Archive,
+  ArrowRightLeft,
   ClipboardX,
   Info,
   Package,
@@ -27,10 +28,15 @@ import {
 } from 'lucide-react'
 import type { Office } from '@/app/types/payload-types'
 import { MetricsStrip } from '@/components/ui/MetricsStrip'
-import { ASSET_CATEGORY_LABEL } from '@/lib/enum-labels'
+import { DataTable } from '@/components/ui/DataTable'
 import { roleSlugLabel } from '@/lib/role-labels'
 import type { OfficeDeactivationImpact } from '@/domain/offices/office-lifecycle'
 import { useOfficeDeactivationImpact, useSetOfficeStatus } from '../hooks/use-offices'
+import { RETIRE_MANUAL_ASSET } from '../schema'
+import { getManualAssetDecisionColumns } from '../office-deactivation.columns'
+
+const SCANNERS_STOP =
+  'Los escáneres de la oficina se detienen solos en menos de 5 minutos y no vuelven a analizar la red. Para quitarlos del equipo, desinstálalos a mano.'
 
 const NOTHING_RESTORED =
   'Reactivar la oficina no restaura nada de esto: ni escáneres, ni personas, ni activos movidos o dados de baja.'
@@ -126,7 +132,10 @@ function DeactivateOffice({
 }) {
   const impact = useOfficeDeactivationImpact(String(office.id), asOrganization)
   const setStatus = useSetOfficeStatus(asOrganization)
-  const [moves, setMoves] = useState<Record<string, string>>({})
+  // Activo manual → id de la oficina de destino, o RETIRE_MANUAL_ASSET para darlo de baja.
+  const [decisions, setDecisions] = useState<Record<string, string>>({})
+  // Activos marcados en la tabla: sobre ellos se aplica la acción en bloque.
+  const [selected, setSelected] = useState<Set<string>>(new Set())
   const [confirmName, setConfirmName] = useState('')
 
   if (impact.isPending)
@@ -143,7 +152,34 @@ function DeactivateOffice({
 
   const data = impact.data
   const destinations = data.destination_offices.map(o => ({ value: o.id, label: o.name }))
-  const allMoved = data.manual_assets.every(asset => moves[asset.id])
+  const officeName = (id: string) => destinations.find(o => o.value === id)?.label ?? 'otra oficina'
+  // El "todos" del encabezado apunta a lo que falta decidir; cuando ya está todo decidido, a
+  // todos, para poder cambiar una decisión en bloque.
+  const undecided = data.manual_assets.filter(asset => !decisions[asset.id]).map(a => a.id)
+  const bulkIds = undecided.length ? undecided : data.manual_assets.map(asset => asset.id)
+  // La acción se aplica a lo marcado y libera la selección para la siguiente tanda.
+  const decide = (destination: string) => {
+    setDecisions(current => ({
+      ...current,
+      ...Object.fromEntries([...selected].map(id => [id, destination])),
+    }))
+    setSelected(new Set())
+  }
+  const columns = getManualAssetDecisionColumns({
+    selected,
+    decisions,
+    officeName,
+    bulkIds,
+    onToggle: (id, checked) =>
+      setSelected(current => {
+        const next = new Set(current)
+        if (checked) next.add(id)
+        else next.delete(id)
+        return next
+      }),
+    onToggleAll: checked => setSelected(new Set(checked ? bulkIds : [])),
+  })
+  const allDecided = data.manual_assets.every(asset => decisions[asset.id])
   const nameMatches = confirmName.trim() === office.name.trim()
 
   const confirm = () =>
@@ -153,9 +189,9 @@ function DeactivateOffice({
         input: {
           is_active: false,
           confirm_name: confirmName.trim(),
-          manual_asset_moves: data.manual_assets.map(asset => ({
+          manual_asset_decisions: data.manual_assets.map(asset => ({
             asset_id: asset.id,
-            office_id: moves[asset.id],
+            destination: decisions[asset.id],
           })),
         },
       },
@@ -168,7 +204,7 @@ function DeactivateOffice({
       <Text size="sm">
         Al desactivar <strong>{office.name}</strong> pasa todo esto en un solo paso:
       </Text>
-      <ImpactStrip impact={data} />
+      <ImpactStrip impact={data} decisions={decisions} />
       {data.open_assessment && (
         <Text size="xs" c="dimmed">
           También se cierra la revisión de seguridad abierta de la oficina.
@@ -177,52 +213,38 @@ function DeactivateOffice({
 
       {data.manual_assets.length > 0 && (
         <Stack gap="xs">
-          <Divider label="Activos manuales: elige a qué oficina va cada uno" labelPosition="left" />
+          <Divider label="Activos manuales: decide qué pasa con cada uno" labelPosition="left" />
           <Text size="xs" c="dimmed">
-            Llegan sin responsable ni ubicación; el resto de sus datos se conserva. Después hay que
-            asignarles un responsable en la oficina nueva.
+            Marca activos y elige una acción. Los que se mueven llegan sin responsable ni ubicación;
+            el resto de sus datos y sus tareas se conservan. Los que se dan de baja quedan como
+            historial y sus tareas se cancelan.
           </Text>
-          <Select
-            label="Mover todos a…"
-            placeholder="Elige una oficina"
-            data={destinations}
-            onChange={value =>
-              value &&
-              setMoves(Object.fromEntries(data.manual_assets.map(asset => [asset.id, value])))
-            }
-          />
-          <ScrollArea.Autosize mah={240} type="auto">
-            <Stack gap={6}>
-              {data.manual_assets.map(asset => (
-                <Group key={asset.id} gap="sm" wrap="nowrap" justify="space-between">
-                  <div style={{ minWidth: 0 }}>
-                    <Text size="sm" fw={600} truncate>
-                      {asset.name}
-                    </Text>
-                    <Text size="xs" c="dimmed" truncate>
-                      {ASSET_CATEGORY_LABEL[asset.category] ?? asset.category}
-                      {asset.owner_name ? ` · Responsable: ${asset.owner_name}` : ''}
-                    </Text>
-                  </div>
-                  <Select
-                    aria-label={`Oficina de destino de ${asset.name}`}
-                    placeholder="Destino"
-                    w={200}
-                    data={destinations}
-                    value={moves[asset.id] ?? null}
-                    onChange={value =>
-                      setMoves(current => {
-                        const next = { ...current }
-                        if (value) next[asset.id] = value
-                        else delete next[asset.id]
-                        return next
-                      })
-                    }
-                  />
-                </Group>
-              ))}
-            </Stack>
-          </ScrollArea.Autosize>
+          <Group gap="sm" align="flex-end" wrap="wrap">
+            <Select
+              aria-label="Mover los activos marcados a otra oficina"
+              placeholder={
+                selected.size
+                  ? `Mover ${selected.size === 1 ? 'el marcado' : `los ${selected.size} marcados`} a…`
+                  : 'Marca activos para moverlos'
+              }
+              data={destinations}
+              value={null}
+              disabled={!selected.size}
+              onChange={value => value && decide(value)}
+              w={280}
+              leftSection={<ArrowRightLeft size={16} strokeWidth={1.5} />}
+            />
+            <Button
+              variant="light"
+              color="orange"
+              disabled={!selected.size}
+              leftSection={<Archive size={16} strokeWidth={1.5} />}
+              onClick={() => decide(RETIRE_MANUAL_ASSET)}
+            >
+              Dar de baja
+            </Button>
+          </Group>
+          <DataTable columns={columns} data={data.manual_assets} minWidth={480} maxHeight={260} />
         </Stack>
       )}
 
@@ -240,6 +262,12 @@ function DeactivateOffice({
         members={data.members_losing_office}
         note="Sus tareas en curso y sus activos de esta oficina quedan liberados."
       />
+
+      {data.agents > 0 && (
+        <Alert color="yellow" icon={<RadioTower size={16} strokeWidth={1.5} />}>
+          {SCANNERS_STOP}
+        </Alert>
+      )}
 
       <Alert color="gray" icon={<Info size={16} strokeWidth={1.5} />}>
         {NOTHING_RESTORED}
@@ -259,7 +287,7 @@ function DeactivateOffice({
         </Button>
         <Button
           color="red"
-          disabled={!nameMatches || !allMoved}
+          disabled={!nameMatches || !allDecided}
           loading={setStatus.isPending}
           leftSection={<PowerOff size={16} strokeWidth={1.5} />}
           onClick={confirm}
@@ -271,7 +299,21 @@ function DeactivateOffice({
   )
 }
 
-function ImpactStrip({ impact }: { impact: OfficeDeactivationImpact }) {
+function ImpactStrip({
+  impact,
+  decisions,
+}: {
+  impact: OfficeDeactivationImpact
+  decisions: Record<string, string>
+}) {
+  const retiring = impact.manual_assets.filter(asset => decisions[asset.id] === RETIRE_MANUAL_ASSET)
+  const moving = impact.manual_assets.filter(
+    asset => decisions[asset.id] && decisions[asset.id] !== RETIRE_MANUAL_ASSET
+  ).length
+  const pending = impact.manual_assets.length - retiring.length - moving
+  // Las tareas de un activo manual se cancelan sólo si ese activo se da de baja.
+  const cancelledTasks =
+    impact.open_tasks + retiring.reduce((total, asset) => total + asset.open_tasks, 0)
   return (
     <MetricsStrip
       isPending={false}
@@ -287,9 +329,16 @@ function ImpactStrip({ impact }: { impact: OfficeDeactivationImpact }) {
           key: 'manual',
           icon: Package,
           value: impact.manual_assets.length,
-          label: 'Activos manuales a mover',
+          label: 'Activos manuales',
+          description: impact.manual_assets.length
+            ? [
+                `${moving} a mover`,
+                `${retiring.length} de baja`,
+                ...(pending ? [`${pending} sin decidir`] : []),
+              ].join(' · ')
+            : undefined,
         },
-        { key: 'tasks', icon: ClipboardX, value: impact.open_tasks, label: 'Tareas canceladas' },
+        { key: 'tasks', icon: ClipboardX, value: cancelledTasks, label: 'Tareas canceladas' },
         {
           key: 'members',
           icon: UserX,

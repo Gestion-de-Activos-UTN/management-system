@@ -1,3 +1,4 @@
+import './lib/zod-config'
 import { InventoryIncidents } from './collections/InventoryIncidents'
 import { resolveInventoryIncidentEndpoint } from './endpoints/inventoryIncidents'
 import { recoverJobsOnStartup } from './domain/risk/recover-jobs'

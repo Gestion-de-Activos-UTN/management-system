@@ -92,8 +92,9 @@ test('Oficinas: alta con ubicación y tope del plan, desactivación en un solo p
   )
   assert.equal(overQuota.status, 409, 'respeta el tope de oficinas del plan')
 
-  // Lo que la desactivación tiene que resolver: un activo manual a cargo del office_manager,
-  // una tarea de ese activo y otra tarea de la oficina que el office_manager tiene tomada.
+  // Lo que la desactivación tiene que resolver: un activo manual a cargo del office_manager que se
+  // mueve, otro que se da de baja, una tarea de cada uno y otra tarea de la oficina que el
+  // office_manager tiene tomada.
   const laptop = await payload.create({
     collection: 'non-network-assets',
     overrideAccess: true,
@@ -108,6 +109,19 @@ test('Oficinas: alta con ubicación y tope del plan, desactivación en un solo p
     } as never,
   })
   const laptopId = String(laptop.id)
+  const oldPrinter = await payload.create({
+    collection: 'non-network-assets',
+    overrideAccess: true,
+    data: {
+      alias: 'Impresora vieja',
+      asset_category: 'printer',
+      criticality: 'low',
+      office: officeId,
+      organization: orgId,
+      owner: managerId,
+    } as never,
+  })
+  const oldPrinterId = String(oldPrinter.id)
   const task = (data: Record<string, unknown>) =>
     payload.create({
       collection: 'tasks',
@@ -132,6 +146,10 @@ test('Oficinas: alta con ubicación y tope del plan, desactivación en un solo p
     title: 'Actualizar la notebook',
     related_entity: { relationTo: 'non-network-assets', value: laptopId },
   })
+  const printerTask = await task({
+    title: 'Cambiar el tóner',
+    related_entity: { relationTo: 'non-network-assets', value: oldPrinterId },
+  })
 
   const impactResponse = await endpoint('get', '/v1/offices/:id/deactivation-impact').handler(
     request(payload, adminId, { id: officeId })
@@ -145,24 +163,31 @@ test('Oficinas: alta con ubicación y tope del plan, desactivación en un solo p
     [managerId]
   )
   assert.deepEqual(
-    impact.manual_assets.map(asset => asset.id),
-    [laptopId]
+    impact.manual_assets.map(asset => [asset.id, asset.open_tasks]).sort(),
+    [
+      [laptopId, 1],
+      [oldPrinterId, 1],
+    ].sort(),
+    'cada activo manual informa sus tareas: siguen la decisión sobre ese activo'
   )
   assert.deepEqual(
     impact.destination_offices.map(destination => destination.id),
     [secondId]
   )
-  assert.equal(impact.open_tasks, 1, 'la tarea de la notebook se mueve con ella')
+  assert.equal(impact.open_tasks, 1, 'sólo la tarea propia de la oficina, sin las de sus activos')
   assert.equal(impact.open_assessment, true)
 
   const status = (id: string, body: unknown) =>
     endpoint('post', '/v1/offices/:id/status').handler(request(payload, adminId, { id, body }))
-  const moves = [{ asset_id: laptopId, office_id: secondId }]
+  const decisions = [
+    { asset_id: laptopId, destination: secondId },
+    { asset_id: oldPrinterId, destination: 'retire' },
+  ]
 
   const mismatch = await status(officeId, {
     is_active: false,
     confirm_name: 'Otra',
-    manual_asset_moves: moves,
+    manual_asset_decisions: decisions,
   })
   assert.equal(mismatch.status, 400)
   assert.equal(((await mismatch.json()) as { error: string }).error, 'confirmation_mismatch')
@@ -170,7 +195,7 @@ test('Oficinas: alta con ubicación y tope del plan, desactivación en un solo p
   const stale = await status(officeId, {
     is_active: false,
     confirm_name: office.name,
-    manual_asset_moves: [],
+    manual_asset_decisions: [],
   })
   assert.equal(stale.status, 409, 'cada activo manual necesita un destino')
   assert.equal(((await stale.json()) as { error: string }).error, 'impact_changed')
@@ -178,7 +203,10 @@ test('Oficinas: alta con ubicación y tope del plan, desactivación en un solo p
   const sameOffice = await status(officeId, {
     is_active: false,
     confirm_name: office.name,
-    manual_asset_moves: [{ asset_id: laptopId, office_id: officeId }],
+    manual_asset_decisions: [
+      { asset_id: laptopId, destination: officeId },
+      { asset_id: oldPrinterId, destination: 'retire' },
+    ],
   })
   assert.equal(sameOffice.status, 400)
   assert.equal(((await sameOffice.json()) as { error: string }).error, 'invalid_destination')
@@ -188,7 +216,7 @@ test('Oficinas: alta con ubicación y tope del plan, desactivación en un solo p
       await status(officeId, {
         is_active: false,
         confirm_name: office.name,
-        manual_asset_moves: moves,
+        manual_asset_decisions: decisions,
       })
     ).status,
     200
@@ -217,6 +245,20 @@ test('Oficinas: alta con ubicación y tope del plan, desactivación en un solo p
   })
   assert.equal(laptopReview.totalDocs, 1)
   assert.equal(relationId(laptopReview.docs[0].office), secondId)
+
+  const retiredPrinter = await read<{ status: string; office: string; deleted_at?: string | null }>(
+    'non-network-assets',
+    oldPrinterId
+  )
+  assert.equal(retiredPrinter.status, 'retired', 'el activo manual elegido se da de baja')
+  assert.equal(relationId(retiredPrinter.office), officeId, 'y queda como historial de su oficina')
+  assert.equal(retiredPrinter.deleted_at ?? null, null)
+  const printerTaskAfter = await read<{ status: string }>('tasks', String(printerTask.id))
+  assert.equal(
+    printerTaskAfter.status,
+    'cancelled',
+    'las tareas del activo dado de baja se cancelan'
+  )
 
   const movedTask = await read<{ status: string; office: string }>('tasks', String(laptopTask.id))
   assert.equal(movedTask.status, 'pending', 'la tarea del activo movido no se cancela')
@@ -264,12 +306,23 @@ test('Oficinas: alta con ubicación y tope del plan, desactivación en un solo p
   assert.equal(draft.status, 409, 'una oficina inactiva no se responde')
   assert.equal(((await draft.json()) as { error: string }).error, 'office_inactive')
 
+  await assert.rejects(
+    payload.update({
+      collection: 'assets',
+      id: server.id,
+      overrideAccess: true,
+      data: { status: 'active' },
+    }),
+    /oficina de este activo está inactiva/,
+    'un activo de red no se reactiva en una oficina inactiva'
+  )
+
   assert.equal(
     (
       await status(secondId, {
         is_active: false,
         confirm_name: 'Sucursal Rosario',
-        manual_asset_moves: [],
+        manual_asset_decisions: [],
       })
     ).status,
     409,

@@ -26,6 +26,9 @@ export const OfficeInputSchema = z
     }
   })
 
+/** Destino de un activo manual que se da de baja en vez de moverse a otra oficina. */
+export const RETIRE_MANUAL_ASSET = 'retire'
+
 // Reactivar no pide nada más: no restaura escáneres, personas ni activos.
 // Desactivar exige escribir el nombre de la oficina y elegir el destino de cada activo manual
 // vigente; el servidor rechaza (409 impact_changed) si el conjunto no coincide con el actual.
@@ -41,8 +44,14 @@ export const OfficeStatusSchema = z.discriminatedUnion('is_active', [
       // `free` y no `label`: se compara contra el nombre guardado, que puede venir del admin o
       // del seed con caracteres que `label` rechaza; si no, esa oficina no podría desactivarse.
       .regex(...TEXT_RULES.free),
-    manual_asset_moves: z
-      .array(z.object({ asset_id: z.uuid(), office_id: z.uuid() }))
+    // Cada activo manual vigente: a qué oficina activa se mueve, o 'retire' para darlo de baja.
+    manual_asset_decisions: z
+      .array(
+        z.object({
+          asset_id: z.uuid(),
+          destination: z.union([z.uuid(), z.literal(RETIRE_MANUAL_ASSET)]),
+        })
+      )
       .max(5000)
       .default([]),
   }),

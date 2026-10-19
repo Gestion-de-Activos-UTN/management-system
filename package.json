@@ -14,7 +14,6 @@
     "prepare": "husky",
     "seed:navigation": "cross-env NODE_OPTIONS=--no-deprecation node --import tsx scripts/seed-navigation.ts",
     "seed:demo": "cross-env NODE_OPTIONS=--no-deprecation node --import tsx scripts/seed-demo.ts",
-    "warmup": "node scripts/warmup-routes.mjs",
     "generate:contracts": "node --import tsx scripts/generate-contracts.ts",
     "spell-check": "cspell \"**/*\" --config cspell.json --exclude \".git/**\" --exclude \"node_modules/**\" --exclude \".next/**\"",
     "test:audit": "vitest run --config vitest.audit.config.ts",

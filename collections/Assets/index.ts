@@ -8,6 +8,7 @@ import { rejectManualOfflineStatus } from './hooks/rejectManualOfflineStatus'
 import { rejectBusinessEditsBeforeIdentified } from './hooks/rejectBusinessEditsBeforeIdentified'
 import { enforceAuthorizationInvariant } from './hooks/enforceAuthorizationInvariant'
 import { reconcileAssessmentApplicability } from './hooks/reconcileAssessmentApplicability'
+import { rejectRevivalInInactiveOffice } from './hooks/rejectRevivalInInactiveOffice'
 import { SCANNED_ASSET_TYPE_OPTIONS } from '../../domain/assets/asset-types'
 import { assessmentScopeFields } from '../../domain/assessments/asset-assessment-scope'
 import { validateAssetAssessmentScope } from '../../domain/assessments/validateAssetAssessmentScope'
@@ -40,6 +41,7 @@ export const Assets: CollectionConfig = {
       rejectBusinessEditsBeforeIdentified,
       enforceAuthorizationInvariant,
       validateAssetAssessmentScope,
+      rejectRevivalInInactiveOffice,
     ],
     afterChange: [reconcileAssessmentApplicability, reconcileAssetTasks],
   },
