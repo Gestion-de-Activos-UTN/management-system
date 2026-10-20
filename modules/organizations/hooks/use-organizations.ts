@@ -8,10 +8,11 @@ import { useListQuery } from '@/lib/use-list-query'
 import {
   getOrganizationOperationalSummary,
   getOrganizationStatusImpact,
+  createOrganization,
   listOrganizations,
   setOrganizationStatus,
 } from '../service'
-import type { OrganizationStatusInput } from '../schema'
+import type { OrganizationCreateInput, OrganizationStatusInput } from '../schema'
 
 export function useOrganizationsList(asOrganization?: string) {
   return useListQuery('organizations', () => listOrganizations({ asOrganization }), [
@@ -53,5 +54,20 @@ export function useSetOrganizationStatus() {
       )
     },
     onError: error => showApiError(error, 'No se pudo cambiar el estado de la organización'),
+  })
+}
+
+export function useCreateOrganization() {
+  const queryClient = useQueryClient()
+  return useMutation<unknown, HttpError, OrganizationCreateInput>({
+    mutationFn: createOrganization,
+    onSuccess: () => {
+      notifications.show({ color: 'green', message: 'Organización creada.' })
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['organizations'] }),
+        queryClient.invalidateQueries({ queryKey: ['platform-admin'] }),
+      ])
+    },
+    onError: error => showApiError(error, 'No se pudo crear la organización'),
   })
 }

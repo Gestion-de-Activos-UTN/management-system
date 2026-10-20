@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   ClipboardCheck,
   ListTodo,
+  Users,
 } from 'lucide-react'
 import { DashboardShell } from '@/components/layout/DashboardShell'
 import { SidebarProfile } from '@/components/layout/SidebarProfile'
@@ -140,6 +141,15 @@ function PortalProtectedLayoutInner({ children }: { children: React.ReactNode })
             label: 'Administración',
             href: `/portal/administration${suffix}`,
             icon: <ShieldCheck size={18} strokeWidth={1.5} />,
+          },
+        ]
+      : []),
+    ...(!isOrgAdmin && tenantContext.data?.permissions.organizationMembers.create
+      ? [
+          {
+            label: 'Equipo',
+            href: `/portal/team${suffix}`,
+            icon: <Users size={18} strokeWidth={1.5} />,
           },
         ]
       : []),

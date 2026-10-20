@@ -1,8 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import { Alert, Button, Group, Loader, Modal, MultiSelect, Stack, Text } from '@mantine/core'
-import { ClipboardList, Package, UserCheck, UserX } from 'lucide-react'
+import {
+  Alert,
+  Button,
+  Group,
+  Loader,
+  Modal,
+  MultiSelect,
+  Stack,
+  Text,
+  TextInput,
+} from '@mantine/core'
+import { ClipboardList, Info, Package, UserCheck, UserX } from 'lucide-react'
 import { MetricsStrip } from '@/components/ui/MetricsStrip'
 import { memberCoversOffice, type OrgMember } from '../service'
 import {
@@ -70,6 +80,7 @@ function MemberStatusForm({
   const needsOffices = !deactivating && member.role !== 'org_admin' && !keptOffices.length
   const [officeIds, setOfficeIds] = useState<string[]>([])
   const [replacementId, setReplacementId] = useState<string | null>(null)
+  const [confirmationEmail, setConfirmationEmail] = useState('')
   const impact = useMemberDeactivationImpact(deactivating ? member.id : null, asOrganization)
   const { data: members } = useOrgMembers(asOrganization)
   const ownedAssets = impact.data?.owned_assets ?? []
@@ -82,6 +93,7 @@ function MemberStatusForm({
       candidate.id !== member.id &&
       reassignableOffices.every(officeId => memberCoversOffice(candidate, officeId))
   )
+  const emailMatches = confirmationEmail.trim().toLowerCase() === member.email.trim().toLowerCase()
 
   const confirm = () =>
     update.mutate(
@@ -89,6 +101,7 @@ function MemberStatusForm({
         userId: member.id,
         input: {
           is_active: !deactivating,
+          ...(deactivating ? { confirm_email: confirmationEmail.trim() } : {}),
           ...(needsOffices ? { office_ids: officeIds } : {}),
           ...(deactivating && replacementId ? { replacement_owner_id: replacementId } : {}),
         },
@@ -102,8 +115,8 @@ function MemberStatusForm({
       {deactivating ? (
         <>
           <Text size="sm">
-            <strong>{name}</strong> pierde el acceso de inmediato y se cierran sus sesiones
-            abiertas. Su historial se conserva y puedes reactivarla más adelante.
+            Al desactivar a <strong>{name}</strong>, pierde el acceso de inmediato y se cierran sus
+            sesiones abiertas. Su historial se conserva.
           </Text>
           {impact.isPending ? (
             <Group gap="xs">
@@ -112,7 +125,18 @@ function MemberStatusForm({
                 Revisando sus activos y tareas…
               </Text>
             </Group>
-          ) : impact.data ? (
+          ) : impact.isError || !impact.data ? (
+            <Alert color="red" title="No se pudo revisar el impacto">
+              <Stack gap="xs">
+                <Text size="sm">
+                  No desactivaremos a la persona hasta poder mostrar sus activos y tareas afectados.
+                </Text>
+                <Button size="xs" variant="light" onClick={() => void impact.refetch()}>
+                  Reintentar
+                </Button>
+              </Stack>
+            </Alert>
+          ) : (
             <>
               <MetricsStrip
                 isPending={false}
@@ -137,6 +161,12 @@ function MemberStatusForm({
                   },
                 ]}
               />
+              <Alert color="gray" icon={<Info size={16} strokeWidth={1.5} />}>
+                Los activos que admiten reasignación pueden pasar a la persona que elijas; los demás
+                quedarán sin responsable. Las tareas en curso que esta persona reclamó volverán a
+                pendientes. Las tareas abiertas asignadas a su nombre no se reasignarán
+                automáticamente.
+              </Alert>
               {ownedAssets.length > 0 && (
                 <MemberSelect
                   label="Nuevo responsable de sus activos"
@@ -154,12 +184,32 @@ function MemberStatusForm({
                 />
               )}
             </>
-          ) : null}
+          )}
         </>
       ) : (
-        <Text size="sm">
-          <strong>{name}</strong> vuelve a tener acceso con su rol anterior.
-        </Text>
+        <>
+          <Text size="sm">
+            <strong>{name}</strong> vuelve a tener acceso con su rol anterior.
+          </Text>
+          <Alert color="gray" icon={<Info size={16} strokeWidth={1.5} />}>
+            <Text size="sm">
+              No se restaura nada más: los activos que quedaron sin responsable no se le asignan
+              nuevamente, y las tareas que volvieron a pendientes no se reclaman automáticamente. Si
+              corresponde, reasigna los activos y las tareas manualmente.
+            </Text>
+          </Alert>
+        </>
+      )}
+      {deactivating && (
+        <TextInput
+          label="Para confirmar, escribe el correo de la persona"
+          description={member.email}
+          type="email"
+          autoComplete="off"
+          value={confirmationEmail}
+          onChange={event => setConfirmationEmail(event.currentTarget.value)}
+          error={confirmationEmail && !emailMatches ? 'El correo no coincide.' : undefined}
+        />
       )}
       {needsOffices && (
         <>
@@ -184,7 +234,10 @@ function MemberStatusForm({
         <Button
           color={deactivating ? 'red' : undefined}
           loading={update.isPending}
-          disabled={(needsOffices && !officeIds.length) || (deactivating && impact.isPending)}
+          disabled={
+            (needsOffices && !officeIds.length) ||
+            (deactivating && (impact.isPending || impact.isError || !impact.data || !emailMatches))
+          }
           leftSection={
             deactivating ? (
               <UserX size={16} strokeWidth={1.5} />

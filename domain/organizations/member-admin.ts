@@ -8,10 +8,11 @@ import {
   subscriptionLimits,
 } from '@/domain/organizations/admin-actions'
 import { reassignOwnedAssets } from '@/domain/organizations/member-responsibilities'
-import type { MemberUpdate, OrganizationRoleSlug } from '@/modules/users/schema'
+import type { MemberCreate, MemberUpdate, OrganizationRoleSlug } from '@/modules/users/schema'
 
 type Membership = {
   id: string
+  email: string
   is_active: boolean
   role: { id: string; slug: OrganizationRoleSlug; rank: number }
   offices: string[]
@@ -35,8 +36,24 @@ async function loadMembership(req: PayloadRequest, organizationId: string, userI
       'La persona no pertenece a la organización.'
     )
   const role = doc.role as unknown as Membership['role']
+  const user = doc.user as unknown as { id?: string; email?: string } | string
+  let email = typeof user === 'object' && typeof user.email === 'string' ? user.email : ''
+  if (!email) {
+    const userIdFromRelation = relationId(user)
+    if (userIdFromRelation) {
+      const userDoc = await req.payload.findByID({
+        collection: 'users',
+        id: userIdFromRelation,
+        overrideAccess: true,
+        req,
+        depth: 0,
+      })
+      email = userDoc.email
+    }
+  }
   return {
     id: String(doc.id),
+    email,
     is_active: Boolean(doc.is_active),
     role: { id: String(role.id), slug: role.slug, rank: role.rank },
     offices: (doc.offices ?? []).map(relationId),
@@ -60,7 +77,7 @@ export async function assertUserLimit(
   req: PayloadRequest,
   organizationId: string,
   role: { id: string; slug: OrganizationRoleSlug },
-  excludeMembershipId: string
+  excludeMembershipId?: string
 ) {
   const limit = (await subscriptionLimits(req, organizationId)).userLimit(role.slug)
   if (limit === null) return
@@ -71,7 +88,7 @@ export async function assertUserLimit(
         { organization: { equals: organizationId } },
         { role: { equals: role.id } },
         { is_active: { equals: true } },
-        { id: { not_equals: excludeMembershipId } },
+        ...(excludeMembershipId ? [{ id: { not_equals: excludeMembershipId } }] : []),
       ],
     },
     overrideAccess: true,
@@ -84,6 +101,80 @@ export async function assertUserLimit(
       `Tu plan permite hasta ${limit} ${limit === 1 ? 'persona' : 'personas'} con el rol ${ROLE_LABELS[role.slug]}.`
     )
   }
+}
+
+/** Creates an active account and its single tenant membership inside the caller's transaction. */
+export async function createMember(
+  req: PayloadRequest,
+  ctx: TenantContext & { organizationId: string },
+  input: MemberCreate
+) {
+  const organizationId = ctx.organizationId
+  await assertOrganizationActive(req, organizationId)
+
+  const role = await roleBySlug(req, input.role)
+  await assertUserLimit(req, organizationId, role)
+
+  const existingUser = await req.payload.find({
+    collection: 'users',
+    where: { email: { equals: input.email } },
+    overrideAccess: true,
+    req,
+    depth: 0,
+    limit: 1,
+  })
+  if (existingUser.docs.length) {
+    throw new AdminDomainError('email_unavailable', 409, 'Ya existe una cuenta con ese correo.')
+  }
+
+  let offices: string[] = []
+  if (input.role !== 'org_admin') {
+    offices = await activeOfficeIds(req, organizationId, input.office_ids)
+    if (offices.length !== input.office_ids.length) {
+      throw new AdminDomainError(
+        'invalid_offices',
+        400,
+        'Selecciona oficinas activas de la organización.'
+      )
+    }
+    if (!offices.length) {
+      throw new AdminDomainError('offices_required', 400, 'Asigna al menos una oficina activa.')
+    }
+    if (ctx.role === 'office_manager' && offices.some(id => !ctx.officeIds.includes(id))) {
+      throw new AdminDomainError('office_out_of_scope', 403, 'Sólo puedes asignar tus oficinas.')
+    }
+  } else if (input.office_ids.length) {
+    throw new AdminDomainError('invalid_offices', 400, 'Los OrgAdmins cubren todas las oficinas.')
+  }
+
+  // AUDIT: this action must emit an AuditLogs entry (user.create, chain_hash over {user, name, email}, previous hash for this organization_id)
+  // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+  const user = await req.payload.create({
+    collection: 'users',
+    overrideAccess: true,
+    req,
+    data: { email: input.email, password: input.password, name: input.name, status: 'active' },
+  })
+
+  // AUDIT: this action must emit an AuditLogs entry (membership.create, chain_hash over {user, organization, role, offices}, previous hash for this organization_id)
+  // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+  // NOTIFY: this event should trigger a Notification Bell entry for {the new member and organization admins}
+  // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
+  const membership = await req.payload.create({
+    collection: 'organization-memberships',
+    overrideAccess: true,
+    req,
+    data: {
+      user: user.id,
+      organization: organizationId,
+      offices,
+      role: role.id,
+      status: 'active',
+      is_active: true,
+    },
+  })
+
+  return { user, membership }
 }
 
 async function activeOfficeIds(req: PayloadRequest, organizationId: string, ids: string[]) {
@@ -122,6 +213,22 @@ export async function updateMember(
 ) {
   const organizationId = ctx.organizationId
   const membership = await loadMembership(req, organizationId, userId)
+  if (input.is_active === false) {
+    if (!input.confirm_email) {
+      throw new AdminDomainError(
+        'confirmation_required',
+        400,
+        'Escribe el correo de la persona para confirmar la desactivación.'
+      )
+    }
+    if (input.confirm_email.trim().toLowerCase() !== membership.email.trim().toLowerCase()) {
+      throw new AdminDomainError(
+        'confirmation_mismatch',
+        400,
+        'El correo no coincide con el de la persona que vas a desactivar.'
+      )
+    }
+  }
   if (userId === ctx.userId && input.is_active === false) {
     throw new AdminDomainError('cannot_deactivate_self', 409, 'No puedes desactivarte a ti mismo.')
   }

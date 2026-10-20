@@ -2,15 +2,17 @@
 
 import Link from 'next/link'
 import { ActionIcon, Group, Tooltip } from '@mantine/core'
-import { ExternalLink, Power, PowerOff } from 'lucide-react'
+import { ExternalLink, Power, PowerOff, UserPlus } from 'lucide-react'
 import type { Organization } from '@/app/types/payload-types'
 
 export function RowActions({
   organization,
   onToggleActive,
+  onAddOrgAdmin,
 }: {
   organization: Organization
   onToggleActive: (organization: Organization) => void
+  onAddOrgAdmin: (organization: Organization) => void
 }) {
   const active = organization.is_active !== false
   const statusAction = active ? 'Desactivar organización' : 'Reactivar organización'
@@ -27,6 +29,18 @@ export function RowActions({
           <ExternalLink size={16} strokeWidth={1.5} />
         </ActionIcon>
       </Tooltip>
+      {active && (
+        <Tooltip label="Añadir OrgAdmin">
+          <ActionIcon
+            variant="light"
+            size="md"
+            aria-label={`Añadir OrgAdmin a ${organization.name}`}
+            onClick={() => onAddOrgAdmin(organization)}
+          >
+            <UserPlus size={16} strokeWidth={1.5} />
+          </ActionIcon>
+        </Tooltip>
+      )}
       <Tooltip label={statusAction}>
         <ActionIcon
           variant="light"

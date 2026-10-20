@@ -4,8 +4,8 @@ import { relationId } from '../lib/relationId'
 import { canDo, hasOrgWideScope, type RoleSlug } from '../access/rbac/permissions'
 import { adminErrorResponse, organizationAdminLock } from '../domain/organizations/admin-actions'
 import { withTransaction } from '../domain/with-transaction'
-import { updateMember } from '../domain/organizations/member-admin'
-import { MemberUpdateSchema } from '../modules/users/schema'
+import { createMember, updateMember } from '../domain/organizations/member-admin'
+import { MemberCreateSchema, MemberUpdateSchema } from '../modules/users/schema'
 import { ownedAssetsSummary } from '../domain/organizations/member-responsibilities'
 
 function json(body: unknown, status = 200) {
@@ -74,6 +74,48 @@ export const orgMembersEndpoint: Endpoint = {
     })
 
     return json({ docs })
+  },
+}
+
+export const createOrgMemberEndpoint: Endpoint = {
+  path: '/v1/org-members',
+  method: 'post',
+  handler: async req => {
+    try {
+      const ctx = await getTenantContext(req)
+      if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
+      if (
+        !ctx.organizationId ||
+        !canDo(ctx.role, 'organization-memberships', 'create', ctx.organizationId)
+      ) {
+        return json({ error: 'forbidden' }, 403)
+      }
+
+      const parsed = MemberCreateSchema.safeParse(await req.json!().catch(() => ({})))
+      if (!parsed.success)
+        return json({ error: 'invalid_member', issues: parsed.error.issues }, 400)
+      if (ctx.role === 'office_manager' && parsed.data.role !== 'org_viewer') {
+        return json({ error: 'forbidden' }, 403)
+      }
+
+      const created = await withTransaction(
+        req.payload,
+        req,
+        () => createMember(req, ctx as TenantContext & { organizationId: string }, parsed.data),
+        { lockKey: organizationAdminLock(ctx.organizationId) }
+      )
+      return json(
+        {
+          id: String(created.user.id),
+          name: created.user.name,
+          email: created.user.email,
+          role: parsed.data.role,
+        },
+        201
+      )
+    } catch (error) {
+      return adminErrorResponse(error)
+    }
   },
 }
 

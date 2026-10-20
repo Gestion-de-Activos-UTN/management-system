@@ -52,6 +52,7 @@ import { agingSweepEndpoint, expireRawScanPayloadsEndpoint } from './endpoints/i
 import { agingSweep } from './domain/inventories/agingSweep'
 import { generateInventorySnapshotEndpoint } from './endpoints/inventorySnapshots'
 import {
+  createOrgMemberEndpoint,
   orgMemberDeactivationImpactEndpoint,
   orgMembersEndpoint,
   updateOrgMemberEndpoint,
@@ -157,6 +158,7 @@ export default buildConfig({
     expireRawScanPayloadsEndpoint,
     generateInventorySnapshotEndpoint,
     orgMembersEndpoint,
+    createOrgMemberEndpoint,
     updateOrgMemberEndpoint,
     orgMemberDeactivationImpactEndpoint,
     organizationSettingsGetEndpoint,

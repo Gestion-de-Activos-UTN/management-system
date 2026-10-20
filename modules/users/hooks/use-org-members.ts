@@ -8,11 +8,13 @@ import {
   getMemberDeactivationImpact,
   getMyProfile,
   listOrgMembers,
+  createOrgMember,
+  createPlatformOrgAdmin,
   updateMyProfile,
   updateOrgMember,
   type OrgMember,
 } from '../service'
-import type { MemberUpdate } from '../schema'
+import type { MemberCreate, MemberUpdate, UserCredentials } from '../schema'
 
 export function useOrgMembers(
   asOrganization?: string,
@@ -46,6 +48,37 @@ export function useUpdateOrgMember(asOrganization?: string) {
       )
     },
     onError: error => showApiError(error, 'No se pudo actualizar a la persona'),
+  })
+}
+
+export function useCreateOrgMember(asOrganization?: string) {
+  const queryClient = useQueryClient()
+  return useMutation<unknown, HttpError, MemberCreate>({
+    mutationFn: input => createOrgMember(input, asOrganization),
+    onSuccess: () => {
+      notifications.show({ color: 'green', message: 'Persona creada.' })
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['org-members'] }),
+        queryClient.invalidateQueries({ queryKey: ['tenant-context'] }),
+        queryClient.invalidateQueries({ queryKey: ['platform-admin'] }),
+      ])
+    },
+    onError: error => showApiError(error, 'No se pudo crear la persona'),
+  })
+}
+
+export function useCreatePlatformOrgAdmin(organizationId: string) {
+  const queryClient = useQueryClient()
+  return useMutation<unknown, HttpError, UserCredentials>({
+    mutationFn: input => createPlatformOrgAdmin(organizationId, input),
+    onSuccess: () => {
+      notifications.show({ color: 'green', message: 'OrgAdmin añadido.' })
+      return Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['organizations'] }),
+        queryClient.invalidateQueries({ queryKey: ['platform-admin'] }),
+      ])
+    },
+    onError: error => showApiError(error, 'No se pudo añadir el OrgAdmin'),
   })
 }
 

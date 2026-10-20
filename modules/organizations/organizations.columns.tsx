@@ -11,7 +11,8 @@ export type OrganizationListRow = Organization & {
 }
 
 export function getOrganizationsColumns(
-  onToggleActive: (organization: Organization) => void
+  onToggleActive: (organization: Organization) => void,
+  onAddOrgAdmin: (organization: Organization) => void
 ): ColumnDef<OrganizationListRow, unknown>[] {
   return [
     { accessorKey: 'name', header: 'Nombre' },
@@ -61,7 +62,13 @@ export function getOrganizationsColumns(
       header: 'Acciones',
       meta: { align: 'center' },
       size: 110,
-      cell: ({ row }) => <RowActions organization={row.original} onToggleActive={onToggleActive} />,
+      cell: ({ row }) => (
+        <RowActions
+          organization={row.original}
+          onToggleActive={onToggleActive}
+          onAddOrgAdmin={onAddOrgAdmin}
+        />
+      ),
     },
   ]
 }

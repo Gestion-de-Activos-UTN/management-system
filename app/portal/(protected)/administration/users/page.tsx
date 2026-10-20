@@ -3,7 +3,7 @@
 import { useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Group, Stack, Text, TextInput } from '@mantine/core'
+import { Button, Group, Stack, Text, TextInput } from '@mantine/core'
 import { Eye, type LucideIcon, Search, ShieldCheck, Wrench } from 'lucide-react'
 import { DataTable } from '@/components/ui/DataTable'
 import { FilterBar } from '@/components/ui/FilterBar'
@@ -26,6 +26,8 @@ import {
 import { RowActions } from '@/modules/users/components/RowActions'
 import { MemberAccessModal } from '@/modules/users/components/MemberAccessModal'
 import { MemberStatusModal } from '@/modules/users/components/MemberStatusModal'
+import { MemberCreateModal } from '@/modules/users/components/MemberCreateModal'
+import { useCreateOrgMember } from '@/modules/users/hooks/use-org-members'
 
 const ROLE_ICONS: Record<(typeof ORGANIZATION_ROLES)[number], LucideIcon> = {
   org_admin: ShieldCheck,
@@ -43,6 +45,8 @@ export default function AdminUsersPage() {
   const [search, setSearch] = useState('')
   const [role, setRole] = useState<string[]>([])
   const [status, setStatus] = useState<string[]>([])
+  const [creating, setCreating] = useState(false)
+  const createMember = useCreateOrgMember(asOrganization)
 
   const officeOptions = (offices ?? []).map(office => ({
     value: String(office.id),
@@ -135,7 +139,11 @@ export default function AdminUsersPage() {
 
   return (
     <Stack gap="md">
-      <PageHeader title="Usuarios" description="Miembros de tu organización." />
+      <PageHeader
+        title="Usuarios"
+        description="Miembros de tu organización."
+        rightSection={<Button onClick={() => setCreating(true)}>Crear persona</Button>}
+      />
       {/* Uso del plan por rol: personas activas (incluye las que se están incorporando). */}
       <MetricsStrip
         isPending={isPending}
@@ -202,6 +210,14 @@ export default function AdminUsersPage() {
         officeOptions={officeOptions}
         onClose={() => setToggling(null)}
         asOrganization={asOrganization}
+      />
+      <MemberCreateModal
+        opened={creating}
+        onClose={() => setCreating(false)}
+        officeOptions={officeOptions}
+        roles={ORGANIZATION_ROLES}
+        onSubmit={input => createMember.mutateAsync(input)}
+        isPending={createMember.isPending}
       />
     </Stack>
   )
