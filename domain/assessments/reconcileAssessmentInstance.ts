@@ -35,6 +35,8 @@ export type ReconcileReason =
   | 'policy_changed'
   | 'answer_expired'
   | 'manual_review'
+  | 'office_reactivated'
+  | 'organization_reactivated'
 
 async function syncAssessmentAssignee(
   payload: Payload,
@@ -89,6 +91,23 @@ export function syncManualAssetAssessmentAssignee(
   req?: PayloadRequest
 ): Promise<void> {
   return syncAssessmentAssignee(payload, 'manual_asset', String(asset.id), asset.owner, req)
+}
+
+// Un activo de una oficina inactiva no cuenta: no recibe assessments y se cierran los abiertos.
+async function isOfficeActive(
+  payload: Payload,
+  officeId: string,
+  req?: PayloadRequest
+): Promise<boolean> {
+  if (!officeId) return true
+  const office = await payload.findByID({
+    collection: 'offices',
+    id: officeId,
+    overrideAccess: true,
+    req,
+    depth: 0,
+  })
+  return office.is_active !== false
 }
 
 function addDays(iso: string, days: number): string {
@@ -147,6 +166,21 @@ export async function reconcileAssessmentInstance(
   ])
   const settings = settingsResult.docs[0]
   const subscription = subscriptionResult.docs[0]
+  if (!subject.is_active) {
+    for (const instance of openResult.docs) {
+      // AUDIT: this action must emit an AuditLogs entry (assessment superseded by office/organization deactivation, chain_hash over {assessment, status: superseded}, previous hash for this organization_id)
+      // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+      await payload.update({
+        collection: 'assessment-instances',
+        id: instance.id,
+        overrideAccess: true,
+        req,
+        data: { status: 'superseded' },
+      })
+    }
+    return { action: openResult.docs.length ? 'superseded' : 'none' }
+  }
+
   const features =
     subscription?.features &&
     typeof subscription.features === 'object' &&
@@ -156,7 +190,7 @@ export async function reconcileAssessmentInstance(
   if (!settings || features?.security_assessments !== true) return { action: 'none' }
   const policy = POLICY_CATALOG.find(item => item.key === settings.assessment_policy_key)
   if (!policy)
-    throw new Error('Selected assessment policy is not available in the deployed catalog')
+    throw new Error('La política de revisión seleccionada no está disponible en el catálogo actual.')
 
   const applicable = v2Questions(subject.scope, policy.key)
   const expectedKeys = applicable.map(question => `${question.key}@${question.version}`).sort()
@@ -240,7 +274,7 @@ export async function reconcileAssetAssessmentInstance(
   const organizationId = relationId(asset.organization)
   const officeId = relationId(asset.office)
 
-  const [settingsResult, subscriptionResult, openResult] = await Promise.all([
+  const [settingsResult, subscriptionResult, openResult, officeActive] = await Promise.all([
     payload.find({
       collection: 'organization-settings',
       where: { organization: { equals: organizationId } },
@@ -271,6 +305,7 @@ export async function reconcileAssetAssessmentInstance(
       depth: 0,
       limit: 10,
     }),
+    isOfficeActive(payload, officeId, req),
   ])
 
   const settings = settingsResult.docs[0]
@@ -288,7 +323,7 @@ export async function reconcileAssetAssessmentInstance(
     item => item.key === (settings.assessment_policy_key as RiskPolicyKey)
   )
   if (!policy)
-    throw new Error('Selected assessment policy is not available in the deployed catalog')
+    throw new Error('La política de revisión seleccionada no está disponible en el catálogo actual.')
 
   // El assessment manual de activo está limitado a endpoints de usuario: workstation para
   // Assets descubiertos y computer (mapeado a workstation) para NonNetworkAssets. Los demás
@@ -299,6 +334,7 @@ export async function reconcileAssetAssessmentInstance(
     asset.identified &&
     asset.identification_status === 'confirmed' &&
     asset.status !== 'retired' &&
+    officeActive &&
     !isAssetExcludedFromAssessments(asset)
       ? v2Questions('asset', policy.key, assetType)
       : []
@@ -389,7 +425,7 @@ export async function reconcileManualAssetAssessmentInstance(
 ): Promise<{ action: 'created' | 'preserved' | 'superseded' | 'none'; id?: string | number }> {
   const organizationId = relationId(asset.organization)
   const officeId = relationId(asset.office)
-  const [settingsResult, subscriptionResult, openResult] = await Promise.all([
+  const [settingsResult, subscriptionResult, openResult, officeActive] = await Promise.all([
     payload.find({
       collection: 'organization-settings',
       where: { organization: { equals: organizationId } },
@@ -420,6 +456,7 @@ export async function reconcileManualAssetAssessmentInstance(
       depth: 0,
       limit: 10,
     }),
+    isOfficeActive(payload, officeId, req),
   ])
 
   const settings = settingsResult.docs[0]
@@ -437,13 +474,14 @@ export async function reconcileManualAssetAssessmentInstance(
   const eligible =
     isManualCategoryAssessable(asset.asset_category) &&
     asset.status !== 'retired' &&
+    officeActive &&
     !isAssetExcludedFromAssessments(asset) &&
     features?.security_assessments === true
   const applicable =
     eligible && policy && assetType ? v2Questions('asset', policy.key, assetType) : []
 
   if (eligible && settings && !policy)
-    throw new Error('Selected assessment policy is not available in the deployed catalog')
+    throw new Error('La política de revisión seleccionada no está disponible en el catálogo actual.')
 
   const expectedKeys = applicable.map(question => `${question.key}@${question.version}`).sort()
   const matching = openResult.docs.find(instance => {

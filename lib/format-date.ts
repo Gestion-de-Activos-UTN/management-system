@@ -14,6 +14,18 @@ export function formatTime(value: string | Date): string {
   return new Date(value).toLocaleTimeString('es-AR', { hour: 'numeric', minute: '2-digit' })
 }
 
+/** "15/10/2026 · 2:40 → 2:44 (4 min)": fecha una sola vez, horas de inicio y fin y duración. */
+export function formatScanWindow(start: string | Date, end?: string | Date | null): string {
+  const from = `${formatDate(start)} · ${formatTime(start)}`
+  if (!end) return from
+  const minutes = Math.max(
+    0,
+    Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000)
+  )
+  const sameDay = formatDate(start) === formatDate(end)
+  return `${from} → ${sameDay ? '' : `${formatDate(end)} · `}${formatTime(end)} (${minutes < 1 ? 'menos de 1' : minutes} min)`
+}
+
 export function formatDateInput(value: string | Date): string {
   const date = new Date(value)
   const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000)

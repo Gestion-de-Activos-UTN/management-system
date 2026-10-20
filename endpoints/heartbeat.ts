@@ -28,6 +28,9 @@ export const heartbeatEndpoint: Endpoint = {
       // ya tolera esa ausencia, solo compara si el header está presente.
       auth = await resolveAgentAuth({ authorization: req.headers.get('authorization') }, authDeps)
     } catch (err) {
+      // Contrato con el escáner: 401 {"error": "agent revoked"} (sólo con credencial válida) hace
+      // que el agente se detenga solo y no vuelva a escanear (scanner-prototype agent.py
+      // _is_revocation). No cambiar ese texto sin versionar el canal (SYSTEM_PROMPT §6).
       if (err instanceof AgentAuthError) return json({ error: err.message }, err.status)
       throw err
     }

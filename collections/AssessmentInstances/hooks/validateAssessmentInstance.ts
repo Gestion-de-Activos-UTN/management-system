@@ -28,7 +28,7 @@ export const validateAssessmentInstance: CollectionBeforeChangeHook = async ({
   // new/open cycles must still match the target's current office.
   const closingHistoricalCycle = operation === 'update' && merged.status === 'superseded'
 
-  if (!organizationId) throw new Error('Assessment organization is required')
+  if (!organizationId) throw new Error('La revisión debe pertenecer a una organización.')
   assertAssessmentTarget(scope, officeId, assetId, manualAssetId)
 
   if (operation === 'update') {
@@ -45,7 +45,7 @@ export const validateAssessmentInstance: CollectionBeforeChangeHook = async ({
       'catalog_version',
     ] as const) {
       if (field in data && String(data[field] ?? '') !== String(originalDoc?.[field] ?? '')) {
-        throw new Error(`Assessment field ${field} is immutable`)
+        throw new Error(`El campo ${field} de la revisión no se puede modificar.`)
       }
     }
   }
@@ -59,7 +59,7 @@ export const validateAssessmentInstance: CollectionBeforeChangeHook = async ({
       depth: 0,
     })
     if (relationId(office.organization) !== organizationId)
-      throw new Error('Assessment office belongs to another organization')
+        throw new Error('La oficina de la revisión pertenece a otra organización.')
   }
   if (assetId) {
     const asset = await req.payload.findByID({
@@ -73,11 +73,11 @@ export const validateAssessmentInstance: CollectionBeforeChangeHook = async ({
       relationId(asset.organization) !== organizationId ||
       (!closingHistoricalCycle && relationId(asset.office) !== officeId)
     ) {
-      throw new Error('Assessment asset does not belong to its organization and office')
+        throw new Error('El activo de la revisión no pertenece a su organización y oficina.')
     }
     // Reconciliation must be able to close an existing cycle after its target is retired.
     if (asset.status === 'retired' && merged.status !== 'superseded')
-      throw new Error('Retired assets cannot receive assessment cycles')
+      throw new Error('Los activos dados de baja no pueden recibir ciclos de evaluación.')
   }
   if (manualAssetId) {
     const manualAsset = await req.payload.findByID({
@@ -91,7 +91,7 @@ export const validateAssessmentInstance: CollectionBeforeChangeHook = async ({
       relationId(manualAsset.organization) !== organizationId ||
       (!closingHistoricalCycle && relationId(manualAsset.office) !== officeId)
     )
-      throw new Error('Manual assessment asset belongs to another organization or office')
+        throw new Error('El activo manual de la revisión pertenece a otra organización u oficina.')
     if (
       (
         manualAsset.status === 'retired' ||
@@ -99,7 +99,7 @@ export const validateAssessmentInstance: CollectionBeforeChangeHook = async ({
       ) &&
       merged.status !== 'superseded'
     )
-      throw new Error('Only active manually entered assets with assessments can receive cycles')
+      throw new Error('Solo las computadoras manuales activas pueden recibir ciclos de evaluación.')
   }
 
   if (
@@ -140,7 +140,7 @@ export const validateAssessmentInstance: CollectionBeforeChangeHook = async ({
       },
     })
     if (existing.docs.length)
-      throw new Error('An open assessment already exists for this policy and target')
+      throw new Error('Ya existe una revisión abierta para esta política y este alcance.')
   }
   // A nullable unique column enforces one open cycle even when concurrent checks see none.
   // Closed cycles retain their history and release the key for the next review.

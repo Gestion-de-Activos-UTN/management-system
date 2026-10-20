@@ -63,12 +63,14 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     // Alta, edición y (des)activación de oficinas y de miembros: sólo el org_admin, vía
     // endpoints/offices.ts y endpoints/orgMembers.ts (las colecciones siguen cerradas).
     offices: ['create', 'read', 'update'],
-    'organization-memberships': ['read', 'update'],
+    'organization-memberships': ['create', 'read', 'update'],
     agents: ['create', 'read', 'update'],
     assets: ['read', 'update', 'delete'],
     'non-network-assets': ['create', 'read', 'update', 'delete'],
-    'scan-reports': ['read', 'read_technical'],
-    'inventory-snapshots': ['create', 'read'],
+    // 'update' = sólo renombrar (display_name) vía endpoints/evidenceNames.ts; la evidencia en sí
+    // sigue inmutable (las colecciones mantienen update: () => false).
+    'scan-reports': ['read', 'read_technical', 'update'],
+    'inventory-snapshots': ['create', 'read', 'update'],
     'assessment-instances': ['read'],
     'assessment-answers': ['read'],
 
@@ -107,10 +109,13 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
   office_manager: {
     organizations: ['read'],
     offices: ['read'],
+    // The create endpoint also enforces rank and office scope; this grants only its scoped flow.
+    'organization-memberships': ['create'],
     assets: ['read', 'update'],
     'non-network-assets': ['create', 'read', 'update'],
-    'scan-reports': ['read', 'read_technical'],
-    'inventory-snapshots': ['read'],
+    // 'update' = sólo renombrar, en sus oficinas (ver org_admin).
+    'scan-reports': ['read', 'read_technical', 'update'],
+    'inventory-snapshots': ['read', 'update'],
     'assessment-instances': ['read'],
     'assessment-answers': ['read'],
 

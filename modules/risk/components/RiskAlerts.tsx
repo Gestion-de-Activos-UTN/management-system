@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Alert, Anchor, Button, List, Stack, Text } from '@mantine/core'
 import { AlertTriangle, Radar } from 'lucide-react'
+import { usePortalHref } from '@/lib/use-portal-href'
 import { controlTitle } from '../risk.columns'
 import type { RiskEvaluationDTO } from '../service'
 
@@ -12,11 +13,13 @@ export function RiskAlerts({
   alerts: RiskEvaluationDTO['alerts']
   inventoryHref: string
 }) {
+  const href = usePortalHref()
+  const exposure = alerts.undetermined_exposure
   const priority =
     alerts.critical_assets.length > 0 ||
     alerts.systemic_failures.length > 0 ||
     alerts.severe_concentration
-  if (!priority && !alerts.undetermined_exposure.length) return null
+  if (!priority && !exposure.length) return null
   return (
     <Stack gap="md">
       {priority && (
@@ -27,7 +30,7 @@ export function RiskAlerts({
                 {item.asset_id.startsWith('asset:') ? (
                   <Anchor
                     component={Link}
-                    href={`/portal/inventory/${item.asset_id.slice('asset:'.length)}`}
+                    href={href(`/portal/inventory/${item.asset_id.slice('asset:'.length)}`)}
                     fw={700}
                     size="sm"
                   >
@@ -56,23 +59,23 @@ export function RiskAlerts({
           </List>
         </Alert>
       )}
-      {alerts.undetermined_exposure.length > 0 && (
+      {exposure.length > 0 && (
         <Alert color="orange" title="Exposición no determinada" icon={<Radar size={18} />}>
-          <Stack gap="xs">
-            <Text size="sm">Hay dispositivos sin identificar en la misma red que:</Text>
-            <List size="sm" spacing={2}>
-              {alerts.undetermined_exposure.map(item => (
-                <List.Item key={item.asset_id}>{item.asset_label}</List.Item>
-              ))}
-            </List>
-            <Text size="sm">Identifíquelos para poder calcular su riesgo.</Text>
+          <Stack gap="sm" align="flex-start">
+            <Text size="sm">
+              Hay dispositivos sin identificar en la misma red que estos equipos. Identifícalos para
+              poder calcular su riesgo.
+            </Text>
+            {/* Punto y coma: los nombres ya usan " · " para separar oficina y equipo. */}
+            <Text size="sm" fw={600}>
+              {exposure.map(item => item.asset_label).join('; ')}.
+            </Text>
             <Button
               component={Link}
               href={inventoryHref}
-              size="xs"
-              variant="light"
+              size="sm"
               color="orange"
-              w="fit-content"
+              w={{ base: '100%', xs: 'auto' }}
             >
               Identificar dispositivos
             </Button>

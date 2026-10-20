@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { TEXT_RULES } from '@/lib/text-rules'
 import { TASK_REFERENCE_COLLECTIONS } from '@/modules/tasks/schema'
 import { ORGANIZATION_ROLES } from '@/modules/users/schema'
 
@@ -64,11 +65,27 @@ export const PortalMessageSpecificEntitySchema = z.object({
 
 export const PortalMessageInputSchema = z
   .object({
-    title: z.string().trim().min(1, 'Escribe un título.').max(100),
-    description: z.string().trim().min(1, 'Escribe una descripción.').max(500),
+    title: z
+      .string()
+      .trim()
+      .min(1, 'Escribe un título.')
+      .max(100)
+      .regex(...TEXT_RULES.title),
+    description: z
+      .string()
+      .trim()
+      .min(1, 'Escribe una descripción.')
+      .max(500)
+      .regex(...TEXT_RULES.free),
     message_type: z.enum(['notice', 'actionable']),
     template_key: z.string().min(1).optional(),
-    cta_label: z.string().trim().max(30).optional().nullable(),
+    cta_label: z
+      .string()
+      .trim()
+      .max(30)
+      .regex(...TEXT_RULES.title)
+      .optional()
+      .nullable(),
     audience: PortalMessageAudienceSchema,
     linked_section: z.enum(PORTAL_MESSAGE_SECTIONS).optional().nullable(),
     linked_entity_type: PortalMessageEntityTypeSchema.optional().nullable(),

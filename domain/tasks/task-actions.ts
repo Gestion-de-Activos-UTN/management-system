@@ -351,6 +351,141 @@ async function editTaskLocked(
   })
 }
 
+/** Por qué el sistema liberó una tarea que nadie soltó a mano. */
+export type ClaimReleaseReason = 'member_deactivated' | 'office_access_removed'
+
+export type ClaimEvent = {
+  action: 'claimed' | 'released'
+  at: string
+  by: ReturnType<typeof actorRelation> | null
+  reason?: ClaimReleaseReason
+}
+
+const withClaimEvent = (
+  task: Task,
+  action: ClaimEvent['action'],
+  by: ClaimEvent['by'],
+  at: string,
+  reason?: ClaimReleaseReason
+): ClaimEvent[] => [
+  ...(Array.isArray(task.claim_history) ? (task.claim_history as ClaimEvent[]) : []),
+  { action, at, by, ...(reason ? { reason } : {}) },
+]
+
+const systemActor = (req: PayloadRequest) =>
+  req.user ? actorRelation(req, String(req.user.id)) : null
+
+/**
+ * Devuelve a pendientes las tareas en curso que tomó una persona que ya no puede completarlas
+ * (desactivada, o sin acceso a la oficina de la tarea). Sólo quien reclamó puede liberar a mano
+ * (releaseTaskLocked); sin esto la tarea quedaría trabada en curso.
+ */
+export async function releaseClaimedTasks(
+  req: PayloadRequest,
+  organizationId: string,
+  userId: string,
+  offices: 'all' | string[],
+  reason: ClaimReleaseReason
+): Promise<void> {
+  if (Array.isArray(offices) && !offices.length) return
+  const claimed = await req.payload.find({
+    collection: 'tasks',
+    overrideAccess: true,
+    req,
+    depth: 0,
+    pagination: false,
+    where: {
+      and: [
+        { organization: { equals: organizationId } },
+        { status: { equals: 'in_progress' } },
+        { 'claimed_by.relationTo': { equals: 'users' } },
+        { 'claimed_by.value': { equals: userId } },
+        ...(offices === 'all' ? [] : [{ office: { in: offices } }]),
+      ],
+    },
+  })
+  for (const candidate of claimed.docs.sort((a, b) => String(a.id).localeCompare(String(b.id)))) {
+    await withTaskLock(req, String(candidate.id), async () => {
+      const task = await loadTask(req, String(candidate.id))
+      if (task.status !== 'in_progress' || relationId(task.claimed_by) !== userId) return
+      // AUDIT: this action must emit an AuditLogs entry (task release by system, reason {member_deactivated|office_access_removed}, chain_hash over {task, previous claimant, reason}, previous hash for this organization_id)
+      // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+      // NOTIFY: this event should trigger a Notification Bell entry for {task managers and eligible audience}
+      // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
+      await req.payload.update({
+        collection: 'tasks',
+        id: task.id,
+        overrideAccess: true,
+        req,
+        data: {
+          status: 'pending',
+          claimed_by: null,
+          claimed_at: null,
+          claim_history: withClaimEvent(
+            task,
+            'released',
+            systemActor(req),
+            new Date().toISOString(),
+            reason
+          ),
+        },
+      })
+    })
+  }
+}
+
+/**
+ * Cancela en bloque las tareas abiertas (pendientes o en curso) que dejaron de tener sentido
+ * porque su oficina u organización se desactivó. Mismo patrón que reconcileAssetTasks: escritura
+ * directa bajo withTaskLock; cancelTaskLocked sólo cancela en curso y exige RBAC del actor.
+ */
+export async function cancelOpenTasks(
+  req: PayloadRequest,
+  scope: { organizationId: string; officeId?: string },
+  reason: string
+): Promise<number> {
+  const open = await req.payload.find({
+    collection: 'tasks',
+    overrideAccess: true,
+    req,
+    depth: 0,
+    pagination: false,
+    where: {
+      and: [
+        { organization: { equals: scope.organizationId } },
+        { status: { in: ['pending', 'in_progress'] } },
+        ...(scope.officeId ? [{ office: { equals: scope.officeId } }] : []),
+      ],
+    },
+  })
+  let cancelled = 0
+  for (const candidate of open.docs.sort((a, b) => String(a.id).localeCompare(String(b.id)))) {
+    await withTaskLock(req, String(candidate.id), async () => {
+      const task = await loadTask(req, String(candidate.id))
+      if (task.status === 'completed' || task.status === 'cancelled') return
+      // AUDIT: this action must emit an AuditLogs entry (task.cancel by system, chain_hash over {task, cancellation_reason}, previous hash for this organization_id)
+      // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+      // NOTIFY: this event should trigger a Notification Bell entry for {claimant and assigned audience of the task}
+      // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
+      await req.payload.update({
+        collection: 'tasks',
+        id: task.id,
+        overrideAccess: true,
+        req,
+        data: {
+          status: 'cancelled',
+          cancelled_at: new Date().toISOString(),
+          cancelled_by: systemActor(req),
+          cancellation_reason: reason,
+          requires_reassignment: false,
+        },
+      })
+      cancelled += 1
+    })
+  }
+  return cancelled
+}
+
 async function claimTaskLocked(req: PayloadRequest, ctx: TenantContext, id: string): Promise<Task> {
   assertAction(ctx, 'claim')
   const task = await loadTask(req, id)
@@ -376,7 +511,12 @@ async function claimTaskLocked(req: PayloadRequest, ctx: TenantContext, id: stri
     limit: 1,
     overrideAccess: true,
     req,
-    data: { status: 'in_progress', claimed_by: actorRelation(req, ctx.userId), claimed_at: now },
+    data: {
+      status: 'in_progress',
+      claimed_by: actorRelation(req, ctx.userId),
+      claimed_at: now,
+      claim_history: withClaimEvent(task, 'claimed', actorRelation(req, ctx.userId), now),
+    },
   })
   const updated = result.docs[0]
   if (!updated) throw new TaskDomainError('already_claimed', 409, 'La tarea ya fue reclamada.')
@@ -403,7 +543,18 @@ async function releaseTaskLocked(
     id,
     overrideAccess: true,
     req,
-    data: { status: 'pending', claimed_by: null, claimed_at: null },
+    data: {
+      status: 'pending',
+      claimed_by: null,
+      claimed_at: null,
+      // Liberar suma un paso a la actividad en vez de borrar quién la tenía.
+      claim_history: withClaimEvent(
+        task,
+        'released',
+        actorRelation(req, ctx.userId),
+        new Date().toISOString()
+      ),
+    },
   })
 }
 
@@ -592,8 +743,14 @@ async function deletePendingTaskLocked(
   return req.payload.delete({ collection: 'tasks', id, overrideAccess: true, req })
 }
 
+/**
+ * Tarea lista para responder por la API. `claim_history` queda en el servidor: guarda IDs de
+ * quienes reclamaron o liberaron, y la actividad ya recibe esos pasos con nombres en
+ * `actor_labels.claim_events`.
+ */
 export function taskWithDerivedState(task: Task) {
-  return { ...task, effective_status: effectiveTaskStatus(task) }
+  const { claim_history: _claimHistory, ...publicTask } = task
+  return { ...publicTask, effective_status: effectiveTaskStatus(task) }
 }
 
 export async function availableTaskActions(

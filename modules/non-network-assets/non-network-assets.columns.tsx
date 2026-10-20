@@ -1,9 +1,9 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { Badge, Group, Stack, Text, Tooltip } from '@mantine/core'
+import { Group, Stack, Text, Tooltip } from '@mantine/core'
 import { OneLineText } from '@/components/ui/OneLineText'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import type { NonNetworkAsset } from '@/app/types/payload-types'
-import { ASSET_CATEGORY_LABEL, CRITICALITY_LABEL } from '@/lib/enum-labels'
+import { ASSET_CATEGORY_LABEL, CRITICALITY_LABEL, NO_OWNER_LABEL } from '@/lib/enum-labels'
 import { formatDate, formatRelativeDays } from '@/lib/format-date'
 import { RowActions } from './components/RowActions'
 
@@ -33,14 +33,10 @@ export function getNonNetworkAssetsColumns(
                 </Text>
               </Tooltip>
               {asset.status === 'retired' && (
-                <Badge size="sm" color="gray" variant="light" style={{ flexShrink: 0 }}>
-                  Retirado
-                </Badge>
+                <StatusBadge size="sm" tone="neutral" label="Retirado" />
               )}
               {asset.assessment_scope === 'excluded' && (
-                <Badge size="sm" color="gray" variant="light" style={{ flexShrink: 0 }}>
-                  Fuera de alcance
-                </Badge>
+                <StatusBadge size="sm" tone="neutral" label="Fuera de alcance" />
               )}
             </Group>
             <Text size="xs" c="dimmed" truncate>
@@ -62,7 +58,11 @@ export function getNonNetworkAssetsColumns(
       cell: ({ row }) => {
         const office = row.original.office
         return (
-          <OneLineText>{typeof office === 'object' && office ? office.name : null}</OneLineText>
+          <OneLineText>
+            {typeof office === 'object' && office
+              ? `${office.name}${office.is_active === false ? ' (inactiva)' : ''}`
+              : null}
+          </OneLineText>
         )
       },
     },
@@ -71,8 +71,10 @@ export function getNonNetworkAssetsColumns(
       header: 'Responsable',
       cell: ({ row }) => {
         const owner = row.original.owner
-        if (typeof owner === 'object' && owner) return <OneLineText>{owner.name}</OneLineText>
-        return <OneLineText>{owner ? ownerNameById[owner] : null}</OneLineText>
+        // Sólo el sistema deja un activo manual sin responsable: se marca para que se asigne uno.
+        if (!owner) return <StatusBadge size="sm" tone="warning" label={NO_OWNER_LABEL} />
+        if (typeof owner === 'object') return <OneLineText>{owner.name}</OneLineText>
+        return <OneLineText>{ownerNameById[owner]}</OneLineText>
       },
     },
     {

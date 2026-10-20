@@ -29,6 +29,14 @@ export function isSessionHydrated() {
   return hydrated
 }
 
+// Snapshot para useSyncExternalStore: tiene que cambiar también cuando la sesión pasa de "sin
+// confirmar" a "confirmada vacía". Con getSession() solo, ese paso era null → null, React no
+// volvía a pintar y un usuario con cookie vieja (p. ej. recién desactivado) quedaba cargando
+// para siempre sin llegar a redirigir al login.
+export function getSessionSnapshot(): Session | undefined {
+  return hydrated ? cached : undefined
+}
+
 export function subscribeSession(callback: () => void) {
   listeners.add(callback)
   return () => listeners.delete(callback)

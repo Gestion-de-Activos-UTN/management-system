@@ -1,10 +1,10 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Controller, useForm } from 'react-hook-form'
 import {
   Alert,
-  Badge,
   Box,
   Button,
   Card,
@@ -14,9 +14,9 @@ import {
   Radio,
   Stack,
   Text,
-  Textarea,
 } from '@mantine/core'
-import { Save } from 'lucide-react'
+import { CharacterCountTextarea } from '@/components/ui/CharacterCountTextarea'
+import { ArrowLeft, Save } from 'lucide-react'
 import type { AssessmentAnswer, AssessmentInstance } from '@/app/types/payload-types'
 import { RISK_QUESTIONS_V2, type RiskQuestionV2 } from '@/domain/risk/catalog-v2'
 import type { SaveAssessmentDraft } from '../schema'
@@ -27,6 +27,7 @@ import {
   type AssessmentAnswerFields,
   assessmentFormResolver,
 } from '../assessment-form-state'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 
 type FormState = { answers: Record<string, AssessmentAnswerFields> }
 
@@ -44,6 +45,9 @@ export function AssessmentForm(props: {
   completeLabel?: string
   confirmationTitle?: string
   confirmationDescription?: string
+  /** Formularios largos: retorno también al pie, junto a las acciones. */
+  backHref?: string
+  backLabel?: string
 }) {
   const snapshot = Array.isArray(props.assessment.question_set_snapshot)
     ? props.assessment.question_set_snapshot
@@ -155,7 +159,11 @@ export function AssessmentForm(props: {
                     defaults[fieldKeyByQuestion.get(question.key) ?? '']?.option_key as never
                   }
                   render={({ field, fieldState }) => (
-                    <Radio.Group {...field} value={field.value ?? ''} error={fieldState.error?.message}>
+                    <Radio.Group
+                      {...field}
+                      value={field.value ?? ''}
+                      error={fieldState.error?.message}
+                    >
                       <Stack mt="xs" gap="xs">
                         {question.options.map(option => (
                           <Radio
@@ -179,7 +187,7 @@ export function AssessmentForm(props: {
                     }
                     control={control}
                     render={({ field, fieldState }) => (
-                      <Textarea
+                      <CharacterCountTextarea
                         {...field}
                         value={field.value ?? ''}
                         label="¿Por qué no aplica?"
@@ -211,25 +219,42 @@ export function AssessmentForm(props: {
           motor; y ofrecer una tarea con el detalle técnico sólo para "No lo sé" o servicios
           prohibidos. Requiere condición por servicio detectado en catalog-v2 y versionar el
           catálogo. Los textos ya están en domain/assessments/network-explanations.ts. */}
-      {!props.readOnly && (
-        <Group justify="flex-end">
-          {props.showSaveDraft !== false && (
+      {(props.backHref || !props.readOnly) && (
+        <Group justify="space-between" gap="sm">
+          {props.backHref ? (
             <Button
-              variant="default"
-              leftSection={<Save size={16} />}
-              loading={props.saving}
-              onClick={handleSubmit(data => props.onSave(command(data)))}
+              component={Link}
+              href={props.backHref}
+              variant="subtle"
+              color="gray"
+              leftSection={<ArrowLeft size={16} />}
             >
-              Guardar borrador
+              {props.backLabel ?? 'Volver'}
             </Button>
+          ) : (
+            <span />
           )}
-          <Button
-            color="pine"
-            loading={props.completing}
-            onClick={handleSubmit(data => setCompletionCommand(command(data)))}
-          >
-            {props.completeLabel ?? 'Completar revisión'}
-          </Button>
+          {!props.readOnly && (
+            <Group gap="sm" justify="flex-end">
+              {props.showSaveDraft !== false && (
+                <Button
+                  variant="default"
+                  leftSection={<Save size={16} />}
+                  loading={props.saving}
+                  onClick={handleSubmit(data => props.onSave(command(data)))}
+                >
+                  Guardar borrador
+                </Button>
+              )}
+              <Button
+                color="pine"
+                loading={props.completing}
+                onClick={handleSubmit(data => setCompletionCommand(command(data)))}
+              >
+                {props.completeLabel ?? 'Completar revisión'}
+              </Button>
+            </Group>
+          )}
         </Group>
       )}
       <Modal
@@ -240,15 +265,15 @@ export function AssessmentForm(props: {
       >
         <Stack gap="md">
           <Group gap="xs">
-            <Badge color={completionCounts?.unanswered ? 'orange' : 'green'} variant="light">
-              {completionCounts?.unanswered ?? 0} sin responder
-            </Badge>
-            <Badge color="gray" variant="light">
-              {completionCounts?.unknown ?? 0} No lo sé
-            </Badge>
-            <Badge color="gray" variant="light">
-              {completionCounts?.notApplicable ?? 0} no aplica
-            </Badge>
+            <StatusBadge
+              tone={completionCounts?.unanswered ? 'warning' : 'success'}
+              label={`${completionCounts?.unanswered ?? 0} sin responder`}
+            />
+            <StatusBadge tone="neutral" label={`${completionCounts?.unknown ?? 0} No lo sé`} />
+            <StatusBadge
+              tone="neutral"
+              label={`${completionCounts?.notApplicable ?? 0} no aplica`}
+            />
           </Group>
           <Text size="sm" c="dimmed">
             {props.confirmationDescription ??

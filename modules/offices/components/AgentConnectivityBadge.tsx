@@ -24,7 +24,9 @@ export function AgentConnectivityBadge({
               ? 'Eliminado (se detectó abuso)'
               : revocationReason === 'office_deactivated'
                 ? 'Eliminado (oficina desactivada)'
-                : 'Eliminado',
+                : revocationReason === 'organization_deactivated'
+                  ? 'Eliminado (organización desactivada)'
+                  : 'Eliminado',
           icon: <Ban size={13} strokeWidth={1.5} />,
         }
       : connectivity === 'online'

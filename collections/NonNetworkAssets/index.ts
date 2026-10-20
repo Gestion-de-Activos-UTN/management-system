@@ -1,5 +1,9 @@
 import { reconcileAssetTasks } from '@/domain/tasks/reconcile-asset-tasks'
-import { logicalDeleteEndpoint, rejectPhysicalAssetDelete, preserveDeletedAsset } from '@/domain/assets/logical-delete'
+import {
+  logicalDeleteEndpoint,
+  rejectPhysicalAssetDelete,
+  preserveDeletedAsset,
+} from '@/domain/assets/logical-delete'
 import type { CollectionConfig } from 'payload'
 import { orgScopedAccess, canDoAccess } from '@/access/rbac/orgScopedAccess'
 import { resolveTenantAndReview } from './hooks/resolveTenant'
@@ -39,8 +43,19 @@ export const NonNetworkAssets: CollectionConfig = {
     afterChange: [reconcileAssessmentApplicability, reconcileAssetTasks],
   },
   fields: [
-    { name: 'deleted_at', type: 'date', index: true, access: { create: () => false, update: () => false } },
-    { name: 'seed_key', type: 'text', unique: true, admin: { hidden: true }, access: resolvedFieldAccess },
+    {
+      name: 'deleted_at',
+      type: 'date',
+      index: true,
+      access: { create: () => false, update: () => false },
+    },
+    {
+      name: 'seed_key',
+      type: 'text',
+      unique: true,
+      admin: { hidden: true },
+      access: resolvedFieldAccess,
+    },
     {
       name: 'alias',
       type: 'text',
@@ -118,7 +133,8 @@ export const NonNetworkAssets: CollectionConfig = {
       name: 'owner',
       type: 'relationship',
       relationTo: 'users',
-      required: true, // RF-51a
+      // RF-51a: obligatorio al crear, validado en hooks/resolveTenant.ts. Sólo el sistema lo deja
+      // en null (persona desactivada, activo movido de una oficina desactivada).
     },
     { name: 'location', type: 'text', maxLength: 200 },
     ...assessmentScopeFields(),

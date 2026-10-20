@@ -3,8 +3,14 @@ import { pathToFileURL } from 'node:url'
 import type { Payload, PayloadRequest, Where } from 'payload'
 import config from '../payload.config'
 import { createOrgWithAdmin } from '../domain/organizations/createOrgWithAdmin'
+import { reconcileAssessmentInstance } from '../domain/assessments/reconcileAssessmentInstance'
 import { initializeSeedPayload } from './seed-payload'
-import { DEMO_OFFICES, type DemoOffice } from '../domain/demo/demo-offices'
+import {
+  DEMO_OFFICES,
+  LIFECYCLE_DEMO_MANAGER,
+  LIFECYCLE_DEMO_OFFICE,
+  type DemoOffice,
+} from '../domain/demo/demo-offices'
 import { PORTAL_MESSAGE_TEMPLATES } from '../modules/portal-messages/templates'
 
 // Único script de esta fase (modo navegación de solo lectura): siembra, en una sola
@@ -135,14 +141,9 @@ async function ensurePortalWelcomeMessage(payload: Payload, req: PayloadRequest)
   return true
 }
 
-const INACTIVE_OFFICE = {
-  name: 'Sucursal Córdoba',
-  province_id: '14',
-  department_id: '14014', // Córdoba, Capital
-}
 // Personas sin credenciales impresas: sólo existen para mostrar estados en Administración →
-// Usuarios. Una quedó desactivada al cerrarse su oficina; la otra todavía se está incorporando.
-const FORMER_MANAGER = { email: 'former-manager@siam.com', name: 'Lucía Fernández' }
+// Usuarios. Lucía administra Córdoba (y Rosario) hasta que seed:demo cierra esa oficina y la
+// desactiva; la otra todavía se está incorporando.
 const ONBOARDING_VIEWER = { email: 'new-viewer@siam.com', name: 'Martín Gómez' }
 
 async function findOneDoc<C extends 'offices' | 'users'>(
@@ -162,7 +163,7 @@ async function ensureSeedMember(
     organizationId: string
     email: string
     name: string
-    officeId: string
+    officeIds: string[]
     roleSlug: 'office_manager' | 'org_viewer'
     membership: { is_active: boolean; status: 'active' | 'onboarding' }
   }
@@ -189,7 +190,7 @@ async function ensureSeedMember(
     data: {
       user: user.id,
       organization: input.organizationId,
-      offices: [input.officeId],
+      offices: input.officeIds,
       role: role.id,
       ...input.membership,
     },
@@ -231,8 +232,8 @@ async function findDemoOffice(
 }
 
 /**
- * Datos de Administración: ubicación de las oficinas, una oficina inactiva y personas en otros
- * estados. Idempotente y no destructivo: sólo completa lo que falta.
+ * Datos de Administración: ubicación de las oficinas, la oficina que seed:demo cierra (Córdoba)
+ * y personas en otros estados. Idempotente y no destructivo: sólo completa lo que falta.
  */
 async function ensureAdministrationDemo(
   payload: Payload,
@@ -242,32 +243,45 @@ async function ensureAdministrationDemo(
   await findDemoOffice(payload, req, organizationId, DEMO_OFFICES.main)
   const secondaryOffice = await findDemoOffice(payload, req, organizationId, DEMO_OFFICES.secondary)
 
-  const inactiveOffice =
-    (await findOneDoc(payload, req, 'offices', {
-      and: [
-        { organization: { equals: organizationId } },
-        { name: { equals: INACTIVE_OFFICE.name } },
-      ],
-    })) ??
+  // Nace activa con su revisión: seed:demo la desactiva con el flujo real (deactivateOffice).
+  const existingLifecycleOffice = await findOneDoc(payload, req, 'offices', {
+    and: [
+      { organization: { equals: organizationId } },
+      { name: { equals: LIFECYCLE_DEMO_OFFICE.name } },
+    ],
+  })
+  const lifecycleOffice =
+    existingLifecycleOffice ??
     (await payload.create({
       collection: 'offices',
       overrideAccess: true,
       req,
-      data: { organization: organizationId, ...INACTIVE_OFFICE, is_active: false },
+      data: { organization: organizationId, ...LIFECYCLE_DEMO_OFFICE, is_active: true },
     }))
+  if (!existingLifecycleOffice) {
+    await reconcileAssessmentInstance(
+      payload,
+      { scope: 'office', id: String(lifecycleOffice.id), organizationId, is_active: true },
+      'initial',
+      req
+    )
+  }
 
   await ensureSeedMember(payload, req, {
     organizationId,
-    ...FORMER_MANAGER,
-    officeId: String(inactiveOffice.id),
+    ...LIFECYCLE_DEMO_MANAGER,
+    officeIds: [
+      String(lifecycleOffice.id),
+      ...(secondaryOffice ? [String(secondaryOffice.id)] : []),
+    ],
     roleSlug: 'office_manager',
-    membership: { is_active: false, status: 'active' },
+    membership: { is_active: true, status: 'active' },
   })
   if (secondaryOffice) {
     await ensureSeedMember(payload, req, {
       organizationId,
       ...ONBOARDING_VIEWER,
-      officeId: String(secondaryOffice.id),
+      officeIds: [String(secondaryOffice.id)],
       roleSlug: 'org_viewer',
       membership: { is_active: true, status: 'onboarding' },
     })
@@ -309,14 +323,26 @@ async function ensureSecondaryOfficeAndAdminScope(
   organizationId: string
 ) {
   const { legacyName: _, ...secondary } = DEMO_OFFICES.secondary
-  const secondaryOffice =
-    (await findDemoOffice(payload, req, organizationId, DEMO_OFFICES.secondary)) ??
-    (await payload.create({
+  let secondaryOffice = await findDemoOffice(payload, req, organizationId, DEMO_OFFICES.secondary)
+  if (!secondaryOffice) {
+    secondaryOffice = await payload.create({
       collection: 'offices',
       overrideAccess: true,
       req,
-      data: { organization: organizationId, ...secondary },
-    }))
+      data: { organization: organizationId, is_active: true, ...secondary },
+    })
+    await reconcileAssessmentInstance(
+      payload,
+      {
+        scope: 'office',
+        id: String(secondaryOffice.id),
+        organizationId,
+        is_active: true,
+      },
+      'initial',
+      req
+    )
+  }
 
   const adminUsers = await payload.find({
     collection: 'users',
@@ -480,8 +506,19 @@ export async function seedNavigation(payload: Payload) {
       collection: 'offices',
       overrideAccess: true,
       req,
-      data: { organization: organization.id, ...secondary },
+      data: { organization: organization.id, is_active: true, ...secondary },
     })
+    await reconcileAssessmentInstance(
+      payload,
+      {
+        scope: 'office',
+        id: String(secondaryOffice.id),
+        organizationId: String(organization.id),
+        is_active: true,
+      },
+      'initial',
+      req
+    )
 
     await payload.update({
       collection: 'organization-memberships',

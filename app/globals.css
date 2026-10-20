@@ -81,13 +81,14 @@ body {
   border-color: var(--mantine-color-dark-4);
 }
 
-/* Subtle, uniform hover motion — buttons/links/nav items/cards all ease instead of
-   snapping, and cards lift slightly to read as elevated surfaces on hover. */
+/* Subtle, uniform hover motion — buttons/links/nav items/interactive rows ease instead of
+   snapping. */
 .mantine-Button-root,
 .mantine-ActionIcon-root,
 .mantine-NavLink-root,
 .sidebar-profile-trigger,
-.mantine-Card-root {
+.attention-row,
+a.mantine-Card-root {
   transition:
     background-color 150ms ease,
     box-shadow 150ms ease,
@@ -95,16 +96,12 @@ body {
     border-color 150ms ease;
 }
 
-.mantine-Card-root[data-with-border]:hover {
+/* Only a card that IS a link lifts (e.g. Administration hub). Informational cards stay still:
+   a lift on hover promises a click that does nothing. Keyboard focus gets the same cue. */
+a.mantine-Card-root:hover,
+a.mantine-Card-root:focus-visible {
   box-shadow: var(--mantine-shadow-md);
   transform: translateY(-1px);
-}
-
-/* Login card: a static entry point, not a hover-browsable list item — the
-   lift reads as unintentional jitter here rather than "elevated surface". */
-.login-card:hover {
-  box-shadow: var(--mantine-shadow-md);
-  transform: none;
 }
 
 /* Thin, theme-aware scrollbar (thumb/track pulled from the same bone/dark
@@ -249,7 +246,58 @@ body {
   }
 }
 
+/* Actividad de una tarea (TaskDetail, Timeline con clase .task-activity).
+   Todo lo que muestra ya ocurrió: cada tramo usa el color de la línea, también entre dos pasos
+   sin color propio, sin depender del índice `active` de Mantine. */
+.task-activity .mantine-Timeline-item:not(.activity-closing)::before {
+  border-inline-start-color: var(--tl-color);
+}
+
+/* Mantine rellena de blanco fijo el círculo de un paso activo: en modo oscuro quedaba un punto
+   blanco. El hueco toma el fondo de la Card que lo contiene (blanco en claro, dark-6 en oscuro).
+   Los cierres pisan esto con su color (style inline desde TaskDetail). */
+[data-mantine-color-scheme='dark'] .task-activity .mantine-Timeline-itemBullet {
+  background-color: var(--mantine-color-dark-6);
+}
+
+/* El tramo que baja desde un cierre (completada, cancelada, archivada) pasa del color de ese
+   estado (--activity-tone, desde TaskDetail) al de la línea. Usa --tl-color y no --tli-color,
+   que el `color` del ítem pisa con el del estado. El borde queda transparente para que se vea el
+   degradé, pintado en su lugar (border-box). */
+.mantine-Timeline-item.activity-closing::before {
+  border-inline-start-color: transparent;
+  background: linear-gradient(to bottom, var(--activity-tone), var(--tl-color)) border-box;
+}
+
+/* Cambio de pestaña: el panel que aparece entra con un fundido corto. Mantine oculta los paneles
+   inactivos con display: none, y al volver a mostrarse la animación arranca de nuevo. Las vistas
+   controladas fuera de Tabs.Panel usan .tab-panel-enter y se remontan al cambiar. Sólo define el
+   punto de partida: al terminar no queda ningún transform aplicado. */
+.mantine-Tabs-panel,
+.tab-panel-enter {
+  animation: tab-panel-in 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes tab-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+/* "Reducir movimiento" del sistema: el CSS propio y las transiciones CSS de Mantine
+   (Progress, SegmentedControl, Switch…) pasan a ser instantáneos; las animadas por JS las
+   cubre `respectReducedMotion` en lib/theme.ts. El robot se detiene del todo. */
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+
   .risk-robot *,
   .risk-robot-body {
     animation: none !important;

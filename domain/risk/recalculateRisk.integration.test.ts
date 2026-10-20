@@ -147,3 +147,49 @@ test('recalculateRisk: ignores answers from another policy and stamps the eviden
   })
   assert.equal(privileged.docs[0]?.status, 'not_evaluable')
 })
+
+test('recalculateRisk: los activos de una oficina inactiva no cuentan en el riesgo de la organización', async () => {
+  const payload = await getPayload({ config })
+  const { organization } = await seedRiskOrganization(payload)
+  const organizationId = String(organization.id)
+  const branch = await payload.create({
+    collection: 'offices',
+    overrideAccess: true,
+    data: { organization: organizationId, name: 'Sucursal' },
+  })
+  const laptop = await payload.create({
+    collection: 'non-network-assets',
+    overrideAccess: true,
+    data: {
+      alias: 'Notebook de la sucursal',
+      asset_category: 'computer',
+      criticality: 'high',
+      office: String(branch.id),
+      organization: organizationId,
+    } as never,
+  })
+  const laptopKeys = async () => {
+    const evaluation = await recalculateRisk(payload, { organizationId })
+    const contributions = await payload.find({
+      collection: 'risk-contributions',
+      overrideAccess: true,
+      depth: 0,
+      pagination: false,
+      where: { evaluation: { equals: evaluation.id } },
+    })
+    return contributions.docs.filter(row => row.asset_key === `manual:${laptop.id}`).length
+  }
+
+  assert.ok((await laptopKeys()) > 0, 'con la oficina activa, la notebook cuenta')
+  await payload.update({
+    collection: 'offices',
+    id: branch.id,
+    overrideAccess: true,
+    data: { is_active: false },
+  })
+  assert.equal(await laptopKeys(), 0, 'con la oficina inactiva, deja de contar')
+  // La evaluación de la oficina inactiva sigue devolviendo una evaluación (vacía): la usan el
+  // snapshot y el job; el job no la pide para oficinas inactivas.
+  const empty = await recalculateRisk(payload, { organizationId, officeId: String(branch.id) })
+  assert.ok(empty.id)
+})

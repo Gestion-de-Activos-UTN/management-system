@@ -129,7 +129,7 @@ export const Agents: CollectionConfig = {
       admin: {
         readOnly: true,
         description:
-          'Motivo de la revocación: manual (acción humana), auto_lockout_abuse u office_deactivated (se desactivó su oficina).',
+          'Motivo de la revocación: manual (acción humana), auto_lockout_abuse, office_deactivated (se desactivó su oficina) u organization_deactivated (se desactivó su organización).',
       },
     },
     {
@@ -238,8 +238,17 @@ export const Agents: CollectionConfig = {
     afterChange: [
       async ({ doc, previousDoc, req }) => {
         const online = getAgentLifecycleStatus(doc) !== 'revoked' && isAgentOnline(doc)
-        const wasOnline = previousDoc && getAgentLifecycleStatus(previousDoc) !== 'revoked' && isAgentOnline(previousDoc)
-        if (online !== Boolean(wasOnline) && doc.organization) await enqueueRiskRecalculation(req.payload, relationId(doc.organization), [relationId(doc.office)], req)
+        const wasOnline =
+          previousDoc &&
+          getAgentLifecycleStatus(previousDoc) !== 'revoked' &&
+          isAgentOnline(previousDoc)
+        if (online !== Boolean(wasOnline) && doc.organization)
+          await enqueueRiskRecalculation(
+            req.payload,
+            relationId(doc.organization),
+            [relationId(doc.office)],
+            req
+          )
         return doc
       },
       ({ doc, operation, req }) => {

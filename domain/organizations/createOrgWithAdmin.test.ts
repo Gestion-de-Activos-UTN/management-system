@@ -118,6 +118,7 @@ test('orden de creación sigue doc 04: organization -> settings+subscription -> 
     'find:assessment-instances',
     'create:assessment-instances',
     'find:roles',
+    'find:users',
     'create:users',
     'create:organization-memberships',
     'commitTransaction',

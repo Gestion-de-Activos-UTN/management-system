@@ -1,4 +1,4 @@
-import type { CollectionBeforeChangeHook, PayloadRequest } from 'payload'
+import { APIError, type CollectionBeforeChangeHook, type PayloadRequest } from 'payload'
 import { getTenantContext } from '@/access/tenant/resolveTenantContext'
 import { categoryHasSoftware } from '@/domain/assets/asset-types'
 import {
@@ -13,7 +13,7 @@ import {
 import { relationId } from '@/lib/relationId'
 import { assertOwnerCoversOffice } from '@/access/tenant/assertOwnerCoversOffice'
 
-async function findOrganizationOfOffice(req: PayloadRequest, officeId: string): Promise<string> {
+async function findOffice(req: PayloadRequest, officeId: string) {
   const office = await req.payload.findByID({
     collection: 'offices',
     id: officeId,
@@ -21,7 +21,11 @@ async function findOrganizationOfOffice(req: PayloadRequest, officeId: string): 
     req,
     depth: 0,
   })
-  return relationId(office.organization)
+  return { organizationId: relationId(office.organization), isActive: office.is_active !== false }
+}
+
+const reject = (message: string) => {
+  throw new APIError(message, 400, undefined, true)
 }
 
 // A diferencia de Assets (que resuelve office/organization en domain/inventories/ingestScanReport.ts,
@@ -46,16 +50,38 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
   // pero la office destino tiene que seguir estando dentro del alcance del usuario.
   assertOfficeInScope(officeId, ctx.officeIds, ctx.isPlatformAdmin && !ctx.organizationId)
 
-  const organizationId = await findOrganizationOfOffice(req, officeId as string)
+  const office = await findOffice(req, officeId as string)
+  const organizationId = office.organizationId
 
-  // RF-51a: owner obligatorio — validado igual que assertOfficeInScope valida `office`, pero acá
-  // necesita I/O (membership real), así que no puede vivir como invariante pura en invariants.ts.
-  const ownerId = data?.owner
-    ? relationId(data.owner)
-    : originalDoc?.owner
-      ? relationId(originalDoc.owner)
-      : null
-  if (ownerId) {
+  // "Cambió" = distinto de lo guardado, no "vino en el request": el formulario manda todos los
+  // campos, y una cascada del sistema escribe sobre activos que ya están en oficinas inactivas.
+  const officeChanged = !originalDoc || officeId !== relationId(originalDoc.office)
+  const revived = originalDoc?.status === 'retired' && data?.status === 'active'
+  // RF-23a: una oficina inactiva no recibe activos nuevos, movidos ni reactivados.
+  if (!office.isActive && (officeChanged || revived)) {
+    reject('La oficina elegida está inactiva.')
+  }
+
+  // RF-51a: owner obligatorio al crear. `null` sólo lo escribe el sistema (lib/system-context.ts):
+  // una persona nunca puede elegir "Sin responsable", aunque sí conservarlo al editar otra cosa.
+  const ownerId =
+    data && 'owner' in data
+      ? data.owner
+        ? relationId(data.owner)
+        : null
+      : originalDoc?.owner
+        ? relationId(originalDoc.owner)
+        : null
+  const previousOwnerId = originalDoc?.owner ? relationId(originalDoc.owner) : null
+  const systemRelease = req.context.systemOwnerRelease === true
+  if (!ownerId && !systemRelease) {
+    if (!originalDoc) reject('El responsable es obligatorio.')
+    if (previousOwnerId) reject('El responsable es obligatorio.')
+    if (officeChanged) reject('Elegí un responsable para la nueva oficina.')
+  }
+  // Se valida sólo si cambia el owner o la oficina: un owner que quedó viejo (desactivado) no
+  // bloquea editar otra cosa del activo.
+  if (ownerId && (ownerId !== previousOwnerId || officeChanged)) {
     await assertOwnerCoversOffice(req, ownerId, organizationId, officeId)
   }
 

@@ -2,7 +2,8 @@
 
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Button, Group, Select, SimpleGrid, Stack, Textarea, TextInput } from '@mantine/core'
+import { Button, Group, Select, SimpleGrid, Stack, TextInput } from '@mantine/core'
+import { CharacterCountTextarea } from '@/components/ui/CharacterCountTextarea'
 import type { TaskDTO } from '../service'
 import { EditTaskSchema, type EditTaskInput } from '../schema'
 import { useEditTask } from '../hooks/use-task-actions'
@@ -19,6 +20,7 @@ export function TaskEditForm({ task, onSaved }: { task: TaskDTO; onSaved: () => 
     handleSubmit,
     formState: { errors },
   } = useForm<EditTaskInput>({
+    mode: 'onChange',
     resolver: zodResolver(EditTaskSchema),
     defaultValues: {
       title: task.title,
@@ -48,7 +50,7 @@ export function TaskEditForm({ task, onSaved }: { task: TaskDTO; onSaved: () => 
           name="description"
           control={control}
           render={({ field }) => (
-            <Textarea
+            <CharacterCountTextarea
               label="Descripción"
               minRows={3}
               autosize

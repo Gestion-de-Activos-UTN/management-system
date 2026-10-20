@@ -18,6 +18,9 @@ export const CRITICALITY_OPTIONS = Object.entries(CRITICALITY_LABEL).map(([value
   label,
 }))
 
+/** Activo manual sin responsable: sólo lo deja así el sistema (persona desactivada, oficina desactivada). */
+export const NO_OWNER_LABEL = 'Sin responsable'
+
 export const ASSET_STATUS_LABEL: Record<string, string> = {
   active: 'Activo',
   retired: 'Retirado',

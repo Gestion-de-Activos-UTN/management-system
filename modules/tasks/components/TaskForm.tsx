@@ -5,16 +5,18 @@ import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   Button,
+  Collapse,
   Group,
   MultiSelect,
+  SegmentedControl,
   Select,
   SimpleGrid,
   Stack,
-  Switch,
   Text,
-  Textarea,
   TextInput,
 } from '@mantine/core'
+import { CharacterCountTextarea } from '@/components/ui/CharacterCountTextarea'
+import { SettingRow } from '@/components/ui/SettingRow'
 import { useOfficesList } from '@/modules/offices/hooks/use-offices'
 import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
 import {
@@ -235,7 +237,7 @@ export function TaskForm({
           name="description"
           control={control}
           render={({ field }) => (
-            <Textarea
+            <CharacterCountTextarea
               label="Descripción"
               autosize
               minRows={3}
@@ -347,50 +349,67 @@ export function TaskForm({
                 name="global"
                 control={control}
                 render={({ field }) => (
-                  <Switch
-                    label="Tarea global"
-                    description="Se aplica una vez a toda la organización"
-                    checked={field.value}
-                    onChange={event => {
-                      field.onChange(event.currentTarget.checked)
-                      if (event.currentTarget.checked) setValue('office_ids', [])
-                    }}
-                  />
-                )}
-              />
-            )}
-            {!global && (
-              <Controller
-                name="office_ids"
-                control={control}
-                render={({ field }) => (
-                  <MultiSelect
-                    label="Oficinas"
-                    required
-                    searchable
-                    data={[
-                      {
-                        value: ALL_OFFICES,
-                        label: `Todas las oficinas actuales (${officeOptions.length})`,
-                      },
-                      ...officeOptions,
-                    ]}
-                    value={field.value}
-                    onChange={values =>
-                      field.onChange(
-                        values.includes(ALL_OFFICES) ? officeOptions.map(o => o.value) : values
-                      )
+                  <SettingRow
+                    label="Alcance"
+                    labelId="task-scope"
+                    description={
+                      field.value
+                        ? 'Se aplica una vez a toda la organización.'
+                        : 'Se aplica a las oficinas que elijas.'
                     }
-                    error={errors.office_ids?.message}
-                  />
+                  >
+                    <SegmentedControl
+                      aria-labelledby="task-scope"
+                      data={[
+                        { value: 'offices', label: 'Oficinas específicas' },
+                        { value: 'global', label: 'Toda la organización' },
+                      ]}
+                      value={field.value ? 'global' : 'offices'}
+                      onChange={value => {
+                        field.onChange(value === 'global')
+                        if (value === 'global') setValue('office_ids', [])
+                      }}
+                    />
+                  </SettingRow>
                 )}
               />
             )}
-            {!global && officeIds.length > 1 && (
-              <Text size="sm" c="dimmed">
-                Se crearán {officeIds.length} tareas independientes.
-              </Text>
-            )}
+            {/* Oficinas sólo aplica si el alcance no es toda la organización: se pliega en vez
+                de aparecer de golpe al cambiar "Alcance". */}
+            <Collapse in={!global}>
+              <Stack gap="md">
+                <Controller
+                  name="office_ids"
+                  control={control}
+                  render={({ field }) => (
+                    <MultiSelect
+                      label="Oficinas"
+                      required
+                      searchable
+                      data={[
+                        {
+                          value: ALL_OFFICES,
+                          label: `Todas las oficinas actuales (${officeOptions.length})`,
+                        },
+                        ...officeOptions,
+                      ]}
+                      value={field.value}
+                      onChange={values =>
+                        field.onChange(
+                          values.includes(ALL_OFFICES) ? officeOptions.map(o => o.value) : values
+                        )
+                      }
+                      error={errors.office_ids?.message}
+                    />
+                  )}
+                />
+                {officeIds.length > 1 && (
+                  <Text size="sm" c="dimmed">
+                    Se crearán {officeIds.length} tareas independientes.
+                  </Text>
+                )}
+              </Stack>
+            </Collapse>
           </>
         )}
 

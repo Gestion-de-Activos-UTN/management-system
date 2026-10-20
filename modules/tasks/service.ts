@@ -33,6 +33,14 @@ export type TaskDTO = Task & {
     completed_by: string | null
     cancelled_by: string | null
     archived_by: string | null
+    /** Cada reclamo y liberación, en el orden en que ocurrieron. */
+    claim_events: Array<{
+      action: 'claimed' | 'released'
+      at: string
+      actor: string | null
+      /** Liberada por el sistema: la persona se desactivó o perdió acceso a la oficina. */
+      reason?: 'member_deactivated' | 'office_access_removed'
+    }>
   }
   available_actions: TaskAction[]
   requires_reassignment: boolean
@@ -50,8 +58,8 @@ export type TaskAssignmentOptions = {
 
 export function listTasks(params: {
   view: 'mine' | 'pool' | 'all'
-  status?: string
-  priority?: string
+  status?: string[]
+  priority?: string[]
   officeId?: string | null
   includeArchived?: boolean
   asOrganization?: string
@@ -59,8 +67,8 @@ export function listTasks(params: {
   return httpClient
     .get<{ docs: TaskDTO[] }>('/api/v1/tasks', {
       view: params.view,
-      status: params.status,
-      priority: params.priority,
+      status: params.status?.length ? params.status.join(',') : undefined,
+      priority: params.priority?.length ? params.priority.join(',') : undefined,
       office_id: params.officeId ?? undefined,
       include_archived: params.includeArchived ? 'true' : undefined,
       asOrganization: params.asOrganization,

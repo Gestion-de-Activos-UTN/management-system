@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { TEXT_RULES } from '@/lib/text-rules'
 import { MANUAL_ASSET_CATEGORY_VALUES } from '@/domain/assets/asset-types'
 import {
   AssessmentScopeFieldsSchema,
@@ -106,8 +107,15 @@ export type NonNetworkAssetFormValues = z.infer<typeof NonNetworkAssetSchema>
   alias: z.string().trim().min(1, 'El alias es obligatorio').max(120),
   asset_category: z.enum(MANUAL_ASSET_CATEGORY_VALUES),
   criticality: z.enum(['low', 'medium', 'high', 'critical']),
-  owner: z.string().min(1, 'El responsable es obligatorio'),
-  location: z.string().trim().max(200).nullable(),
+  // null = "Sin responsable": sólo lo pone el sistema (persona desactivada, activo movido de una
+  // oficina desactivada). Se puede conservar al editar; elegirlo no (la opción está deshabilitada).
+  owner: z.string().min(1, 'El responsable es obligatorio').nullable(),
+  location: z
+    .string()
+    .trim()
+    .max(200)
+    .regex(...TEXT_RULES.label)
+    .nullable(),
   status: z.enum(['active', 'retired']),
   office: z.string().min(1, 'La oficina es obligatoria'),
   // next_review_at ya no se edita a mano — se deriva de este intervalo (ver

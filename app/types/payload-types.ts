@@ -203,6 +203,7 @@ export interface Organization {
   id: string;
   name: string;
   is_active?: boolean | null;
+  deactivated_at?: string | null;
   settings?: (string | null) | OrganizationSetting;
   subscription?: (string | null) | Subscription;
   updatedAt: string;
@@ -216,6 +217,7 @@ export interface OrganizationSetting {
   id: string;
   organization: string | Organization;
   industry: string;
+  industry_details?: string | null;
   assessment_policy_key: 'essential' | 'reinforced';
   assessment_policy_version: number;
   assessment_policy_selected_at: string;
@@ -286,6 +288,7 @@ export interface OrganizationMembership {
   role: string | Role;
   status?: ('onboarding' | 'active') | null;
   is_active?: boolean | null;
+  deactivated_at?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -408,9 +411,9 @@ export interface Agent {
   is_active?: boolean | null;
   revoked_at?: string | null;
   /**
-   * Motivo de la revocación: manual (acción humana), auto_lockout_abuse u office_deactivated (se desactivó su oficina).
+   * Motivo de la revocación: manual (acción humana), auto_lockout_abuse, office_deactivated (se desactivó su oficina) u organization_deactivated (se desactivó su organización).
    */
-  revocation_reason?: ('manual' | 'auto_lockout_abuse' | 'office_deactivated') | null;
+  revocation_reason?: ('manual' | 'auto_lockout_abuse' | 'office_deactivated' | 'organization_deactivated') | null;
   failedAttempts?: number | null;
   lockedUntil?: string | null;
   lockoutCount?: number | null;
@@ -664,7 +667,7 @@ export interface NonNetworkAsset {
   software_part?: ('a' | 'o') | null;
   cpe_candidate?: string | null;
   criticality: 'low' | 'medium' | 'high' | 'critical';
-  owner: string | User;
+  owner?: (string | null) | User;
   location?: string | null;
   assessment_scope?: ('included' | 'excluded') | null;
   assessment_exclusion_reason?:
@@ -700,6 +703,7 @@ export interface NonNetworkAsset {
  * via the `definition` "scan-reports".
  */
 export interface ScanReport {
+  display_name?: string | null;
   content_fingerprint?: string | null;
   received_at?: string | null;
   /**
@@ -778,6 +782,7 @@ export interface JobRun {
  */
 export interface InventorySnapshot {
   id: string;
+  display_name?: string | null;
   organization: string | Organization;
   office: string | Office;
   taken_at: string;
@@ -908,7 +913,9 @@ export interface AssessmentInstance {
     | 'office_changed'
     | 'policy_changed'
     | 'answer_expired'
-    | 'manual_review';
+    | 'manual_review'
+    | 'office_reactivated'
+    | 'organization_reactivated';
   opened_at: string;
   due_at: string;
   completed_at?: string | null;
@@ -1054,6 +1061,15 @@ export interface Task {
   id: string;
   requires_reassignment?: boolean | null;
   lifecycle_history?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  claim_history?:
     | {
         [k: string]: unknown;
       }
@@ -1590,6 +1606,7 @@ export interface PayloadMigration {
 export interface OrganizationsSelect<T extends boolean = true> {
   name?: T;
   is_active?: T;
+  deactivated_at?: T;
   settings?: T;
   subscription?: T;
   updatedAt?: T;
@@ -1842,6 +1859,7 @@ export interface NonNetworkAssetsSelect<T extends boolean = true> {
  * via the `definition` "scan-reports_select".
  */
 export interface ScanReportsSelect<T extends boolean = true> {
+  display_name?: T;
   content_fingerprint?: T;
   received_at?: T;
   id?: T;
@@ -1884,6 +1902,7 @@ export interface RolesSelect<T extends boolean = true> {
 export interface OrganizationSettingsSelect<T extends boolean = true> {
   organization?: T;
   industry?: T;
+  industry_details?: T;
   assessment_policy_key?: T;
   assessment_policy_version?: T;
   assessment_policy_selected_at?: T;
@@ -1972,6 +1991,7 @@ export interface OrganizationMembershipsSelect<T extends boolean = true> {
   role?: T;
   status?: T;
   is_active?: T;
+  deactivated_at?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -1994,6 +2014,7 @@ export interface JobRunsSelect<T extends boolean = true> {
  * via the `definition` "inventory-snapshots_select".
  */
 export interface InventorySnapshotsSelect<T extends boolean = true> {
+  display_name?: T;
   organization?: T;
   office?: T;
   taken_at?: T;
@@ -2147,6 +2168,7 @@ export interface RiskContributionsSelect<T extends boolean = true> {
 export interface TasksSelect<T extends boolean = true> {
   requires_reassignment?: T;
   lifecycle_history?: T;
+  claim_history?: T;
   seed_key?: T;
   title?: T;
   description?: T;
@@ -2359,7 +2381,7 @@ export interface TaskRecalculateRisk {
     office_id?: string | null;
   };
   output: {
-    evaluation_id: string;
+    evaluation_id?: string | null;
   };
 }
 /**

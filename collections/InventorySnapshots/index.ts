@@ -21,6 +21,13 @@ export const InventorySnapshots: CollectionConfig = {
   },
   fields: [
     {
+      // Único campo editable: un nombre para reconocer la evidencia. Se escribe sólo vía
+      // endpoints/evidenceNames.ts; el resto del documento sigue inmutable.
+      name: 'display_name',
+      type: 'text',
+      maxLength: 80,
+    },
+    {
       name: 'organization',
       type: 'relationship',
       relationTo: 'organizations',

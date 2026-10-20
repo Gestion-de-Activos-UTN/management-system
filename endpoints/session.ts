@@ -58,13 +58,34 @@ export const sessionEndpoint: Endpoint = {
       // Para mostrar el uso del plan (Administración); los endpoints los hacen cumplir igual.
       limits: subscription?.docs[0] ? planLimits(subscription.docs[0]) : null,
       permissions: {
+        organizationMembers: {
+          create: Boolean(
+            ctx.organizationId &&
+            canDo(ctx.role, 'organization-memberships', 'create', ctx.organizationId)
+          ),
+          read: Boolean(
+            ctx.organizationId &&
+            canDo(ctx.role, 'organization-memberships', 'read', ctx.organizationId)
+          ),
+          update: Boolean(
+            ctx.organizationId &&
+            canDo(ctx.role, 'organization-memberships', 'update', ctx.organizationId)
+          ),
+        },
         technicalEvidence: Boolean(
           ctx.organizationId &&
           canDo(ctx.role, 'scan-reports', 'read_technical', ctx.organizationId)
         ),
         tasks: taskActions.filter(action => canDo(ctx.role, 'tasks', action, ctx.organizationId)),
+        // Same rule endpoints/evidenceNames.ts enforces (row scope aside: the actor only ever
+        // sees reports/snapshots of its own offices).
+        renameEvidence: Boolean(
+          ctx.organizationId && canDo(ctx.role, 'scan-reports', 'update', ctx.organizationId)
+        ),
         // Same rule endpoints/inventoryIncidents.ts enforces to resolve an inventory incident.
-        assets: (['update'] as const).filter(action => canDo(ctx.role, 'assets', action, ctx.organizationId)),
+        assets: (['update'] as const).filter(action =>
+          canDo(ctx.role, 'assets', action, ctx.organizationId)
+        ),
       },
     })
   },

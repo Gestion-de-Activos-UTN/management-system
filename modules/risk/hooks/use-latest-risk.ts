@@ -1,6 +1,7 @@
 'use client'
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import type { RiskSortKey } from '@/domain/risk/constants'
 import { getLatestRisk } from '../service'
 
 export const useLatestRisk = (params?: {
@@ -8,6 +9,9 @@ export const useLatestRisk = (params?: {
   officeId?: string | null
   asOrganization?: string
   page?: number
+  limit?: number
+  sort?: RiskSortKey
+  direction?: 'asc' | 'desc'
   enabled?: boolean
 }) =>
   useQuery({
@@ -17,6 +21,9 @@ export const useLatestRisk = (params?: {
       params?.asOrganization,
       params?.officeId,
       params?.page ?? 1,
+      params?.limit,
+      params?.sort,
+      params?.direction,
       params?.evaluationId,
     ],
     queryFn: () => getLatestRisk(params),

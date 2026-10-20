@@ -2,11 +2,17 @@ import type { PayloadRequest } from 'payload'
 import type { TenantContext } from '@/access/tenant/resolveTenantContext'
 import { relationId } from '@/lib/relationId'
 import { ROLE_LABELS } from '@/lib/role-labels'
-import { AdminDomainError, subscriptionLimits } from '@/domain/organizations/admin-actions'
-import type { MemberUpdate, OrganizationRoleSlug } from '@/modules/users/schema'
+import {
+  AdminDomainError,
+  assertOrganizationActive,
+  subscriptionLimits,
+} from '@/domain/organizations/admin-actions'
+import { reassignOwnedAssets } from '@/domain/organizations/member-responsibilities'
+import type { MemberCreate, MemberUpdate, OrganizationRoleSlug } from '@/modules/users/schema'
 
 type Membership = {
   id: string
+  email: string
   is_active: boolean
   role: { id: string; slug: OrganizationRoleSlug; rank: number }
   offices: string[]
@@ -30,8 +36,24 @@ async function loadMembership(req: PayloadRequest, organizationId: string, userI
       'La persona no pertenece a la organización.'
     )
   const role = doc.role as unknown as Membership['role']
+  const user = doc.user as unknown as { id?: string; email?: string } | string
+  let email = typeof user === 'object' && typeof user.email === 'string' ? user.email : ''
+  if (!email) {
+    const userIdFromRelation = relationId(user)
+    if (userIdFromRelation) {
+      const userDoc = await req.payload.findByID({
+        collection: 'users',
+        id: userIdFromRelation,
+        overrideAccess: true,
+        req,
+        depth: 0,
+      })
+      email = userDoc.email
+    }
+  }
   return {
     id: String(doc.id),
+    email,
     is_active: Boolean(doc.is_active),
     role: { id: String(role.id), slug: role.slug, rank: role.rank },
     offices: (doc.offices ?? []).map(relationId),
@@ -51,11 +73,11 @@ async function roleBySlug(req: PayloadRequest, slug: OrganizationRoleSlug) {
   return { id: String(found.docs[0].id), slug, rank: Number(found.docs[0].rank) }
 }
 
-async function assertUserLimit(
+export async function assertUserLimit(
   req: PayloadRequest,
   organizationId: string,
   role: { id: string; slug: OrganizationRoleSlug },
-  excludeMembershipId: string
+  excludeMembershipId?: string
 ) {
   const limit = (await subscriptionLimits(req, organizationId)).userLimit(role.slug)
   if (limit === null) return
@@ -66,7 +88,7 @@ async function assertUserLimit(
         { organization: { equals: organizationId } },
         { role: { equals: role.id } },
         { is_active: { equals: true } },
-        { id: { not_equals: excludeMembershipId } },
+        ...(excludeMembershipId ? [{ id: { not_equals: excludeMembershipId } }] : []),
       ],
     },
     overrideAccess: true,
@@ -79,6 +101,80 @@ async function assertUserLimit(
       `Tu plan permite hasta ${limit} ${limit === 1 ? 'persona' : 'personas'} con el rol ${ROLE_LABELS[role.slug]}.`
     )
   }
+}
+
+/** Creates an active account and its single tenant membership inside the caller's transaction. */
+export async function createMember(
+  req: PayloadRequest,
+  ctx: TenantContext & { organizationId: string },
+  input: MemberCreate
+) {
+  const organizationId = ctx.organizationId
+  await assertOrganizationActive(req, organizationId)
+
+  const role = await roleBySlug(req, input.role)
+  await assertUserLimit(req, organizationId, role)
+
+  const existingUser = await req.payload.find({
+    collection: 'users',
+    where: { email: { equals: input.email } },
+    overrideAccess: true,
+    req,
+    depth: 0,
+    limit: 1,
+  })
+  if (existingUser.docs.length) {
+    throw new AdminDomainError('email_unavailable', 409, 'Ya existe una cuenta con ese correo.')
+  }
+
+  let offices: string[] = []
+  if (input.role !== 'org_admin') {
+    offices = await activeOfficeIds(req, organizationId, input.office_ids)
+    if (offices.length !== input.office_ids.length) {
+      throw new AdminDomainError(
+        'invalid_offices',
+        400,
+        'Selecciona oficinas activas de la organización.'
+      )
+    }
+    if (!offices.length) {
+      throw new AdminDomainError('offices_required', 400, 'Asigna al menos una oficina activa.')
+    }
+    if (ctx.role === 'office_manager' && offices.some(id => !ctx.officeIds.includes(id))) {
+      throw new AdminDomainError('office_out_of_scope', 403, 'Sólo puedes asignar tus oficinas.')
+    }
+  } else if (input.office_ids.length) {
+    throw new AdminDomainError('invalid_offices', 400, 'Los OrgAdmins cubren todas las oficinas.')
+  }
+
+  // AUDIT: this action must emit an AuditLogs entry (user.create, chain_hash over {user, name, email}, previous hash for this organization_id)
+  // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+  const user = await req.payload.create({
+    collection: 'users',
+    overrideAccess: true,
+    req,
+    data: { email: input.email, password: input.password, name: input.name, status: 'active' },
+  })
+
+  // AUDIT: this action must emit an AuditLogs entry (membership.create, chain_hash over {user, organization, role, offices}, previous hash for this organization_id)
+  // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+  // NOTIFY: this event should trigger a Notification Bell entry for {the new member and organization admins}
+  // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
+  const membership = await req.payload.create({
+    collection: 'organization-memberships',
+    overrideAccess: true,
+    req,
+    data: {
+      user: user.id,
+      organization: organizationId,
+      offices,
+      role: role.id,
+      status: 'active',
+      is_active: true,
+    },
+  })
+
+  return { user, membership }
 }
 
 async function activeOfficeIds(req: PayloadRequest, organizationId: string, ids: string[]) {
@@ -117,8 +213,36 @@ export async function updateMember(
 ) {
   const organizationId = ctx.organizationId
   const membership = await loadMembership(req, organizationId, userId)
+  if (input.is_active === false) {
+    if (!input.confirm_email) {
+      throw new AdminDomainError(
+        'confirmation_required',
+        400,
+        'Escribe el correo de la persona para confirmar la desactivación.'
+      )
+    }
+    if (input.confirm_email.trim().toLowerCase() !== membership.email.trim().toLowerCase()) {
+      throw new AdminDomainError(
+        'confirmation_mismatch',
+        400,
+        'El correo no coincide con el de la persona que vas a desactivar.'
+      )
+    }
+  }
   if (userId === ctx.userId && input.is_active === false) {
     throw new AdminDomainError('cannot_deactivate_self', 409, 'No puedes desactivarte a ti mismo.')
+  }
+  const replacementId = input.replacement_owner_id
+  if (replacementId) {
+    const replacement =
+      replacementId === userId ? null : await loadMembership(req, organizationId, replacementId)
+    if (!replacement?.is_active) {
+      throw new AdminDomainError(
+        'invalid_replacement',
+        400,
+        'El nuevo responsable tiene que ser otra persona activa de la organización.'
+      )
+    }
   }
 
   const role =
@@ -129,6 +253,7 @@ export async function updateMember(
   const active = input.is_active ?? membership.is_active
   const reactivating = active && !membership.is_active
 
+  if (reactivating) await assertOrganizationActive(req, organizationId)
   if (active && (reactivating || roleChanged)) {
     await assertUserLimit(req, organizationId, role, membership.id)
   }
@@ -152,6 +277,12 @@ export async function updateMember(
     }
   }
 
+  // Antes de desactivar: el reemplazo todavía valida contra la persona activa, y después el hook
+  // releaseMemberResponsibilities ya no encuentra activos que dejar sin responsable.
+  if (replacementId && membership.is_active && !active) {
+    await reassignOwnedAssets(req, organizationId, userId, replacementId)
+  }
+
   // AUDIT: this action must emit an AuditLogs entry (membership.update — activate/deactivate/role/offices, chain_hash over {membership, role, offices, is_active}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   // NOTIFY: this event should trigger a Notification Bell entry for {the affected user, org_admins of this organization}
@@ -170,7 +301,7 @@ export async function updateMember(
   })
 
   // La cascada de desactivación pasa Users.status a inactive pero, a propósito, no lo revierte
-  // (doc 04 regla 5): reactivar es esta decisión explícita.
+  // (doc 03, cascada de personas): reactivar es esta decisión explícita.
   if (reactivating) {
     await req.payload.update({
       collection: 'users',

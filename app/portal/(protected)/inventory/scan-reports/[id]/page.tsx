@@ -2,22 +2,27 @@
 
 import { useParams, useSearchParams } from 'next/navigation'
 import type { ColumnDef } from '@tanstack/react-table'
-import { Center, Group, Loader, SimpleGrid, Stack, Tabs, Text } from '@mantine/core'
+import { Center, Loader, Stack, Tabs, Text, Tooltip } from '@mantine/core'
 import { Network, Radar, CircleCheck, CircleX } from 'lucide-react'
 import { DataTable } from '@/components/ui/DataTable'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { BackButton } from '@/components/ui/BackButton'
 import { TechnicalText } from '@/components/ui/TechnicalText'
-import { StatCard } from '@/components/ui/StatCard'
+import { MetricsStrip } from '@/components/ui/MetricsStrip'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import {
+  SCAN_DISCOVERY_DESCRIPTION,
+  SCAN_EXECUTION_DESCRIPTION,
   SCAN_RUN_LABEL,
   SCAN_REPORT_STATUS_LABEL,
   SCAN_REPORT_STATUS_TONE,
 } from '@/modules/scan-reports/scan-report-labels'
-import { formatDateTime } from '@/lib/format-date'
+import { formatScanWindow } from '@/lib/format-date'
 import { relationId } from '@/lib/relationId'
-import { useScanReport } from '@/modules/scan-reports/hooks/use-scan-report'
+import { useRenameScanReport, useScanReport } from '@/modules/scan-reports/hooks/use-scan-report'
+import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
+import { EVIDENCE_NAME_MAX, evidenceNameError } from '@/modules/scan-reports/schema'
+import { EditableTitle } from '@/components/ui/EditableTitle'
 import {
   acceptedAssetsInReport,
   parseRejectedAssets,
@@ -26,6 +31,7 @@ import {
   type ReportedAsset,
 } from '@/modules/scan-reports/service'
 import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
+import { portalHref } from '@/lib/portal-href'
 
 const acceptedColumns: ColumnDef<ReportedAsset, unknown>[] = [
   {
@@ -62,8 +68,10 @@ const rejectedColumns: ColumnDef<RejectedAsset, unknown>[] = [
 export default function ScanReportDetailPage() {
   const { id } = useParams<{ id: string }>()
   const asOrganization = useSearchParams().get('asOrganization') ?? undefined
-  const backHref = `/portal/inventory/scan-reports${asOrganization ? `?asOrganization=${asOrganization}` : ''}`
+  const backHref = portalHref('/portal/inventory/scan-reports', asOrganization)
   const { data: report, isPending } = useScanReport(id)
+  const rename = useRenameScanReport(id)
+  const tenant = useTenantContext(asOrganization)
 
   if (isPending) {
     return (
@@ -86,59 +94,87 @@ export default function ScanReportDetailPage() {
   const rejected = parseRejectedAssets(report.error)
   const accepted = acceptedAssetsInReport(report.raw_payload, rejected)
   const status = report.status ?? 'received'
+  const discoveryStatus =
+    (report.report_coverage as { discovery?: { status?: string } } | null)?.discovery?.status ??
+    'unknown'
+  const officeName =
+    report.office && typeof report.office === 'object' ? report.office.name : 'la oficina'
 
   return (
     <Stack gap="lg">
       <BackButton href={backHref} label="Volver a Informes de escaneo" />
 
       <PageHeader
-        title={`Informe de escaneo — ${report.scan_start ? formatDateTime(report.scan_start) : report.id}`}
-        description={`Enviado por el agente ${relationId(report.agent)}${report.scan_end ? ` · finalizado ${formatDateTime(report.scan_end)}` : ''}.`}
+        title={
+          <EditableTitle
+            value={report.display_name ?? ''}
+            fallback="Informe de escaneo"
+            canEdit={Boolean(tenant.data?.permissions.renameEvidence)}
+            saving={rename.isPending}
+            maxLength={EVIDENCE_NAME_MAX}
+            validate={evidenceNameError}
+            onSave={rename.mutateAsync}
+          />
+        }
+        badge={
+          <Tooltip
+            multiline
+            w={260}
+            label={SCAN_EXECUTION_DESCRIPTION[report.execution_status ?? ''] ?? ''}
+            disabled={!report.execution_status}
+          >
+            <span>
+              <StatusBadge
+                tone={SCAN_REPORT_STATUS_TONE[status] ?? 'neutral'}
+                label={SCAN_REPORT_STATUS_LABEL[status] ?? status}
+              />
+            </span>
+          </Tooltip>
+        }
+        // Una sola mención de fecha y hora, también cuando el informe tiene nombre propio.
+        description={
+          <>
+            {report.scan_start ? formatScanWindow(report.scan_start, report.scan_end) : 'Sin fecha'}
+            {' · '}
+            <Tooltip label={`Agente ${relationId(report.agent)}`}>
+              <span>Escáner de {officeName}</span>
+            </Tooltip>
+          </>
+        }
         rightSection={
-          <Group gap="xs">
-            <CreateRelatedTaskButton
-              reference={{ relationTo: 'scan-reports', value: String(report.id) }}
-              asOrganization={asOrganization}
-            />
-            <StatusBadge
-              tone={SCAN_REPORT_STATUS_TONE[status] ?? 'neutral'}
-              label={SCAN_REPORT_STATUS_LABEL[status] ?? status}
-            />
-          </Group>
+          <CreateRelatedTaskButton
+            reference={{ relationTo: 'scan-reports', value: String(report.id) }}
+            asOrganization={asOrganization}
+          />
         }
       />
 
-      <Text size="sm" c="dimmed">
-        Ejecución: {SCAN_RUN_LABEL[report.execution_status ?? ''] ?? 'desconocida'} · Cobertura de
-        detección:{' '}
-        {SCAN_RUN_LABEL[
-          (report.report_coverage as { discovery?: { status?: string } } | null)?.discovery
-            ?.status ?? ''
-        ] ?? 'desconocida'}
-      </Text>
+      <Stack gap={2}>
+        {report.execution_status && (
+          <Text size="sm">{SCAN_EXECUTION_DESCRIPTION[report.execution_status]}</Text>
+        )}
+        <Text size="xs" c="dimmed">
+          Búsqueda de equipos: {SCAN_RUN_LABEL[discoveryStatus] ?? 'desconocida'}
+          {SCAN_DISCOVERY_DESCRIPTION[discoveryStatus]
+            ? ` — ${SCAN_DISCOVERY_DESCRIPTION[discoveryStatus]}`
+            : ''}
+        </Text>
+      </Stack>
 
-      <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} spacing="md">
-        <StatCard
-          icon={<Network size={20} strokeWidth={1.5} />}
-          value={report.network ?? '—'}
-          label="Red"
-        />
-        <StatCard
-          icon={<Radar size={20} strokeWidth={1.5} />}
-          value={report.hosts_up ?? total}
-          label="Hosts detectados"
-        />
-        <StatCard
-          icon={<CircleCheck size={20} strokeWidth={1.5} />}
-          value={payloadArchived ? 'Archivado' : `${accepted.length} / ${total}`}
-          label="Aceptados"
-        />
-        <StatCard
-          icon={<CircleX size={20} strokeWidth={1.5} />}
-          value={rejected.length}
-          label="Rechazados"
-        />
-      </SimpleGrid>
+      <MetricsStrip
+        isPending={false}
+        metrics={[
+          { key: 'network', icon: Network, value: report.network ?? '—', label: 'red' },
+          { key: 'hosts', icon: Radar, value: report.hosts_up ?? total, label: 'hosts detectados' },
+          {
+            key: 'accepted',
+            icon: CircleCheck,
+            value: payloadArchived ? 'Archivado' : `${accepted.length} / ${total}`,
+            label: 'aceptados',
+          },
+          { key: 'rejected', icon: CircleX, value: rejected.length, label: 'rechazados' },
+        ]}
+      />
 
       <Tabs defaultValue="accepted">
         <Tabs.List>

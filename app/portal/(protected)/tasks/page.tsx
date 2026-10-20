@@ -2,20 +2,11 @@
 
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import {
-  Button,
-  Group,
-  Modal,
-  Select,
-  Stack,
-  Switch,
-  Tabs,
-  TextInput,
-  Tooltip,
-} from '@mantine/core'
+import { Button, Modal, Stack, SegmentedControl, Tabs, TextInput, Tooltip } from '@mantine/core'
 import { Inbox, ListTodo, Plus, Search, UserRound } from 'lucide-react'
 import { DataTable } from '@/components/ui/DataTable'
 import { FilterBar } from '@/components/ui/FilterBar'
+import { MultiFilterSelect } from '@/components/ui/MultiFilterSelect'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useUiStore } from '@/lib/ui-store'
 import { TaskForm } from '@/modules/tasks/components/TaskForm'
@@ -25,10 +16,16 @@ import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
 
 type TaskView = 'mine' | 'pool' | 'all'
 
-const ALL = 'all'
+const PRIORITY_OPTIONS = [
+  { value: 'urgent', label: 'Urgente' },
+  { value: 'high', label: 'Alta' },
+  { value: 'normal', label: 'Normal' },
+  { value: 'low', label: 'Baja' },
+]
 
+// Sólo estados reales y de selección múltiple: "lo que falta hacer" es marcar varios, no una
+// categoría aparte que haga parecer que una tarea tiene dos estados a la vez.
 const ALL_STATUSES = [
-  { value: ALL, label: 'Todos los estados' },
   { value: 'planned', label: 'Planificadas' },
   { value: 'pending', label: 'Pendientes' },
   { value: 'in_progress', label: 'En progreso' },
@@ -36,15 +33,21 @@ const ALL_STATUSES = [
   { value: 'cancelled', label: 'Canceladas' },
 ]
 
-// El pool sólo contiene tareas pendientes sin reclamar (ver endpoints/tasks.ts, view === 'pool').
-const STATUS_OPTIONS: Record<TaskView, typeof ALL_STATUSES> = {
-  mine: ALL_STATUSES,
-  pool: [
-    { value: ALL, label: 'Todos los estados' },
-    { value: 'pending', label: 'Disponibles ahora' },
-    { value: 'planned', label: 'Próximas' },
-  ],
-  all: ALL_STATUSES,
+// El pool sólo contiene tareas pendientes sin reclamar (ver endpoints/tasks.ts, view === 'pool'):
+// ahí el estado es binario (se puede reclamar ya o todavía no) y va como SegmentedControl.
+// Textos cortos: tres segmentos iguales en una columna de FilterBar.
+const POOL_STATUS_OPTIONS = [
+  { value: 'all', label: 'Todas' },
+  { value: 'pending', label: 'Ahora' },
+  { value: 'planned', label: 'Próximas' },
+]
+
+// Estados con los que abre cada pestaña (vacío = todos): lo propio que falta hacer, lo que se
+// puede reclamar ya, y en "Todas" ningún filtro (vista de supervisión completa).
+const DEFAULT_STATUS: Record<TaskView, string[]> = {
+  mine: ['planned', 'pending', 'in_progress'],
+  pool: ['pending'],
+  all: [],
 }
 
 const EMPTY_LABELS: Record<TaskView, string> = {
@@ -60,15 +63,15 @@ export default function TasksPage() {
   const canCreate = tenant.data?.permissions.tasks.includes('create') ?? false
   const canManage = tenant.data?.permissions.tasks.includes('assign') ?? false
   const [view, setView] = useState<TaskView>('mine')
-  const [status, setStatus] = useState<string | undefined>()
-  const [priority, setPriority] = useState<string | undefined>()
+  const [status, setStatus] = useState<string[]>(DEFAULT_STATUS.mine)
+  const [priority, setPriority] = useState<string[]>([])
   const [includeArchived, setIncludeArchived] = useState(false)
   const [opened, setOpened] = useState(false)
   const [search, setSearch] = useState('')
-  const statusOptions = STATUS_OPTIONS[view]
   // Sólo las terminales se archivan: el toggle sobra cuando el filtro no puede devolverlas.
   const showArchivedToggle =
-    view !== 'pool' && (!status || status === 'completed' || status === 'cancelled')
+    view !== 'pool' &&
+    (!status.length || status.some(value => value === 'completed' || value === 'cancelled'))
   const tasks = useTasks({
     view,
     status,
@@ -78,10 +81,12 @@ export default function TasksPage() {
     asOrganization,
   })
   const changeView = (next: TaskView) => {
+    // Cada pestaña abre con sus filtros por defecto (el estado cambia de opciones entre vistas);
+    // la búsqueda escrita se conserva.
     setView(next)
-    if (status && !STATUS_OPTIONS[next].some(option => option.value === status)) {
-      setStatus(undefined)
-    }
+    setStatus(DEFAULT_STATUS[next])
+    setPriority([])
+    setIncludeArchived(false)
   }
   const visibleTasks = useMemo(() => {
     const term = search.trim().toLowerCase()
@@ -123,56 +128,66 @@ export default function TasksPage() {
           )}
         </Tabs.List>
       </Tabs>
-      <FilterBar>
-        <TextInput
-          placeholder="Buscar tarea o entidad..."
-          aria-label="Buscar"
-          leftSection={<Search size={16} strokeWidth={1.5} />}
-          value={search}
-          onChange={event => setSearch(event.currentTarget.value)}
-          w="100%"
-        />
-        <Select
-          placeholder="Estado"
-          aria-label="Estado"
-          data={statusOptions}
-          value={status ?? ALL}
-          onChange={value => setStatus(!value || value === ALL ? undefined : value)}
-          w="100%"
-        />
-        <Select
-          placeholder="Prioridad"
-          aria-label="Prioridad"
-          data={[
-            { value: ALL, label: 'Todas las prioridades' },
-            { value: 'urgent', label: 'Urgente' },
-            { value: 'high', label: 'Alta' },
-            { value: 'normal', label: 'Normal' },
-            { value: 'low', label: 'Baja' },
-          ]}
-          value={priority ?? ALL}
-          onChange={value => setPriority(!value || value === ALL ? undefined : value)}
-          w="100%"
-        />
-        {showArchivedToggle && (
-          <Group h={36}>
-            <Tooltip label="Las tareas completadas o canceladas se archivan para despejar la lista">
-              <Switch
-                label="Incluir archivadas"
-                checked={includeArchived}
-                onChange={event => setIncludeArchived(event.currentTarget.checked)}
+      <Stack key={view} gap="md" className="tab-panel-enter">
+        <FilterBar>
+          <TextInput
+            placeholder="Buscar tarea o entidad..."
+            aria-label="Buscar"
+            leftSection={<Search size={16} strokeWidth={1.5} />}
+            value={search}
+            onChange={event => setSearch(event.currentTarget.value)}
+            w="100%"
+          />
+          {view !== 'pool' && (
+            <MultiFilterSelect
+              ariaLabel="Estado"
+              allLabel="Todos los estados"
+              data={ALL_STATUSES}
+              value={status}
+              onChange={setStatus}
+            />
+          )}
+          <MultiFilterSelect
+            ariaLabel="Prioridad"
+            allLabel="Todas las prioridades"
+            data={PRIORITY_OPTIONS}
+            value={priority}
+            onChange={setPriority}
+          />
+          {view === 'pool' && (
+            <Tooltip label="Disponibilidad">
+              <SegmentedControl
+                aria-label="Disponibilidad"
+                fullWidth
+                data={POOL_STATUS_OPTIONS}
+                value={status[0] ?? 'all'}
+                onChange={value => setStatus(value === 'all' ? [] : [value])}
               />
             </Tooltip>
-          </Group>
-        )}
-      </FilterBar>
-      <DataTable
-        columns={columns}
-        data={visibleTasks}
-        isLoading={tasks.isPending}
-        emptyLabel={EMPTY_LABELS[view]}
-        minWidth={850}
-      />
+          )}
+          {showArchivedToggle && (
+            <Tooltip label="Las tareas completadas o canceladas se archivan para despejar la lista">
+              <SegmentedControl
+                aria-label="Tareas archivadas"
+                fullWidth
+                data={[
+                  { value: 'hide', label: 'Sin archivar' },
+                  { value: 'include', label: 'Todas' },
+                ]}
+                value={includeArchived ? 'include' : 'hide'}
+                onChange={value => setIncludeArchived(value === 'include')}
+              />
+            </Tooltip>
+          )}
+        </FilterBar>
+        <DataTable
+          columns={columns}
+          data={visibleTasks}
+          isLoading={tasks.isPending}
+          emptyLabel={EMPTY_LABELS[view]}
+          minWidth={850}
+        />
+      </Stack>
       <Modal
         opened={opened}
         onClose={() => setOpened(false)}

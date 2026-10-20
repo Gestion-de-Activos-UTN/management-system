@@ -4,6 +4,7 @@ import { useEffect } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
+  Box,
   Autocomplete,
   Button,
   Divider,
@@ -20,6 +21,7 @@ import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
 import { memberCoversOffice } from '@/modules/users/service'
 import { MemberSelect } from '@/modules/users/components/MemberSelect'
 import {
+  NO_OWNER_LABEL,
   CRITICALITY_OPTIONS,
   NON_NETWORK_ASSET_STATUS_OPTIONS,
   REVIEW_INTERVAL_OPTIONS,
@@ -34,6 +36,12 @@ import { createNonNetworkAssetSchema, type NonNetworkAssetFormValues } from '../
 import { useSaveNonNetworkAsset } from '../hooks/use-save-non-network-asset'
 import { useSoftwareSuggestions } from '../hooks/use-software-suggestions'
 import { formatDateInput, localDateEndToISOString } from '@/lib/format-date'
+import {
+  AssessmentExclusionFields,
+  AssessmentScopeHint,
+} from '@/modules/assessments/components/AssessmentExclusionFields'
+
+const NO_OWNER = '__no_owner__'
 
 function relationIdOf(value: string | { id: string } | null | undefined): string {
   if (!value) return ''
@@ -58,7 +66,7 @@ export function NonNetworkAssetForm({
     handleSubmit,
     watch,
     setValue,
-    formState: { errors },
+    formState: { errors, isValid },
   } = useForm<NonNetworkAssetFormValues>({
     mode: 'onChange',
     resolver: zodResolver(createNonNetworkAssetSchema(asset)),
@@ -66,7 +74,10 @@ export function NonNetworkAssetForm({
       alias: asset?.alias ?? '',
       asset_category: asset?.asset_category,
       criticality: asset?.criticality ?? 'medium',
-      owner: relationIdOf(asset?.owner as string | { id: string } | null | undefined),
+      // En el alta '' obliga a elegir; al editar un activo sin responsable se conserva el null.
+      owner: asset
+        ? relationIdOf(asset.owner as string | { id: string } | null | undefined) || null
+        : '',
       location: asset?.location ?? '',
       status: asset?.status ?? 'active',
       office: relationIdOf(asset?.office as string | { id: string } | null | undefined),
@@ -102,12 +113,17 @@ export function NonNetworkAssetForm({
     ? (members ?? []).filter(member => memberCoversOffice(member, selectedOffice))
     : []
 
+  const originalOffice = relationIdOf(asset?.office as string | { id: string } | null | undefined)
   useEffect(() => {
-    if (!members || !selectedOwner || !selectedOffice) return
-    if (!eligibleOwners.some(member => member.id === selectedOwner)) {
+    if (!members || !selectedOffice) return
+    // Cambiar de oficina obliga a elegir un responsable que la cubra, también si no tenía.
+    const ownerless = selectedOwner === null && selectedOffice !== originalOffice
+    const uncovered =
+      Boolean(selectedOwner) && !eligibleOwners.some(member => member.id === selectedOwner)
+    if (ownerless || uncovered) {
       setValue('owner', '', { shouldDirty: true, shouldValidate: true })
     }
-  }, [eligibleOwners, members, selectedOffice, selectedOwner, setValue])
+  }, [eligibleOwners, members, originalOffice, selectedOffice, selectedOwner, setValue])
 
   const onSubmit = handleSubmit(values => {
     save.mutate(values, { onSuccess: onSaved })
@@ -299,14 +315,16 @@ export function NonNetworkAssetForm({
               <MemberSelect
                 label="Responsable"
                 members={eligibleOwners}
+                // Visible para entender el estado, nunca elegible: sólo el sistema lo asigna.
+                emptyOption={{ value: NO_OWNER, label: NO_OWNER_LABEL, disabled: true }}
                 required
                 placeholder={
                   selectedOffice
                     ? 'Selecciona un responsable de esta oficina'
                     : 'Selecciona primero una oficina'
                 }
-                value={field.value || null}
-                onChange={field.onChange}
+                value={field.value === null ? NO_OWNER : field.value || null}
+                onChange={value => field.onChange(value === NO_OWNER ? null : value)}
                 disabled={!selectedOffice}
                 error={errors.owner?.message}
               />
@@ -369,11 +387,7 @@ export function NonNetworkAssetForm({
           )}
         />
         <Divider label="Alcance de la evaluación de seguridad" labelPosition="left" />
-        <Text size="sm" c="dimmed">
-          Los activos excluidos permanecen en el inventario, pero no afectan las revisiones ni el
-          puntaje de riesgo.
-        </Text>
-        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+        <Box w={{ base: '100%', sm: '50%' }}>
           <Controller
             name="assessment_scope"
             control={control}
@@ -389,64 +403,21 @@ export function NonNetworkAssetForm({
               />
             )}
           />
-          {assessmentScope === 'excluded' && (
-            <Controller
-              name="assessment_exclusion_reason"
-              control={control}
-              render={({ field }) => (
-                <Select
-                  label="Motivo de exclusión"
-                  required
-                  data={[...ASSESSMENT_EXCLUSION_REASON_OPTIONS]}
-                  value={field.value}
-                  onChange={field.onChange}
-                  error={errors.assessment_exclusion_reason?.message}
-                />
-              )}
-            />
-          )}
-          {assessmentScope === 'excluded' && (
-            <Controller
-              name="assessment_excluded_until"
-              control={control}
-              render={({ field }) => (
-                <TextInput
-                  type="date"
-                  label="Excluido hasta"
-                  description="Fecha obligatoria, hasta 90 días desde hoy."
-                  required
-                  error={errors.assessment_excluded_until?.message}
-                  value={field.value ? formatDateInput(field.value) : ''}
-                  onChange={event =>
-                    field.onChange(
-                      event.currentTarget.value
-                        ? localDateEndToISOString(event.currentTarget.value)
-                        : null
-                    )
-                  }
-                />
-              )}
-            />
-          )}
-        </SimpleGrid>
-        {assessmentScope === 'excluded' && (
-          <Controller
-            name="assessment_exclusion_note"
-            control={control}
-            render={({ field }) => (
-              <Textarea
-                label="Nota de exclusión"
-                description="Agrega contexto para quienes revisen cuando sea útil."
-                required={exclusionReason === 'other'}
-                value={field.value ?? ''}
-                onChange={field.onChange}
-                error={errors.assessment_exclusion_note?.message}
-              />
-            )}
-          />
-        )}
+        </Box>
+        <AssessmentScopeHint />
+        <AssessmentExclusionFields
+          control={control}
+          errors={errors}
+          excluded={assessmentScope === 'excluded'}
+          noteRequired={exclusionReason === 'other'}
+        />
         <Group justify="flex-end">
-          <Button type="submit" loading={save.isPending} w={{ base: '100%', sm: 'auto' }}>
+          <Button
+            type="submit"
+            loading={save.isPending}
+            disabled={!isValid}
+            w={{ base: '100%', sm: 'auto' }}
+          >
             {asset ? 'Guardar cambios' : 'Crear activo'}
           </Button>
         </Group>

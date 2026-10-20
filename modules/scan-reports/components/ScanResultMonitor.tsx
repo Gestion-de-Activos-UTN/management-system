@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { formatDateTime } from '@/lib/format-date'
 import { useNewScanResult } from '../hooks/use-new-scan-result'
 import { invalidateSecurityReview } from '@/modules/assessments/invalidate-security-review'
+import { portalHref } from '@/lib/portal-href'
 
 const NOTIFICATION_ID = 'new-scan-result'
 
@@ -39,8 +40,8 @@ export function ScanResultMonitor({
     })
 
     const office =
-      typeof result.office === 'object' && result.office ? result.office.name : 'your organization'
-    const href = `/portal/inventory${asOrganization ? `?asOrganization=${asOrganization}` : ''}`
+      typeof result.office === 'object' && result.office ? result.office.name : 'tu organización'
+    const href = portalHref('/portal/inventory', asOrganization)
 
     // Una sola notificación global: un resultado posterior reemplaza al anterior. autoClose=false
     // hace que permanezca visible hasta que el usuario la cierre o abra el inventario.

@@ -29,11 +29,17 @@ test('Miembros: desactivar, reactivar y cambiar de rol respetan las reglas de la
   const officeId = String(office.id)
   const adminId = await member(payload, orgId, [officeId], 'org_admin')
   const viewerId = await member(payload, orgId, [officeId], 'org_viewer')
+  const adminEmail = (
+    await payload.findByID({ collection: 'users', id: adminId, overrideAccess: true })
+  ).email
+  const viewerEmail = (
+    await payload.findByID({ collection: 'users', id: viewerId, overrideAccess: true })
+  ).email
   const patch = (actor: string, target: string, body: unknown) =>
     updateOrgMemberEndpoint.handler(request(payload, actor, { id: target, body }))
 
   assert.equal((await patch(viewerId, adminId, { is_active: false })).status, 403)
-  const self = await patch(adminId, adminId, { is_active: false })
+  const self = await patch(adminId, adminId, { is_active: false, confirm_email: adminEmail })
   assert.equal(self.status, 409)
   assert.equal(((await self.json()) as { error: string }).error, 'cannot_deactivate_self')
   const lastAdmin = await patch(adminId, adminId, { role: 'org_viewer', office_ids: [officeId] })
@@ -45,7 +51,10 @@ test('Miembros: desactivar, reactivar y cambiar de rol respetan las reglas de la
     'un rol que no es admin necesita al menos una oficina'
   )
 
-  assert.equal((await patch(adminId, viewerId, { is_active: false })).status, 200)
+  assert.equal(
+    (await patch(adminId, viewerId, { is_active: false, confirm_email: viewerEmail })).status,
+    200
+  )
   const listed = await orgMembersEndpoint.handler(
     request(payload, adminId, { url: 'http://localhost/x?include_inactive=1' })
   )

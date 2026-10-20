@@ -1,17 +1,18 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import type { SortingState } from '@tanstack/react-table'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
   Alert,
   Anchor,
-  Badge,
   Card,
   Group,
   Pagination,
   Progress,
   RingProgress,
+  Select,
   Skeleton,
   Stack,
   Text,
@@ -27,8 +28,16 @@ import { RiskAlerts } from '@/modules/risk/components/RiskAlerts'
 import { TopRiskAssets } from '@/modules/risk/components/TopRiskAssets'
 import { RiskBandBadge } from '@/modules/risk/components/RiskBandBadge'
 import { RISK_BAND_COLOR, RISK_SCORE_MEANING, RISK_SCORE_SCALE } from '@/modules/risk/risk-labels'
-import { bandVisible, scoreVisible } from '@/domain/risk/constants'
+import {
+  bandVisible,
+  RISK_DEFAULT_PAGE_SIZE,
+  RISK_PAGE_SIZES,
+  type RiskSortKey,
+  scoreVisible,
+} from '@/domain/risk/constants'
+import { portalHref } from '@/lib/portal-href'
 import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
+import { StatusBadge } from '@/components/ui/StatusBadge'
 
 export default function RiskScorePage() {
   const searchParams = useSearchParams()
@@ -36,16 +45,43 @@ export default function RiskScorePage() {
   const evaluationId = searchParams.get('evaluation') ?? undefined
   const { officeId, ready } = useConcreteOfficeId(asOrganization)
   const [page, setPage] = useState(1)
-  // A different office or organization has its own evaluation: start again from the first page.
-  useEffect(() => setPage(1), [officeId, asOrganization, evaluationId])
-  const query = useLatestRisk({ officeId, asOrganization, evaluationId, page, enabled: ready })
+  // Al cambiar de página la lista vuelve a su encabezado, no se queda en el pie de la anterior.
+  const tableRef = useRef<HTMLDivElement>(null)
+  const changePage = (next: number) => {
+    setPage(next)
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    tableRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })
+  }
+  const [pageSize, setPageSize] = useState<number>(RISK_DEFAULT_PAGE_SIZE)
+  // El servidor ordena toda la evaluación y después pagina; sin orden elegido usa el control.
+  const [sorting, setSorting] = useState<SortingState>([])
+  const sort = sorting[0]
+  // Otra oficina, organización, tamaño u orden tiene sus propias páginas: vuelve a la primera.
+  useEffect(
+    () => setPage(1),
+    [officeId, asOrganization, evaluationId, pageSize, sort?.id, sort?.desc]
+  )
+  const query = useLatestRisk({
+    officeId,
+    asOrganization,
+    evaluationId,
+    page,
+    limit: pageSize,
+    sort: sort?.id as RiskSortKey | undefined,
+    direction: sort ? (sort.desc ? 'desc' : 'asc') : undefined,
+    enabled: ready,
+  })
   const data = query.data?.evaluation
   const pagination = query.data?.pagination
-  const inventoryHref = `/portal/inventory${asOrganization ? `?asOrganization=${asOrganization}` : ''}`
+  const inventoryHref = portalHref('/portal/inventory', asOrganization)
 
   return (
     <Stack gap="xl">
-      {evaluationId && <Alert color="blue" title="Evaluación histórica">Esta es la evidencia que originó la tarea. El puntaje vigente puede ser diferente.</Alert>}
+      {evaluationId && (
+        <Alert color="blue" title="Evaluación histórica">
+          Esta es la evidencia que originó la tarea. El puntaje vigente puede ser diferente.
+        </Alert>
+      )}
       <PageHeader
         title="Puntaje de riesgo"
         description="Una vista simple de los problemas de seguridad detectados y de la información que todavía falta revisar."
@@ -59,7 +95,9 @@ export default function RiskScorePage() {
         }
       />
       {query.isError && <Alert color="red">No se pudo cargar la última evaluación.</Alert>}
-      {(query.data?.recalculation === 'pending' || query.data?.recalculation === 'processing' || query.data?.recalculation === 'outdated') && (
+      {(query.data?.recalculation === 'pending' ||
+        query.data?.recalculation === 'processing' ||
+        query.data?.recalculation === 'outdated') && (
         <Alert color="blue" title="Actualización pendiente">
           Los cambios están guardados. El puntaje mostrado corresponde al cálculo anterior y se
           actualizará cuando termine el recálculo.
@@ -120,9 +158,7 @@ export default function RiskScorePage() {
                     </Text>
                   )}
                   {data.score !== null && !data.final_band && (
-                    <Badge color="gray" variant="light">
-                      Preliminar
-                    </Badge>
+                    <StatusBadge tone="neutral" label="Preliminar" />
                   )}
                   <Text size="sm">
                     {data.score === null
@@ -162,7 +198,14 @@ export default function RiskScorePage() {
           </Card>
           <RiskAlerts alerts={data.alerts} inventoryHref={inventoryHref} />
           <TopRiskAssets assets={data.top_assets} />
-          <Card withBorder radius="lg" p="lg">
+          <Card
+            ref={tableRef}
+            withBorder
+            radius="lg"
+            p="lg"
+            // Deja a la vista el encabezado fijo de la app al desplazarse hasta acá.
+            style={{ scrollMarginTop: 'calc(var(--app-shell-header-height, 0px) + 16px)' }}
+          >
             <Text fw={750} mb="md">
               Qué necesita atención
             </Text>
@@ -173,16 +216,36 @@ export default function RiskScorePage() {
             <DataTable
               columns={riskContributionsColumns}
               data={query.data?.contributions ?? []}
-              isLoading={query.isFetching}
+              // Sólo la carga de otra página/tamaño (datos de relleno), no el refresco de fondo de
+              // cada 30 s: si no, la tabla se atenuaba sola periódicamente.
+              isLoading={query.isPending || query.isPlaceholderData}
+              manualSorting
+              sorting={sorting}
+              onSortingChange={setSorting}
               emptyLabel="Sin comprobaciones aplicables"
               minWidth={720}
             />
-            {pagination && pagination.totalPages > 1 && (
+            {pagination && pagination.totalDocs > RISK_PAGE_SIZES[0] && (
               <Group justify="space-between" mt="md">
-                <Text size="sm" c="dimmed">
-                  {pagination.totalDocs} comprobaciones
-                </Text>
-                <Pagination total={pagination.totalPages} value={page} onChange={setPage} />
+                <Group gap="sm">
+                  <Text size="sm" c="dimmed">
+                    {pagination.totalDocs} comprobaciones
+                  </Text>
+                  <Select
+                    aria-label="Filas por página"
+                    data={RISK_PAGE_SIZES.map(size => ({
+                      value: String(size),
+                      label: `${size} por página`,
+                    }))}
+                    value={String(pageSize)}
+                    onChange={value => value && setPageSize(Number(value))}
+                    w={140}
+                    size="xs"
+                  />
+                </Group>
+                {pagination.totalPages > 1 && (
+                  <Pagination total={pagination.totalPages} value={page} onChange={changePage} />
+                )}
               </Group>
             )}
           </Card>

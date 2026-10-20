@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { Group, Skeleton, Stack, Text, UnstyledButton } from '@mantine/core'
 import { StatusBadge } from '@/components/ui/StatusBadge'
+import { useSession } from '@/lib/use-session'
 import { formatRelativeDays } from '@/lib/format-date'
 import { usePortalMessageReceipt, usePortalMessages } from '../hooks/use-portal-messages'
 import { usePortalMessageActions } from '../hooks/use-portal-message-actions'
@@ -17,7 +18,11 @@ import { markPortalMessageShown } from '../session-state'
 
 /** Mensajes vigentes del usuario: sin leer primero; los leídos hasta cumplir 30 días. */
 export function PortalMessagesList() {
-  const query = usePortalMessages()
+  const session = useSession()
+  // La bandeja es personal: /v1/portal-messages responde 403 a un admin de plataforma
+  // que visita la organización, así que ni se consulta.
+  const isMember = session?.collection === 'users'
+  const query = usePortalMessages(isMember)
   const receipt = usePortalMessageReceipt()
   const [activeId, setActiveId] = useState<string | null>(null)
   const messages = (query.data ?? [])
@@ -46,7 +51,11 @@ export function PortalMessagesList() {
           <StatusBadge tone="info" label={`${unread} sin leer`} />
         </Group>
       )}
-      {query.isPending ? (
+      {session && !isMember ? (
+        <Text size="sm" c="dimmed" py="md">
+          La bandeja de mensajes es personal de cada miembro de la organización.
+        </Text>
+      ) : query.isPending ? (
         <Stack gap="sm">
           <Skeleton height={40} />
           <Skeleton height={40} />

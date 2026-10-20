@@ -2,7 +2,7 @@
 
 import { useSearchParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
-import { Button, Group, Select, Stack, Text, TextInput, Tooltip } from '@mantine/core'
+import { Button, Group, SegmentedControl, Stack, Text, TextInput, Tooltip } from '@mantine/core'
 import { Plus, Search } from 'lucide-react'
 import { DataTable } from '@/components/ui/DataTable'
 import { FilterBar } from '@/components/ui/FilterBar'
@@ -94,19 +94,19 @@ export default function AdminOfficesPage() {
         />
         {/* Sólo cambia el resultado si hay oficinas inactivas. */}
         {hasInactive && (
-          <Select
-            placeholder="Estado"
-            aria-label="Filtrar por estado"
-            allowDeselect={false}
-            data={[
-              { value: 'all', label: 'Todas las oficinas' },
-              { value: 'active', label: 'Oficinas activas' },
-              { value: 'inactive', label: 'Oficinas inactivas' },
-            ]}
-            value={status}
-            onChange={value => setStatus((value as StatusFilter) ?? 'all')}
-            w="100%"
-          />
+          <Tooltip label="Estado">
+            <SegmentedControl
+              aria-label="Estado"
+              fullWidth
+              data={[
+                { value: 'all', label: 'Todas' },
+                { value: 'active', label: 'Activas' },
+                { value: 'inactive', label: 'Inactivas' },
+              ]}
+              value={status}
+              onChange={value => setStatus(value as StatusFilter)}
+            />
+          </Tooltip>
         )}
       </FilterBar>
       <DataTable

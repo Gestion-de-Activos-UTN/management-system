@@ -81,6 +81,17 @@ async function enforceLastActiveOrgAdminInvariant(
     depth: 0,
   })
   if (!isProtectedRole(role.slug)) return
+  // Doc 02: "toda organización ACTIVA tiene al menos un admin". La desactivación de la
+  // organización (domain/organizations/organization-lifecycle.ts) la apaga primero y después
+  // desactiva a todas sus personas, admins incluidos.
+  const organization = await req.payload.findByID({
+    collection: 'organizations',
+    id: organizationId,
+    overrideAccess: true,
+    req,
+    depth: 0,
+  })
+  if (organization.is_active === false) return
 
   const countAfter = await countOtherActiveOrgAdmins(
     req,

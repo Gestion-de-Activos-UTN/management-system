@@ -1,7 +1,9 @@
 'use client'
 
+import { textRuleError } from '@/lib/text-rules'
+import { userFacingErrorMessage } from '@/lib/user-facing-error'
 import { useState } from 'react'
-import { Alert, Button, Group, Modal, Select, SimpleGrid, Stack, TextInput } from '@mantine/core'
+import { Alert, Button, Group, Modal, Select, Stack, TextInput } from '@mantine/core'
 import { Plus, Save } from 'lucide-react'
 import type { Office } from '@/app/types/payload-types'
 import { departmentsOf, PROVINCES } from '@/lib/argentina-geo'
@@ -83,52 +85,48 @@ function OfficeForm({
       await save.mutateAsync({ input: parsed.data, id: office ? String(office.id) : undefined })
       onDone()
     } catch (error) {
-      setServerError((error as { message?: string }).message || 'No se pudo guardar la oficina.')
+      setServerError(userFacingErrorMessage(error, 'No se pudo guardar la oficina.'))
     }
   }
 
   return (
     <Stack gap="md">
       <TextInput
-        label="Nombre"
+        label="Nombre de la oficina"
         placeholder="Ej.: Casa central"
         required
         maxLength={120}
         value={name}
-        error={errors.name}
+        error={errors.name ?? textRuleError(name, 'label')}
         onChange={event => setName(event.currentTarget.value)}
         data-autofocus
       />
-      <SimpleGrid cols={{ base: 1, sm: 2 }}>
-        <Select
-          label="Provincia"
-          placeholder="Selecciona la provincia"
-          required
-          searchable
-          data={PROVINCE_OPTIONS}
-          value={provinceId || null}
-          error={errors.province_id}
-          onChange={value => {
-            setProvinceId(value ?? '')
-            setDepartmentId('')
-          }}
-          comboboxProps={{ withinPortal: true }}
-        />
-        <Select
-          // Sin "(opcional)": parte la etiqueta en dos líneas y desalinea los campos; la falta del
-          // asterisco ya lo indica.
-          label={provinceId === '02' ? 'Comuna' : 'Departamento o partido'}
-          placeholder={provinceId ? 'Sin especificar' : 'Primero elige la provincia'}
-          searchable
-          clearable
-          disabled={!provinceId}
-          data={departmentOptions}
-          value={departmentId || null}
-          error={errors.department_id}
-          onChange={value => setDepartmentId(value ?? '')}
-          comboboxProps={{ withinPortal: true }}
-        />
-      </SimpleGrid>
+      <Select
+        label="Provincia"
+        placeholder="Selecciona la provincia"
+        required
+        searchable
+        data={PROVINCE_OPTIONS}
+        value={provinceId || null}
+        error={errors.province_id}
+        onChange={value => {
+          setProvinceId(value ?? '')
+          setDepartmentId('')
+        }}
+        comboboxProps={{ withinPortal: true }}
+      />
+      <Select
+        label={`${provinceId === '02' ? 'Comuna' : provinceId === '06' ? 'Partido' : 'Departamento'} (opcional)`}
+        placeholder={provinceId ? 'Sin especificar' : 'Primero elige la provincia'}
+        searchable
+        clearable
+        disabled={!provinceId}
+        data={departmentOptions}
+        value={departmentId || null}
+        error={errors.department_id}
+        onChange={value => setDepartmentId(value ?? '')}
+        comboboxProps={{ withinPortal: true }}
+      />
       {serverError && <Alert color="red">{serverError}</Alert>}
       <Group justify="flex-end" gap="xs">
         <Button variant="default" onClick={onDone}>

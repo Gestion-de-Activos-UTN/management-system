@@ -1,19 +1,23 @@
 'use client'
 
 import { useParams, useSearchParams } from 'next/navigation'
-import { Center, Loader, SimpleGrid, Stack, Tabs, Text } from '@mantine/core'
+import { Center, Loader, Stack, Tabs, Text } from '@mantine/core'
 import { Gauge, Package, Server, ShieldCheck } from 'lucide-react'
 import type { ColumnDef } from '@tanstack/react-table'
 import { DataTable } from '@/components/ui/DataTable'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { BackButton } from '@/components/ui/BackButton'
-import { StatCard } from '@/components/ui/StatCard'
+import { MetricsStrip } from '@/components/ui/MetricsStrip'
 import { TechnicalText } from '@/components/ui/TechnicalText'
 import { StatusBadge, type StatusTone } from '@/components/ui/StatusBadge'
-import { useSnapshot } from '@/modules/inventory-snapshots/hooks/use-snapshot'
-import { formatDateTime } from '@/lib/format-date'
+import { useRenameSnapshot, useSnapshot } from '@/modules/inventory-snapshots/hooks/use-snapshot'
+import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
+import { EVIDENCE_NAME_MAX, evidenceNameError } from '@/modules/scan-reports/schema'
+import { EditableTitle } from '@/components/ui/EditableTitle'
+import { formatScanWindow } from '@/lib/format-date'
 import { ASSET_CATEGORY_LABEL, ASSET_STATUS_LABEL, CRITICALITY_LABEL } from '@/lib/enum-labels'
 import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
+import { portalHref } from '@/lib/portal-href'
 
 type DumpedAsset = {
   id?: string
@@ -121,8 +125,10 @@ function dumpArray<T>(value: unknown): T[] {
 export default function SnapshotDetailPage() {
   const { id } = useParams<{ id: string }>()
   const asOrganization = useSearchParams().get('asOrganization') ?? undefined
-  const backHref = `/portal/inventory/snapshots${asOrganization ? `?asOrganization=${asOrganization}` : ''}`
+  const backHref = portalHref('/portal/inventory/snapshots', asOrganization)
   const { data: snapshot, isPending } = useSnapshot(id)
+  const rename = useRenameSnapshot(id)
+  const tenant = useTenantContext(asOrganization)
 
   if (isPending) {
     return (
@@ -154,8 +160,19 @@ export default function SnapshotDetailPage() {
       <BackButton href={backHref} label="Volver al Historial de instantáneas" />
 
       <PageHeader
-        title={`Instantánea — ${formatDateTime(snapshot.taken_at)}`}
-        description="Instantánea inmutable: el estado de cada activo refleja ese momento, no su estado actual."
+        title={
+          <EditableTitle
+            value={snapshot.display_name ?? ''}
+            fallback="Instantánea"
+            canEdit={Boolean(tenant.data?.permissions.renameEvidence)}
+            saving={rename.isPending}
+            maxLength={EVIDENCE_NAME_MAX}
+            validate={evidenceNameError}
+            onSave={rename.mutateAsync}
+          />
+        }
+        // La fecha va una sola vez, acá; el nombre propio (si hay) es sólo una etiqueta.
+        description={`${formatScanWindow(snapshot.taken_at)} · El estado de cada activo refleja ese momento, no su estado actual.`}
         rightSection={
           <CreateRelatedTaskButton
             reference={{ relationTo: 'inventory-snapshots', value: String(snapshot.id) }}
@@ -164,29 +181,30 @@ export default function SnapshotDetailPage() {
         }
       />
 
-      {/* Misma grilla de métricas que el detalle de un informe de escaneo. */}
-      <SimpleGrid cols={{ base: 1, xs: 2, lg: 4 }} spacing="md">
-        <StatCard
-          icon={<Gauge size={20} strokeWidth={1.5} />}
-          value={risk.score == null ? 'No evaluable' : Math.round(risk.score)}
-          label="Puntaje de riesgo en ese momento"
-        />
-        <StatCard
-          icon={<ShieldCheck size={20} strokeWidth={1.5} />}
-          value={risk.score == null ? '—' : `${Math.round(risk.coverage ?? 0)} %`}
-          label="Cobertura de la evaluación"
-        />
-        <StatCard
-          icon={<Server size={20} strokeWidth={1.5} />}
-          value={networkAssets.length}
-          label="Activos de red"
-        />
-        <StatCard
-          icon={<Package size={20} strokeWidth={1.5} />}
-          value={nonNetworkAssets.length}
-          label="Activos manuales"
-        />
-      </SimpleGrid>
+      <MetricsStrip
+        isPending={false}
+        metrics={[
+          {
+            key: 'score',
+            icon: Gauge,
+            value: risk.score == null ? 'No evaluable' : Math.round(risk.score),
+            label: 'puntaje de riesgo en ese momento',
+          },
+          {
+            key: 'coverage',
+            icon: ShieldCheck,
+            value: risk.score == null ? '—' : `${Math.round(risk.coverage ?? 0)} %`,
+            label: 'cobertura de la evaluación',
+          },
+          { key: 'network', icon: Server, value: networkAssets.length, label: 'activos de red' },
+          {
+            key: 'manual',
+            icon: Package,
+            value: nonNetworkAssets.length,
+            label: 'activos manuales',
+          },
+        ]}
+      />
       {(risk.excluded_assets ?? 0) > 0 && (
         <Text size="sm" c="dimmed">
           {risk.excluded_assets} activos estaban fuera del alcance de la evaluación de seguridad en

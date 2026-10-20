@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { CreateTasksSchema, EditTaskSchema } from './schema'
+import { CreateTasksSchema, EditTaskSchema, TaskListQuerySchema } from './schema'
 
 const base = {
   title: 'Revisar servidor',
@@ -52,4 +52,26 @@ test('aplica límites de título y descripción', () => {
 
 test('la edición permite quitar el vencimiento', () => {
   assert.deepEqual(EditTaskSchema.parse({ due_at: null }), { due_at: null })
+})
+
+test('status acepta uno o varios estados reales separados por coma', () => {
+  assert.deepEqual(TaskListQuerySchema.parse({ status: 'planned,pending' }).status, [
+    'planned',
+    'pending',
+  ])
+  assert.equal(TaskListQuerySchema.parse({}).status, undefined)
+  assert.equal(TaskListQuerySchema.parse({ status: '' }).status, undefined)
+})
+
+test('status rechaza agrupaciones o valores inventados', () => {
+  assert.equal(TaskListQuerySchema.safeParse({ status: 'open' }).success, false)
+  assert.equal(TaskListQuerySchema.safeParse({ status: 'pending,closed' }).success, false)
+})
+
+test('priority acepta varias prioridades separadas por coma', () => {
+  assert.deepEqual(TaskListQuerySchema.parse({ priority: 'high,urgent' }).priority, [
+    'high',
+    'urgent',
+  ])
+  assert.equal(TaskListQuerySchema.safeParse({ priority: 'high,critical' }).success, false)
 })
