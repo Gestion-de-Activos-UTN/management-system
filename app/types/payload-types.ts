@@ -217,6 +217,7 @@ export interface OrganizationSetting {
   id: string;
   organization: string | Organization;
   industry: string;
+  industry_details?: string | null;
   assessment_policy_key: 'essential' | 'reinforced';
   assessment_policy_version: number;
   assessment_policy_selected_at: string;
@@ -1865,6 +1866,7 @@ export interface RolesSelect<T extends boolean = true> {
 export interface OrganizationSettingsSelect<T extends boolean = true> {
   organization?: T;
   industry?: T;
+  industry_details?: T;
   assessment_policy_key?: T;
   assessment_policy_version?: T;
   assessment_policy_selected_at?: T;

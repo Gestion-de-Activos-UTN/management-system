@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Alert, Stack, TextInput } from '@mantine/core'
+import { Alert, Button, Stack, TextInput } from '@mantine/core'
 import { Search } from 'lucide-react'
 import { DataTable } from '@/components/ui/DataTable'
 import { FilterBar } from '@/components/ui/FilterBar'
@@ -10,6 +10,7 @@ import { MultiFilterSelect } from '@/components/ui/MultiFilterSelect'
 import { PageHeader } from '@/components/ui/PageHeader'
 import type { Organization } from '@/app/types/payload-types'
 import {
+  useCreateOrganization,
   useOrganizationOperationalSummary,
   useOrganizationsList,
 } from '@/modules/organizations/hooks/use-organizations'
@@ -18,6 +19,9 @@ import {
   type OrganizationListRow,
 } from '@/modules/organizations/organizations.columns'
 import { OrganizationStatusModal } from '@/modules/organizations/components/OrganizationStatusModal'
+import { OrganizationCreateModal } from '@/modules/organizations/components/OrganizationCreateModal'
+import { MemberCreateModal } from '@/modules/users/components/MemberCreateModal'
+import { useCreatePlatformOrgAdmin } from '@/modules/users/hooks/use-org-members'
 
 const ORGANIZATION_STATUS_OPTIONS = [
   { value: 'active', label: 'Activas' },
@@ -28,10 +32,14 @@ export default function OrganizationsPage() {
   const asOrganization = useSearchParams().get('asOrganization') ?? undefined
   const { data, isPending } = useOrganizationsList(asOrganization)
   const operationalSummary = useOrganizationOperationalSummary()
+  const createOrganization = useCreateOrganization()
   const [statusTarget, setStatusTarget] = useState<Organization | null>(null)
+  const [adminTarget, setAdminTarget] = useState<Organization | null>(null)
+  const [creating, setCreating] = useState(false)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<string[]>([])
-  const columns = useMemo(() => getOrganizationsColumns(setStatusTarget), [])
+  const columns = useMemo(() => getOrganizationsColumns(setStatusTarget, setAdminTarget), [])
+  const createAdmin = useCreatePlatformOrgAdmin(String(adminTarget?.id ?? ''))
   const organizationRows = useMemo<OrganizationListRow[]>(
     () =>
       (data ?? []).map(organization => ({
@@ -63,6 +71,7 @@ export default function OrganizationsPage() {
       <PageHeader
         title="Organizaciones"
         description="Administración de organizaciones desde PlatformPortal."
+        rightSection={<Button onClick={() => setCreating(true)}>Crear organización</Button>}
       />
       <FilterBar cols={{ base: 1, sm: 2, lg: 2 }}>
         <TextInput
@@ -83,7 +92,8 @@ export default function OrganizationsPage() {
       </FilterBar>
       {operationalSummary.isError && (
         <Alert color="red" title="No se pudo cargar el resumen operativo">
-          Los nombres y estados siguen disponibles; vuelve a cargar para consultar las oficinas y los escáneres.
+          Los nombres y estados siguen disponibles; vuelve a cargar para consultar las oficinas y
+          los escáneres.
         </Alert>
       )}
       <DataTable
@@ -98,6 +108,27 @@ export default function OrganizationsPage() {
         minWidth={850}
       />
       <OrganizationStatusModal organization={statusTarget} onClose={() => setStatusTarget(null)} />
+      <OrganizationCreateModal
+        opened={creating}
+        onClose={() => setCreating(false)}
+        onSubmit={input => createOrganization.mutateAsync(input)}
+        isPending={createOrganization.isPending}
+      />
+      <MemberCreateModal
+        opened={Boolean(adminTarget)}
+        onClose={() => setAdminTarget(null)}
+        officeOptions={[]}
+        roles={['org_admin']}
+        lockedRole="org_admin"
+        onSubmit={input =>
+          createAdmin.mutateAsync({
+            name: input.name,
+            email: input.email,
+            password: input.password,
+          })
+        }
+        isPending={createAdmin.isPending}
+      />
     </Stack>
   )
 }

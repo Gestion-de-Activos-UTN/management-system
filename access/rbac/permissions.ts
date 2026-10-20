@@ -63,7 +63,7 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     // Alta, edición y (des)activación de oficinas y de miembros: sólo el org_admin, vía
     // endpoints/offices.ts y endpoints/orgMembers.ts (las colecciones siguen cerradas).
     offices: ['create', 'read', 'update'],
-    'organization-memberships': ['read', 'update'],
+    'organization-memberships': ['create', 'read', 'update'],
     agents: ['create', 'read', 'update'],
     assets: ['read', 'update', 'delete'],
     'non-network-assets': ['create', 'read', 'update', 'delete'],
@@ -109,6 +109,8 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
   office_manager: {
     organizations: ['read'],
     offices: ['read'],
+    // The create endpoint also enforces rank and office scope; this grants only its scoped flow.
+    'organization-memberships': ['create'],
     assets: ['read', 'update'],
     'non-network-assets': ['create', 'read', 'update'],
     // 'update' = sólo renombrar, en sus oficinas (ver org_admin).

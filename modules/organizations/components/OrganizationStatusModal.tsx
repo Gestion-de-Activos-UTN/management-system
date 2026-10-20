@@ -19,7 +19,8 @@ import { useOrganizationStatusImpact, useSetOrganizationStatus } from '../hooks/
 
 /**
  * Desactivar o reactivar una organización (sólo PlatformAdmin). Desactivar da de baja todo y se
- * confirma escribiendo el nombre; reactivar vuelve sólo con su OrgAdmin y su oficina más antiguos.
+ * confirma escribiendo el nombre; reactivar habilita la primera persona administradora disponible
+ * y la oficina más antigua.
  */
 export function OrganizationStatusModal({
   organization,
@@ -102,9 +103,9 @@ function OrganizationStatusForm({
       <Stack gap="md">
         {admin && office ? (
           <Text size="sm">
-            <strong>{organization.name}</strong> vuelve con lo mínimo para operar: se reactiva a{' '}
+            Al reactivar <strong>{organization.name}</strong>, vuelven a estar disponibles{' '}
             <strong>{admin.name || admin.email}</strong> como administrador y la oficina{' '}
-            <strong>{office.name}</strong>, y se abren sus revisiones de seguridad.
+            <strong>{office.name}</strong>. Se abren nuevas revisiones de seguridad.
           </Text>
         ) : (
           <Alert color="red" icon={<Info size={16} strokeWidth={1.5} />}>
@@ -112,8 +113,8 @@ function OrganizationStatusForm({
           </Alert>
         )}
         <Alert color="gray" icon={<Info size={16} strokeWidth={1.5} />}>
-          No se restaura nada más: el resto de las personas y oficinas, los escáneres y los activos
-          dados de baja quedan como están y se reactivan aparte.
+          No se restaura nada más: las demás personas y oficinas, los escáneres revocados y los
+          activos dados de baja quedan como están. Reactívalos por separado si corresponde.
         </Alert>
         {actions(
           'Reactivar organización',
@@ -157,8 +158,9 @@ function OrganizationStatusForm({
         volver a ingresar hasta que se reactive.
       </Text>
       <Alert color="gray" icon={<Info size={16} strokeWidth={1.5} />}>
-        Reactivarla no restaura nada de esto: vuelve sólo su administrador y su oficina más
-        antiguos.
+        Al reactivarla, vuelven a estar disponibles la persona administradora disponible más antigua
+        y la oficina más antigua. El resto de las personas, oficinas, escáneres y activos no se
+        restaura automáticamente.
       </Alert>
       <TextInput
         label="Para confirmar, escribe el nombre de la organización"

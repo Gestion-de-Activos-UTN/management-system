@@ -1,14 +1,20 @@
 import type { Payload, PayloadRequest } from 'payload'
 import { defaultFeatures } from '../subscriptions/features'
-import { getSubscriptionLimits } from '../subscriptions/limits'
+import { getSubscriptionLimits, type SubscriptionLevel } from '../subscriptions/limits'
 import { reconcileAssessmentInstance } from '../assessments/reconcileAssessmentInstance'
+import { AdminDomainError } from './admin-actions'
 
 export interface CreateOrgWithAdminInput {
   organizationName: string
   industry: string
+  industryDetails?: string
   adminEmail: string
   adminPassword: string
   adminName: string
+  /** Basic por omisión para conservar los seeds existentes. La UI de StaffPortal siempre lo envía. */
+  plan?: SubscriptionLevel
+  officeProvinceId?: string
+  officeDepartmentId?: string | null
   /** Nombre de la primera oficina; por defecto "Casa central". */
   officeName?: string
 }
@@ -36,7 +42,8 @@ export async function createOrgWithAdmin(
     : ({ transactionID } as PayloadRequest)
 
   try {
-    const subscriptionLimits = getSubscriptionLimits('basic')
+    const plan = input.plan ?? 'basic'
+    const subscriptionLimits = getSubscriptionLimits(plan)
 
     // AUDIT: this action must emit an AuditLogs entry (chain_hash over {name, is_active}, previous hash for this organization_id)
     // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
@@ -47,7 +54,7 @@ export async function createOrgWithAdmin(
       data: { name: input.organizationName, is_active: true },
     })
 
-    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {organization, industry, level, features}, previous hash for this organization_id)
+    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {organization, industry, industry_details, level, features}, previous hash for this organization_id)
     // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
     const [settings, subscription] = await Promise.all([
       payload.create({
@@ -57,6 +64,7 @@ export async function createOrgWithAdmin(
         data: {
           organization: organization.id,
           industry: input.industry,
+          ...(input.industryDetails ? { industry_details: input.industryDetails } : {}),
           assessment_policy_key: 'essential',
           assessment_policy_version: 2,
           assessment_policy_selected_at: new Date().toISOString(),
@@ -68,7 +76,7 @@ export async function createOrgWithAdmin(
         req,
         data: {
           organization: organization.id,
-          level: 'basic',
+          level: plan,
           max_offices: subscriptionLimits.max_offices,
           user_limits: subscriptionLimits.user_limits,
           features: defaultFeatures(),
@@ -92,7 +100,13 @@ export async function createOrgWithAdmin(
       collection: 'offices',
       overrideAccess: true,
       req,
-      data: { organization: organization.id, name: input.officeName ?? 'Casa central' },
+      data: {
+        organization: organization.id,
+        is_active: true,
+        name: input.officeName ?? 'Casa central',
+        ...(input.officeProvinceId ? { province_id: input.officeProvinceId } : {}),
+        ...(input.officeDepartmentId ? { department_id: input.officeDepartmentId } : {}),
+      },
     })
 
     await reconcileAssessmentInstance(
@@ -130,16 +144,34 @@ export async function createOrgWithAdmin(
       throw new Error('Role org_admin no sembrado — correr el seed de roles primero')
     }
 
-    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {email, name}, previous hash for this organization_id)
+    const adminEmail = input.adminEmail.trim().toLowerCase()
+    const existingUser = await payload.find({
+      collection: 'users',
+      where: { email: { equals: adminEmail } },
+      overrideAccess: true,
+      req,
+      depth: 0,
+      limit: 1,
+    })
+    if (existingUser.docs.length) {
+      throw new AdminDomainError('email_unavailable', 409, 'Ya existe una cuenta con ese correo.')
+    }
+
+    // AUDIT: this action must emit an AuditLogs entry (user.create, chain_hash over {email, name}, previous hash for this organization_id)
     // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
     const user = await payload.create({
       collection: 'users',
       overrideAccess: true,
       req,
-      data: { email: input.adminEmail, password: input.adminPassword, name: input.adminName },
+      data: {
+        email: adminEmail,
+        password: input.adminPassword,
+        name: input.adminName,
+        status: 'active',
+      },
     })
 
-    // AUDIT: this action must emit an AuditLogs entry (user.invite, chain_hash over {user, organization, role}, previous hash for this organization_id)
+    // AUDIT: this action must emit an AuditLogs entry (user.create, chain_hash over {user, organization, role}, previous hash for this organization_id)
     // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
     // NOTIFY: this event should trigger a Notification Bell entry for {the new org_admin user}
     // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point

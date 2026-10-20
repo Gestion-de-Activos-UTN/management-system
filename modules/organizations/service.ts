@@ -2,7 +2,7 @@ import { listResource } from '@/lib/list-resource'
 import type { Organization } from '@/app/types/payload-types'
 import { httpClient } from '@/lib/http-client'
 import type { OrganizationStatusImpact } from '@/domain/organizations/organization-lifecycle'
-import type { OrganizationStatusInput } from './schema'
+import type { OrganizationCreateInput, OrganizationStatusInput } from './schema'
 
 export type OrganizationOperationalCounts = {
   counts: {
@@ -33,6 +33,13 @@ export function getOrganizationStatusImpact(id: string) {
 export function setOrganizationStatus(id: string, input: OrganizationStatusInput) {
   return httpClient.post<{ ok: boolean }>(
     `/api/v1/platform-admin/organizations/${id}/status`,
+    input
+  )
+}
+
+export function createOrganization(input: OrganizationCreateInput) {
+  return httpClient.post<{ id: string; name: string }>(
+    '/api/v1/platform-admin/organizations',
     input
   )
 }

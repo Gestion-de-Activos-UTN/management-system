@@ -73,6 +73,9 @@ test('Personas: desactivar con reemplazo pasa sus activos al reemplazo y libera 
   const { orgId, officeA, adminId, laptop, claimedTask } = await seed(payload)
   const leavingId = await member(payload, orgId, [officeA], 'office_manager')
   const replacementId = await member(payload, orgId, [officeA], 'office_manager')
+  const leavingEmail = (
+    await payload.findByID({ collection: 'users', id: leavingId, overrideAccess: true })
+  ).email
   const asset = await laptop(leavingId, officeA)
   const task = await claimedTask(leavingId, officeA)
 
@@ -90,7 +93,7 @@ test('Personas: desactivar con reemplazo pasa sus activos al reemplazo y libera 
   const updated = await updateOrgMemberEndpoint.handler(
     request(payload, adminId, {
       id: leavingId,
-      body: { is_active: false, replacement_owner_id: replacementId },
+      body: { is_active: false, confirm_email: leavingEmail, replacement_owner_id: replacementId },
     })
   )
   assert.equal(updated.status, 200)
@@ -126,6 +129,9 @@ test('Personas: sin reemplazo los activos quedan sin responsable, incluso los de
   const payload = await getPayload({ config })
   const { orgId, officeA, adminId, server, laptop } = await seed(payload)
   const leavingId = await member(payload, orgId, [officeA], 'office_manager')
+  const leavingEmail = (
+    await payload.findByID({ collection: 'users', id: leavingId, overrideAccess: true })
+  ).email
   const asset = await laptop(leavingId, officeA)
   // Un activo des-identificado conserva su owner a propósito (assetUnidentify.ts).
   await payload.update({
@@ -139,13 +145,16 @@ test('Personas: sin reemplazo los activos quedan sin responsable, incluso los de
   const invalid = await updateOrgMemberEndpoint.handler(
     request(payload, adminId, {
       id: leavingId,
-      body: { is_active: false, replacement_owner_id: leavingId },
+      body: { is_active: false, confirm_email: leavingEmail, replacement_owner_id: leavingId },
     })
   )
   assert.equal(invalid.status, 400, 'el reemplazo tiene que ser otra persona activa')
 
   const updated = await updateOrgMemberEndpoint.handler(
-    request(payload, adminId, { id: leavingId, body: { is_active: false } })
+    request(payload, adminId, {
+      id: leavingId,
+      body: { is_active: false, confirm_email: leavingEmail },
+    })
   )
   assert.equal(updated.status, 200)
   assert.equal(
