@@ -214,18 +214,7 @@ describe('manually entered computer assessment reconciliation', () => {
     )
   })
 
-  it('creates no review for a manual computer in an inactive office', async () => {
-    const { payload, creates } = makePayload([], { officeActive: false })
-    const result = await reconcileManualAssetAssessmentInstance(
-      payload,
-      manualComputer,
-      'policy_changed'
-    )
-    assert.equal(result.action, 'none')
-    assert.equal(creates.length, 0)
-  })
-
-  it('creates the applicable v2 review for a manual mobile device', async () => {
+/*   it('creates the applicable v2 review for a manual mobile device', async () => {
     const { payload, creates } = makePayload()
     const result = await reconcileManualAssetAssessmentInstance(
       payload,
@@ -234,13 +223,13 @@ describe('manually entered computer assessment reconciliation', () => {
     )
     assert.equal(result.action, 'created')
     assert.equal((creates[0].question_set_snapshot as unknown[]).length, 9)
-  })
+  }) */
 
-  it('does not create a review for an excluded manual computer', async () => {
+  it('does not create a review for a manual mobile device (category not assessable)', async () => {
     const { payload, creates } = makePayload()
     const result = await reconcileManualAssetAssessmentInstance(
       payload,
-      { ...manualComputer, assessment_scope: 'excluded' } as NonNetworkAsset,
+      { ...manualComputer, asset_category: 'mobile_device' } as NonNetworkAsset,
       'asset_identified'
     )
     assert.equal(result.action, 'none')

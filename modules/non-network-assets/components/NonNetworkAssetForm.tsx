@@ -3,7 +3,19 @@
 import { useEffect } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Box, Button, Divider, Group, Select, SimpleGrid, Stack, TextInput } from '@mantine/core'
+import {
+  Box,
+  Autocomplete,
+  Button,
+  Divider,
+  Group,
+  Select,
+  SimpleGrid,
+  Stack,
+  Text,
+  Textarea,
+  TextInput,
+} from '@mantine/core'
 import { useOfficesList } from '@/modules/offices/hooks/use-offices'
 import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
 import { memberCoversOffice } from '@/modules/users/service'
@@ -13,11 +25,17 @@ import {
   CRITICALITY_OPTIONS,
   NON_NETWORK_ASSET_STATUS_OPTIONS,
   REVIEW_INTERVAL_OPTIONS,
+  ASSESSMENT_EXCLUSION_REASON_OPTIONS,
+  CLOUD_ASSET_KIND_OPTIONS,
+  REPOSITORY_KIND_OPTIONS,
 } from '@/lib/enum-labels'
 import type { NonNetworkAsset } from '@/app/types/payload-types'
-import { MANUAL_ASSET_CATEGORY_GROUPS } from '@/domain/assets/asset-types'
+import { categoryHasSoftware, MANUAL_ASSET_CATEGORY_GROUPS } from '@/domain/assets/asset-types'
+import { categoryGroupOf } from '@/collections/NonNetworkAssets/categoryGroups'
 import { createNonNetworkAssetSchema, type NonNetworkAssetFormValues } from '../schema'
 import { useSaveNonNetworkAsset } from '../hooks/use-save-non-network-asset'
+import { useSoftwareSuggestions } from '../hooks/use-software-suggestions'
+import { formatDateInput, localDateEndToISOString } from '@/lib/format-date'
 import {
   AssessmentExclusionFields,
   AssessmentScopeHint,
@@ -63,6 +81,19 @@ export function NonNetworkAssetForm({
       location: asset?.location ?? '',
       status: asset?.status ?? 'active',
       office: relationIdOf(asset?.office as string | { id: string } | null | undefined),
+      product_details: {
+        software_vendor: asset?.product_details?.software_vendor ?? null,
+        software_product: asset?.product_details?.software_product ?? null,
+        software_version: asset?.product_details?.software_version ?? null,
+      },
+      cloud_details: {
+        kind: asset?.cloud_details?.kind ?? null,
+        vendor: asset?.cloud_details?.vendor ?? null,
+      },
+      repository_details: {
+        kind: asset?.repository_details?.kind ?? null,
+      },
+      notes: asset?.notes ?? null,
       review_interval: asset?.review_interval ?? 'never',
       assessment_scope: asset?.assessment_scope ?? 'included',
       assessment_exclusion_reason: asset?.assessment_exclusion_reason ?? null,
@@ -70,6 +101,10 @@ export function NonNetworkAssetForm({
       assessment_excluded_until: asset?.assessment_excluded_until ?? null,
     },
   })
+  const assetCategory = watch('asset_category')
+  const categoryGroup = categoryGroupOf(assetCategory)
+  const hasSoftware = categoryHasSoftware(assetCategory)
+  const { data: suggestions } = useSoftwareSuggestions({ asOrganization, enabled: hasSoftware })
   const assessmentScope = watch('assessment_scope')
   const exclusionReason = watch('assessment_exclusion_reason')
   const selectedOffice = watch('office')
@@ -93,6 +128,18 @@ export function NonNetworkAssetForm({
   const onSubmit = handleSubmit(values => {
     save.mutate(values, { onSuccess: onSaved })
   })
+  
+  // Este bloque es redundante porque lo limpia el backend
+  /* const onSubmit = handleSubmit(values => {
+    const payload: NonNetworkAssetFormValues = {
+      ...values,
+      product_details: categoryGroup === 'product_details' ? values.product_details : undefined,
+      cloud_details: categoryGroup === 'cloud_details' ? values.cloud_details : undefined,
+      repository_details:
+        categoryGroup === 'repository_details' ? values.repository_details : undefined,
+    }
+    save.mutate(payload, { onSuccess: onSaved })
+  }) */
 
   return (
     // noValidate: `required` below is kept ONLY for the visual asterisk. Without this, the
@@ -139,6 +186,101 @@ export function NonNetworkAssetForm({
               />
             )}
           />
+          {categoryGroup === 'product_details' && (
+            <>
+              <Controller
+                name="product_details.software_vendor"
+                control={control}
+                render={({ field }) => (
+                  <Autocomplete
+                    label="Proveedor"
+                    // El error conocido de esta feature: el usuario escribe el producto donde va
+                    // el fabricante. El placeholder es la mitigación barata; el autocompletado es
+                    // la otra. No se elimina, se reduce.
+                    placeholder="Canonical, no Ubuntu"
+                    data={suggestions?.vendors ?? []}
+                    value={field.value ?? ''}
+                    onChange={value => field.onChange(value || null)}
+                    error={errors.product_details?.software_vendor?.message}
+                  />
+                )}
+              />
+              <Controller
+                name="product_details.software_product"
+                control={control}
+                render={({ field }) => (
+                  <Autocomplete
+                    label="Producto"
+                    placeholder="Busca o escribe un producto"
+                    data={suggestions?.products ?? []}
+                    value={field.value ?? ''}
+                    onChange={value => field.onChange(value || null)}
+                    error={errors.product_details?.software_product?.message}
+                  />
+                )}
+              />
+              <Controller
+                name="product_details.software_version"
+                control={control}
+                render={({ field }) => (
+                  <TextInput
+                    label="Versión"
+                    placeholder="Opcional"
+                    value={field.value ?? ''}
+                    onChange={e => field.onChange(e.currentTarget.value || null)}
+                    error={errors.product_details?.software_version?.message}
+                  />
+                )}
+              />
+            </>
+          )}
+          {categoryGroup === 'cloud_details' && (
+            <>
+              <Controller
+                name="cloud_details.kind"
+                control={control}
+                render={({ field }) => (
+                  <Select
+                    label="Tipo de servicio cloud"
+                    required
+                    data={[...CLOUD_ASSET_KIND_OPTIONS]}
+                    value={field.value ?? null}
+                    onChange={value => field.onChange(value || null)}
+                    error={errors.cloud_details?.kind?.message}
+                  />
+                )}
+              />
+              <Controller
+                name="cloud_details.vendor"
+                control={control}
+                render={({ field }) => (
+                  <TextInput
+                    label="Proveedor"
+                    placeholder="Opcional"
+                    value={field.value ?? ''}
+                    onChange={e => field.onChange(e.currentTarget.value || null)}
+                    error={errors.cloud_details?.vendor?.message}
+                  />
+                )}
+              />
+            </>
+          )}
+          {categoryGroup === 'repository_details' && (
+            <Controller
+              name="repository_details.kind"
+              control={control}
+              render={({ field }) => (
+                <Select
+                  label="Tipo de repositorio"
+                  required
+                  data={[...REPOSITORY_KIND_OPTIONS]}
+                  value={field.value ?? null}
+                  onChange={value => field.onChange(value || null)}
+                  error={errors.repository_details?.kind?.message}
+                />
+              )}
+            />
+          )}
           <Controller
             name="criticality"
             control={control}
@@ -232,6 +374,18 @@ export function NonNetworkAssetForm({
             )}
           />
         </SimpleGrid>
+        <Controller
+          name="notes"
+          control={control}
+          render={({ field }) => (
+            <Textarea
+              label="Observaciones"
+              value={field.value ?? ''}
+              onChange={e => field.onChange(e.currentTarget.value || null)}
+              error={errors.notes?.message}
+            />
+          )}
+        />
         <Divider label="Alcance de la evaluación de seguridad" labelPosition="left" />
         <Box w={{ base: '100%', sm: '50%' }}>
           <Controller

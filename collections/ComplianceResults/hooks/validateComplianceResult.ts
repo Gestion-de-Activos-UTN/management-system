@@ -1,5 +1,6 @@
 import type { CollectionBeforeChangeHook } from 'payload'
 import { relationId } from '@/lib/relationId'
+import { isManualCategoryAssessable } from '@/domain/risk/risk-asset-type'
 
 const optionalRelationId = (value: unknown): string | null => (value ? relationId(value) : null)
 

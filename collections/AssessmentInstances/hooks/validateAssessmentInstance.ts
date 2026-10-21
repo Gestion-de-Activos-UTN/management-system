@@ -6,6 +6,7 @@ import {
   type AssessmentStatus,
 } from '../invariants'
 import type { AssessmentScope } from '@/domain/assessments/catalog'
+import { isManualCategoryAssessable } from '@/domain/risk/risk-asset-type'
 import { createHash } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 
@@ -92,7 +93,10 @@ export const validateAssessmentInstance: CollectionBeforeChangeHook = async ({
     )
         throw new Error('El activo manual de la revisión pertenece a otra organización u oficina.')
     if (
-      (manualAsset.status === 'retired' || manualAsset.asset_category !== 'computer') &&
+      (
+        manualAsset.status === 'retired' ||
+        !isManualCategoryAssessable(manualAsset.asset_category)
+      ) &&
       merged.status !== 'superseded'
     )
       throw new Error('Solo las computadoras manuales activas pueden recibir ciclos de evaluación.')

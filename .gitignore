@@ -20,3 +20,6 @@ uploads/
 # misc
 .DS_Store
 *.log
+
+# AI
+.claude/

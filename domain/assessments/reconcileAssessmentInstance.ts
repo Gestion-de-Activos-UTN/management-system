@@ -2,7 +2,12 @@ import type { Payload, PayloadRequest } from 'payload'
 import type { Asset, NonNetworkAsset } from '@/app/types/payload-types'
 import { relationId } from '@/lib/relationId'
 import { RISK_QUESTIONS_V2, type RiskAssetType, type RiskPolicyKey } from '@/domain/risk/catalog-v2'
-import { riskAssetTypeForManual, riskAssetTypeForScanned } from '@/domain/risk/risk-asset-type'
+import {
+  ASSESSABLE_MANUAL,
+  isManualCategoryAssessable,
+  riskAssetTypeForManual,
+  riskAssetTypeForScanned,
+} from '@/domain/risk/risk-asset-type'
 
 const POLICY_CATALOG = [
   { key: 'essential', version: 2 },
@@ -467,7 +472,7 @@ export async function reconcileManualAssetAssessmentInstance(
     : null
   const assetType = riskAssetTypeForManual(asset.asset_category)
   const eligible =
-    Boolean(assetType) &&
+    isManualCategoryAssessable(asset.asset_category) &&
     asset.status !== 'retired' &&
     officeActive &&
     !isAssetExcludedFromAssessments(asset) &&
@@ -587,7 +592,7 @@ export async function reconcileOrganizationAssessments(
       where: {
         and: [
           { organization: { equals: organizationId } },
-          { asset_category: { equals: 'computer' } },
+          { asset_category: { in: [...ASSESSABLE_MANUAL] } },
         ],
       },
       overrideAccess: true,

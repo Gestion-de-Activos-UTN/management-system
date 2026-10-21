@@ -59,6 +59,7 @@ import {
 } from './endpoints/orgMembers'
 import { officeEndpoints } from './endpoints/offices'
 import { myProfileEndpoints } from './endpoints/myProfile'
+import { softwareSuggestionsEndpoint } from './endpoints/softwareSuggestions'
 import {
   organizationSettingsGetEndpoint,
   organizationSettingsUpdateEndpoint,
@@ -160,6 +161,7 @@ export default buildConfig({
     orgMembersEndpoint,
     createOrgMemberEndpoint,
     updateOrgMemberEndpoint,
+    softwareSuggestionsEndpoint,
     orgMemberDeactivationImpactEndpoint,
     organizationSettingsGetEndpoint,
     organizationSettingsUpdateEndpoint,

@@ -23,6 +23,9 @@ export function validateRiskCatalogV2(catalog: RiskCatalogV2): void {
   const controls = new Map(catalog.controls.map(item => [item.key, item]))
   const questions = new Map(catalog.questions.map(item => [item.key, item]))
 
+  // TODO(engine-limit): a control must not mix questions with different scope or asset_types within
+  // a policy. evaluateControlEfficacy averages all question_keys without filtering by asset type, and
+  // buildRiskPairs takes the scope from questions[0]. Not enforced here; today every control shares them.
   for (const question of catalog.questions) {
     if (!controls.has(question.control_key)) {
       throw new Error(`Question ${question.key} references missing control ${question.control_key}`)
