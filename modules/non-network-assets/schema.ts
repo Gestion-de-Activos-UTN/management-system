@@ -13,7 +13,7 @@ const text = (max: number) => z.string().trim().max(max).nullish()
 
 export const NonNetworkAssetFieldsSchema = z
   .object({
-    alias: z.string().trim().min(1, 'El alias es obligatorio').max(120),
+    alias: z.string().trim().min(1, 'El alias es obligatorio').max(120).regex(...TEXT_RULES.label),
     asset_category: z.enum(MANUAL_ASSET_CATEGORY_VALUES),
     // El form conserva los tres grupos en estado, pero envía solo el correspondiente a la categoría.
     // Los campos obligatorios se validan en superRefine con las reglas compartidas del servidor.
@@ -40,8 +40,8 @@ export const NonNetworkAssetFieldsSchema = z
       .optional(),
     notes: text(1000),
     criticality: z.enum(['low', 'medium', 'high', 'critical']),
-    owner: z.string().min(1, 'El responsable es obligatorio'),
-    location: z.string().trim().max(200).nullable(),
+    owner: z.string().min(1, 'El responsable es obligatorio').nullable(),
+    location: z.string().trim().max(200).regex(...TEXT_RULES.label).nullable(),
     status: z.enum(['active', 'retired']),
     office: z.string().min(1, 'La oficina es obligatoria'),
     // next_review_at ya no se edita a mano — se deriva de este intervalo (ver
