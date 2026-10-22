@@ -548,7 +548,7 @@ async function ensureManualAsset(
     location: string
     reviewInterval: 'never' | '1d' | '1w' | '1m' | '6m' | '1y'
     status?: 'active' | 'retired'
-  }
+  } & Pick<NonNetworkAsset, 'product_details' | 'cloud_details' | 'repository_details'>
 ) {
   const existing = await findOne<NonNetworkAsset>(payload, 'non-network-assets', {
     seed_key: { equals: seedKey(input.organizationId, 'manual', input.alias) },
@@ -571,6 +571,9 @@ async function ensureManualAsset(
       location: input.location,
       review_interval: input.reviewInterval,
       status: input.status ?? 'active',
+      product_details: input.product_details,
+      cloud_details: input.cloud_details,
+      repository_details: input.repository_details,
     },
   })
   return { doc: doc as NonNetworkAsset, created: true }
@@ -733,6 +736,7 @@ async function seedLifecycleScenario(
     () =>
       updateMember(memberReq, { ...ctx, organizationId }, managerId, {
         is_active: false,
+        confirm_email: LIFECYCLE_DEMO_MANAGER.email,
       }),
     lock
   )
@@ -1176,6 +1180,10 @@ export async function seedDemoData(
       officeId: mainOfficeId,
       location: 'Tenant corporativo',
       reviewInterval: '6m' as const,
+      product_details: {
+        software_vendor: 'Microsoft',
+        software_product: 'Microsoft 365 Business Premium',
+      },
     },
     {
       alias: 'Repositorio documental corporativo',
@@ -1185,6 +1193,7 @@ export async function seedDemoData(
       officeId: mainOfficeId,
       location: 'SharePoint Online',
       reviewInterval: '1m' as const,
+      repository_details: { kind: 'other_digital' as const },
     },
     {
       alias: 'Backup diario de sistemas críticos',
@@ -1214,6 +1223,7 @@ export async function seedDemoData(
       officeId: mainOfficeId,
       location: 'SaaS',
       reviewInterval: '1m' as const,
+      cloud_details: { kind: 'productivity_identity' as const },
     },
     {
       alias: 'Servicio de Internet secundario',
@@ -1251,6 +1261,11 @@ export async function seedDemoData(
       location: 'Histórico de licencias',
       reviewInterval: 'never' as const,
       status: 'retired' as const,
+      product_details: {
+        software_vendor: 'ESET',
+        software_product: 'Endpoint Security',
+        software_version: '9',
+      },
     },
   ]
   const manualDocs: NonNetworkAsset[] = []
@@ -1364,6 +1379,14 @@ export async function seedDemoData(
             location: `Sector ${(index % 6) + 1}`,
             reviewInterval: (['1d', '1w', '1m', '6m', '1y', 'never'] as const)[index % 6],
             status: index % 13 === 0 ? 'retired' : 'active',
+            ...[
+              {},
+              {
+                product_details: { software_vendor: 'Adobe', software_product: 'Creative Cloud' },
+              },
+              { cloud_details: { kind: 'infrastructure' as const } },
+              {},
+            ][index],
           }
         )
         if (result.created) {
