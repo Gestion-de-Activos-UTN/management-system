@@ -733,6 +733,7 @@ async function seedLifecycleScenario(
     () =>
       updateMember(memberReq, { ...ctx, organizationId }, managerId, {
         is_active: false,
+        confirm_email: manager.email,
       }),
     lock
   )

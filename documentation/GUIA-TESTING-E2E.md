@@ -28,9 +28,9 @@ El alta debe crear organización, settings, suscripción con los límites del pl
 
 Valores actuales relevantes: settings iniciales con industria seleccionada y política Essential; plan Basic o Premium según la selección; features activas por defecto. La organización siempre nace con una oficina activa y un OrgAdmin activo. Si cualquier paso falla, no debe quedar una organización parcial ni una cuenta sin membresía.
 
-#### REQ-USER-01 — Alta de usuario desde Administración → Usuarios
+#### REQ-USER-01 — Alta de usuario
 
-El alta está en Administración → Usuarios para OrgAdmin y en Portal → Equipo para OfficeManager; ambas usan `POST /api/v1/org-members`. Solicita nombre completo, correo, contraseña inicial, rol y oficinas cuando el rol lo requiere. La cuenta y membresía quedan activas al confirmar.
+El alta de OrgAdmin está en Administración → Usuarios y la de OfficeManager debe limitarse a crear Viewers dentro de sus oficinas. Ambas usan `POST /api/v1/org-members`. Solicita nombre completo, correo, contraseña inicial, rol y oficinas cuando el rol lo requiere. La cuenta y membresía quedan activas al confirmar. La disponibilidad del punto de entrada de OfficeManager en la interfaz queda pendiente de revisión (ver USER-02).
 
 | Actor                        | Roles que puede crear           | Alcance de oficinas                                                                           |
 | ---------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------- |
@@ -39,7 +39,7 @@ El alta está en Administración → Usuarios para OrgAdmin y en Portal → Equi
 | OrgViewer                    | Ninguno                         | No puede administrar usuarios                                                                 |
 | PlatformAdmin en StaffPortal | OrgAdmin adicional              | Rol fijado; cubre todas las oficinas                                                          |
 
-La ruta general de Administración sigue restringida a OrgAdmin (`app/portal/(protected)/administration/layout.tsx`); OfficeManager recibe un punto de entrada separado y acotado. La API repite las reglas del formulario, aplica límites bajo concurrencia y rechaza correo ya existente sin crear duplicados.
+La ruta general de Administración sigue restringida a OrgAdmin (`app/portal/(protected)/administration/layout.tsx`). La API repite las reglas del formulario, aplica límites bajo concurrencia y rechaza correo ya existente sin crear duplicados. La presencia efectiva del punto de entrada separado para OfficeManager debe confirmarse antes de dar por disponible el alta delegada en el frontend.
 
 #### REQ-USER-02 — Alta de OrgAdmin adicional desde StaffPortal
 
@@ -212,6 +212,8 @@ Fuente: `access/rbac/permissions.ts`, `access/tenant/resolveTenantContext.ts` y 
 
 Para cada capacidad: probar la acción normal, intentar abrir directamente la URL como rol sin permiso y repetir la request desde Network/cURL. El layout de Administración actualmente restringe la navegación desde el cliente; recibir 404 al abrir una ruta no demuestra autorización server-side. La prueba de permiso debe invocar el endpoint protegido y comprobar 401/403 sin cambios. La posibilidad futura de crear usuarios por rol amplía esta matriz y debe quedar expresada tanto en el contexto de sesión como en endpoints server-side; no basta con mostrar/ocultar controles.
 
+**Criterio revisado:** se conserva la denominación «Observador de la organización» para el rol `org_viewer`. La descripción debe dejar claro que, además de consultar información, puede completar revisiones propias y determinadas tareas. No se planifica cambiar el nombre ni los permisos del rol.
+
 ## 6. Onboarding de organización y usuarios
 
 ### ORG-01 — Alta feliz Basic
@@ -278,12 +280,14 @@ Para cada capacidad: probar la acción normal, intentar abrir directamente la UR
 
 **Objetivo:** validar creación delegada sin ampliar privilegios.
 
-1. Como OfficeManager asignado a Oficina 1, abrir Portal → Equipo. No debe aparecer Administración → Usuarios.
+1. Como OfficeManager asignado a Oficina 1, comprobar si existe un punto de entrada visible para crear Viewers. No debe aparecer Administración → Usuarios.
 2. Crear Viewer con Oficina 1.
 3. Comprobar que Oficina 2 no es seleccionable; intentar manipular la request para incluirla.
 4. Probar también una oficina de otra organización.
 
 **Esperado:** creación válida limitada a Oficina 1; el servidor rechaza oficina fuera de alcance aunque el cliente la envíe.
+
+**Pendiente de revisión:** en la interfaz observada no se encuentra una sección «Portal → Equipo». Aunque existe una ruta/componente para esa pantalla y el layout contempla mostrar su enlace según los permisos de sesión, confirmar por qué no aparece para OfficeManager y si el usuario puede llegar a ella desde la navegación normal. Hasta resolverlo, no considerar accesible desde el frontend el alta delegada, aunque el permiso y el endpoint estén definidos.
 
 ### USER-03 — OrgAdmin adicional desde StaffPortal
 
@@ -442,6 +446,8 @@ Para comparar UI y servidor, consultar primero la lista/impacto mediante los cUR
 5. Revisar activos desconocidos/no identificados y probar identificar/desidentificar con actor permitido.
 
 **Esperado:** scope por oficina; campos de negocio sólo para roles permitidos; técnicos inmutables; asset no se crea manualmente.
+
+**Pendiente de implementación:** habilitar al OfficeManager la baja lógica de activos de red y activos manuales dentro de sus oficinas asignadas. La baja debe conservar el historial, respetar el scope por oficina y no habilitar el borrado físico. Verificar que el Viewer no pueda realizarla y que un OfficeManager no pueda dar de baja activos de otra oficina u organización. Actualmente, la matriz no concede `delete` al OfficeManager y el endpoint de baja lógica rechaza esa acción.
 
 ### INV-02 — Activos manuales
 
@@ -614,6 +620,8 @@ curl -i -X POST "$SIAM_URL/api/v1/reports" \
 **Esperado:** totales agregados correctos; PlatformAdmin puede visitar cualquier organización existente por el enlace del StaffPortal, incluso si está inactiva. La visita da contexto/rol efectivo OrgAdmin; cada mutación debe además aplicar sus guardas de ciclo de vida. `asOrganization` inválido falla; un usuario de organización no puede cambiar de tenant enviando ese parámetro. Endpoints de plataforma devuelven 403 a roles de organización. Para organizaciones inactivas, aplicar la comprobación específica de mutaciones indicada a continuación.
 
 **Hallazgo de código a resolver/aceptar explícitamente:** el bloqueo de escrituras en una organización inactiva no es uniforme. Crear oficinas y reactivar miembros llaman al guard de organización activa; en cambio, el PATCH de detalles de oficina, el PATCH de settings y algunas modificaciones de membresía no lo comprueban. Probarlos como PlatformAdmin visitando una organización inactiva en entorno desechable. La expectativa de negocio recomendada es rechazo sin mutación; si alguna operación sigue aceptándose, registrar el endpoint y tratarlo como brecha de ciclo de vida antes de cerrar el estándar.
+
+**Hallazgo de código a resolver/aceptar explícitamente:** las lecturas detalladas de datos de una organización deben requerir que PlatformAdmin esté en modo visita (`asOrganization=<id>`). Fuera de ese contexto, StaffPortal sólo debe exponer indicadores y resúmenes agregados, además de los datos mínimos necesarios para seleccionar una organización. Verificar la regla tanto en la interfaz como en las rutas de API: una consulta directa sin organización seleccionada no debe devolver registros detallados; durante la visita, las consultas deben quedar limitadas a la organización elegida. Mantener este criterio separado de la auditoría persistente de acciones, que es una funcionalidad distinta.
 
 ### ORG-STATUS-01 — Desactivar/reactivar organización
 
