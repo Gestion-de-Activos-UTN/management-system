@@ -51,6 +51,7 @@ export const assetBusinessEndpoint: Endpoint = {
       id,
       overrideAccess: true,
       req,
+      depth: 0,
       data: parsed.data,
     })
     return json(updated)

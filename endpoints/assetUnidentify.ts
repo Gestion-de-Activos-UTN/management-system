@@ -42,6 +42,7 @@ export const assetUnidentifyEndpoint: Endpoint = {
       id,
       overrideAccess: true,
       req,
+      depth: 0,
       data: {
         identified: false,
         identification_status: 'pending',

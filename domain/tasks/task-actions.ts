@@ -270,6 +270,7 @@ async function createTasksInTransaction(
           collection: 'tasks',
           overrideAccess: true,
           req,
+          depth: 0,
           data: {
             title: input.title,
             description: input.description,
@@ -344,6 +345,7 @@ async function editTaskLocked(
     id,
     overrideAccess: true,
     req,
+    depth: 0,
     data: {
       ...input,
       ...(replanned ? { status: 'pending' as const, claimed_by: null, claimed_at: null } : {}),
@@ -417,6 +419,7 @@ export async function releaseClaimedTasks(
         id: task.id,
         overrideAccess: true,
         req,
+        depth: 0,
         data: {
           status: 'pending',
           claimed_by: null,
@@ -472,6 +475,7 @@ export async function cancelOpenTasks(
         id: task.id,
         overrideAccess: true,
         req,
+        depth: 0,
         data: {
           status: 'cancelled',
           cancelled_at: new Date().toISOString(),
@@ -511,6 +515,7 @@ async function claimTaskLocked(req: PayloadRequest, ctx: TenantContext, id: stri
     limit: 1,
     overrideAccess: true,
     req,
+    depth: 0,
     data: {
       status: 'in_progress',
       claimed_by: actorRelation(req, ctx.userId),
@@ -543,6 +548,7 @@ async function releaseTaskLocked(
     id,
     overrideAccess: true,
     req,
+    depth: 0,
     data: {
       status: 'pending',
       claimed_by: null,
@@ -587,6 +593,7 @@ async function reassignTaskLocked(
     id,
     overrideAccess: true,
     req,
+    depth: 0,
     data: {
       requires_reassignment: false,
       assignment_kind: assignment.assignment_kind,
@@ -625,6 +632,7 @@ async function completeTaskLocked(
     id,
     overrideAccess: true,
     req,
+    depth: 0,
     data: { status: 'completed', completed_by: actorRelation(req, ctx.userId), completed_at: now },
   })
 }
@@ -659,6 +667,7 @@ async function forceCompleteTaskLocked(
     id,
     overrideAccess: true,
     req,
+    depth: 0,
     data: {
       status: 'completed',
       completed_by: actorRelation(req, ctx.userId),
@@ -691,6 +700,7 @@ async function cancelTaskLocked(
     id,
     overrideAccess: true,
     req,
+    depth: 0,
     data: {
       status: 'cancelled',
       cancelled_by: actorRelation(req, ctx.userId),
@@ -719,6 +729,7 @@ async function archiveTaskLocked(
     id,
     overrideAccess: true,
     req,
+    depth: 0,
     data: { archived_by: actorRelation(req, ctx.userId), archived_at: new Date().toISOString() },
   })
 }
@@ -740,7 +751,7 @@ async function deletePendingTaskLocked(
   }
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {task delete}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
-  return req.payload.delete({ collection: 'tasks', id, overrideAccess: true, req })
+  return req.payload.delete({ collection: 'tasks', id, overrideAccess: true, req, depth: 0 })
 }
 
 /**

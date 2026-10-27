@@ -51,6 +51,7 @@ export const assetIdentifyEndpoint: Endpoint = {
       id,
       overrideAccess: true,
       req,
+      depth: 0,
       data: {
         ...body,
         owner: body.authorization_status === 'authorized' ? body.owner : null,
