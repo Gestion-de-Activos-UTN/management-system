@@ -5,6 +5,7 @@ import {
   preserveDeletedAsset,
 } from '@/domain/assets/logical-delete'
 import type { CollectionConfig } from 'payload'
+import { textRule } from '../../lib/payload-text-rules'
 import { orgScopedAccess, canDoAccess } from '@/access/rbac/orgScopedAccess'
 import { resolveTenantAndReview } from './hooks/resolveTenant'
 import { computeReviewStatus, canReviewNow, type ReviewInterval } from './invariants'
@@ -61,6 +62,7 @@ export const NonNetworkAssets: CollectionConfig = {
       type: 'text',
       required: true,
       maxLength: 120,
+      validate: textRule('label'),
     },
     {
       // Enum fijo en código (no catálogo en DB): la matriz RBAC ya es estática por la misma razón
@@ -136,7 +138,7 @@ export const NonNetworkAssets: CollectionConfig = {
       // RF-51a: obligatorio al crear, validado en hooks/resolveTenant.ts. Sólo el sistema lo deja
       // en null (persona desactivada, activo movido de una oficina desactivada).
     },
-    { name: 'location', type: 'text', maxLength: 200 },
+    { name: 'location', type: 'text', maxLength: 200, validate: textRule('label') },
     ...assessmentScopeFields(),
     {
       name: 'status',

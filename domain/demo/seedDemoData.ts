@@ -695,13 +695,13 @@ async function seedLifecycleScenario(
     if (result.created) summary.manualAssetsCreated += 1
     return result
   }
-  const notebook = await manual('Córdoba · Notebook del mostrador', officeId, 'computer')
-  const printer = await manual('Córdoba · Impresora del depósito', officeId, 'printer')
-  await manual('Depósito · Tablet de inventario', secondaryOfficeId, 'mobile_device')
+  const notebook = await manual('Córdoba - Notebook del mostrador', officeId, 'computer')
+  const printer = await manual('Córdoba - Impresora del depósito', officeId, 'printer')
+  await manual('Depósito - Tablet de inventario', secondaryOfficeId, 'mobile_device')
   const startAt = new Date(Date.now() - 2 * DAY).toISOString()
   for (const task of [
-    { title: 'Córdoba · Inventariar el mostrador', officeId },
-    { title: 'Depósito · Etiquetar las tablets', officeId: secondaryOfficeId },
+    { title: 'Córdoba - Inventariar el mostrador', officeId },
+    { title: 'Depósito - Etiquetar las tablets', officeId: secondaryOfficeId },
   ])
     summary.tasksCreated += Number(
       await ensureTask(payload, ctx, {
@@ -1077,7 +1077,7 @@ export async function seedDemoData(
       alias: 'Servidor de archivos principal',
       criticality: 'critical',
       owner: adminId,
-      location: 'Sala técnica — planta baja',
+      location: 'Sala técnica - planta baja',
       type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
@@ -1087,7 +1087,7 @@ export async function seedDemoData(
       alias: 'Equipo de Finanzas 04',
       criticality: 'high',
       owner: core.users.mainManager.id,
-      location: 'Finanzas — puesto 4',
+      location: 'Finanzas - puesto 4',
       type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
@@ -1126,7 +1126,7 @@ export async function seedDemoData(
       alias: 'Access Point depósito',
       criticality: 'medium',
       owner: core.users.secondaryManager.id,
-      location: 'Depósito — techo norte',
+      location: 'Depósito - techo norte',
       type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
@@ -1136,7 +1136,7 @@ export async function seedDemoData(
       alias: 'Equipo de Logística 02',
       criticality: 'medium',
       owner: core.users.secondaryManager.id,
-      location: 'Logística — puesto 2',
+      location: 'Logística - puesto 2',
       type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
@@ -1146,7 +1146,7 @@ export async function seedDemoData(
       alias: 'Cámara del depósito',
       criticality: 'high',
       owner: core.users.secondaryManager.id,
-      location: 'Depósito — acceso',
+      location: 'Depósito - acceso',
       type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   if (secondaryCamera.status !== 'offline') {
@@ -1333,7 +1333,7 @@ export async function seedDemoData(
         if (index % 9 !== 0)
           sourceChanged =
             (await enrichAsset(payload, assetId, {
-              alias: `${officeIndex === 0 ? 'Casa central' : 'Depósito'} · ${['Equipo de recepción', 'Servidor contable', 'Impresora de administración', 'Switch de oficina', 'Cámara de acceso', 'Portátil de operaciones'][index]}`,
+              alias: `${officeIndex === 0 ? 'Casa central' : 'Depósito'} - ${['Equipo de recepción', 'Servidor contable', 'Impresora de administración', 'Switch de oficina', 'Cámara de acceso', 'Portátil de operaciones'][index]}`,
               confirmed_type: types[index % types.length],
               authorization_status: index % 11 === 0 ? 'unauthorized' : 'authorized',
               criticality: (['low', 'medium', 'high', 'critical'] as const)[index % 4],
@@ -1343,7 +1343,7 @@ export async function seedDemoData(
             })) || sourceChanged
         const networkAsset = await findAsset(payload, assetId)
         expandedTasks.push({
-          title: `${officeIndex === 0 ? 'Casa central' : 'Depósito'} · ${['Identificar equipo de recepción', 'Actualizar servidor contable', 'Comprobar impresora de administración', 'Revisar switch de oficina', 'Revisar cámara de acceso', 'Preparar portátil de operaciones'][index]}`,
+          title: `${officeIndex === 0 ? 'Casa central' : 'Depósito'} - ${['Identificar equipo de recepción', 'Actualizar servidor contable', 'Comprobar impresora de administración', 'Revisar switch de oficina', 'Revisar cámara de acceso', 'Preparar portátil de operaciones'][index]}`,
           description: `Verificar el equipo del sector ${(index % 6) + 1}. Datos sintéticos para filtros y listas.`,
           officeId,
           priority: (['low', 'normal', 'high', 'urgent'] as const)[index % 4],
@@ -1373,7 +1373,7 @@ export async function seedDemoData(
             organizationId: core.organizationId,
             officeId,
             ownerId: managerId,
-            alias: `${officeIndex === 0 ? 'Casa central' : 'Depósito'} · ${['Notebook de recepción', 'Licencia de diseño gráfico', 'Almacenamiento en la nube', 'Soporte de sistemas'][index]}`,
+            alias: `${officeIndex === 0 ? 'Casa central' : 'Depósito'} - ${['Notebook de recepción', 'Licencia de diseño gráfico', 'Almacenamiento en la nube', 'Soporte de sistemas'][index]}`,
             category: categories[index % categories.length],
             criticality: (['low', 'medium', 'high', 'critical'] as const)[index % 4],
             location: `Sector ${(index % 6) + 1}`,
@@ -1544,7 +1544,7 @@ export async function seedDemoData(
 
   if (options.profile === 'expanded') {
     const movingAsset = await findAsset(payload, 'demo-expanded-0-005')
-    const title = 'Revisar portátil trasladado · reasignación necesaria'
+    const title = 'Revisar portátil trasladado - reasignación necesaria'
     if (
       !(await findOne(payload, 'tasks', {
         seed_key: { equals: seedKey(core.organizationId, 'task', title) },
@@ -1580,7 +1580,7 @@ export async function seedDemoData(
         // AUDIT: this action must emit an AuditLogs entry (chain_hash over {seed asset move and task reassignment}, previous hash for this organization_id)
         // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
         // NOTIFY: this event should trigger a Notification Bell entry for {previous claimant and destination office managers}
-        // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
+        // TODO(notification-feature): no persistent notification entity exists yet - do not build one speculatively, just mark the trigger point
         await payload.update({
           collection: 'assets',
           id: movingAsset.id,
@@ -1592,7 +1592,7 @@ export async function seedDemoData(
       sourceChanged = true
     }
     const retiringAsset = await findAsset(payload, 'demo-expanded-0-002')
-    const cancellationTitle = 'Revisar impresora retirada · cancelación automática'
+    const cancellationTitle = 'Revisar impresora retirada - cancelación automática'
     if (
       !(await findOne(payload, 'tasks', {
         seed_key: { equals: seedKey(core.organizationId, 'task', cancellationTitle) },
@@ -1620,7 +1620,7 @@ export async function seedDemoData(
         // AUDIT: this action must emit an AuditLogs entry (chain_hash over {seed asset retirement and task cancellation}, previous hash for this organization_id)
         // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
         // NOTIFY: this event should trigger a Notification Bell entry for {task claimant}
-        // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
+        // TODO(notification-feature): no persistent notification entity exists yet - do not build one speculatively, just mark the trigger point
         await payload.update({
           collection: 'assets',
           id: retiringAsset.id,

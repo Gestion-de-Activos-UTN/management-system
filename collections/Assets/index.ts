@@ -1,6 +1,7 @@
 import { reconcileAssetTasks } from '@/domain/tasks/reconcile-asset-tasks'
 import { logicalDeleteEndpoint, rejectPhysicalAssetDelete, preserveDeletedAsset } from '@/domain/assets/logical-delete'
 import type { CollectionConfig } from 'payload'
+import { textRule } from '../../lib/payload-text-rules'
 import { readTechnicalEvidence } from '../../access/rbac/technical-evidence'
 import { orgScopedAccess } from '../../access/rbac/orgScopedAccess'
 import { validateOwnerTenant } from './hooks/validateOwnerTenant'
@@ -374,7 +375,7 @@ export const Assets: CollectionConfig = {
       admin: { readOnly: true },
       access: technicalFieldAccess,
     },
-    { name: 'alias', type: 'text', maxLength: 120 },
+    { name: 'alias', type: 'text', maxLength: 120, validate: textRule('label') },
     {
       name: 'criticality',
       type: 'select',
@@ -387,7 +388,7 @@ export const Assets: CollectionConfig = {
       // Pertenencia a la organización del Asset validada en hooks/validateOwnerTenant.ts —
       // el filtro de fila (RBAC) no alcanza para validar el *valor* de una FK a otra colección.
     },
-    { name: 'location', type: 'text', maxLength: 200 },
+    { name: 'location', type: 'text', maxLength: 200, validate: textRule('label') },
     ...assessmentScopeFields(),
     {
       name: 'status',
