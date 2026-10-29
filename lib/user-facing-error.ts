@@ -13,6 +13,7 @@ const MESSAGES_BY_CODE: Record<string, string> = {
   last_active_org_admin: 'La organización debe conservar al menos un administrador activo.',
   rank_escalation: 'No puedes asignar un rol de mayor autoridad que el tuyo.',
   unauthenticated: 'Tu sesión venció. Inicia sesión nuevamente.',
+  user_limit_reached: 'Alcanzaste el límite de personas activas para este rol en tu plan.',
 }
 
 function translateKnownMessage(message: string): string | undefined {
@@ -62,9 +63,11 @@ function translateKnownMessage(message: string): string | undefined {
     return `La pregunta ${questionUnavailable[1]} (versión ${questionUnavailable[2]}) ya no está disponible.`
   }
   const questionPolicy = message.match(/^Question (.+) is not available for this policy$/)
-  if (questionPolicy) return `La pregunta ${questionPolicy[1]} no está disponible para esta política.`
+  if (questionPolicy)
+    return `La pregunta ${questionPolicy[1]} no está disponible para esta política.`
   const optionUnavailable = message.match(/^Option (.+) is not available for (.+)$/)
-  if (optionUnavailable) return 'La respuesta seleccionada ya no está disponible para esta pregunta.'
+  if (optionUnavailable)
+    return 'La respuesta seleccionada ya no está disponible para esta pregunta.'
   const assessmentStatus = message.match(/^Assessment in status (.+) cannot be changed$/)
   if (assessmentStatus) {
     const status =
@@ -80,7 +83,8 @@ function translateKnownMessage(message: string): string | undefined {
     return `La revisión en estado «${status}» no se puede modificar.`
   }
   const questionNotInReview = message.match(/^Question (.+) is not part of this review$/)
-  if (questionNotInReview) return `La pregunta ${questionNotInReview[1]} no forma parte de esta revisión.`
+  if (questionNotInReview)
+    return `La pregunta ${questionNotInReview[1]} no forma parte de esta revisión.`
   const missingAnswers = message.match(/^Every visible question must be answered: (.+)$/)
   if (missingAnswers) {
     return `Responde todas las preguntas visibles para completar la revisión: ${missingAnswers[1]}.`

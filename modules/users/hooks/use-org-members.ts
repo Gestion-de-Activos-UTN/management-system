@@ -47,7 +47,15 @@ export function useUpdateOrgMember(asOrganization?: string) {
         ].map(key => queryClient.invalidateQueries({ queryKey: [key] }))
       )
     },
-    onError: error => showApiError(error, 'No se pudo actualizar a la persona'),
+    onError: (error, { input }) => {
+      const action =
+        input.is_active === true
+          ? 'No se pudo reactivar a la persona'
+          : input.is_active === false
+            ? 'No se pudo desactivar a la persona'
+            : 'No se pudo actualizar a la persona'
+      showApiError(error, action, error.code === 'user_limit_reached' ? action : undefined)
+    },
   })
 }
 

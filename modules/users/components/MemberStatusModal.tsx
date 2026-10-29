@@ -44,6 +44,7 @@ export function MemberStatusModal({
       opened={Boolean(member)}
       onClose={onClose}
       title={member?.is_active ? 'Desactivar persona' : 'Reactivar persona'}
+      size="lg"
       centered
     >
       {member && (
@@ -145,19 +146,19 @@ function MemberStatusForm({
                     key: 'assets',
                     icon: Package,
                     value: ownedAssets.length,
-                    label: 'Activos a su cargo',
+                    label: 'Activos a cargo',
                   },
                   {
                     key: 'in-progress',
                     icon: ClipboardList,
                     value: impact.data.in_progress_tasks,
-                    label: 'Tareas en curso que vuelven a pendientes',
+                    label: 'Tareas en curso',
                   },
                   {
                     key: 'assigned',
                     icon: ClipboardList,
                     value: impact.data.assigned_tasks,
-                    label: 'Tareas asignadas que piden reasignación',
+                    label: 'Tareas asignadas',
                   },
                 ]}
               />
