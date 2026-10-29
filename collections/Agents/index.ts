@@ -154,21 +154,19 @@ export const Agents: CollectionConfig = {
       defaultValue: 0,
       admin: { readOnly: true },
     },
+    // `hidden` saca el campo de toda respuesta (REST, Local API y relaciones pobladas), aun con
+    // overrideAccess. Solo resolveAgentAuth.ts los lee, pidiéndolos con showHiddenFields.
     {
       name: 'apiKeyPrefix',
       type: 'text',
       unique: true,
       index: true,
-      admin: {
-        readOnly: true,
-      },
+      hidden: true,
     },
     {
       name: 'apiKeyHash',
       type: 'text',
-      admin: {
-        hidden: true,
-      },
+      hidden: true,
     },
     {
       // Solo poblado por attachPlainApiKeyOnce en la respuesta de creación — nunca se persiste ni se rehidrata en lecturas.

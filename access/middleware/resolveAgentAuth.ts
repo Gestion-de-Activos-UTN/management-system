@@ -93,6 +93,8 @@ export function createPayloadAgentAuthDeps(payload: Payload): AgentAuthDeps {
         collection: 'agents',
         where: { apiKeyPrefix: { equals: prefix } },
         overrideAccess: true,
+        // apiKeyHash es `hidden` en Agents: sin esto llega undefined y ninguna key valida.
+        showHiddenFields: true,
         limit: 1,
         depth: 0,
       })

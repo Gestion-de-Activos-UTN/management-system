@@ -1236,7 +1236,10 @@ it('REVIEW-07: a kept location keeps refreshing presence without moving the asse
   )
   resolveReq.routeParams = { id: incidents.docs[0].id }
   resolveReq.json = async () => ({ decision: 'keep' })
-  expect((await resolveInventoryIncidentEndpoint.handler(resolveReq)).status).toBe(200)
+  const resolved = await resolveInventoryIncidentEndpoint.handler(resolveReq)
+  expect(resolved.status).toBe(200)
+  // La respuesta puebla el agente del incidente y el del activo: ninguno debe traer su API key.
+  expect(JSON.stringify(await resolved.json())).not.toMatch(/apiKey(Hash|Prefix)/)
 
   const later = new Date(Date.now() + 1000).toISOString()
   const result = await processScanReport(
