@@ -1,13 +1,5 @@
 import Link from 'next/link'
-import {
-  Button,
-  Card,
-  Group,
-  Paper,
-  Skeleton,
-  Stack,
-  Text,
-} from '@mantine/core'
+import { Button, Card, Group, Paper, Skeleton, Stack, Text } from '@mantine/core'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { ArrowRight } from 'lucide-react'
 import { RiskBandBadge } from '@/modules/risk/components/RiskBandBadge'
@@ -39,16 +31,18 @@ export function RiskOverviewCard({
           <Text fw={700} c="dimmed" size="sm" tt="uppercase">
             Riesgo actual
           </Text>
-          {summary?.recalculation && summary.recalculation !== 'current' && (
-            <StatusBadge
-              tone={summary.recalculation === 'failed' ? 'danger' : 'warning'}
-              label={
-                summary.recalculation === 'failed'
-                  ? 'Actualización pendiente de recuperación'
-                  : 'Actualizando riesgo'
-              }
-            />
-          )}
+          {summary?.recalculation &&
+            summary.recalculation !== 'current' &&
+            summary.recalculation !== 'outdated' && (
+              <StatusBadge
+                tone={summary.recalculation === 'failed' ? 'danger' : 'warning'}
+                label={
+                  summary.recalculation === 'failed'
+                    ? 'No se pudo completar el cálculo'
+                    : 'Actualizando riesgo'
+                }
+              />
+            )}
           <Group gap="sm" align="center">
             <Text fw={800} fz={44} lh={1}>
               {score === null ? '—' : `${Math.round(score)} %`}

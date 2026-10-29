@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { notifications } from '@mantine/notifications'
+import { notify } from '@/lib/notify'
 import type { HttpError } from '@/lib/http-client'
 import { showApiError } from '@/lib/notify-error'
 import { useListQuery } from '@/lib/use-list-query'
@@ -30,7 +30,7 @@ export function useUpdateOrganizationDetails() {
           client.invalidateQueries({ queryKey: [key] })
         )
       )
-      notifications.show({ color: 'green', message: 'Organización actualizada.' })
+      notify({ color: 'green', title: 'Organización actualizada.' })
     },
     onError: error => showApiError(error, 'No se pudo actualizar la organización'),
   })
@@ -73,9 +73,9 @@ export function useSetOrganizationStatus() {
   return useMutation<unknown, HttpError, { id: string; input: OrganizationStatusInput }>({
     mutationFn: ({ id, input }) => setOrganizationStatus(id, input),
     onSuccess: (_, { input }) => {
-      notifications.show({
+      notify({
         color: 'green',
-        message: input.is_active ? 'Organización reactivada.' : 'Organización desactivada.',
+        title: input.is_active ? 'Organización reactivada.' : 'Organización desactivada.',
       })
       return Promise.all(
         ['organizations', 'platform-admin'].map(key =>
@@ -83,7 +83,13 @@ export function useSetOrganizationStatus() {
         )
       )
     },
-    onError: error => showApiError(error, 'No se pudo cambiar el estado de la organización'),
+    onError: (error, { input }) =>
+      showApiError(
+        error,
+        input.is_active
+          ? 'No se pudo reactivar la organización'
+          : 'No se pudo desactivar la organización'
+      ),
   })
 }
 
@@ -92,12 +98,15 @@ export function useCreateOrganization() {
   return useMutation<unknown, HttpError, OrganizationCreateInput>({
     mutationFn: createOrganization,
     onSuccess: () => {
-      notifications.show({ color: 'green', message: 'Organización creada.' })
+      notify({ color: 'green', title: 'Organización creada.' })
       return Promise.all([
         queryClient.invalidateQueries({ queryKey: ['organizations'] }),
         queryClient.invalidateQueries({ queryKey: ['platform-admin'] }),
       ])
     },
-    onError: error => showApiError(error, 'No se pudo crear la organización'),
+    onError: error => {
+      if (error.code !== 'email_unavailable')
+        showApiError(error, 'No se pudo crear la organización')
+    },
   })
 }

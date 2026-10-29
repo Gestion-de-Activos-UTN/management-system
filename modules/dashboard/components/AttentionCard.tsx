@@ -1,15 +1,7 @@
 import Link from 'next/link'
 import type { LucideIcon } from 'lucide-react'
 import { CircleCheck, ChevronRight } from 'lucide-react'
-import {
-  Card,
-  Group,
-  Skeleton,
-  Stack,
-  Text,
-  ThemeIcon,
-  UnstyledButton,
-} from '@mantine/core'
+import { Card, Group, Skeleton, Stack, Text, ThemeIcon, UnstyledButton } from '@mantine/core'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 
 export type AttentionItem = {
@@ -50,14 +42,16 @@ export function AttentionCard({
             <Skeleton height={44} />
           </Stack>
         ) : pending.length === 0 ? (
-          <Group gap="sm" py="md">
-            <ThemeIcon color="green" variant="light" size="lg" radius="xl">
+          <Group gap="sm" wrap="nowrap" align="flex-start">
+            <ThemeIcon color="pine" variant="light" size="lg" radius="xl" style={{ flexShrink: 0 }}>
               <CircleCheck size={18} strokeWidth={1.5} />
             </ThemeIcon>
-            <div>
-              <Text fw={600}>Todo al día</Text>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Text size="sm" fw={600}>
+                Sin pendientes detectados
+              </Text>
               <Text size="sm" c="dimmed">
-                No hay equipos, revisiones ni tareas pendientes de atención.
+                Aquí aparecerán los equipos, revisiones y tareas que necesiten atención.
               </Text>
             </div>
           </Group>

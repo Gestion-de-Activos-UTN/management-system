@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { notifications } from '@mantine/notifications'
+import { notify } from '@/lib/notify'
 import type { HttpError } from '@/lib/http-client'
 import { showApiError } from '@/lib/notify-error'
 import type { CreateTasksInput, EditTaskInput, ReassignTaskInput } from '../schema'
@@ -22,7 +22,7 @@ export function useCreateTasks() {
     mutationFn: createTasks,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['tasks'] })
-      notifications.show({ color: 'green', message: 'Tarea creada' })
+      notify({ color: 'green', title: 'Tarea creada' })
     },
     onError: error => showApiError(error, 'No se pudo crear la tarea'),
   })
@@ -34,7 +34,7 @@ export function useEditTask(id: string) {
     mutationFn: input => editTask(id, input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['tasks'] })
-      notifications.show({ color: 'green', message: 'Tarea actualizada' })
+      notify({ color: 'green', title: 'Tarea actualizada' })
     },
     onError: error => showApiError(error, 'No se pudo actualizar la tarea'),
   })
@@ -64,11 +64,24 @@ export function useTaskCommand(id: string) {
         delete: 'Tarea eliminada',
         reassign: 'Tarea reasignada',
       }
-      notifications.show({
+      notify({
         color: 'green',
-        message: labels[variables.action] ?? 'Tarea actualizada',
+        title: labels[variables.action] ?? 'Tarea actualizada',
       })
     },
-    onError: error => showApiError(error, 'No se pudo realizar la acción'),
+    onError: (error, { action }) => {
+      const actions: Record<TaskAction, string> = {
+        claim: 'No se pudo reclamar la tarea',
+        release: 'No se pudo liberar la tarea',
+        complete: 'No se pudo completar la tarea',
+        force_complete: 'No se pudo completar la tarea por administración',
+        cancel: 'No se pudo cancelar la tarea',
+        archive: 'No se pudo archivar la tarea',
+        delete: 'No se pudo eliminar la tarea',
+        reassign: 'No se pudo reasignar la tarea',
+        edit: 'No se pudo editar la tarea',
+      }
+      showApiError(error, actions[action])
+    },
   })
 }

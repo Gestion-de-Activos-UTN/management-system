@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { notifications } from '@mantine/notifications'
+import { notify } from '@/lib/notify'
 import type { BulkAssessmentComplete, BulkAssessmentSelector } from '../schema'
 import { completeBulkAssessments, previewBulkAssessments } from '../service'
 import { showApiError } from '@/lib/notify-error'
@@ -10,7 +10,7 @@ export function useBulkAssessments() {
   const queryClient = useQueryClient()
   const preview = useMutation({
     mutationFn: (selector: BulkAssessmentSelector) => previewBulkAssessments(selector),
-    onError: error => showApiError(error, 'No se pudo preparar la respuesta masiva'),
+    onError: error => showApiError(error, 'No se pudieron preparar las revisiones seleccionadas'),
   })
   const complete = useMutation({
     mutationFn: (command: BulkAssessmentComplete) => completeBulkAssessments(command),
@@ -19,9 +19,9 @@ export function useBulkAssessments() {
         queryClient.invalidateQueries({ queryKey: ['assessments'] }),
         queryClient.invalidateQueries({ queryKey: ['risk'] }),
       ])
-      notifications.show({
+      notify({
         color: 'green',
-        message: `${result.completed} ${result.completed === 1 ? 'revisión completada' : 'revisiones completadas'}`,
+        title: `${result.completed} ${result.completed === 1 ? 'revisión completada' : 'revisiones completadas'}`,
       })
     },
     onError: error => showApiError(error, 'No se pudieron completar las revisiones'),

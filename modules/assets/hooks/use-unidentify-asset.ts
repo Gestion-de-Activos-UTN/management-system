@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { notifications } from '@mantine/notifications'
+import { notify } from '@/lib/notify'
 import type { HttpError } from '@/lib/http-client'
 import { showApiError } from '@/lib/notify-error'
 import { unidentifyAsset } from '../service'
@@ -16,7 +16,7 @@ export function useUnidentifyAsset() {
         queryClient.invalidateQueries({ queryKey: ['assets'] }),
         invalidateSecurityReview(queryClient),
       ])
-      notifications.show({ color: 'green', message: 'Identificación eliminada' })
+      notify({ color: 'green', title: 'Identificación eliminada' })
     },
     onError: error => showApiError(error, 'No se pudo quitar la identificación'),
   })

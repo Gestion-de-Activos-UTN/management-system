@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { notifications } from '@mantine/notifications'
+import { notify } from '@/lib/notify'
 import { showApiError } from '@/lib/notify-error'
 import { getScanReport, renameScanReport } from '../service'
 
@@ -19,8 +19,8 @@ export function useRenameScanReport(id: string) {
     mutationFn: (displayName: string) => renameScanReport(id, { display_name: displayName }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['scan-reports'] })
-      notifications.show({ color: 'green', message: 'Nombre guardado' })
+      notify({ color: 'green', title: 'Nombre del escaneo guardado' })
     },
-    onError: error => showApiError(error, 'No se pudo guardar el nombre'),
+    onError: error => showApiError(error, 'No se pudo guardar el nombre del escaneo'),
   })
 }

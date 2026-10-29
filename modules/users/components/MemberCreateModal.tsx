@@ -14,6 +14,8 @@ import {
 } from '@mantine/core'
 import { MemberCreateSchema, ORGANIZATION_ROLES, type MemberCreate } from '../schema'
 import { ROLE_LABELS } from '@/lib/role-labels'
+import type { HttpError } from '@/lib/http-client'
+import { userFacingErrorMessage } from '@/lib/user-facing-error'
 
 type Props = {
   opened: boolean
@@ -85,8 +87,14 @@ export function MemberCreateModal({
     try {
       await onSubmit(parsed.data)
       close()
-    } catch {
-      // El hook presenta el error de API; se conserva el formulario para corregir/reintentar.
+    } catch (error) {
+      if ((error as Partial<HttpError>)?.code === 'email_unavailable') {
+        setFieldErrors(current => ({
+          ...current,
+          email: userFacingErrorMessage(error, 'Escribe otro correo.'),
+        }))
+      }
+      // Los errores generales los presenta el hook; se conserva el formulario.
     }
   }
 

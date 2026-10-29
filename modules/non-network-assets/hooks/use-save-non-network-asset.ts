@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { notifications } from '@mantine/notifications'
+import { notify } from '@/lib/notify'
 import type { HttpError } from '@/lib/http-client'
 import { showApiError } from '@/lib/notify-error'
 import { createNonNetworkAsset, updateNonNetworkAsset } from '../service'
@@ -22,8 +22,9 @@ export function useSaveNonNetworkAsset(id?: string) {
         queryClient.invalidateQueries({ queryKey: ['software-suggestions'] }),
         invalidateSecurityReview(queryClient),
       ])
-      notifications.show({ color: 'green', message: id ? 'Activo actualizado' : 'Activo creado' })
+      notify({ color: 'green', title: id ? 'Activo actualizado' : 'Activo creado' })
     },
-    onError: error => showApiError(error, 'No se pudo guardar el activo'),
+    onError: error =>
+      showApiError(error, id ? 'No se pudo actualizar el activo' : 'No se pudo crear el activo'),
   })
 }

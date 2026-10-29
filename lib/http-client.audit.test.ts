@@ -66,8 +66,64 @@ it('keeps unknown technical messages out of the notification', () => {
   )
   expect(notifications.show).toHaveBeenCalledWith(
     expect.objectContaining({
-      title: 'Ocurrió un error',
-      message: 'No se pudo reactivar a la persona',
+      title: 'No se pudo reactivar a la persona',
+      message: 'Ocurrió un problema en el servidor. Intenta nuevamente en unos momentos.',
+      autoClose: false,
+    })
+  )
+})
+
+it('shows an actionable duplicate email message instead of technical server text', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValue(
+        Response.json(
+          { error: 'email_unavailable', message: 'duplicate key users_email_idx' },
+          { status: 409 }
+        )
+      )
+  )
+  const error = await httpClient.post('/api/v1/org-members', {}).catch(error => error)
+  expect(error).toMatchObject({ status: 409, code: 'email_unavailable' })
+  showApiError(error, 'No se pudo crear la persona')
+  expect(notifications.show).toHaveBeenCalledWith(
+    expect.objectContaining({
+      title: 'No se pudo crear la persona',
+      message: 'Ese correo ya está asociado a una cuenta. Escribe otro correo.',
+    })
+  )
+})
+
+it('keeps the action title for validation errors without duplicating its description', () => {
+  showApiError({ status: 400 }, 'No se pudo guardar el cambio')
+  expect(notifications.show).toHaveBeenCalledWith(
+    expect.objectContaining({ title: 'No se pudo guardar el cambio', message: null })
+  )
+})
+
+it.each([
+  [401, 'Tu sesión venció. Inicia sesión nuevamente.'],
+  [403, 'No tienes permiso para realizar esta acción.'],
+  [404, 'El elemento ya no está disponible. Actualiza la página.'],
+  [429, 'Hay demasiados intentos. Espera unos momentos y vuelve a intentar.'],
+])('explains HTTP %s when the API only returns an unknown code', (status, message) => {
+  showApiError(
+    { status, code: 'request_failed', message: 'technical details' },
+    'No se pudo guardar el cambio'
+  )
+  expect(notifications.show).toHaveBeenCalledWith(
+    expect.objectContaining({ title: 'No se pudo guardar el cambio', message })
+  )
+})
+
+it('explains a network failure without exposing the browser error', () => {
+  showApiError(new TypeError('Failed to fetch'), 'No se pudo guardar el cambio')
+  expect(notifications.show).toHaveBeenCalledWith(
+    expect.objectContaining({
+      title: 'No se pudo guardar el cambio',
+      message: 'No se pudo conectar con el servidor. Revisa tu conexión e intenta nuevamente.',
       autoClose: false,
     })
   )

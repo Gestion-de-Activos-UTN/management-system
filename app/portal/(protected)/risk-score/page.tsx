@@ -38,6 +38,7 @@ import {
 import { portalHref } from '@/lib/portal-href'
 import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 import { StatusBadge } from '@/components/ui/StatusBadge'
+import { getRiskCalculationMessage } from '@/modules/risk/risk-calculation-message'
 
 export default function RiskScorePage() {
   const searchParams = useSearchParams()
@@ -72,6 +73,10 @@ export default function RiskScorePage() {
     enabled: ready,
   })
   const data = query.data?.evaluation
+  const calculationMessage =
+    !evaluationId && !query.isPending && !query.isError
+      ? getRiskCalculationMessage(query.data?.recalculation, Boolean(data))
+      : null
   const pagination = query.data?.pagination
   const inventoryHref = portalHref('/portal/inventory', asOrganization)
 
@@ -95,33 +100,23 @@ export default function RiskScorePage() {
         }
       />
       {query.isError && <Alert color="red">No se pudo cargar la última evaluación.</Alert>}
-      {(query.data?.recalculation === 'pending' ||
-        query.data?.recalculation === 'processing' ||
-        query.data?.recalculation === 'outdated') && (
-        <Alert color="blue" title="Actualización pendiente">
-          Los cambios están guardados. El puntaje mostrado corresponde al cálculo anterior y se
-          actualizará cuando termine el recálculo.
-        </Alert>
-      )}
-      {query.data?.recalculation === 'failed' && (
-        <Alert color="orange" title="Actualización pendiente de recuperación">
-          El recálculo no pudo completarse. Los cambios están guardados, pero el puntaje puede estar
-          desactualizado.
+      {calculationMessage && (
+        <Alert color={calculationMessage.color} title={calculationMessage.title}>
+          {calculationMessage.message}
         </Alert>
       )}
       {query.isPending ? (
         <Skeleton height={260} />
       ) : !data ? (
-        <Alert color="blue">
-          Todavía no existe una evaluación. El cálculo se ejecutará después del próxima revisión o
-          ingreso de evidencia.
-        </Alert>
+        evaluationId && !query.isError ? (
+          <Alert color="gray">No se encontró esta evaluación histórica.</Alert>
+        ) : null
       ) : (
         <>
           {!scoreVisible(data.confidence) && (
             <Alert color="orange" title="Datos insuficientes">
-              Complete las revisiones pendientes, identifique dispositivos y mantenga activo el
-              agente para poder mostrar el puntaje.
+              Completa las revisiones pendientes, identifica dispositivos y mantén activo el agente
+              para poder mostrar el puntaje.
             </Alert>
           )}
           {scoreVisible(data.confidence) && !bandVisible(data.confidence) && (
