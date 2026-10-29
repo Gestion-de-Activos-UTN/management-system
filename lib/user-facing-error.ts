@@ -31,8 +31,8 @@ function translateKnownMessage(message: string): string | undefined {
     message.startsWith('Ya existe una respuesta ') ||
     message.startsWith('Este activo todavía no fue identificado:') ||
     message.startsWith('La oficina elegida está inactiva.') ||
-    message.startsWith('El responsable es obligatorio.') ||
-    message.startsWith('Elegí un responsable para la nueva oficina.') ||
+    message === 'Selecciona un responsable.' ||
+    message === 'Selecciona un responsable para la nueva oficina.' ||
     message.startsWith('La oficina de este activo está inactiva:') ||
     message.startsWith('Un activo eliminado conserva su baja y su historial.') ||
     message.startsWith('Los activos se eliminan lógicamente para conservar su historial.') ||

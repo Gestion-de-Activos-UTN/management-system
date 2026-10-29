@@ -44,7 +44,8 @@ const TaskBusinessFieldsSchema = z.object({
   title: z
     .string()
     .trim()
-    .min(3)
+    .min(1, 'Escribe un título.')
+    .min(3, 'Escribe al menos 3 caracteres.')
     .max(160)
     .regex(...TEXT_RULES.title),
   description: z

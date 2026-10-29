@@ -2,7 +2,21 @@ import { listResource } from '@/lib/list-resource'
 import type { Organization } from '@/app/types/payload-types'
 import { httpClient } from '@/lib/http-client'
 import type { OrganizationStatusImpact } from '@/domain/organizations/organization-lifecycle'
-import type { OrganizationCreateInput, OrganizationStatusInput } from './schema'
+import type {
+  OrganizationCreateInput,
+  OrganizationDetailsInput,
+  OrganizationStatusInput,
+} from './schema'
+
+export function updateOrganizationDetails(id: string, input: OrganizationDetailsInput) {
+  return httpClient.patch<{ ok: boolean }>(`/api/v1/platform-admin/organizations/${id}`, input)
+}
+
+export function getOrganizationDetails(id: string) {
+  return httpClient.get<{ name: string; industry: string; industry_details: string }>(
+    `/api/v1/platform-admin/organizations/${id}`
+  )
+}
 
 export type OrganizationOperationalCounts = {
   counts: {

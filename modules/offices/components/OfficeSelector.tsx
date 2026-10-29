@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Select, Skeleton } from '@mantine/core'
+import { Select, Skeleton, Tooltip } from '@mantine/core'
 import { useUiStore } from '@/lib/ui-store'
 import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
 import { useOfficesList } from '../hooks/use-offices'
@@ -56,15 +56,27 @@ export function OfficeSelector() {
   ]
 
   if (options.length === 0) return null
+  const selectedLabel =
+    options.find(option => option.value === (selectedOfficeId ?? ALL_OFFICES))?.label ??
+    options[0].label
 
   return (
-    <Select
-      placeholder="Oficina"
-      data={options}
-      value={selectedOfficeId ?? ALL_OFFICES}
-      onChange={value => setSelectedOfficeId(value === ALL_OFFICES ? null : value)}
-      w={{ base: 138, sm: 200 }}
-      size="sm"
-    />
+    <Tooltip
+      label={selectedLabel}
+      events={{ hover: true, focus: true, touch: false }}
+      multiline
+      maw={360}
+      withArrow
+    >
+      <Select
+        aria-label="Oficina"
+        placeholder="Oficina"
+        data={options}
+        value={selectedOfficeId ?? ALL_OFFICES}
+        onChange={value => setSelectedOfficeId(value === ALL_OFFICES ? null : value)}
+        w={{ base: 138, sm: 200 }}
+        size="sm"
+      />
+    </Tooltip>
   )
 }

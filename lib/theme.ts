@@ -76,7 +76,7 @@ const variantColorResolver: VariantColorsResolver = input => {
 export const theme = createTheme({
   colors: { bone, pine },
   primaryColor: 'pine',
-  primaryShade: { light: 6, dark: 4 },
+  primaryShade: { light: 6, dark: 6 },
   breakpoints: {
     xs: '30em',
     sm: '48em',

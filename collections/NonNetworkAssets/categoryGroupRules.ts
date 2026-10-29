@@ -15,11 +15,11 @@ const REQUIRED_FIELDS: Record<CategoryGroup, readonly string[]> = {
   repository_details: ['kind'],
 }
 
-const FIELD_LABEL: Record<string, string> = {
-  software_vendor: 'El proveedor',
-  software_product: 'El producto',
-  software_version: 'La versión',
-  kind: 'El tipo',
+const REQUIRED_MESSAGE: Record<string, string> = {
+  software_vendor: 'Escribe el proveedor.',
+  software_product: 'Escribe el producto.',
+  software_version: 'Escribe la versión.',
+  kind: 'Selecciona un tipo.',
 }
 
 type Doc = Record<string, unknown> | null | undefined
@@ -55,14 +55,14 @@ export function resolveCategoryGroups(data: Doc, originalDoc: Doc) {
         if (isBlank(effective[field])) {
           errors.push({
             path: `${group}.${field}`,
-            message: `${FIELD_LABEL[field]} es obligatorio para esta categoría`,
+            message: REQUIRED_MESSAGE[field],
           })
         }
       }
-    } else if (GROUP_FIELDS[group].some((field) => !isBlank(effective[field]))) {
+    } else if (GROUP_FIELDS[group].some(field => !isBlank(effective[field]))) {
       // Solo si hay algo que limpiar: null y no undefined, porque omitir la clave no borra la
       // columna en un update.
-      clean[group] = Object.fromEntries(GROUP_FIELDS[group].map((field) => [field, null]))
+      clean[group] = Object.fromEntries(GROUP_FIELDS[group].map(field => [field, null]))
     }
   }
 

@@ -81,7 +81,14 @@ function ProfileForm({
             maxLength={120}
             value={name}
             error={error || textRuleError(name, 'personName')}
-            onChange={event => setName(event.currentTarget.value)}
+            onChange={event => {
+              const value = event.currentTarget.value
+              setName(value)
+              const parsed = ProfileUpdateSchema.safeParse({ name: value })
+              setError(
+                parsed.success ? '' : (parsed.error.issues[0]?.message ?? 'Nombre inválido.')
+              )
+            }}
           />
           <div>
             <Text size="sm" fw={500}>

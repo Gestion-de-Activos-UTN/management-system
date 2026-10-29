@@ -2,6 +2,7 @@ import type { Endpoint } from 'payload'
 import { getTenantContext, type TenantContext } from '../access/tenant/resolveTenantContext'
 import { relationId } from '../lib/relationId'
 import { canDo, hasOrgWideScope, type RoleSlug } from '../access/rbac/permissions'
+import { canChangeMemberStatus, canEditMemberOffices } from '../access/rbac/member-status'
 import { adminErrorResponse, organizationAdminLock } from '../domain/organizations/admin-actions'
 import { withTransaction } from '../domain/with-transaction'
 import { createMember, updateMember } from '../domain/organizations/member-admin'
@@ -29,7 +30,8 @@ export const orgMembersEndpoint: Endpoint = {
     // reactivarlas); los selectores de persona siguen recibiendo sólo las activas.
     const includeInactive =
       new URL(req.url ?? 'http://localhost').searchParams.get('include_inactive') === '1' &&
-      canDo(ctx.role, 'organization-memberships', 'read', ctx.organizationId)
+      (canDo(ctx.role, 'organization-memberships', 'read', ctx.organizationId) ||
+        canDo(ctx.role, 'organization-memberships', 'change_status', ctx.organizationId))
     const memberships = await req.payload.find({
       collection: 'organization-memberships',
       where: includeInactive
@@ -60,18 +62,34 @@ export const orgMembersEndpoint: Endpoint = {
             (m.offices ?? []).some(office => ctx.officeIds.includes(relationId(office)))
         )
 
-    const docs = visible.map(m => {
-      const user = m.user as unknown as { id: string; name: string; email: string }
-      return {
-        id: relationId(user),
-        name: user.name,
-        email: user.email,
+    const mayChangeStatus = (m: (typeof memberships.docs)[number]) =>
+      canChangeMemberStatus(ctx, {
+        organizationId: ctx.organizationId!,
         role: roleSlug(m),
-        office_ids: (m.offices ?? []).map(relationId),
-        status: m.status,
-        is_active: Boolean(m.is_active),
-      }
-    })
+        officeIds: (m.offices ?? []).map(relationId),
+      })
+    // Inactive members outside delegated management must not become visible via this option.
+    const docs = visible
+      .filter(m => orgWide || m.is_active || mayChangeStatus(m))
+      .map(m => {
+        const user = m.user as unknown as { id: string; name: string; email: string }
+        return {
+          id: relationId(user),
+          name: user.name,
+          email: user.email,
+          role: roleSlug(m),
+          office_ids: (m.offices ?? []).map(relationId),
+          status: m.status,
+          is_active: Boolean(m.is_active),
+          can_change_status: mayChangeStatus(m),
+          can_edit_offices: canEditMemberOffices(ctx, {
+            organizationId: ctx.organizationId!,
+            role: roleSlug(m),
+            officeIds: (m.offices ?? []).map(relationId),
+            isActive: Boolean(m.is_active),
+          }),
+        }
+      })
 
     return json({ docs })
   },
@@ -128,7 +146,11 @@ export const updateOrgMemberEndpoint: Endpoint = {
       if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
       if (
         !ctx.organizationId ||
-        !canDo(ctx.role, 'organization-memberships', 'update', ctx.organizationId)
+        !(
+          canDo(ctx.role, 'organization-memberships', 'update', ctx.organizationId) ||
+          canDo(ctx.role, 'organization-memberships', 'change_status', ctx.organizationId) ||
+          canDo(ctx.role, 'organization-memberships', 'edit_offices', ctx.organizationId)
+        )
       ) {
         return json({ error: 'forbidden' }, 403)
       }
@@ -165,7 +187,10 @@ export const orgMemberDeactivationImpactEndpoint: Endpoint = {
     if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
     if (
       !ctx.organizationId ||
-      !canDo(ctx.role, 'organization-memberships', 'update', ctx.organizationId)
+      !(
+        canDo(ctx.role, 'organization-memberships', 'update', ctx.organizationId) ||
+        canDo(ctx.role, 'organization-memberships', 'change_status', ctx.organizationId)
+      )
     ) {
       return json({ error: 'forbidden' }, 403)
     }
@@ -178,10 +203,20 @@ export const orgMemberDeactivationImpactEndpoint: Endpoint = {
       },
       overrideAccess: true,
       req,
-      depth: 0,
+      depth: 1,
       limit: 1,
     })
     if (!membership.docs[0]) return json({ error: 'member_not_found' }, 404)
+    const target = membership.docs[0]
+    const targetRole = target.role as unknown as { slug: string }
+    if (
+      !canChangeMemberStatus(ctx, {
+        organizationId,
+        role: targetRole.slug,
+        officeIds: (target.offices ?? []).map(relationId),
+      })
+    )
+      return json({ error: 'forbidden' }, 403)
     const openTasks = { organization: { equals: organizationId } }
     const [ownedAssets, inProgress, assigned] = await Promise.all([
       ownedAssetsSummary(req, organizationId, userId),

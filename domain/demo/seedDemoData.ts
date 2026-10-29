@@ -1,5 +1,8 @@
 import { createLocalReq, type Payload, type PayloadRequest, type Where } from 'payload'
 import { getTenantContext } from '@/access/tenant/resolveTenantContext'
+import { AssetBusinessUpdateSchema } from '@/modules/assets/schema'
+import { NonNetworkAssetFieldsSchema } from '@/modules/non-network-assets/schema'
+import { CreateTasksSchema } from '@/modules/tasks/schema'
 import type {
   Agent,
   Asset,
@@ -41,6 +44,11 @@ const seedKey = (organization: string, kind: string, label: string) =>
   createHash('sha256')
     .update(JSON.stringify([organization, kind, label]))
     .digest('hex')
+
+// Only fixture presentation text is normalized. Original labels remain seed-key inputs so
+// retries still find existing scenarios, including records renamed by a user.
+const demoText = (value: unknown) =>
+  typeof value === 'string' ? value.replace(/[·—–]/g, '-') : value
 
 const DAY = 24 * 60 * 60 * 1000
 const DEMO_ORGANIZATION = 'Demo Organization'
@@ -517,6 +525,11 @@ async function enrichAsset(
   assetId: string,
   data: Record<string, unknown>
 ): Promise<boolean> {
+  // Los fixtures deben respetar las mismas reglas de texto que el formulario de edición.
+  const business = AssetBusinessUpdateSchema.pick({ alias: true, location: true }).parse({
+    alias: demoText(data.alias),
+    location: demoText(data.location),
+  })
   const current = await findAsset(payload, assetId)
   if (current.identified) return false
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {asset identification and business fields}, previous hash for this organization_id)
@@ -530,6 +543,7 @@ async function enrichAsset(
       identification_status: 'confirmed',
       type_confirmed_at: new Date().toISOString(),
       ...data,
+      ...business,
     },
   })
   return true
@@ -550,6 +564,10 @@ async function ensureManualAsset(
     status?: 'active' | 'retired'
   } & Pick<NonNetworkAsset, 'product_details' | 'cloud_details' | 'repository_details'>
 ) {
+  const business = NonNetworkAssetFieldsSchema.pick({ alias: true, location: true }).parse({
+    alias: demoText(input.alias),
+    location: demoText(input.location),
+  })
   const existing = await findOne<NonNetworkAsset>(payload, 'non-network-assets', {
     seed_key: { equals: seedKey(input.organizationId, 'manual', input.alias) },
   })
@@ -562,13 +580,13 @@ async function ensureManualAsset(
     req,
     data: {
       seed_key: seedKey(input.organizationId, 'manual', input.alias),
-      alias: input.alias,
+      alias: business.alias,
       asset_category: input.category,
       criticality: input.criticality,
       owner: input.ownerId,
       office: input.officeId,
       organization: input.organizationId,
-      location: input.location,
+      location: business.location,
       review_interval: input.reviewInterval,
       status: input.status ?? 'active',
       product_details: input.product_details,
@@ -785,8 +803,8 @@ async function ensureTask(
       seed_key: { equals: seedKey(ctx.organizationId!, 'task', input.title) },
     })
     if (existing) return false
-    const created = await createTasks(req, ctx, {
-      title: input.title,
+    const values = CreateTasksSchema.parse({
+      title: demoText(input.title),
       description: input.description,
       priority: input.priority,
       global: false,
@@ -798,6 +816,7 @@ async function ensureTask(
       due_at: input.dueAt,
       related_entity: input.reference,
     })
+    const created = await createTasks(req, ctx, values)
     const task = created[0]
     // AUDIT: persist the immutable scenario identifier alongside task creation.
     // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
@@ -1077,7 +1096,7 @@ export async function seedDemoData(
       alias: 'Servidor de archivos principal',
       criticality: 'critical',
       owner: adminId,
-      location: 'Sala técnica — planta baja',
+      location: 'Sala técnica - planta baja',
       type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
@@ -1087,7 +1106,7 @@ export async function seedDemoData(
       alias: 'Equipo de Finanzas 04',
       criticality: 'high',
       owner: core.users.mainManager.id,
-      location: 'Finanzas — puesto 4',
+      location: 'Finanzas - puesto 4',
       type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
@@ -1126,7 +1145,7 @@ export async function seedDemoData(
       alias: 'Access Point depósito',
       criticality: 'medium',
       owner: core.users.secondaryManager.id,
-      location: 'Depósito — techo norte',
+      location: 'Depósito - techo norte',
       type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
@@ -1136,7 +1155,7 @@ export async function seedDemoData(
       alias: 'Equipo de Logística 02',
       criticality: 'medium',
       owner: core.users.secondaryManager.id,
-      location: 'Logística — puesto 2',
+      location: 'Logística - puesto 2',
       type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
@@ -1146,7 +1165,7 @@ export async function seedDemoData(
       alias: 'Cámara del depósito',
       criticality: 'high',
       owner: core.users.secondaryManager.id,
-      location: 'Depósito — acceso',
+      location: 'Depósito - acceso',
       type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   if (secondaryCamera.status !== 'offline') {

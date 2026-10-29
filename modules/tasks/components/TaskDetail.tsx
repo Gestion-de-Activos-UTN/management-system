@@ -30,9 +30,14 @@ import { TaskEditForm } from './TaskEditForm'
 import { TaskAssignmentFields, type TaskAssignmentKind } from './TaskAssignmentFields'
 import { TaskReferenceSummary } from './TaskReferenceSummary'
 import { taskActivity } from '../task-activity'
+import { TaskDeleteModal } from './TaskDeleteModal'
+import { useRouter } from 'next/navigation'
+import { portalHref } from '@/lib/portal-href'
 
 export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganization?: string }) {
   const command = useTaskCommand(task.id)
+  const router = useRouter()
+  const [deleteOpened, setDeleteOpened] = useState(false)
   const [editOpened, setEditOpened] = useState(false)
   const [reassignOpened, setReassignOpened] = useState(false)
   const [cancelOpened, setCancelOpened] = useState(false)
@@ -257,13 +262,32 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             leftSection={<Trash2 size={16} strokeWidth={1.5} />}
             loading={command.isPending && command.variables?.action === 'delete'}
             disabled={command.isPending}
-            onClick={() => window.confirm('¿Eliminar esta tarea pendiente?') && run('delete')}
+            onClick={() => setDeleteOpened(true)}
           >
             Eliminar
           </Button>
         )}
       </Group>
 
+      <TaskDeleteModal
+        opened={deleteOpened}
+        title={task.title}
+        isPending={command.isPending}
+        onClose={() => setDeleteOpened(false)}
+        onConfirm={() => {
+          // La invalidación puede desmontar el detalle antes de resolver la mutación.
+          // La promesa conserva la navegación aunque el componente ya no se muestre.
+          void command.mutateAsync({ action: 'delete' }).then(
+            () => {
+              setDeleteOpened(false)
+              router.push(portalHref('/portal/tasks', asOrganization))
+            },
+            () => {
+              // El hook muestra el error; el modal permite reintentar.
+            }
+          )
+        }}
+      />
       <Modal
         opened={editOpened}
         onClose={() => setEditOpened(false)}

@@ -17,9 +17,8 @@ export type StatusTone = keyof typeof STATUS_TONE_COLOR
  * modules/assets/components/CriticalityBadge.tsx maps
  * criticality -> tone and renders <StatusBadge tone={...} label={...} />.
  *
- * Uses the theme's default Badge variant ("filled", see lib/theme.ts) —
- * "light" reads too close-in-hue between tones (e.g. green vs yellow) in
- * dark mode; a solid, autoContrast-text fill stays legible in both schemes.
+ * Uses the theme's filled variant. globals.css softens filled badges in dark mode
+ * while preserving their text labels and semantic colors.
  */
 export function StatusBadge({
   tone,

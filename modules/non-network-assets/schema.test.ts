@@ -29,3 +29,27 @@ test('NonNetworkAssetSchema: un activo que el sistema dejó sin responsable se p
   // null sólo lo pone el sistema; el formulario lo conserva al editar otra cosa.
   assert.equal(NonNetworkAssetSchema.safeParse({ ...base, owner: null }).success, true)
 })
+
+test('NonNetworkAssetSchema: categoría sin elegir muestra una indicación breve', () => {
+  for (const asset_category of [undefined, null, '']) {
+    const result = NonNetworkAssetSchema.safeParse({ ...base, owner: null, asset_category })
+    assert.equal(result.success, false)
+    assert.equal(
+      result.error?.issues.find(issue => issue.path[0] === 'asset_category')?.message,
+      'Selecciona una categoría.'
+    )
+  }
+})
+
+test('NonNetworkAssetSchema: categoría inválida no muestra los identificadores internos', () => {
+  const result = NonNetworkAssetSchema.safeParse({
+    ...base,
+    owner: null,
+    asset_category: 'invalid-category',
+  })
+  assert.equal(result.success, false)
+  assert.equal(
+    result.error?.issues.find(issue => issue.path[0] === 'asset_category')?.message,
+    'Selecciona una categoría válida.'
+  )
+})

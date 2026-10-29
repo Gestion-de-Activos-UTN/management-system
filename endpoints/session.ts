@@ -59,6 +59,16 @@ export const sessionEndpoint: Endpoint = {
       limits: subscription?.docs[0] ? planLimits(subscription.docs[0]) : null,
       permissions: {
         organizationMembers: {
+          editOffices: Boolean(
+            ctx.organizationId &&
+            (canDo(ctx.role, 'organization-memberships', 'edit_offices', ctx.organizationId) ||
+              canDo(ctx.role, 'organization-memberships', 'update', ctx.organizationId))
+          ),
+          changeStatus: Boolean(
+            ctx.organizationId &&
+            (canDo(ctx.role, 'organization-memberships', 'change_status', ctx.organizationId) ||
+              canDo(ctx.role, 'organization-memberships', 'update', ctx.organizationId))
+          ),
           create: Boolean(
             ctx.organizationId &&
             canDo(ctx.role, 'organization-memberships', 'create', ctx.organizationId)

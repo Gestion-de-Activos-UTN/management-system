@@ -450,7 +450,7 @@ export function AssetDetailView({
     reset,
     setValue,
     watch,
-    formState: { isDirty, isValid, dirtyFields, errors },
+    formState: { isDirty, dirtyFields, errors },
   } = useForm<AssetBusinessFields>({
     mode: 'onChange',
     resolver: zodResolver(createAssetBusinessFieldsSchema(asset)),
@@ -797,6 +797,7 @@ export function AssetDetailView({
                           { value: 'excluded', label: 'Excluido' },
                         ]}
                         value={field.value}
+                        error={errors.assessment_scope?.message}
                         onChange={value => {
                           if (value === 'excluded' && authorizationStatus === 'unauthorized') {
                             warnedUnauthorizedExclusion.current = true
@@ -827,7 +828,9 @@ export function AssetDetailView({
                   <Button
                     type="submit"
                     loading={updateAsset.isPending}
-                    disabled={!isDirty || !isValid}
+                    // Validar al enviar muestra también los errores de campos no tocados.
+                    // isValid bloqueaba el botón sin explicar qué impedía guardar.
+                    disabled={!isDirty}
                     w={{ base: '100%', sm: 'auto' }}
                   >
                     Guardar cambios

@@ -30,6 +30,8 @@ export type Action =
   | 'complete'
   | 'cancel'
   | 'archive'
+  | 'change_status'
+  | 'edit_offices'
 
 // Matriz estática — decisión explícita (documentation/01-erd-core.md nota 9): el sistema no
 // tiene hoy suficientes funcionalidades como para justificar overrides dinámicos por
@@ -60,8 +62,8 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
   },
   org_admin: {
     organizations: ['read'],
-    // Alta, edición y (des)activación de oficinas y de miembros: sólo el org_admin, vía
-    // endpoints/offices.ts y endpoints/orgMembers.ts (las colecciones siguen cerradas).
+    // Administración general de oficinas y miembros. El Manager sólo recibe el flujo delegado
+    // de alta/estado de Viewers; las colecciones siguen cerradas al CRUD directo.
     offices: ['create', 'read', 'update'],
     'organization-memberships': ['create', 'read', 'update'],
     agents: ['create', 'read', 'update'],
@@ -109,8 +111,8 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
   office_manager: {
     organizations: ['read'],
     offices: ['read'],
-    // The create endpoint also enforces rank and office scope; this grants only its scoped flow.
-    'organization-memberships': ['create'],
+    // Status changes are limited to Viewers fully covered by the actor's offices in the domain.
+    'organization-memberships': ['create', 'change_status', 'edit_offices'],
     assets: ['read', 'update'],
     'non-network-assets': ['create', 'read', 'update'],
     // 'update' = sólo renombrar, en sus oficinas (ver org_admin).

@@ -66,7 +66,7 @@ export function NonNetworkAssetForm({
     handleSubmit,
     watch,
     setValue,
-    formState: { errors, isValid },
+    formState: { errors },
   } = useForm<NonNetworkAssetFormValues>({
     mode: 'onChange',
     resolver: zodResolver(createNonNetworkAssetSchema(asset)),
@@ -128,7 +128,7 @@ export function NonNetworkAssetForm({
   const onSubmit = handleSubmit(values => {
     save.mutate(values, { onSuccess: onSaved })
   })
-  
+
   // Este bloque es redundante porque lo limpia el backend
   /* const onSubmit = handleSubmit(values => {
     const payload: NonNetworkAssetFormValues = {
@@ -399,6 +399,7 @@ export function NonNetworkAssetForm({
                   { value: 'excluded', label: 'Excluido' },
                 ]}
                 value={field.value}
+                error={errors.assessment_scope?.message}
                 onChange={value => field.onChange(value ?? 'included')}
               />
             )}
@@ -412,12 +413,7 @@ export function NonNetworkAssetForm({
           noteRequired={exclusionReason === 'other'}
         />
         <Group justify="flex-end">
-          <Button
-            type="submit"
-            loading={save.isPending}
-            disabled={!isValid}
-            w={{ base: '100%', sm: 'auto' }}
-          >
+          <Button type="submit" loading={save.isPending} w={{ base: '100%', sm: 'auto' }}>
             {asset ? 'Guardar cambios' : 'Crear activo'}
           </Button>
         </Group>

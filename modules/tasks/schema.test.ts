@@ -50,6 +50,21 @@ test('aplica límites de título y descripción', () => {
   )
 })
 
+test('crear y editar distinguen un título vacío de uno demasiado corto', () => {
+  for (const title of ['', '   ', 'a', 'ab']) {
+    const expected = title.trim() ? 'Escribe al menos 3 caracteres.' : 'Escribe un título.'
+    for (const result of [
+      CreateTasksSchema.safeParse({ ...base, title }),
+      EditTaskSchema.safeParse({ title }),
+    ]) {
+      assert.equal(result.success, false)
+      assert.equal(result.error?.issues.find(issue => issue.path[0] === 'title')?.message, expected)
+    }
+  }
+  assert.equal(CreateTasksSchema.safeParse({ ...base, title: 'abc' }).success, true)
+  assert.equal(EditTaskSchema.safeParse({ title: 'abc' }).success, true)
+})
+
 test('la edición permite quitar el vencimiento', () => {
   assert.deepEqual(EditTaskSchema.parse({ due_at: null }), { due_at: null })
 })

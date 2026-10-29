@@ -9,7 +9,11 @@ import {
 import { sql, type PostgresAdapter } from '@payloadcms/db-postgres'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { createHash } from 'node:crypto'
 import { seedDemoData } from '@/domain/demo/seedDemoData'
+import { AssetBusinessUpdateSchema } from '@/modules/assets/schema'
+import { NonNetworkAssetFieldsSchema } from '@/modules/non-network-assets/schema'
+import { EditTaskSchema } from '@/modules/tasks/schema'
 import { expireRawScanPayloads } from '@/domain/inventories/expireRawScanPayloads'
 
 let payload: Payload, config: SanitizedConfig
@@ -125,6 +129,89 @@ it('seed: navigation and demo populate an empty database and repeat without over
   const tasks = await payload.find({ collection: 'tasks', overrideAccess: true, pagination: false })
   for (const task of tasks.docs)
     if (task.due_at) expect(Date.parse(task.start_at)).toBeLessThanOrEqual(Date.parse(task.due_at))
+
+  // The CLI defaults to expanded: verify its generated text against the actual edit contracts.
+  const expanded = await seedDemoData(payload, { profile: 'expanded' })
+  expect(expanded.reportsProcessed).toBeGreaterThan(0)
+  expect(expanded.manualAssetsCreated).toBeGreaterThan(0)
+  const network = await payload.find({
+    collection: 'assets',
+    overrideAccess: true,
+    pagination: false,
+  })
+  const manual = await payload.find({
+    collection: 'non-network-assets',
+    overrideAccess: true,
+    pagination: false,
+  })
+  const expandedTasks = await payload.find({
+    collection: 'tasks',
+    overrideAccess: true,
+    pagination: false,
+  })
+  for (const item of network.docs)
+    expect(
+      AssetBusinessUpdateSchema.pick({ alias: true, location: true }).safeParse({
+        alias: item.alias,
+        location: item.location,
+      }).success,
+      `network ${item.asset_id}`
+    ).toBe(true)
+  for (const item of manual.docs)
+    expect(
+      NonNetworkAssetFieldsSchema.pick({ alias: true, location: true }).safeParse({
+        alias: item.alias,
+        location: item.location ?? null,
+      }).success,
+      `manual ${item.alias}`
+    ).toBe(true)
+  for (const item of expandedTasks.docs)
+    expect(EditTaskSchema.safeParse({ title: item.title }).success, `task ${item.title}`).toBe(true)
+
+  const manualTarget = manual.docs.find(
+    item => item.alias === 'Casa central - Licencia de diseño gráfico'
+  )
+  const taskTarget = expandedTasks.docs.find(
+    item => item.title === 'Casa central - Actualizar servidor contable'
+  )
+  if (!manualTarget || !taskTarget) throw new Error('Expanded fixture texts required')
+  for (const [item, kind, originalLabel] of [
+    [manualTarget, 'manual', 'Casa central · Licencia de diseño gráfico'],
+    [taskTarget, 'task', 'Casa central · Actualizar servidor contable'],
+  ] as const)
+    expect(item.seed_key).toBe(
+      createHash('sha256')
+        .update(JSON.stringify([expanded.organizationId, kind, originalLabel]))
+        .digest('hex')
+    )
+  await payload.update({
+    collection: 'non-network-assets',
+    id: manualTarget.id,
+    overrideAccess: true,
+    data: { alias: 'Alias personalizado por la persona' },
+  })
+  await payload.update({
+    collection: 'tasks',
+    id: taskTarget.id,
+    overrideAccess: true,
+    data: { title: 'Título personalizado por la persona' },
+  })
+  const expandedCounts = await counts()
+  const repeat = await seedDemoData(payload, { profile: 'expanded' })
+  expect(repeat.reportsProcessed).toBe(0)
+  expect(repeat.manualAssetsCreated).toBe(0)
+  expect(repeat.tasksCreated).toBe(0)
+  expect(await counts()).toEqual(expandedCounts)
+  expect(
+    await payload.findByID({
+      collection: 'non-network-assets',
+      id: manualTarget.id,
+      overrideAccess: true,
+    })
+  ).toMatchObject({ alias: 'Alias personalizado por la persona', seed_key: manualTarget.seed_key })
+  expect(
+    await payload.findByID({ collection: 'tasks', id: taskTarget.id, overrideAccess: true })
+  ).toMatchObject({ title: 'Título personalizado por la persona', seed_key: taskTarget.seed_key })
 }, 120000)
 
 it('technical permission: viewer sees report summary and normalized inventory, not nested evidence', async () => {

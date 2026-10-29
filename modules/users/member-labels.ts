@@ -6,7 +6,8 @@ export const ROLE_DESCRIPTIONS: Record<OrganizationRoleSlug | 'platform_admin', 
   platform_admin:
     'Administra todas las organizaciones, sus suscripciones y los mensajes del portal.',
   org_admin: 'Administra toda la organización: usuarios, oficinas y configuración.',
-  office_manager: 'Gestiona el inventario y las tareas de sus oficinas.',
+  office_manager:
+    'Gestiona el inventario, las tareas y el acceso de observadores dentro de sus oficinas.',
   org_viewer: 'Consulta la información de sus oficinas y completa tareas.',
 }
 

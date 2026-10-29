@@ -20,6 +20,7 @@ import {
 } from '@/modules/organizations/organizations.columns'
 import { OrganizationStatusModal } from '@/modules/organizations/components/OrganizationStatusModal'
 import { OrganizationCreateModal } from '@/modules/organizations/components/OrganizationCreateModal'
+import { OrganizationEditModal } from '@/modules/organizations/components/OrganizationEditModal'
 import { MemberCreateModal } from '@/modules/users/components/MemberCreateModal'
 import { useCreatePlatformOrgAdmin } from '@/modules/users/hooks/use-org-members'
 
@@ -35,10 +36,14 @@ export default function OrganizationsPage() {
   const createOrganization = useCreateOrganization()
   const [statusTarget, setStatusTarget] = useState<Organization | null>(null)
   const [adminTarget, setAdminTarget] = useState<Organization | null>(null)
+  const [editTarget, setEditTarget] = useState<Organization | null>(null)
   const [creating, setCreating] = useState(false)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<string[]>([])
-  const columns = useMemo(() => getOrganizationsColumns(setStatusTarget, setAdminTarget), [])
+  const columns = useMemo(
+    () => getOrganizationsColumns(setStatusTarget, setAdminTarget, setEditTarget),
+    []
+  )
   const createAdmin = useCreatePlatformOrgAdmin(String(adminTarget?.id ?? ''))
   const organizationRows = useMemo<OrganizationListRow[]>(
     () =>
@@ -108,6 +113,7 @@ export default function OrganizationsPage() {
         minWidth={850}
       />
       <OrganizationStatusModal organization={statusTarget} onClose={() => setStatusTarget(null)} />
+      <OrganizationEditModal organization={editTarget} onClose={() => setEditTarget(null)} />
       <OrganizationCreateModal
         opened={creating}
         onClose={() => setCreating(false)}

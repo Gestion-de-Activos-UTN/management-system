@@ -11,8 +11,38 @@ import {
   createOrganization,
   listOrganizations,
   setOrganizationStatus,
+  updateOrganizationDetails,
+  getOrganizationDetails,
 } from '../service'
-import type { OrganizationCreateInput, OrganizationStatusInput } from '../schema'
+import type {
+  OrganizationCreateInput,
+  OrganizationDetailsInput,
+  OrganizationStatusInput,
+} from '../schema'
+
+export function useUpdateOrganizationDetails() {
+  const client = useQueryClient()
+  return useMutation<unknown, HttpError, { id: string; input: OrganizationDetailsInput }>({
+    mutationFn: ({ id, input }) => updateOrganizationDetails(id, input),
+    onSuccess: async () => {
+      await Promise.all(
+        ['organizations', 'platform-admin', 'organization-settings'].map(key =>
+          client.invalidateQueries({ queryKey: [key] })
+        )
+      )
+      notifications.show({ color: 'green', message: 'Organización actualizada.' })
+    },
+    onError: error => showApiError(error, 'No se pudo actualizar la organización'),
+  })
+}
+
+export function useOrganizationDetails(id: string | null) {
+  return useQuery({
+    queryKey: ['organizations', 'details', id],
+    queryFn: () => getOrganizationDetails(id!),
+    enabled: Boolean(id),
+  })
+}
 
 export function useOrganizationsList(asOrganization?: string) {
   return useListQuery('organizations', () => listOrganizations({ asOrganization }), [
