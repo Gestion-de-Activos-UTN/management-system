@@ -25,7 +25,10 @@ import { RISK_CATALOG_V2 } from '@/domain/risk/catalog-v2'
 import { useState } from 'react'
 import { Modal, SimpleGrid } from '@mantine/core'
 
-import { OFFLINE_AFTER_HOURS_OPTIONS, SNAPSHOT_INTERVAL_DAYS_OPTIONS } from '@/domain/organizations/settings-options'
+import {
+  OFFLINE_AFTER_HOURS_OPTIONS,
+  SNAPSHOT_INTERVAL_DAYS_OPTIONS,
+} from '@/domain/organizations/settings-options'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 
 export default function AdminSettingsPage() {
@@ -55,7 +58,7 @@ export default function AdminSettingsPage() {
               snapshot_before_each_scan: settings.snapshot_before_each_scan ?? false,
               snapshot_interval_days: settings.snapshot_interval_days ?? null,
             }}
-            onSave={values => save.mutate(values)}
+            onSave={values => save.mutateAsync(values)}
             saving={save.isPending}
           />
         )}
@@ -176,33 +179,54 @@ function SettingsForm({
   saving,
 }: {
   initial: OrganizationSettingsFormValues
-  onSave: (values: OrganizationSettingsFormValues) => void
+  onSave: (values: OrganizationSettingsFormValues) => Promise<unknown>
   saving: boolean
 }) {
   const {
     control,
     handleSubmit,
     watch,
-    setValue,
-    getValues,
+    reset,
     formState: { errors },
   } = useForm<OrganizationSettingsFormValues>({
     resolver: zodResolver(OrganizationSettingsFormSchema),
     defaultValues: initial,
   })
+  const [pendingAction, setPendingAction] = useState<'save' | 'restore' | null>(null)
+  const busy = saving || pendingAction !== null
   const beforeEachScan = watch('snapshot_before_each_scan')
   const offlineAfterHours = watch('offline_after_hours')
   const snapshotIntervalDays = watch('snapshot_interval_days')
-  const alreadyAtDefaults = offlineAfterHours == null && snapshotIntervalDays == null
+  const alreadyAtDefaults =
+    offlineAfterHours == null && snapshotIntervalDays == null && !beforeEachScan
+
+  const persist = async (values: OrganizationSettingsFormValues, action: 'save' | 'restore') => {
+    if (busy) return
+    setPendingAction(action)
+    try {
+      await onSave(values)
+      // Reflejar lo guardado solo después de que el servidor lo confirme.
+      reset(values)
+    } catch {
+      // El hook muestra el error; se conservan los valores para corregir o reintentar.
+    } finally {
+      setPendingAction(null)
+    }
+  }
 
   const restoreDefaults = () => {
-    setValue('offline_after_hours', null, { shouldDirty: true })
-    setValue('snapshot_interval_days', null, { shouldDirty: true })
-    onSave({ ...getValues(), offline_after_hours: null, snapshot_interval_days: null })
+    void persist(
+      {
+        offline_after_hours: null,
+        snapshot_before_each_scan: false,
+        snapshot_interval_days: null,
+      },
+      'restore'
+    )
   }
 
   return (
-    <form onSubmit={handleSubmit(onSave)} noValidate>
+    <form onSubmit={handleSubmit(values => persist(values, 'save'))} noValidate>
       <Stack gap="md">
         <Text size="sm" fw={600}>
           Antigüedad
@@ -213,6 +237,7 @@ function SettingsForm({
           render={({ field }) => (
             <Stack gap={4}>
               <Select
+                disabled={busy}
                 label="Umbral sin conexión"
                 description="Un activo que no aparezca en un escaneo durante este período se marcará como sin conexión."
                 placeholder="Valor predeterminado de la plataforma"
@@ -242,6 +267,7 @@ function SettingsForm({
             <Checkbox
               label="Tomar una instantánea antes de cada escaneo"
               description="Al activarlo, se ignora el intervalo siguiente y se toma una instantánea en cada escaneo procesado."
+              disabled={busy}
               checked={field.value}
               onChange={e => field.onChange(e.currentTarget.checked)}
             />
@@ -257,7 +283,7 @@ function SettingsForm({
                 description="Tiempo mínimo entre instantáneas automáticas."
                 placeholder="Valor predeterminado de la plataforma"
                 data={SNAPSHOT_INTERVAL_DAYS_OPTIONS}
-                disabled={beforeEachScan}
+                disabled={busy || beforeEachScan}
                 value={field.value != null ? String(field.value) : null}
                 onChange={v => field.onChange(v ? Number(v) : null)}
                 error={errors.snapshot_interval_days?.message}
@@ -277,14 +303,19 @@ function SettingsForm({
           <Button
             type="button"
             variant="subtle"
-            disabled={alreadyAtDefaults}
-            loading={saving}
+            disabled={busy || alreadyAtDefaults}
+            loading={pendingAction === 'restore'}
             onClick={restoreDefaults}
             w={{ base: '100%', sm: 'auto' }}
           >
             Restaurar valores predeterminados
           </Button>
-          <Button type="submit" loading={saving} w={{ base: '100%', sm: 'auto' }}>
+          <Button
+            type="submit"
+            disabled={busy}
+            loading={pendingAction === 'save'}
+            w={{ base: '100%', sm: 'auto' }}
+          >
             Guardar cambios
           </Button>
         </Group>

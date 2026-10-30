@@ -125,11 +125,12 @@ export default function RiskScorePage() {
             </Alert>
           )}
           <Card withBorder radius="lg" p="xl">
-            <Group justify="space-between" align="center" wrap="wrap">
-              <Group>
+            <Group gap="xl" align="center" wrap="wrap">
+              <Group gap="lg" style={{ flex: '2 1 32rem', minWidth: 0 }}>
                 <RingProgress
                   size={144}
                   thickness={14}
+                  style={{ flexShrink: 0 }}
                   // Without a band (preliminary result) the ring stays neutral instead of alarming.
                   sections={[
                     {
@@ -143,7 +144,7 @@ export default function RiskScorePage() {
                     </Text>
                   }
                 />
-                <Stack gap={4}>
+                <Stack gap={4} style={{ flex: '1 1 18rem', minWidth: 0 }}>
                   <Text fw={750}>Riesgo actual</Text>
                   {data.final_band && <RiskBandBadge band={data.final_band} />}
                   {data.final_band && data.base_band !== data.final_band && (
@@ -165,7 +166,7 @@ export default function RiskScorePage() {
                   </Text>
                 </Stack>
               </Group>
-              <Stack miw={280}>
+              <Stack style={{ flex: '1 1 18rem', minWidth: 0 }}>
                 <Group justify="space-between">
                   <Text fw={700}>Cobertura</Text>
                   <Text>{Math.round(data.coverage)}%</Text>
