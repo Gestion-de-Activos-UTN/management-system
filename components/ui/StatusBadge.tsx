@@ -1,4 +1,7 @@
-import { Badge, VisuallyHidden } from '@mantine/core'
+'use client'
+
+import { Badge, Tooltip, VisuallyHidden } from '@mantine/core'
+import { useTextTruncation } from '@/lib/use-text-truncation'
 import type { ReactNode } from 'react'
 
 export const STATUS_TONE_COLOR = {
@@ -33,18 +36,40 @@ export function StatusBadge({
   icon?: ReactNode
   iconOnly?: boolean
 }) {
+  const { ref, truncated } = useTextTruncation<HTMLSpanElement>(label)
+
   return (
-    <Badge
-      color={STATUS_TONE_COLOR[tone]}
-      size={size}
-      style={{
-        display: 'inline-flex',
-        width: 'fit-content',
-        maxWidth: '100%',
-      }}
-    >
-      {icon && <span aria-hidden="true">{icon}</span>}
-      {iconOnly && icon ? <VisuallyHidden>{label}</VisuallyHidden> : label}
-    </Badge>
+    <Tooltip label={label} disabled={!truncated}>
+      <Badge
+        tabIndex={truncated ? 0 : undefined}
+        color={STATUS_TONE_COLOR[tone]}
+        size={size}
+        leftSection={icon && !iconOnly ? <span aria-hidden="true">{icon}</span> : undefined}
+        style={{
+          display: 'inline-flex',
+          width: 'fit-content',
+          maxWidth: '100%',
+        }}
+      >
+        {iconOnly && icon ? (
+          <>
+            <span aria-hidden="true">{icon}</span>
+            <VisuallyHidden>{label}</VisuallyHidden>
+          </>
+        ) : (
+          <span
+            ref={ref}
+            style={{
+              display: 'block',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {label}
+          </span>
+        )}
+      </Badge>
+    </Tooltip>
   )
 }

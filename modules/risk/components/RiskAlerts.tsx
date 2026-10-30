@@ -27,12 +27,14 @@ export function RiskAlerts({
           <List size="sm" spacing={4}>
             {alerts.critical_assets.map(item => (
               <List.Item key={`${item.asset_id}:${item.control_key}`}>
-                {item.asset_id.startsWith('asset:') ? (
+                {item.asset_id.startsWith('asset:') || item.asset_id.startsWith('manual:') ? (
                   <Anchor
                     component={Link}
-                    href={href(`/portal/inventory/${item.asset_id.slice('asset:'.length)}`)}
+                    href={`${href('/portal/security-review', `device=${encodeURIComponent(item.asset_id)}`)}#dispositivos`}
                     fw={700}
                     size="sm"
+                    c="inherit"
+                    underline="always"
                   >
                     {item.asset_label}
                   </Anchor>

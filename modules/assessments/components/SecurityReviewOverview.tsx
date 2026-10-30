@@ -1,6 +1,7 @@
 import { matchesSearch } from '@/lib/search-text'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
   Anchor,
   Box,
@@ -134,21 +135,29 @@ export function SecurityReviewList({
   asOrganization?: string
 }) {
   const [search, setSearch] = useState('')
+  const params = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
+  const device = params.get('device')
+  // Risk references and review groups keep detected and legacy manual IDs distinct.
+  const focusedKey = device?.startsWith('manual:') ? `asset:${device}` : device
   const groups = groupAssessments(assessments)
   const primary = groups.filter(group => group.scope !== 'asset')
   const devices = groups.filter(group => group.scope === 'asset')
   const term = search.trim()
-  const visibleDevices = term
-    ? devices.filter(group => matchesSearch([group.target], term))
-    : devices
+  const visibleDevices = devices.filter(
+    group =>
+      (!focusedKey || group.key === focusedKey) && (!term || matchesSearch([group.target], term))
+  )
   const columns = useMemo(() => getDeviceReviewColumns(asOrganization), [asOrganization])
   const devicesRef = useRef<HTMLDivElement>(null)
 
   // La lista se monta cuando llegan los datos, después de la navegación: el salto nativo al
   // ancla ya pasó y no encontró la sección, así que se hace acá.
   useEffect(() => {
-    if (window.location.hash === `#${DEVICES_ANCHOR}`) devicesRef.current?.scrollIntoView()
-  }, [])
+    if (device || window.location.hash === `#${DEVICES_ANCHOR}`)
+      devicesRef.current?.scrollIntoView()
+  }, [device])
 
   return (
     <Stack gap="xl">
@@ -198,6 +207,28 @@ export function SecurityReviewList({
             />
           )}
         </Group>
+        {device && (
+          <Group justify="space-between" gap="xs">
+            <Text size="sm">
+              {devices.find(group => group.key === focusedKey)?.target ??
+                'Dispositivo seleccionado'}
+            </Text>
+            <Button
+              variant="subtle"
+              size="compact-sm"
+              onClick={() => {
+                const next = new URLSearchParams(params.toString())
+                next.delete('device')
+                router.replace(`${pathname}${next.size ? `?${next}` : ''}#${DEVICES_ANCHOR}`, {
+                  scroll: false,
+                })
+                setSearch('')
+              }}
+            >
+              Ver todos los dispositivos
+            </Button>
+          </Group>
+        )}
         {devices.length ? (
           <Card withBorder radius="lg" p="md">
             <DataTable

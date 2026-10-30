@@ -41,7 +41,9 @@ export const validateComplianceResult: CollectionBeforeChangeHook = async ({ dat
       relationId(asset.organization) !== organizationId ||
       relationId(asset.office) !== officeId
     ) {
-      throw new Error('El activo del resultado de cumplimiento no pertenece a su organización y oficina.')
+      throw new Error(
+        'El activo del resultado de cumplimiento no pertenece a su organización y oficina.'
+      )
     }
   }
   if (manualAssetId) {
@@ -58,8 +60,8 @@ export const validateComplianceResult: CollectionBeforeChangeHook = async ({ dat
     ) {
       throw new Error('El activo manual de cumplimiento no pertenece a su organización y oficina.')
     }
-    if (asset.asset_category !== 'computer')
-      throw new Error('Solo las computadoras manuales pueden recibir resultados de evaluación.')
+    if (!isManualCategoryAssessable(asset.asset_category))
+      throw new Error('La categoría de este activo manual no admite revisiones de seguridad.')
   }
   if (data?.supersedes) {
     const previous = await req.payload.findByID({

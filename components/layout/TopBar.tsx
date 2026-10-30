@@ -1,4 +1,5 @@
-import { Burger, Group, Text } from '@mantine/core'
+import { Group, Text } from '@mantine/core'
+import { NavigationToggle } from './NavigationToggle'
 import Link from 'next/link'
 import type { ReactNode } from 'react'
 import { ColorSchemeToggle } from '@/components/ui/ColorSchemeToggle'
@@ -18,7 +19,7 @@ export function TopBar({
   return (
     <Group h="100%" px={{ base: 'sm', sm: 'md' }} justify="space-between" wrap="nowrap">
       <Group gap="xs" wrap="nowrap" style={{ minWidth: 0 }}>
-        <Burger opened={opened} onClick={onToggle} hiddenFrom="sm" size="sm" />
+        <NavigationToggle opened={opened} onToggle={onToggle} />
         <Link href={homeHref} style={{ textDecoration: 'none', minWidth: 0 }}>
           <Group gap="0.25rem" align="center" c="pine" wrap="nowrap" style={{ minWidth: 0 }}>
             <Logo height={32} />

@@ -77,6 +77,8 @@ const MESSAGES_BY_CODE: Record<string, string> = {
 }
 
 function translateKnownMessage(message: string): string | undefined {
+  if (message === 'La categoría de este activo manual no admite revisiones de seguridad.')
+    return message
   if (
     /^La pregunta .+ (?:ya no está disponible|no está disponible para esta política|no forma parte de esta revisión)/.test(
       message

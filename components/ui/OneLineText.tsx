@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useTextTruncation } from '@/lib/use-text-truncation'
 import { Text, Tooltip, type TextProps } from '@mantine/core'
 
 /** One line with its full value available on hover/focus only when actually truncated. */
@@ -10,18 +10,7 @@ export function OneLineText({
   style,
   ...props
 }: Omit<TextProps, 'children' | 'truncate'> & { children: string | null | undefined }) {
-  const ref = useRef<HTMLParagraphElement>(null)
-  const [truncated, setTruncated] = useState(false)
-
-  useEffect(() => {
-    const element = ref.current
-    if (!element) return
-    const measure = () => setTruncated(element.scrollWidth > element.clientWidth)
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(element)
-    return () => observer.disconnect()
-  }, [children])
+  const { ref, truncated } = useTextTruncation<HTMLParagraphElement>(children)
 
   return (
     <Tooltip label={children} disabled={!truncated || !children}>

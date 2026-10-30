@@ -8,11 +8,13 @@ import {
   Alert,
   Anchor,
   Card,
+  Flex,
   Group,
   Pagination,
   Progress,
   RingProgress,
   Select,
+  SimpleGrid,
   Skeleton,
   Stack,
   Text,
@@ -136,48 +138,54 @@ export default function RiskScorePage() {
             </Alert>
           )}
           <Card withBorder radius="lg" p="xl">
-            <Group gap="xl" align="center" wrap="wrap">
-              <Group gap="lg" style={{ flex: '2 1 32rem', minWidth: 0 }}>
-                <RingProgress
-                  size={144}
-                  thickness={14}
-                  style={{ flexShrink: 0 }}
-                  // Without a band (preliminary result) the ring stays neutral instead of alarming.
-                  sections={[
-                    {
-                      value: data.score ?? 0,
-                      color: data.final_band ? RISK_BAND_COLOR[data.final_band] : 'gray',
-                    },
-                  ]}
-                  label={
-                    <Text ta="center" fw={800} fz={30}>
-                      {data.score === null ? '—' : `${Math.round(data.score)} %`}
+            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">
+              <Stack gap="md" style={{ minWidth: 0 }}>
+                <Text fw={700}>Riesgo actual</Text>
+                <Flex
+                  direction={{ base: 'column', sm: 'row' }}
+                  gap="lg"
+                  align={{ base: 'center', sm: 'flex-start' }}
+                >
+                  <RingProgress
+                    size={120}
+                    thickness={12}
+                    style={{ flexShrink: 0 }}
+                    // Without a band (preliminary result) the ring stays neutral instead of alarming.
+                    sections={[
+                      {
+                        value: data.score ?? 0,
+                        color: data.final_band ? RISK_BAND_COLOR[data.final_band] : 'gray',
+                      },
+                    ]}
+                    label={
+                      <Text ta="center" fw={800} fz={30}>
+                        {data.score === null ? '—' : `${Math.round(data.score)} %`}
+                      </Text>
+                    }
+                  />
+                  <Stack gap="xs" w="100%" style={{ flex: 1, minWidth: 0 }}>
+                    {data.final_band && <RiskBandBadge band={data.final_band} />}
+                    {data.final_band && data.base_band !== data.final_band && (
+                      <Text size="xs" c="dimmed">
+                        El nivel subió porque varios problemas importantes se concentran en pocos
+                        controles.
+                      </Text>
+                    )}
+                    {data.score !== null && !data.final_band && (
+                      <StatusBadge tone="neutral" label="Preliminar" />
+                    )}
+                    <Text size="sm">
+                      {data.score === null
+                        ? 'Todavía no hay información suficiente para calcularlo.'
+                        : `El ${Math.round(data.score)} % ${RISK_SCORE_MEANING}.`}
                     </Text>
-                  }
-                />
-                <Stack gap={4} style={{ flex: '1 1 18rem', minWidth: 0 }}>
-                  <Text fw={750}>Riesgo actual</Text>
-                  {data.final_band && <RiskBandBadge band={data.final_band} />}
-                  {data.final_band && data.base_band !== data.final_band && (
                     <Text size="xs" c="dimmed">
-                      El nivel subió porque varios problemas importantes se concentran en pocos
-                      controles.
+                      {RISK_SCORE_SCALE}. Cuanto más alto, mayor es la prioridad de mejora.
                     </Text>
-                  )}
-                  {data.score !== null && !data.final_band && (
-                    <StatusBadge tone="neutral" label="Preliminar" />
-                  )}
-                  <Text size="sm">
-                    {data.score === null
-                      ? 'Todavía no hay información suficiente para calcularlo.'
-                      : `El ${Math.round(data.score)} % ${RISK_SCORE_MEANING}.`}
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    {RISK_SCORE_SCALE}. Cuanto más alto, mayor es la prioridad de mejora.
-                  </Text>
-                </Stack>
-              </Group>
-              <Stack style={{ flex: '1 1 18rem', minWidth: 0 }}>
+                  </Stack>
+                </Flex>
+              </Stack>
+              <Stack gap="md" style={{ minWidth: 0 }}>
                 <Group justify="space-between">
                   <Text fw={700}>Cobertura</Text>
                   <Text>{Math.round(data.coverage)}%</Text>
@@ -201,7 +209,7 @@ export default function RiskScorePage() {
                     ` · ${data.counts.excluded_assets} dispositivos fuera de la revisión`}
                 </Text>
               </Stack>
-            </Group>
+            </SimpleGrid>
           </Card>
           <RiskAlerts alerts={data.alerts} inventoryHref={inventoryHref} />
           <TopRiskAssets assets={data.top_assets} />
