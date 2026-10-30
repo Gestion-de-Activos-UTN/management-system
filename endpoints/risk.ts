@@ -1,6 +1,13 @@
 import type { Endpoint, PayloadRequest, Where } from 'payload'
 import { z } from 'zod'
-import type { RiskContribution, RiskEvaluation } from '@/app/types/payload-types'
+import type { RiskEvaluation } from '@/app/types/payload-types'
+import {
+  assignedOfficeRisk,
+  type RiskContributionView,
+  type RiskEvaluationView,
+} from '@/domain/risk/assigned-office-risk'
+import { riskFeatureEnabled } from '@/domain/risk/feature-enabled'
+import { canReadAssignedOfficeRisk } from '@/access/rbac/risk-scope'
 import type { AssetRiskScore } from '@/domain/risk/engine'
 import {
   bandVisible,
@@ -81,7 +88,7 @@ async function assetLabels(req: PayloadRequest, organizationId: string, keys: It
 
 const TOP_ASSETS = 10
 
-const topAssets = (row: RiskEvaluation) =>
+const topAssets = (row: Pick<RiskEvaluation, 'asset_summary'>) =>
   [...(row.asset_summary as AssetRiskScore[])]
     // Ordena por el % sin tratar que muestra la UI (TopRiskAssets); el riesgo residual absoluto
     // sólo desempata. Sin score (preliminar) va al final.
@@ -98,12 +105,12 @@ type StoredAlerts = {
 
 const label = (labels: Labels, key: string) => labels.get(key) ?? 'Activo no disponible'
 
-const evaluationDTO = (row: RiskEvaluation, labels: Labels): RiskEvaluationDTO => {
+const evaluationDTO = (row: RiskEvaluationView, labels: Labels): RiskEvaluationDTO => {
   const alerts = row.alerts as StoredAlerts
   const showScore = scoreVisible(row.confidence)
   const showBand = bandVisible(row.confidence)
   return {
-    id: String(row.id),
+    id: row.id,
     evaluated_at: row.evaluated_at,
     engine_version: row.engine_version,
     catalog_version: row.catalog_version,
@@ -141,7 +148,7 @@ const evaluationDTO = (row: RiskEvaluation, labels: Labels): RiskEvaluationDTO =
 }
 
 const contributionDTO = (
-  row: RiskContribution,
+  row: RiskContributionView,
   labels: Labels,
   showScore: boolean
 ): RiskContributionDTO => ({
@@ -162,25 +169,7 @@ const contributionDTO = (
   reason_code: row.reason_code,
 })
 
-async function riskFeatureEnabled(req: Parameters<Endpoint['handler']>[0], organizationId: string) {
-  const result = await req.payload.find({
-    collection: 'subscriptions',
-    where: { organization: { equals: organizationId } },
-    overrideAccess: true,
-    req,
-    depth: 0,
-    limit: 1,
-  })
-  const features = result.docs[0]?.features
-  return Boolean(
-    features &&
-    typeof features === 'object' &&
-    !Array.isArray(features) &&
-    features.risk_score === true
-  )
-}
-
-/** Read-only: returns the latest persisted evaluation. Also supports an explicitly selected historical evaluation in the same tenant/office. Never calculates during a GET. */
+/** Read-only: persisted organization/office history, or a live consolidation of assigned offices. */
 export const latestRiskEvaluationEndpoint: Endpoint = {
   path: '/v1/risk/latest',
   method: 'get',
@@ -210,9 +199,35 @@ export const latestRiskEvaluationEndpoint: Endpoint = {
       sort,
       direction,
     } = query.data
-    // Office-scoped roles never read the organization-wide evaluation (other offices' assets).
-    const officeError = officeQueryError(ctx, officeId)
+    // The client cannot supply the office set: it always comes from the resolved membership.
+    const assignedScope = !officeId && !evaluationId && canReadAssignedOfficeRisk(ctx)
+    const officeError = assignedScope ? null : officeQueryError(ctx, officeId)
     if (officeError) return json({ error: officeError }, 403)
+
+    if (assignedScope) {
+      const { evaluation, contributions } = await assignedOfficeRisk(req, ctx)
+      const alerts = evaluation.alerts as StoredAlerts
+      const labels = await assetLabels(req, ctx.organizationId, [
+        ...contributions.map(row => row.asset_key),
+        ...alerts.undetermined_exposure.map(item => item.asset_id),
+      ])
+      const sorted = sortContributions(contributions, key => label(labels, key), sort, direction)
+      const totalDocs = sorted.length
+      return json({
+        scope: 'assigned_offices',
+        evaluation: evaluationDTO(evaluation, labels),
+        recalculation: 'current',
+        contributions: sorted
+          .slice((page - 1) * limit, page * limit)
+          .map(row => contributionDTO(row, labels, scoreVisible(evaluation.confidence))),
+        pagination: {
+          page,
+          totalPages: Math.ceil(totalDocs / limit),
+          totalDocs,
+          hasNextPage: page * limit < totalDocs,
+        },
+      } satisfies LatestRiskResponse)
+    }
 
     const where: Where = {
       and: [
@@ -238,6 +253,7 @@ export const latestRiskEvaluationEndpoint: Endpoint = {
     const empty = { page, totalPages: 0, totalDocs: 0, hasNextPage: false }
     if (!evaluation)
       return json({
+        scope: officeId ? 'office' : 'organization',
         evaluation: null,
         recalculation,
         contributions: [],
@@ -271,6 +287,7 @@ export const latestRiskEvaluationEndpoint: Endpoint = {
     const totalDocs = sorted.length
     const totalPages = Math.ceil(totalDocs / limit)
     return json({
+      scope: officeId ? 'office' : 'organization',
       evaluation: evaluationDTO(evaluation, labels),
       recalculation,
       contributions: sorted

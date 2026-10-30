@@ -1,5 +1,7 @@
 'use client'
 
+import { matchesSearch } from '@/lib/search-text'
+
 import { useSearchParams } from 'next/navigation'
 import { useMemo, useState } from 'react'
 import { Button, Group, SegmentedControl, Stack, Text, TextInput, Tooltip } from '@mantine/core'
@@ -44,13 +46,13 @@ export default function AdminOfficesPage() {
   const activeCount = offices.filter(office => office.is_active !== false).length
   const maxOffices = tenantContext?.limits?.max_offices ?? null
   const atLimit = maxOffices !== null && activeCount >= maxOffices
-  const term = search.trim().toLocaleLowerCase('es')
+  const term = search.trim()
   const visible = offices.filter(office => {
     const active = office.is_active !== false
     if (hasInactive && status !== 'all' && active !== (status === 'active')) return false
     if (!term) return true
     const haystack = `${office.name} ${locationLabel(office.province_id, office.department_id) ?? ''}`
-    return haystack.toLocaleLowerCase('es').includes(term)
+    return matchesSearch([haystack], term)
   })
 
   return (

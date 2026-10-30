@@ -1,5 +1,7 @@
 'use client'
 
+import { matchesSearch } from '@/lib/search-text'
+
 import { useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
@@ -69,12 +71,12 @@ export function MembersView({ mode }: { mode: 'administration' | 'team' }) {
   const isSelf = (member: OrgMember) => member.id === tenantContext?.userId
   const all = members ?? []
   const statuses = new Set(all.map(memberStatus))
-  const term = search.trim().toLocaleLowerCase('es')
+  const term = search.trim()
   const visible = all.filter(
     member =>
       (!role.length || role.includes(member.role)) &&
       (!status.length || status.includes(memberStatus(member))) &&
-      (!term || `${member.name} ${member.email}`.toLocaleLowerCase('es').includes(term))
+      matchesSearch([`${member.name} ${member.email}`], term)
   )
 
   const columns: ColumnDef<OrgMember, unknown>[] = [

@@ -1,3 +1,4 @@
+import { matchesSearch } from '@/lib/search-text'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
@@ -136,9 +137,9 @@ export function SecurityReviewList({
   const groups = groupAssessments(assessments)
   const primary = groups.filter(group => group.scope !== 'asset')
   const devices = groups.filter(group => group.scope === 'asset')
-  const term = search.trim().toLocaleLowerCase('es')
+  const term = search.trim()
   const visibleDevices = term
-    ? devices.filter(group => group.target.toLocaleLowerCase('es').includes(term))
+    ? devices.filter(group => matchesSearch([group.target], term))
     : devices
   const columns = useMemo(() => getDeviceReviewColumns(asOrganization), [asOrganization])
   const devicesRef = useRef<HTMLDivElement>(null)

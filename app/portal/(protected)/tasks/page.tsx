@@ -1,5 +1,7 @@
 'use client'
 
+import { matchesSearch } from '@/lib/search-text'
+
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Button, Modal, Stack, SegmentedControl, Tabs, TextInput, Tooltip } from '@mantine/core'
@@ -89,10 +91,10 @@ export default function TasksPage() {
     setIncludeArchived(false)
   }
   const visibleTasks = useMemo(() => {
-    const term = search.trim().toLowerCase()
+    const term = search.trim()
     if (!term) return tasks.data ?? []
     return (tasks.data ?? []).filter(task =>
-      [task.title, task.related_entity_info?.label].some(text => text?.toLowerCase().includes(term))
+      matchesSearch([task.title, task.related_entity_info?.label], term)
     )
   }, [tasks.data, search])
   const columns = useMemo(() => getTasksColumns(asOrganization), [asOrganization])

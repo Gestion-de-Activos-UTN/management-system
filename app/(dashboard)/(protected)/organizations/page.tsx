@@ -1,5 +1,7 @@
 'use client'
 
+import { matchesSearch } from '@/lib/search-text'
+
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Alert, Button, Stack, TextInput } from '@mantine/core'
@@ -62,9 +64,9 @@ export default function OrganizationsPage() {
     [data, operationalSummary.data, operationalSummary.isError]
   )
   const visibleOrganizations = useMemo(() => {
-    const normalizedSearch = search.trim().toLocaleLowerCase('es')
+    const normalizedSearch = search.trim()
     return organizationRows.filter(organization => {
-      const matchesName = organization.name.toLocaleLowerCase('es').includes(normalizedSearch)
+      const matchesName = matchesSearch([organization.name], normalizedSearch)
       const organizationStatus = organization.is_active === false ? 'inactive' : 'active'
       const matchesStatus = status.length === 0 || status.includes(organizationStatus)
       return matchesName && matchesStatus

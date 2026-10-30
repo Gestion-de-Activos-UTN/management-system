@@ -13,7 +13,7 @@ import type { RiskPolicyKey } from '@/domain/risk/catalog-v2/types'
 import type { RecalculationStatus } from '@/domain/risk/recalculation-status'
 
 export type RiskEvaluationDTO = {
-  id: string
+  id: string | null
   evaluated_at: string
   engine_version: number
   catalog_version: number
@@ -56,7 +56,10 @@ export type RiskContributionDTO = {
   reason_code: string
 }
 
+export type RiskScope = 'organization' | 'office' | 'assigned_offices'
+
 export type LatestRiskResponse = {
+  scope?: RiskScope
   recalculation?: RecalculationStatus
   evaluation: RiskEvaluationDTO | null
   contributions: RiskContributionDTO[]

@@ -17,6 +17,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { useSession } from '@/lib/use-session'
 import { portalHref } from '@/lib/portal-href'
 import { formatDate, formatRelativeDays } from '@/lib/format-date'
+import { OfficeRiskSelectionNotice } from '@/modules/offices/components/OfficeRiskSelectionNotice'
 import { useConcreteOfficeId } from '@/modules/offices/hooks/use-concrete-office-id'
 import { useDashboardMetrics } from '@/modules/dashboard/hooks/use-dashboard-metrics'
 import { useRiskSummary } from '@/modules/assessments/hooks/use-risk-summary'
@@ -37,7 +38,7 @@ const plural = (count: number, one: string, many: string) => (count === 1 ? one 
 export default function PortalDashboardPage() {
   const asOrganization = useSearchParams().get('asOrganization') ?? undefined
   // El riesgo existe por organización o por oficina concreta (ver useConcreteOfficeId).
-  const { officeId, ready } = useConcreteOfficeId(asOrganization)
+  const { officeId, ready, requiresOfficeSelection } = useConcreteOfficeId(asOrganization)
   const metrics = useDashboardMetrics(asOrganization)
   const risk = useRiskSummary({ officeId, asOrganization, enabled: ready })
   const tasks = useTasks({ view: 'mine', officeId, asOrganization })
@@ -49,6 +50,7 @@ export default function PortalDashboardPage() {
 
   const href = (path: string, extra?: string) => portalHref(path, asOrganization, extra)
 
+  const riskSummary = requiresOfficeSelection ? undefined : risk.data
   const data = metrics.data
   const overdueTasks = (tasks.data ?? []).filter(task => task.is_overdue).length
   const offlineScanners = data ? data.total_scanners - data.online_scanners : 0
@@ -66,12 +68,12 @@ export default function PortalDashboardPage() {
     {
       key: 'unconfirmed',
       label: plural(
-        risk.data?.unconfirmed_assets ?? 0,
+        riskSummary?.unconfirmed_assets ?? 0,
         'equipo sin identificar',
         'equipos sin identificar'
       ),
       description: 'No cuentan en el riesgo hasta que se identifican',
-      count: risk.data?.unconfirmed_assets ?? 0,
+      count: riskSummary?.unconfirmed_assets ?? 0,
       href: href('/portal/inventory'),
       icon: HelpCircle,
       color: 'yellow',
@@ -79,12 +81,12 @@ export default function PortalDashboardPage() {
     {
       key: 'controls',
       label: plural(
-        risk.data?.requires_attention ?? 0,
+        riskSummary?.requires_attention ?? 0,
         'control requiere atención',
         'controles requieren atención'
       ),
       description: 'Protecciones ausentes o incompletas',
-      count: risk.data?.requires_attention ?? 0,
+      count: riskSummary?.requires_attention ?? 0,
       href: href('/portal/risk-score'),
       icon: ShieldAlert,
       color: 'orange',
@@ -122,17 +124,23 @@ export default function PortalDashboardPage() {
       {metrics.isError && <Alert color="red">No se pudieron cargar las métricas.</Alert>}
       <div className={styles.layout}>
         <div className={styles.main}>
-          <RiskOverviewCard
-            summary={risk.data}
-            isPending={risk.isPending}
-            href={href('/portal/risk-score')}
-          />
+          {requiresOfficeSelection ? (
+            <OfficeRiskSelectionNotice />
+          ) : (
+            <RiskOverviewCard
+              summary={risk.data}
+              isPending={risk.isPending}
+              href={href('/portal/risk-score')}
+            />
+          )}
         </div>
         {/* Lateral: lo que requiere atención. */}
         <div className={styles.side}>
           <AttentionCard
             items={attention}
-            isPending={metrics.isPending || risk.isPending || tasks.isPending}
+            isPending={
+              metrics.isPending || (!requiresOfficeSelection && risk.isPending) || tasks.isPending
+            }
           />
         </div>
         {/* Contexto numérico debajo del riesgo: infraestructura y calidad de la evidencia. */}
@@ -168,7 +176,9 @@ export default function PortalDashboardPage() {
               },
             ]}
           />
-          <EvidenceCoverageStrip summary={risk.data} isPending={risk.isPending} />
+          {!requiresOfficeSelection && (
+            <EvidenceCoverageStrip summary={risk.data} isPending={risk.isPending} />
+          )}
         </div>
         <div className={styles.activity}>
           <ActivityTabsCard

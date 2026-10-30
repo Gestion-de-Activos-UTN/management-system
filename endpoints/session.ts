@@ -1,6 +1,7 @@
 import type { Endpoint } from 'payload'
 import { getTenantContext } from '../access/tenant/resolveTenantContext'
 import { canDo, hasOrgWideScope, type Action } from '../access/rbac/permissions'
+import { canReadAssignedOfficeRisk } from '@/access/rbac/risk-scope'
 import { defaultFeatures } from '../domain/subscriptions/features'
 import { planLimits } from '../domain/subscriptions/plan-limits'
 
@@ -58,6 +59,7 @@ export const sessionEndpoint: Endpoint = {
       // Para mostrar el uso del plan (Administración); los endpoints los hacen cumplir igual.
       limits: subscription?.docs[0] ? planLimits(subscription.docs[0]) : null,
       permissions: {
+        assignedOfficeRisk: canReadAssignedOfficeRisk(ctx),
         organizationMembers: {
           editOffices: Boolean(
             ctx.organizationId &&

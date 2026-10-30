@@ -9,18 +9,6 @@ body {
   overflow-x: clip;
 }
 
-/* Shared option rhythm for Select, MultiSelect, Autocomplete and custom Combobox lists. */
-.mantine-Combobox-option {
-  padding-block: 0.5rem;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-
-.mantine-Combobox-option + .mantine-Combobox-option,
-.mantine-Menu-item + .mantine-Menu-item {
-  border-top: 1px solid var(--mantine-color-default-border);
-}
-
 /*
  * Mantine owns components (buttons, tables, forms, layout shells).
  * Tailwind is for utility spacing/one-off layout only — never a

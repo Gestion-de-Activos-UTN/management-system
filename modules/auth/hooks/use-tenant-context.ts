@@ -20,6 +20,7 @@ export type TenantContext = {
   /** Topes del plan; null sin organización o sin suscripción. */
   limits: PlanLimits | null
   permissions: {
+    assignedOfficeRisk?: boolean
     organizationMembers: {
       create: boolean
       read: boolean

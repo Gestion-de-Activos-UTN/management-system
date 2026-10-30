@@ -1,3 +1,6 @@
+import { riskFeatureEnabled } from '@/domain/risk/feature-enabled'
+import { assignedOfficeRisk, type RiskEvaluationView } from '@/domain/risk/assigned-office-risk'
+import { canReadAssignedOfficeRisk } from '@/access/rbac/risk-scope'
 import { riskRecalculationStatus } from '@/domain/risk/recalculation-status'
 import { actorRelation } from '@/lib/actor-relation'
 import type { Endpoint, PayloadRequest, Where } from 'payload'
@@ -27,7 +30,8 @@ import { enqueueOrganizationRiskRecalculation } from '@/domain/risk/enqueueRiskR
 import { RISK_POLICY_KEYS } from '@/domain/risk/catalog-v2'
 import { bandVisible, scoreVisible } from '@/domain/risk/constants'
 import type { SecurityReviewSummary } from '@/modules/assessments/service'
-import type { RiskEvaluationDTO } from '@/modules/risk/service'
+import type { RiskEvaluationDTO, RiskScope } from '@/modules/risk/service'
+import type { RecalculationStatus } from '@/domain/risk/recalculation-status'
 import { resolveInheritedAssessmentEvidence } from '@/domain/assessments/resolveInheritedEvidence'
 import { hasOrgWideScope } from '@/access/rbac/permissions'
 import { officeQueryError } from '@/access/tenant/officeQueryError'
@@ -236,6 +240,27 @@ export const assessmentsListEndpoint: Endpoint = {
   },
 }
 
+function riskSummaryDTO(
+  evaluation: RiskEvaluationView,
+  scope: RiskScope,
+  recalculation: RecalculationStatus
+): SecurityReviewSummary {
+  const counts = evaluation.counts as RiskEvaluationDTO['counts']
+  return {
+    scope,
+    recalculation,
+    risk_score: scoreVisible(evaluation.confidence) ? (evaluation.score ?? null) : null,
+    evaluated_percentage: evaluation.coverage,
+    applicable_checks:
+      counts.compliant + counts.partially_effective + counts.non_compliant + counts.not_evaluable,
+    not_evaluable: counts.not_evaluable,
+    requires_attention: counts.non_compliant + counts.partially_effective,
+    excluded_assets: counts.excluded_assets,
+    risk_band: bandVisible(evaluation.confidence) ? (evaluation.final_band ?? null) : null,
+    unconfirmed_assets: counts.unconfirmed_assets,
+  }
+}
+
 export const securityReviewSummaryEndpoint: Endpoint = {
   path: '/v1/security-review/summary',
   method: 'get',
@@ -248,6 +273,12 @@ export const securityReviewSummaryEndpoint: Endpoint = {
     const officeId = new URL(req.url ?? 'http://localhost', 'http://localhost').searchParams.get(
       'office_id'
     )
+    if (!officeId && canReadAssignedOfficeRisk(ctx)) {
+      if (!(await riskFeatureEnabled(req, ctx.organizationId)))
+        return json({ error: 'feature_disabled' }, 403)
+      const { evaluation } = await assignedOfficeRisk(req, ctx)
+      return json(riskSummaryDTO(evaluation, 'assigned_offices', 'current'))
+    }
     const officeError = officeQueryError(ctx, officeId)
     if (officeError) return json({ error: officeError }, 403)
     const evaluations = await req.payload.find({
@@ -273,6 +304,7 @@ export const securityReviewSummaryEndpoint: Endpoint = {
     )
     if (!evaluation)
       return json({
+        scope: officeId ? 'office' : 'organization',
         risk_score: null,
         recalculation,
         evaluated_percentage: 0,
@@ -283,21 +315,7 @@ export const securityReviewSummaryEndpoint: Endpoint = {
         risk_band: null,
         unconfirmed_assets: 0,
       } satisfies SecurityReviewSummary)
-    // Counts are persisted with the evaluation; counting contribution rows here would truncate.
-    const counts = evaluation.counts as RiskEvaluationDTO['counts']
-    return json({
-      recalculation,
-      risk_score: scoreVisible(evaluation.confidence) ? (evaluation.score ?? null) : null,
-      evaluated_percentage: evaluation.coverage,
-      applicable_checks:
-        counts.compliant + counts.partially_effective + counts.non_compliant + counts.not_evaluable,
-      not_evaluable: counts.not_evaluable,
-      requires_attention: counts.non_compliant + counts.partially_effective,
-      excluded_assets: counts.excluded_assets,
-      // Same visibility rule as the risk endpoint: no band on a preliminary result.
-      risk_band: bandVisible(evaluation.confidence) ? (evaluation.final_band ?? null) : null,
-      unconfirmed_assets: counts.unconfirmed_assets,
-    } satisfies SecurityReviewSummary)
+    return json(riskSummaryDTO(evaluation, officeId ? 'office' : 'organization', recalculation))
   },
 }
 
@@ -687,7 +705,8 @@ export const assessmentPolicyEndpoint: Endpoint = {
       return json(
         {
           error: 'policy_change_failed',
-          message: error instanceof Error ? error.message : 'No se pudo cambiar la política de revisión.',
+          message:
+            error instanceof Error ? error.message : 'No se pudo cambiar la política de revisión.',
         },
         400
       )

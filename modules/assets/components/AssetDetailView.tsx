@@ -629,7 +629,7 @@ export function AssetDetailView({
             Datos y revisión
           </Tabs.Tab>
           <Tabs.Tab value="red" leftSection={<Network size={16} strokeWidth={1.5} />}>
-            Red y puertos ({asset.services?.length ?? 0})
+            Red y puertos
           </Tabs.Tab>
         </Tabs.List>
 

@@ -7,11 +7,13 @@ import { FilterBar } from '@/components/ui/FilterBar'
 import { useSearchParams } from 'next/navigation'
 import { useState } from 'react'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { RiskScopeExplanation } from '@/modules/risk/components/RiskScopeExplanation'
 import { useAssessments } from '@/modules/assessments/hooks/use-assessments'
 import {
   SecurityReviewList,
   SecurityReviewSummary,
 } from '@/modules/assessments/components/SecurityReviewOverview'
+import { OfficeRiskSelectionNotice } from '@/modules/offices/components/OfficeRiskSelectionNotice'
 import { useConcreteOfficeId } from '@/modules/offices/hooks/use-concrete-office-id'
 import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
 import { relationId } from '@/lib/relationId'
@@ -34,7 +36,11 @@ const CURRENT_STATUSES = STATUS_OPTIONS.map(option => option.value).filter(
 export default function SecurityReviewPage() {
   const params = useSearchParams()
   const asOrganization = params.get('asOrganization') ?? undefined
-  const { officeId: selectedOfficeId, ready } = useConcreteOfficeId(asOrganization)
+  const {
+    officeId: selectedOfficeId,
+    ready,
+    requiresOfficeSelection,
+  } = useConcreteOfficeId(asOrganization)
   // Abre con las revisiones vigentes: todo menos las reemplazadas por un ciclo nuevo.
   const [status, setStatus] = useState<string[]>(CURRENT_STATUSES)
   const [assignment, setAssignment] = useState('all')
@@ -88,7 +94,9 @@ export default function SecurityReviewPage() {
           ) : null
         }
       />
-      {!query.isPending && !query.isError && (
+      <RiskScopeExplanation scope={risk.data?.scope} />
+      {requiresOfficeSelection && <OfficeRiskSelectionNotice />}
+      {!requiresOfficeSelection && !query.isPending && !query.isError && (
         <SecurityReviewSummary
           assessments={summaryDocs}
           riskSummary={risk.data}

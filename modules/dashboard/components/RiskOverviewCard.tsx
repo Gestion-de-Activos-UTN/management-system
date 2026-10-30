@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Button, Card, Group, Paper, Skeleton, Stack, Text } from '@mantine/core'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { ArrowRight } from 'lucide-react'
+import { RiskScopeExplanation } from '@/modules/risk/components/RiskScopeExplanation'
 import { RiskBandBadge } from '@/modules/risk/components/RiskBandBadge'
 import { RISK_ROBOT_MESSAGE, RiskRobot, riskRobotMood } from '@/modules/risk/components/RiskRobot'
 import type { SecurityReviewSummary } from '@/modules/assessments/service'
@@ -29,8 +30,13 @@ export function RiskOverviewCard({
         <RiskRobot score={score} band={band} size={128} />
         <Stack gap="sm" style={{ flex: 1, minWidth: 0 }}>
           <Text fw={700} c="dimmed" size="sm" tt="uppercase">
-            Riesgo actual
+            {summary?.scope === 'organization'
+              ? 'Riesgo global de la organización'
+              : summary?.scope === 'assigned_offices'
+                ? 'Riesgo de tus oficinas'
+                : 'Riesgo actual'}
           </Text>
+          <RiskScopeExplanation scope={summary?.scope} />
           {summary?.recalculation &&
             summary.recalculation !== 'current' &&
             summary.recalculation !== 'outdated' && (
@@ -65,7 +71,7 @@ export function RiskOverviewCard({
             <Text size="xs" c="dimmed">
               {score === null
                 ? 'Completa revisiones e identifica equipos para poder calcularlo.'
-                : 'Porcentaje del riesgo de la organización que sigue sin tratar.'}
+                : 'Porcentaje del riesgo evaluado que sigue sin tratar.'}
             </Text>
             <Button
               component={Link}

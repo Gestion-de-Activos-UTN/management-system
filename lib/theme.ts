@@ -1,4 +1,8 @@
 import {
+  Autocomplete,
+  Combobox,
+  Menu,
+  MultiSelect,
   Card,
   Collapse,
   Modal,
@@ -11,6 +15,8 @@ import {
   type MantineColorsTuple,
   type VariantColorsResolver,
 } from '@mantine/core'
+import dropdownStyles from './DropdownOptions.module.css'
+import { searchOptionsFilter } from './search-options-filter'
 
 /**
  * SIAM palette — warm neutral "bone" base + muted slate-teal "pine" accent.
@@ -130,7 +136,20 @@ export const theme = createTheme({
     // Mantine deselecciona al volver a clickear la opción elegida: un campo obligatorio quedaba
     // vacío sin aviso (p. ej. la oficina preseleccionada de una tarea de inventario). Para
     // vaciar un campo opcional está `clearable`; los filtros tienen su opción "Todas/Todos".
-    Select: Select.extend({ defaultProps: { allowDeselect: false } }),
+    Select: Select.extend({
+      defaultProps: { allowDeselect: false, filter: searchOptionsFilter },
+      classNames: { option: dropdownStyles.separatedOption },
+    }),
+    MultiSelect: MultiSelect.extend({
+      defaultProps: { filter: searchOptionsFilter },
+      classNames: { option: dropdownStyles.separatedOption },
+    }),
+    Autocomplete: Autocomplete.extend({
+      defaultProps: { filter: searchOptionsFilter },
+      classNames: { option: dropdownStyles.separatedOption },
+    }),
+    Combobox: Combobox.extend({ classNames: { option: dropdownStyles.separatedOption } }),
+    Menu: Menu.extend({ classNames: { item: dropdownStyles.separatedOption } }),
     // Toggle "bloque": pista y pulgar cuadrados (mismo radio que los badges) y un
     // deslizamiento lineal y corto. Sólo para encender/apagar una cosa; dos opciones con
     // nombre propio van con SegmentedControl (SYSTEM_PROMPT §3).

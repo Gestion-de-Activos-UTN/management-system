@@ -19,11 +19,13 @@ import {
 } from '@mantine/core'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { DataTable } from '@/components/ui/DataTable'
+import { OfficeRiskSelectionNotice } from '@/modules/offices/components/OfficeRiskSelectionNotice'
 import { useConcreteOfficeId } from '@/modules/offices/hooks/use-concrete-office-id'
 import { formatDateTime } from '@/lib/format-date'
 import { RISK_CONFIDENCE_LABEL } from '@/lib/enum-labels'
 import { useLatestRisk } from '@/modules/risk/hooks/use-latest-risk'
 import { riskContributionsColumns } from '@/modules/risk/risk.columns'
+import { RiskScopeExplanation } from '@/modules/risk/components/RiskScopeExplanation'
 import { RiskAlerts } from '@/modules/risk/components/RiskAlerts'
 import { TopRiskAssets } from '@/modules/risk/components/TopRiskAssets'
 import { RiskBandBadge } from '@/modules/risk/components/RiskBandBadge'
@@ -44,7 +46,7 @@ export default function RiskScorePage() {
   const searchParams = useSearchParams()
   const asOrganization = searchParams.get('asOrganization') ?? undefined
   const evaluationId = searchParams.get('evaluation') ?? undefined
-  const { officeId, ready } = useConcreteOfficeId(asOrganization)
+  const { officeId, ready, requiresOfficeSelection } = useConcreteOfficeId(asOrganization)
   const [page, setPage] = useState(1)
   // Al cambiar de página la lista vuelve a su encabezado, no se queda en el pie de la anterior.
   const tableRef = useRef<HTMLDivElement>(null)
@@ -80,6 +82,14 @@ export default function RiskScorePage() {
   const pagination = query.data?.pagination
   const inventoryHref = portalHref('/portal/inventory', asOrganization)
 
+  if (requiresOfficeSelection)
+    return (
+      <Stack gap="xl">
+        <PageHeader title="Puntaje de riesgo" />
+        <OfficeRiskSelectionNotice />
+      </Stack>
+    )
+
   return (
     <Stack gap="xl">
       {evaluationId && (
@@ -91,7 +101,7 @@ export default function RiskScorePage() {
         title="Puntaje de riesgo"
         description="Una vista simple de los problemas de seguridad detectados y de la información que todavía falta revisar."
         rightSection={
-          data ? (
+          data?.id ? (
             <CreateRelatedTaskButton
               reference={{ relationTo: 'risk-evaluations', value: String(data.id) }}
               asOrganization={asOrganization}
@@ -99,6 +109,7 @@ export default function RiskScorePage() {
           ) : undefined
         }
       />
+      <RiskScopeExplanation scope={query.data?.scope} />
       {query.isError && <Alert color="red">No se pudo cargar la última evaluación.</Alert>}
       {calculationMessage && (
         <Alert color={calculationMessage.color} title={calculationMessage.title}>
