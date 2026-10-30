@@ -82,13 +82,7 @@ export function OfficeSelector() {
   if (options.length === 0) return null
 
   return (
-    <Tooltip
-      label={selectedLabel}
-      opened={!dropdownOpened && truncated && (hovered || focused)}
-      multiline
-      maw={360}
-      withArrow
-    >
+    <Tooltip label={selectedLabel} opened={!dropdownOpened && truncated && (hovered || focused)}>
       <Box
         onMouseEnter={() => {
           measureLabel()

@@ -8,6 +8,7 @@ import {
   Modal,
   Select,
   Switch,
+  Tooltip,
   createTheme,
   defaultVariantColorsResolver,
   parseThemeColor,
@@ -113,6 +114,19 @@ export const theme = createTheme({
   white: bone[0],
   black: bone[9],
   components: {
+    // One tooltip pattern for truncated labels, row actions and contextual help.
+    Tooltip: Tooltip.extend({
+      defaultProps: {
+        withArrow: false,
+        radius: 6,
+        position: 'top',
+        openDelay: 300,
+        closeDelay: 0,
+        multiline: true,
+        maw: 400,
+        events: { hover: true, focus: true, touch: false },
+      },
+    }),
     // Same absolute radius as everything else still reads as "more rounded" on a
     // ~22px-tall badge than on a ~36px button — the corner curve is a much
     // bigger proportion of a short element's height. Sized down to 'sm' so the
