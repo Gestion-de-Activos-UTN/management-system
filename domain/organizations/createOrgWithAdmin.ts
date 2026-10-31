@@ -19,13 +19,10 @@ export interface CreateOrgWithAdminInput {
   officeName?: string
 }
 
-// Implementa documentation/04-bootstrap-creation-order.md pasos 1-5 (Organization ->
-// Settings+Subscription (paralelo) -> link back -> Office -> Role lookup) dentro de una
-// transacción real de Payload/Postgres — reemplaza el rollback manual en cascada del doc por
-// una transacción de DB (más simple, estrictamente más seguro: ningún paso queda a medias
-// visible para otra conexión). Los pasos 6-10 del doc (UserInvitation -> Auth0 signup) se
-// reemplazan por creación directa de User+Membership, ya que no hay Auth0 ni invitaciones
-// en esta fase.
+// Alta completa en una sola transacción de Payload/Postgres: Organization -> Settings +
+// Subscription -> vínculo de vuelta -> Office -> Role -> User + Membership del primer OrgAdmin.
+// Ningún paso queda a medias visible para otra conexión, y un fallo revierte todo. No hay
+// invitaciones: el usuario se crea directamente con la autenticación nativa de Payload.
 //
 // Composable: si se pasa `externalReq` con una transacción ya activa, la reusa (no abre/cierra
 // transacción propia) — necesario para que scripts/seed-navigation.ts pueda envolver esto y

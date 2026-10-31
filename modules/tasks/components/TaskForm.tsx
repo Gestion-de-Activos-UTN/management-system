@@ -61,6 +61,13 @@ export function TaskForm({
   const create = useCreateTasks()
   const submissionLock = useRef(false)
   const submissionSucceeded = useRef(false)
+  // One key per opened form, repeated on every retry: if a response is lost after saving, the
+  // retry returns the tasks already created instead of creating them again.
+  const [operationId] = useState(() =>
+    Array.from(crypto.getRandomValues(new Uint8Array(16)), byte =>
+      byte.toString(16).padStart(2, '0')
+    ).join('')
+  )
   const [submitted, setSubmitted] = useState(false)
   const { data: tenant } = useTenantContext(asOrganization)
   const { data: offices } = useOfficesList(asOrganization)
@@ -215,7 +222,7 @@ export function TaskForm({
       return
     }
     try {
-      await create.mutateAsync(values)
+      await create.mutateAsync({ ...values, operation_id: operationId })
       // The modal remains mounted during its exit animation. Never reopen this submission.
       submissionSucceeded.current = true
       setSubmitted(true)

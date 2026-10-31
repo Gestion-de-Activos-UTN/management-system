@@ -1,7 +1,8 @@
 import { actorRelation, actorMatches } from '@/lib/actor-relation'
 import { withTaskLock } from './with-task-lock'
-import { withTransaction, lockAssetRow } from '@/domain/with-transaction'
-import crypto from 'crypto'
+import { withTransaction, lockAssetRow, transactionLock } from '@/domain/with-transaction'
+import crypto, { createHash } from 'crypto'
+import { canonicalJson } from '@/lib/canonical-json'
 import type { PayloadRequest } from 'payload'
 import type { Task } from '@/app/types/payload-types'
 import type { TenantContext } from '@/access/tenant/resolveTenantContext'
@@ -216,7 +217,8 @@ export async function assignmentOptionsScope(
 async function createTasksInTransaction(
   req: PayloadRequest,
   ctx: TenantContext,
-  input: CreateTasksInput
+  input: CreateTasksInput,
+  operation?: { id: string; fingerprint: string }
 ): Promise<Task[]> {
   assertAction(ctx, 'create')
   const organizationId = ctx.organizationId!
@@ -286,6 +288,8 @@ async function createTasksInTransaction(
             office: officeId,
             created_by: actorRelation(req, ctx.userId),
             creation_batch_id: batchId,
+            operation_id: operation?.id,
+            operation_fingerprint: operation?.fingerprint,
           },
         })
       )
@@ -306,13 +310,56 @@ export async function createTasks(
   input: CreateTasksInput
 ): Promise<Task[]> {
   return withTransaction(req.payload, req, async request => {
-    const reference = input.related_entity
+    const { operation_id: operationId, ...values } = input
+    let operation: { id: string; fingerprint: string } | undefined
+    if (operationId) {
+      assertAction(ctx, 'create')
+      // A retry waits for the attempt holding its key and returns what that attempt created.
+      // The key never deduplicates by content: a new form sends a new key.
+      await transactionLock(request, `task-create:${ctx.organizationId}:${operationId}`)
+      operation = {
+        id: operationId,
+        fingerprint: createHash('sha256').update(canonicalJson(values)).digest('hex'),
+      }
+      const previous = await request.payload.find({
+        collection: 'tasks',
+        where: {
+          and: [
+            { organization: { equals: ctx.organizationId } },
+            { operation_id: { equals: operationId } },
+          ],
+        },
+        overrideAccess: true,
+        showHiddenFields: true,
+        req: request,
+        pagination: false,
+        sort: 'createdAt',
+      })
+      if (previous.docs.length) {
+        if (
+          previous.docs.some(
+            task =>
+              task.operation_fingerprint !== operation!.fingerprint ||
+              !actorMatches(task.created_by, ctx)
+          )
+        )
+          throw new TaskDomainError(
+            'task_operation_conflict',
+            409,
+            'Esta creación ya se guardó con otros datos.'
+          )
+        return previous.docs.map(
+          ({ operation_id: _id, operation_fingerprint: _fingerprint, ...task }) => task as Task
+        )
+      }
+    }
+    const reference = values.related_entity
     if (
       reference &&
       (reference.relationTo === 'assets' || reference.relationTo === 'non-network-assets')
     )
       await lockAssetRow(request, reference.relationTo, reference.value)
-    return createTasksInTransaction(request, ctx, input)
+    return createTasksInTransaction(request, ctx, values, operation)
   })
 }
 

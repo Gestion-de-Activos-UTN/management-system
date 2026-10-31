@@ -79,7 +79,11 @@ async function asset(
   return String(doc.id)
 }
 beforeAll(async () => {
-  if (process.env.DATABASE_URL !== 'postgresql://siam_test@127.0.0.1:55447/siam_risk_scope_checks')
+  if (
+    !/^postgresql:\/\/siam_test@127\.0\.0\.1:55447\/siam_risk_scope_checks(?:_[a-z0-9]+)?$/.test(
+      process.env.DATABASE_URL ?? ''
+    )
+  )
     throw new Error('Use the disposable siam_risk_scope_checks database only')
   config = await (await import('../payload.config')).default
   config.typescript.autoGenerate = false
@@ -365,10 +369,12 @@ it('shows the organization recalculation state to the Manager as it does to OrgA
 it('answers a failed live calculation with risk_unavailable, without internals, and keeps no failure', async () => {
   await recalculateRisk(payload, { organizationId: org })
   const find = payload.find.bind(payload)
-  const spy = vi.spyOn(payload, 'find').mockImplementation(((args: { collection: string }) =>
-    args.collection === 'compliance-results'
-      ? Promise.reject(new Error('internal detail 42'))
-      : find(args as Parameters<typeof find>[0])) as typeof payload.find)
+  const spy = vi
+    .spyOn(payload, 'find')
+    .mockImplementation(((args: { collection: string }) =>
+      args.collection === 'compliance-results'
+        ? Promise.reject(new Error('internal detail 42'))
+        : find(args as Parameters<typeof find>[0])) as typeof payload.find)
   try {
     for (const path of [endpoint, summary]) {
       const failed = await api(path)

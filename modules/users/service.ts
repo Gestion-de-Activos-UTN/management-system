@@ -7,7 +7,8 @@ import type { MemberCreate, MemberUpdate, UserCredentials } from './schema'
 export type OrgMember = {
   id: string
   name: string
-  email: string
+  /** Only for people who manage members (endpoints/orgMembers.ts). */
+  email?: string
   role: RoleSlug
   office_ids: string[]
   status: 'onboarding' | 'active'
@@ -24,11 +25,14 @@ export function memberCoversOffice(member: OrgMember, officeId: string): boolean
   )
 }
 
-// Formato único para identificar a una persona en cualquier selector: nombre · rol · email.
+// Formato único para identificar a una persona en cualquier selector: nombre · rol · email
+// (el email sólo cuando el servidor lo envía).
 export function orgMemberOptionLabel(
   member: Pick<OrgMember, 'name' | 'email'> & { role: string }
 ): string {
-  return `${member.name || member.email} · ${roleSlugLabel(member.role)}${member.name ? ` · ${member.email}` : ''}`
+  return [member.name || member.email, roleSlugLabel(member.role), member.name && member.email]
+    .filter(Boolean)
+    .join(' · ')
 }
 
 // Deliberadamente NO usa /api/users (Users.read es () => false hoy, ver el ponytail: en

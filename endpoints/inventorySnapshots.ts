@@ -43,10 +43,12 @@ export const generateInventorySnapshotEndpoint: Endpoint = {
     // Una oficina inactiva no cuenta en riesgo: su snapshot no tendría evaluación que asociar.
     if (office.is_active === false) return json({ error: 'office_inactive' }, 409)
 
-    const snapshot = await createInventorySnapshot(req.payload, officeId, {
-      type: 'manual',
-      userId: ctx.userId,
-    })
+    const snapshot = await createInventorySnapshot(
+      req.payload,
+      officeId,
+      { type: 'manual', userId: ctx.userId },
+      req
+    )
 
     const visibleSnapshot = await req.payload.findByID({
       collection: 'inventory-snapshots',

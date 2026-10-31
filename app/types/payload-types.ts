@@ -1182,6 +1182,8 @@ export interface Task {
         value: string | Admin;
       };
   creation_batch_id?: string | null;
+  operation_id?: string | null;
+  operation_fingerprint?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -2197,6 +2199,8 @@ export interface TasksSelect<T extends boolean = true> {
   office?: T;
   created_by?: T;
   creation_batch_id?: T;
+  operation_id?: T;
+  operation_fingerprint?: T;
   updatedAt?: T;
   createdAt?: T;
 }

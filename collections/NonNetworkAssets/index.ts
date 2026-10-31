@@ -63,8 +63,8 @@ export const NonNetworkAssets: CollectionConfig = {
       maxLength: 120,
     },
     {
-      // Enum fijo en código (no catálogo en DB): la matriz RBAC ya es estática por la misma razón
-      // (documentation/01-erd-core.md nota 9) y esto da un union literal en payload-types.ts,
+      // Enum fijo en código (no catálogo en DB), por la misma razón que la matriz RBAC estática:
+      // no hay necesidad de configurarlo por organización. Además da un union literal en payload-types.ts,
       // con el que el risk score puede hacer switch exhaustivo. Cambiar la lista = deploy.
       name: 'asset_category',
       type: 'select',

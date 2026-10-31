@@ -2,6 +2,7 @@
 
 import { ModalLayout } from '@/components/ui/ModalLayout'
 import { DateField } from '@/components/ui/DateField'
+import { useRef, useState, type FormEvent } from 'react'
 
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -18,10 +19,13 @@ import {
 
 export function TaskEditForm({ task, onSaved }: { task: TaskDTO; onSaved: () => void }) {
   const edit = useEditTask(task.id)
+  const submissionLock = useRef(false)
+  const submissionSucceeded = useRef(false)
+  const [submitted, setSubmitted] = useState(false)
   const {
     control,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, isSubmitting },
   } = useForm<EditTaskInput>({
     mode: 'onChange',
     resolver: zodResolver(EditTaskSchema),
@@ -33,13 +37,34 @@ export function TaskEditForm({ task, onSaved }: { task: TaskDTO; onSaved: () => 
       due_at: task.due_at ?? null,
     },
   })
+  const validateAndSubmit = handleSubmit(async values => {
+    try {
+      await edit.mutateAsync(values)
+      submissionSucceeded.current = true
+      setSubmitted(true)
+      onSaved()
+    } catch {
+      // The mutation reports the error; keep the entered values available for retry.
+    }
+  })
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    // Acquire before async validation; retain after success through the modal's exit.
+    if (submissionLock.current) return
+    submissionLock.current = true
+    try {
+      await validateAndSubmit(event)
+    } finally {
+      if (!submissionSucceeded.current) submissionLock.current = false
+    }
+  }
   return (
-    <form noValidate onSubmit={handleSubmit(values => edit.mutate(values, { onSuccess: onSaved }))}>
+    <form noValidate onSubmit={submit}>
       <ModalLayout
         gap="md"
         footer={
           <Group justify="flex-end">
-            <Button type="submit" loading={edit.isPending}>
+            <Button type="submit" loading={isSubmitting || edit.isPending} disabled={submitted}>
               Guardar
             </Button>
           </Group>

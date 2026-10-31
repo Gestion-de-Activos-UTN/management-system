@@ -1,6 +1,7 @@
 import { actorRelation } from '@/lib/actor-relation'
 import type { Endpoint } from 'payload'
 import { getTenantContext } from '../access/tenant/resolveTenantContext'
+import { organizationWriteError } from '@/domain/organizations/admin-actions'
 import {
   OrganizationMaturitySchema,
   OrganizationSettingsFormSchema,
@@ -20,11 +21,18 @@ function json(body: unknown, status = 200) {
 type LoadResult =
   { ok: false; response: Response } | { ok: true; doc: { id: string | number }; userId: string }
 
-async function loadSettings(req: Parameters<Endpoint['handler']>[0]): Promise<LoadResult> {
+async function loadSettings(
+  req: Parameters<Endpoint['handler']>[0],
+  forWrite = false
+): Promise<LoadResult> {
   const ctx = await getTenantContext(req)
   if (!ctx || !ctx.isActive) return { ok: false, response: json({ error: 'unauthenticated' }, 401) }
   if (ctx.role !== 'org_admin' || !ctx.organizationId) {
     return { ok: false, response: json({ error: 'forbidden' }, 403) }
+  }
+  if (forWrite) {
+    const denied = await organizationWriteError(req, ctx.organizationId)
+    if (denied) return { ok: false, response: denied }
   }
 
   const result = await req.payload.find({
@@ -62,7 +70,7 @@ export const organizationSettingsUpdateEndpoint: Endpoint = {
   path: '/v1/organization-settings',
   method: 'patch',
   handler: async req => {
-    const loaded = await loadSettings(req)
+    const loaded = await loadSettings(req, true)
     if (!loaded.ok) return loaded.response
 
     const parsed = OrganizationSettingsFormSchema.safeParse(await req.json!().catch(() => ({})))
@@ -91,7 +99,7 @@ export const organizationMaturityUpdateEndpoint: Endpoint = {
   path: '/v1/organization-settings/maturity',
   method: 'patch',
   handler: async req => {
-    const loaded = await loadSettings(req)
+    const loaded = await loadSettings(req, true)
     if (!loaded.ok) return loaded.response
     const parsed = OrganizationMaturitySchema.safeParse(await req.json!().catch(() => ({})))
     if (!parsed.success)

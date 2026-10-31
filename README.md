@@ -182,7 +182,7 @@ y cobertura utilizados.
 
 ## Estructura
 
-Ver [`../documentation/README.md`](../documentation/README.md) para arquitectura, contratos,
+Ver [`docs/README.md`](docs/README.md) para arquitectura, contratos,
 inventario y Security Reviews. Sin `migrations/`: no se usan migraciones en este proyecto (ver
 sección "Levantar el proyecto"). Heatmap y VideoTraining continúan fuera de alcance.
 

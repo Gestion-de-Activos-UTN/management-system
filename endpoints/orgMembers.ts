@@ -58,6 +58,10 @@ export const orgMembersEndpoint: Endpoint = {
 
     const orgWide = hasOrgWideScope(ctx.role)
     const roleSlug = (m: (typeof memberships.docs)[number]) => memberRole(m).slug
+    // Names and roles serve every person picker; emails only reach people who manage members.
+    const seesEmail = (['read', 'create', 'change_status'] as const).some(action =>
+      canDo(ctx.role, 'organization-memberships', action, ctx.organizationId)
+    )
     // Office-scoped roles only see people who share one of their offices, plus org-wide members
     // (who cover every office); the rest of the directory belongs to other offices.
     const visible = orgWide
@@ -83,7 +87,7 @@ export const orgMembersEndpoint: Endpoint = {
         return {
           id: relationId(user),
           name: user.name,
-          email: user.email,
+          ...(seesEmail ? { email: user.email } : {}),
           role: roleSlug(m),
           office_ids: (m.offices ?? []).map(relationId),
           status: m.status,

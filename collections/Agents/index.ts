@@ -16,7 +16,9 @@ const API_KEY_PREFIX_LENGTH = 8
 
 const generateApiKey = () => crypto.randomBytes(32).toString('hex')
 
-// TODO(rbac-feature): reemplazar por access real cuando exista TenantContext/RBAC (documentation/02-core-interfaces.md §4)
+// Acceso REST cerrado: los agentes se leen y escriben solo desde endpoints dedicados
+// (aprovisionamiento, revocación, resumen, canal del escáner) con overrideAccess y sus propios
+// controles de rol y alcance. Así el hash de la credencial nunca sale por la API genérica.
 export const Agents: CollectionConfig = {
   slug: 'agents',
   admin: {

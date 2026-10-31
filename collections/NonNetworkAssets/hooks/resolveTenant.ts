@@ -12,6 +12,7 @@ import {
 
 import { relationId } from '@/lib/relationId'
 import { assertOwnerCoversOffice } from '@/access/tenant/assertOwnerCoversOffice'
+import { AdminDomainError, assertOrganizationActive } from '@/domain/organizations/admin-actions'
 
 async function findOffice(req: PayloadRequest, officeId: string) {
   const office = await req.payload.findByID({
@@ -52,6 +53,17 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
 
   const office = await findOffice(req, officeId as string)
   const organizationId = office.organizationId
+  // Tenant writes require an active organization. StaffPortal lifecycle operations have no
+  // visited organization and must still be able to retire/release assets during deactivation.
+  if (ctx.organizationId) {
+    try {
+      await assertOrganizationActive(req, organizationId)
+    } catch (error) {
+      if (error instanceof AdminDomainError)
+        throw new APIError(error.message, error.status, { code: error.code }, true)
+      throw error
+    }
+  }
 
   // "Cambió" = distinto de lo guardado, no "vino en el request": el formulario manda todos los
   // campos, y una cascada del sistema escribe sobre activos que ya están en oficinas inactivas.

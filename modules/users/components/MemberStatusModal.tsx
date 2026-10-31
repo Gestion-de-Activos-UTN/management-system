@@ -95,7 +95,10 @@ function MemberStatusForm({
       candidate.id !== member.id &&
       reassignableOffices.every(officeId => memberCoversOffice(candidate, officeId))
   )
-  const emailMatches = confirmationEmail.trim().toLowerCase() === member.email.trim().toLowerCase()
+  // Without an email (not sent to non-managers) nothing can be confirmed.
+  const emailMatches =
+    Boolean(member.email) &&
+    confirmationEmail.trim().toLowerCase() === member.email!.trim().toLowerCase()
   const [attempted, setAttempted] = useState(false)
   const officesError =
     attempted && needsOffices && !officeIds.length ? 'Selecciona al menos una oficina.' : undefined

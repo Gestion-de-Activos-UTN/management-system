@@ -1,6 +1,6 @@
 # SIAM Frontend — Style & Conventions Quick Reference
 
-Full rationale: `documentation/09-frontend-architecture.md`. Hard rules: `SYSTEM_PROMPT.md`. This file is the fast lookup during day-to-day work — if it conflicts with either, they win.
+Hard rules: `SYSTEM_PROMPT.md`. Feature behavior: `docs/`. This file is the fast lookup during day-to-day work — if it conflicts with either, they win.
 
 ## Palette
 

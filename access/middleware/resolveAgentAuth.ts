@@ -47,8 +47,8 @@ export interface AgentAuthDeps {
 
 const API_KEY_PREFIX_LENGTH = 8
 
-// Resuelve identidad del canal Scanner↔Platform (token estático por Agent), análogo pero DISTINTO
-// del TenantResolver de usuarios humanos (Auth0), ver documentation/02-core-interfaces.md.
+// Resuelve la identidad del canal Scanner↔Platform (token estático por Agent). Es distinto de la
+// resolución de personas (access/tenant/resolveTenantContext.ts), que usa la sesión de Payload.
 export async function resolveAgentAuth(
   headers: AgentAuthHeaders,
   deps: AgentAuthDeps

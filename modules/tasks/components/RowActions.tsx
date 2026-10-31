@@ -2,18 +2,30 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { ActionIcon, Group, Menu, Tooltip } from '@mantine/core'
-import { Archive, Check, Ellipsis, ExternalLink, Eye, Hand, RotateCcw, Trash2 } from 'lucide-react'
+import { ActionIcon, Group, Menu, Modal, Tooltip } from '@mantine/core'
+import {
+  Archive,
+  Check,
+  Ellipsis,
+  ExternalLink,
+  Eye,
+  Hand,
+  Pencil,
+  RotateCcw,
+  Trash2,
+} from 'lucide-react'
 import type { TaskDTO } from '../service'
 import { getTaskReferenceHref, getTaskCurrentReferenceHref } from '../task-reference-link'
 import { useTaskCommand } from '../hooks/use-task-actions'
 import { TaskDeleteModal } from './TaskDeleteModal'
+import { TaskEditForm } from './TaskEditForm'
 
 // Componente aparte (no una cell inline) porque necesita su propio hook de mutación.
-// Acciones de un clic. Editar, reasignar y cancelar piden datos extra: viven en el detalle.
+// Editar abre el mismo formulario del detalle; reasignar y cancelar permanecen allí.
 export function RowActions({ task, asOrganization }: { task: TaskDTO; asOrganization?: string }) {
   const command = useTaskCommand(task.id)
   const [deleteOpened, setDeleteOpened] = useState(false)
+  const [editOpened, setEditOpened] = useState(false)
   const has = (action: TaskDTO['available_actions'][number]) =>
     task.available_actions.includes(action)
   const suffix = asOrganization ? `?asOrganization=${asOrganization}` : ''
@@ -51,6 +63,19 @@ export function RowActions({ task, asOrganization }: { task: TaskDTO; asOrganiza
             onClick={() => command.mutate({ action: 'complete' })}
           >
             <Check size={16} strokeWidth={1.5} />
+          </ActionIcon>
+        </Tooltip>
+      )}
+      {has('edit') && (
+        <Tooltip label="Editar tarea">
+          <ActionIcon
+            variant="light"
+            size="md"
+            aria-label="Editar tarea"
+            disabled={command.isPending}
+            onClick={() => setEditOpened(true)}
+          >
+            <Pencil size={16} strokeWidth={1.5} />
           </ActionIcon>
         </Tooltip>
       )}
@@ -119,6 +144,15 @@ export function RowActions({ task, asOrganization }: { task: TaskDTO; asOrganiza
           </Menu.Dropdown>
         </Menu>
       )}
+      <Modal
+        opened={editOpened}
+        onClose={() => setEditOpened(false)}
+        title="Editar tarea"
+        size="lg"
+        centered
+      >
+        {editOpened && <TaskEditForm task={task} onSaved={() => setEditOpened(false)} />}
+      </Modal>
       <TaskDeleteModal
         opened={deleteOpened}
         title={task.title}

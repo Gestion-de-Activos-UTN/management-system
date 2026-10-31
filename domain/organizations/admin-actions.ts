@@ -55,6 +55,16 @@ export async function assertOrganizationActive(req: PayloadRequest, organization
   }
 }
 
+/** Custom write endpoints use this without restricting historical GETs or active tenants. */
+export async function organizationWriteError(req: PayloadRequest, organizationId: string) {
+  try {
+    await assertOrganizationActive(req, organizationId)
+    return null
+  } catch (error) {
+    return adminErrorResponse(error)
+  }
+}
+
 /**
  * Lock por organización para las acciones de Administración: serializa altas, bajas y cambios
  * de rol concurrentes, que de otro modo podrían saltear el tope del plan o dejar a la

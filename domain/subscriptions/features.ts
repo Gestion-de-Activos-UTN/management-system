@@ -1,8 +1,7 @@
 import type { PayloadRequest } from 'payload'
 
-// Catálogo propio de Siam — NO el catálogo de documentation/02-core-interfaces.md, que lista
-// módulos (compliance_documents, compliance_assessments, compliance_tasks) que no existen como
-// collections acá. Se amplía cuando exista un módulo real, no antes.
+// Catálogo de funciones de Siam: solo módulos que existen. Se amplía cuando exista un módulo
+// real, no antes.
 export const FEATURE_CATALOG = [
   'asset_inventory',
   'security_assessments',

@@ -1,8 +1,7 @@
 import { MANUAL_ASSET_CATEGORY_OPTIONS } from '@/domain/assets/asset-types'
 
-// Los valores persistidos en el backend ya están en inglés (mismo contrato que
-// documentation/05-inventory-architecture.md, traducido en su totalidad — ver
-// collections/Assets, collections/NonNetworkAssets). Estos mapas value->label existen igual
+// Los valores persistidos en el backend están en inglés (ver collections/Assets,
+// collections/NonNetworkAssets). Estos mapas value->label existen igual
 // para no hardcodear la lista de opciones de cada <Select> en cuatro lugares distintos
 // (SYSTEM_PROMPT.md #3, DRY), y para poder mostrar un label con mayúscula/formato propio
 // (ej. "Antivirus / EDR") sin acoplar la UI al valor crudo del enum.

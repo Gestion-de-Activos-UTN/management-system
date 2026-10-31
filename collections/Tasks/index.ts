@@ -143,6 +143,9 @@ export const Tasks: CollectionConfig = {
       admin: { readOnly: true },
     },
     { name: 'creation_batch_id', type: 'text', index: true, access: serverOnly },
+    // Idempotency of a creation retried after a lost response (domain/tasks/task-actions.ts).
+    { name: 'operation_id', type: 'text', index: true, hidden: true, access: serverOnly },
+    { name: 'operation_fingerprint', type: 'text', hidden: true, access: serverOnly },
   ],
 }
 

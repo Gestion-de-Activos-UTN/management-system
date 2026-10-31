@@ -6,6 +6,8 @@ type ErrorLike = {
 const MESSAGES_BY_CODE: Record<string, string> = {
   already_claimed: 'Otra persona ya reclamó esta tarea. Actualiza la lista.',
   task_not_found: 'La tarea ya no está disponible. Actualiza la lista.',
+  task_operation_conflict:
+    'Esta tarea ya se creó con los datos del primer intento. Actualiza la lista antes de crear otra.',
   task_terminal: 'La tarea ya finalizó o fue cancelada y no admite cambios.',
   task_not_pending: 'La tarea ya no está pendiente. Actualiza la lista.',
   task_planned: 'La tarea todavía no llegó a su fecha de inicio.',
