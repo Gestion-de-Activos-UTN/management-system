@@ -1,0 +1,125 @@
+.adminList {
+  container-type: inline-size;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.adminItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--mantine-spacing-md);
+  padding: var(--mantine-spacing-lg);
+  overflow-wrap: anywhere;
+}
+
+.adminItem + .adminItem {
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+
+.content,
+.audience,
+.delivery {
+  min-width: 0;
+}
+
+.content,
+.audience {
+  grid-column: 1 / -1;
+}
+
+.previewTitle {
+  width: 100%;
+  border-radius: var(--mantine-radius-sm);
+}
+
+.previewTitle:focus-visible,
+.readerItem:focus-visible {
+  outline: 2px solid var(--mantine-primary-color-filled);
+  outline-offset: 3px;
+}
+
+.actions {
+  justify-self: end;
+  align-self: end;
+}
+
+@container (min-width: 38rem) {
+  .adminItem {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) auto;
+    grid-template-areas: 'content audience actions' 'content delivery actions';
+  }
+
+  .content {
+    grid-area: content;
+  }
+
+  .audience {
+    grid-area: audience;
+  }
+
+  .delivery {
+    grid-area: delivery;
+  }
+
+  .actions {
+    grid-area: actions;
+    align-self: start;
+  }
+}
+
+@container (min-width: 54rem) {
+  .adminItem {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1.2fr) minmax(0, 1fr) auto;
+    grid-template-areas: none;
+    align-items: start;
+    gap: var(--mantine-spacing-lg);
+  }
+
+  .content,
+  .audience,
+  .delivery,
+  .actions {
+    grid-area: auto;
+  }
+}
+
+.readerItem {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--mantine-spacing-sm);
+  width: 100%;
+  min-width: 0;
+  padding: var(--mantine-spacing-xs);
+  border-radius: var(--mantine-radius-sm);
+}
+
+.readerContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.unreadDot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: var(--mantine-primary-color-filled);
+}
+
+.unreadDot[data-read] {
+  visibility: hidden;
+}
+
+@media (hover: hover) {
+  .previewTitle:hover {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+
+  .readerItem:hover {
+    background: var(--mantine-color-default-hover);
+  }
+}

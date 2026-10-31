@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { notifications } from '@mantine/notifications'
+import { notify } from '@/lib/notify'
 import type { PortalMessageDTO } from '../service'
 import { resolvePortalMessageLink } from '../service'
 import { usePortalMessageReceipt } from './use-portal-messages'
@@ -26,9 +26,10 @@ export function usePortalMessageActions(
       })
       return true
     } catch {
-      notifications.show({
+      notify({
         color: 'red',
-        message: 'No se pudo guardar la acción. El mensaje podría volver a aparecer.',
+        title: 'No se pudo guardar tu respuesta',
+        message: 'El mensaje podría volver a aparecer.',
       })
       return false
     }
@@ -61,8 +62,9 @@ export function usePortalMessageActions(
       const url = hasLink ? await resolvePortalMessageLink(message.id) : null
       await saveDismissal()
       if (hasLink && !url) {
-        notifications.show({
+        notify({
           color: 'red',
+          title: 'No se pudo abrir el enlace',
           message: 'El enlace ya no está disponible o no tienes acceso.',
         })
         onDone({ stopQueue: true })

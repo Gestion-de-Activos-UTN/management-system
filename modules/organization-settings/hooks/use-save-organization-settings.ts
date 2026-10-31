@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { notifications } from '@mantine/notifications'
+import { notify } from '@/lib/notify'
 import type { HttpError } from '@/lib/http-client'
 import { showApiError } from '@/lib/notify-error'
 import { updateOrganizationSettings, type OrganizationSettingsFormValues } from '../service'
@@ -12,7 +12,7 @@ export function useSaveOrganizationSettings() {
     mutationFn: values => updateOrganizationSettings(values),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['organization-settings'] })
-      notifications.show({ color: 'green', message: 'Configuración guardada' })
+      notify({ color: 'green', title: 'Configuración guardada' })
     },
     onError: error => showApiError(error, 'No se pudo guardar la configuración'),
   })

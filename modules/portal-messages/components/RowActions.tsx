@@ -1,6 +1,7 @@
 'use client'
 
-import { ActionIcon, Button, Group, Modal, Stack, Text, Tooltip } from '@mantine/core'
+import { ModalLayout } from '@/components/ui/ModalLayout'
+import { ActionIcon, Button, Group, Modal, Text, Tooltip } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import { Eye, Pencil, RotateCcw } from 'lucide-react'
 import type { PortalMessageRecord } from '../service'
@@ -71,24 +72,28 @@ export function RowActions({
         title="Volver a mostrar el mensaje"
         centered
       >
-        <Stack gap="md">
+        <ModalLayout
+          gap="md"
+          footer={
+            <Group justify="flex-end" gap="xs">
+              <Button variant="default" onClick={confirm.close}>
+                Cancelar
+              </Button>
+              <Button
+                leftSection={<RotateCcw size={16} strokeWidth={1.5} />}
+                loading={replay.isPending}
+                onClick={() => replay.mutate(message.id, { onSuccess: confirm.close })}
+              >
+                Volver a mostrar
+              </Button>
+            </Group>
+          }
+        >
           <Text size="sm">
             <strong>{message.title}</strong> volverá a aparecer como nuevo para todos sus
             destinatarios, incluso para quienes ya lo leyeron o descartaron.
           </Text>
-          <Group justify="flex-end" gap="xs">
-            <Button variant="default" onClick={confirm.close}>
-              Cancelar
-            </Button>
-            <Button
-              leftSection={<RotateCcw size={16} strokeWidth={1.5} />}
-              loading={replay.isPending}
-              onClick={() => replay.mutate(message.id, { onSuccess: confirm.close })}
-            >
-              Volver a mostrar
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </Modal>
     </Group>
   )

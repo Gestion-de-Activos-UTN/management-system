@@ -1,18 +1,21 @@
 'use client'
 
 import Link from 'next/link'
-import { ActionIcon, Group, Tooltip } from '@mantine/core'
-import { ExternalLink, Power, PowerOff, UserPlus } from 'lucide-react'
+import { ActionIcon, Group, Menu, Tooltip } from '@mantine/core'
+import { Ellipsis, ExternalLink, Pencil, Power, PowerOff, UserPlus } from 'lucide-react'
 import type { Organization } from '@/app/types/payload-types'
+import { ROLE_LABELS } from '@/lib/role-labels'
 
 export function RowActions({
   organization,
   onToggleActive,
   onAddOrgAdmin,
+  onEdit,
 }: {
   organization: Organization
   onToggleActive: (organization: Organization) => void
   onAddOrgAdmin: (organization: Organization) => void
+  onEdit: (organization: Organization) => void
 }) {
   const active = organization.is_active !== false
   const statusAction = active ? 'Desactivar organización' : 'Reactivar organización'
@@ -30,14 +33,14 @@ export function RowActions({
         </ActionIcon>
       </Tooltip>
       {active && (
-        <Tooltip label="Añadir OrgAdmin">
+        <Tooltip label="Editar organización">
           <ActionIcon
             variant="light"
             size="md"
-            aria-label={`Añadir OrgAdmin a ${organization.name}`}
-            onClick={() => onAddOrgAdmin(organization)}
+            aria-label={`Editar organización ${organization.name}`}
+            onClick={() => onEdit(organization)}
           >
-            <UserPlus size={16} strokeWidth={1.5} />
+            <Pencil size={16} strokeWidth={1.5} />
           </ActionIcon>
         </Tooltip>
       )}
@@ -56,6 +59,28 @@ export function RowActions({
           )}
         </ActionIcon>
       </Tooltip>
+      {active && (
+        <Menu withinPortal position="bottom-end">
+          <Menu.Target>
+            <ActionIcon
+              variant="subtle"
+              color="gray"
+              size="md"
+              aria-label={`Más acciones de ${organization.name}`}
+            >
+              <Ellipsis size={16} strokeWidth={1.5} />
+            </ActionIcon>
+          </Menu.Target>
+          <Menu.Dropdown>
+            <Menu.Item
+              leftSection={<UserPlus size={14} strokeWidth={1.5} />}
+              onClick={() => onAddOrgAdmin(organization)}
+            >
+              Añadir {ROLE_LABELS.org_admin.toLocaleLowerCase('es')}
+            </Menu.Item>
+          </Menu.Dropdown>
+        </Menu>
+      )}
     </Group>
   )
 }

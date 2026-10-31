@@ -75,9 +75,9 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
   const previousOwnerId = originalDoc?.owner ? relationId(originalDoc.owner) : null
   const systemRelease = req.context.systemOwnerRelease === true
   if (!ownerId && !systemRelease) {
-    if (!originalDoc) reject('El responsable es obligatorio.')
-    if (previousOwnerId) reject('El responsable es obligatorio.')
-    if (officeChanged) reject('Elegí un responsable para la nueva oficina.')
+    if (!originalDoc) reject('Selecciona un responsable.')
+    if (previousOwnerId) reject('Selecciona un responsable.')
+    if (officeChanged) reject('Selecciona un responsable para la nueva oficina.')
   }
   // Se valida sólo si cambia el owner o la oficina: un owner que quedó viejo (desactivado) no
   // bloquea editar otra cosa del activo.

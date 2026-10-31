@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { notifications } from '@mantine/notifications'
+import { notify } from '@/lib/notify'
 import {
   listAdminPortalMessages,
   listMyPortalMessages,
@@ -48,9 +48,9 @@ export function useSetPortalMessageActive() {
     mutationFn: ({ input, id }: { input: PortalMessageInput; id: string }) =>
       savePortalMessage(input, id),
     onSuccess: (_, { input }) => {
-      notifications.show({
+      notify({
         color: 'green',
-        message: input.is_active ? 'Mensaje activado.' : 'Mensaje desactivado.',
+        title: input.is_active ? 'Mensaje activado.' : 'Mensaje desactivado.',
       })
       return queryClient.invalidateQueries({ queryKey: ['platform-admin', 'portal-messages'] })
     },
@@ -67,9 +67,10 @@ export function useReplayPortalMessage() {
   return useMutation({
     mutationFn: replayPortalMessage,
     onSuccess: () => {
-      notifications.show({
+      notify({
         color: 'green',
-        message: 'El mensaje volverá a mostrarse a todos sus destinatarios.',
+        title: 'Mensaje listo para volver a mostrarse',
+        message: 'Sus destinatarios lo verán nuevamente.',
       })
       return queryClient.invalidateQueries({ queryKey: ['platform-admin', 'portal-messages'] })
     },

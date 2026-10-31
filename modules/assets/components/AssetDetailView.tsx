@@ -1,5 +1,6 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -450,7 +451,7 @@ export function AssetDetailView({
     reset,
     setValue,
     watch,
-    formState: { isDirty, isValid, dirtyFields, errors },
+    formState: { isDirty, dirtyFields, errors },
   } = useForm<AssetBusinessFields>({
     mode: 'onChange',
     resolver: zodResolver(createAssetBusinessFieldsSchema(asset)),
@@ -597,30 +598,34 @@ export function AssetDetailView({
         title="Quitar identificación"
         centered
       >
-        <Stack gap="md">
+        <ModalLayout
+          gap="md"
+          footer={
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setUnidentifyConfirmOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                color="red"
+                loading={unidentifyAsset.isPending}
+                onClick={() =>
+                  unidentifyAsset.mutate(
+                    { id: asset.id },
+                    { onSuccess: () => setUnidentifyConfirmOpen(false) }
+                  )
+                }
+              >
+                Quitar identificación
+              </Button>
+            </Group>
+          }
+        >
           <Text size="sm">
             Este activo volverá a estar &quot;no identificado&quot;. El responsable, la criticidad,
             el alias y la ubicación quedarán guardados para completar el formulario si vuelves a
             identificarlo, pero dejarán de contar en los cálculos de riesgo hasta entonces.
           </Text>
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setUnidentifyConfirmOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              color="red"
-              loading={unidentifyAsset.isPending}
-              onClick={() =>
-                unidentifyAsset.mutate(
-                  { id: asset.id },
-                  { onSuccess: () => setUnidentifyConfirmOpen(false) }
-                )
-              }
-            >
-              Quitar identificación
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </Modal>
 
       <Tabs value={tab} onChange={changeTab}>
@@ -629,7 +634,7 @@ export function AssetDetailView({
             Datos y revisión
           </Tabs.Tab>
           <Tabs.Tab value="red" leftSection={<Network size={16} strokeWidth={1.5} />}>
-            Red y puertos ({asset.services?.length ?? 0})
+            Red y puertos
           </Tabs.Tab>
         </Tabs.List>
 
@@ -797,6 +802,7 @@ export function AssetDetailView({
                           { value: 'excluded', label: 'Excluido' },
                         ]}
                         value={field.value}
+                        error={errors.assessment_scope?.message}
                         onChange={value => {
                           if (value === 'excluded' && authorizationStatus === 'unauthorized') {
                             warnedUnauthorizedExclusion.current = true
@@ -827,7 +833,9 @@ export function AssetDetailView({
                   <Button
                     type="submit"
                     loading={updateAsset.isPending}
-                    disabled={!isDirty || !isValid}
+                    // Validar al enviar muestra también los errores de campos no tocados.
+                    // isValid bloqueaba el botón sin explicar qué impedía guardar.
+                    disabled={!isDirty}
                     w={{ base: '100%', sm: 'auto' }}
                   >
                     Guardar cambios
@@ -962,34 +970,37 @@ export function AssetDetailView({
         title="¿Excluir un dispositivo no autorizado?"
         centered
       >
-        <Stack>
+        <ModalLayout
+          footer={
+            <Group justify="flex-end">
+              <Button
+                variant="default"
+                onClick={() => {
+                  setValue('assessment_scope', 'included', { shouldDirty: true })
+                  setConfirmUnauthorizedExclusion(false)
+                }}
+              >
+                Mantener incluido
+              </Button>
+              <Button
+                color="orange"
+                onClick={() => {
+                  warnedUnauthorizedExclusion.current = true
+                  setValue('assessment_scope', 'excluded', { shouldDirty: true })
+                  setConfirmUnauthorizedExclusion(false)
+                }}
+              >
+                Excluir de todos modos
+              </Button>
+            </Group>
+          }
+        >
           <Alert color="orange">
             SIAM recomienda mantener dentro del alcance los dispositivos no autorizados porque
             representan un hallazgo de seguridad. Aun así, puedes excluir este dispositivo si esa es
             la decisión de tu organización.
           </Alert>
-          <Group justify="flex-end">
-            <Button
-              variant="default"
-              onClick={() => {
-                setValue('assessment_scope', 'included', { shouldDirty: true })
-                setConfirmUnauthorizedExclusion(false)
-              }}
-            >
-              Mantener incluido
-            </Button>
-            <Button
-              color="orange"
-              onClick={() => {
-                warnedUnauthorizedExclusion.current = true
-                setValue('assessment_scope', 'excluded', { shouldDirty: true })
-                setConfirmUnauthorizedExclusion(false)
-              }}
-            >
-              Excluir de todos modos
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </Modal>
     </Stack>
   )

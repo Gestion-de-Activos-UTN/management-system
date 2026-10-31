@@ -2,6 +2,7 @@ import type { Endpoint } from 'payload'
 import { getTenantContext, type TenantContext } from '../access/tenant/resolveTenantContext'
 import { relationId } from '../lib/relationId'
 import { canDo, hasOrgWideScope, type RoleSlug } from '../access/rbac/permissions'
+import { canChangeMemberStatus, canEditMemberOffices } from '../access/rbac/member-status'
 import { adminErrorResponse, organizationAdminLock } from '../domain/organizations/admin-actions'
 import { withTransaction } from '../domain/with-transaction'
 import { createMember, updateMember } from '../domain/organizations/member-admin'
@@ -10,6 +11,15 @@ import { ownedAssetsSummary } from '../domain/organizations/member-responsibilit
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
+}
+
+// Memberships are read with depth 1; an unpopulated role (id only) yields no slug/rank, so every
+// rank-based check fails closed instead of guessing.
+function memberRole(membership: { role?: unknown }) {
+  const role = membership.role as { slug?: RoleSlug; rank?: number } | string | null | undefined
+  return typeof role === 'object' && role
+    ? { slug: role.slug ?? null, rank: role.rank ?? null }
+    : { slug: null, rank: null }
 }
 
 // No abre Users.read (esa colección sigue () => false a propósito — ver el ponytail: marcado en
@@ -29,7 +39,8 @@ export const orgMembersEndpoint: Endpoint = {
     // reactivarlas); los selectores de persona siguen recibiendo sólo las activas.
     const includeInactive =
       new URL(req.url ?? 'http://localhost').searchParams.get('include_inactive') === '1' &&
-      canDo(ctx.role, 'organization-memberships', 'read', ctx.organizationId)
+      (canDo(ctx.role, 'organization-memberships', 'read', ctx.organizationId) ||
+        canDo(ctx.role, 'organization-memberships', 'change_status', ctx.organizationId))
     const memberships = await req.payload.find({
       collection: 'organization-memberships',
       where: includeInactive
@@ -46,10 +57,7 @@ export const orgMembersEndpoint: Endpoint = {
     })
 
     const orgWide = hasOrgWideScope(ctx.role)
-    const roleSlug = (m: (typeof memberships.docs)[number]) => {
-      const role = m.role as unknown as { slug: RoleSlug } | RoleSlug
-      return typeof role === 'string' ? role : role.slug
-    }
+    const roleSlug = (m: (typeof memberships.docs)[number]) => memberRole(m).slug
     // Office-scoped roles only see people who share one of their offices, plus org-wide members
     // (who cover every office); the rest of the directory belongs to other offices.
     const visible = orgWide
@@ -60,18 +68,36 @@ export const orgMembersEndpoint: Endpoint = {
             (m.offices ?? []).some(office => ctx.officeIds.includes(relationId(office)))
         )
 
-    const docs = visible.map(m => {
-      const user = m.user as unknown as { id: string; name: string; email: string }
-      return {
-        id: relationId(user),
-        name: user.name,
-        email: user.email,
+    const mayChangeStatus = (m: (typeof memberships.docs)[number]) =>
+      canChangeMemberStatus(ctx, {
+        organizationId: ctx.organizationId!,
         role: roleSlug(m),
-        office_ids: (m.offices ?? []).map(relationId),
-        status: m.status,
-        is_active: Boolean(m.is_active),
-      }
-    })
+        rank: memberRole(m).rank,
+        officeIds: (m.offices ?? []).map(relationId),
+      })
+    // Inactive members outside delegated management must not become visible via this option.
+    const docs = visible
+      .filter(m => orgWide || m.is_active || mayChangeStatus(m))
+      .map(m => {
+        const user = m.user as unknown as { id: string; name: string; email: string }
+        return {
+          id: relationId(user),
+          name: user.name,
+          email: user.email,
+          role: roleSlug(m),
+          office_ids: (m.offices ?? []).map(relationId),
+          status: m.status,
+          is_active: Boolean(m.is_active),
+          can_change_status: mayChangeStatus(m),
+          can_edit_offices: canEditMemberOffices(ctx, {
+            organizationId: ctx.organizationId!,
+            role: roleSlug(m),
+            rank: memberRole(m).rank,
+            officeIds: (m.offices ?? []).map(relationId),
+            isActive: Boolean(m.is_active),
+          }),
+        }
+      })
 
     return json({ docs })
   },
@@ -128,7 +154,10 @@ export const updateOrgMemberEndpoint: Endpoint = {
       if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
       if (
         !ctx.organizationId ||
-        !canDo(ctx.role, 'organization-memberships', 'update', ctx.organizationId)
+        !(
+          canDo(ctx.role, 'organization-memberships', 'change_status', ctx.organizationId) ||
+          canDo(ctx.role, 'organization-memberships', 'edit_offices', ctx.organizationId)
+        )
       ) {
         return json({ error: 'forbidden' }, 403)
       }
@@ -165,7 +194,7 @@ export const orgMemberDeactivationImpactEndpoint: Endpoint = {
     if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
     if (
       !ctx.organizationId ||
-      !canDo(ctx.role, 'organization-memberships', 'update', ctx.organizationId)
+      !canDo(ctx.role, 'organization-memberships', 'change_status', ctx.organizationId)
     ) {
       return json({ error: 'forbidden' }, 403)
     }
@@ -178,10 +207,22 @@ export const orgMemberDeactivationImpactEndpoint: Endpoint = {
       },
       overrideAccess: true,
       req,
-      depth: 0,
+      depth: 1,
       limit: 1,
     })
     if (!membership.docs[0]) return json({ error: 'member_not_found' }, 404)
+    const target = membership.docs[0]
+    const targetRole = memberRole(target)
+    if (!targetRole.slug) return json({ error: 'member_not_found' }, 404)
+    if (
+      !canChangeMemberStatus(ctx, {
+        organizationId,
+        role: targetRole.slug,
+        rank: targetRole.rank,
+        officeIds: (target.offices ?? []).map(relationId),
+      })
+    )
+      return json({ error: 'forbidden' }, 403)
     const openTasks = { organization: { equals: organizationId } }
     const [ownedAssets, inProgress, assigned] = await Promise.all([
       ownedAssetsSummary(req, organizationId, userId),

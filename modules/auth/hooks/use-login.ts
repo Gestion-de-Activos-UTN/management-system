@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { notifications } from '@mantine/notifications'
+import { notify } from '@/lib/notify'
 import type { HttpError } from '@/lib/http-client'
 import { setSession, type Session } from '@/lib/session'
 import { resetPortalMessageSessionState } from '@/modules/portal-messages/session-state'
@@ -62,9 +62,9 @@ export function useLogin() {
       queryClient.clear()
       resetPortalMessageSessionState()
       setSession(session)
-      notifications.show({
+      notify({
         color: 'green',
-        message: name ? `Te damos la bienvenida, ${name}` : 'Te damos la bienvenida',
+        title: name ? `Te damos la bienvenida, ${name}` : 'Te damos la bienvenida',
         autoClose: 3000,
       })
     },

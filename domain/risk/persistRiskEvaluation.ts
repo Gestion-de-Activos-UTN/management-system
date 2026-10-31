@@ -1,6 +1,7 @@
 import type { Payload, PayloadRequest } from 'payload'
 import type { RiskPolicyKey } from './catalog-v2'
 import type { RiskEvaluationResult } from './engine'
+import { evaluationFromResult } from './evaluation-from-result'
 
 /**
  * Writes one evaluation and all its contributions in a single transaction, so a partial failure
@@ -38,32 +39,11 @@ export async function persistRiskEvaluation(
       data: {
         organization: input.organizationId,
         office: input.officeId ?? null,
-        catalog_version: 2,
-        engine_version: 2,
-        policy_key: input.policy,
+        ...evaluationFromResult(input),
         evaluated_at: input.evaluatedAt.toISOString(),
         rro_raw: result.rro_raw,
         rro_adjusted: result.rro_adjusted,
         riem: result.riem,
-        score: result.score,
-        base_band: result.base_band,
-        final_band: result.final_band,
-        coverage: result.coverage,
-        unknown_percentage: result.unknown_percentage,
-        confidence: result.confidence,
-        effective_confidence: result.effective_confidence,
-        counts: result.counts,
-        alerts: {
-          critical_assets: result.critical_asset_alerts,
-          systemic_failures: result.controls
-            .filter(item => item.systemic_failure)
-            .map(item => item.control_key),
-          severe_concentration: result.severe_concentration,
-          severe_concentration_percentage: result.severe_concentration_percentage,
-          undetermined_exposure: input.undeterminedExposure,
-        },
-        control_summary: result.controls,
-        asset_summary: result.assets,
       },
     })
     // ponytail: one insert per contribution; switch to a bulk insert if large fleets make this slow.

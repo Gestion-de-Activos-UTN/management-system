@@ -211,7 +211,7 @@ test('Activos manuales: una persona no puede dejarlos sin responsable ni moverlo
       data,
     })
 
-  await assert.rejects(asAdmin({ owner: null }), /responsable es obligatorio/)
+  await assert.rejects(asAdmin({ owner: null }), /Selecciona un responsable\./)
 
   await payload.update({
     collection: 'offices',

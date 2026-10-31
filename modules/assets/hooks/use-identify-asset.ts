@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { notifications } from '@mantine/notifications'
+import { notify } from '@/lib/notify'
 import type { HttpError } from '@/lib/http-client'
 import { showApiError } from '@/lib/notify-error'
 import { identifyAsset } from '../service'
@@ -17,8 +17,8 @@ export function useIdentifyAsset() {
         queryClient.invalidateQueries({ queryKey: ['assets'] }),
         invalidateSecurityReview(queryClient),
       ])
-      notifications.show({ color: 'green', message: 'Activo identificado' })
+      notify({ color: 'green', title: 'Activo identificado' })
     },
-    onError: error => showApiError(error, 'No se pudo actualizar el estado de identificación'),
+    onError: error => showApiError(error, 'No se pudo identificar el activo'),
   })
 }

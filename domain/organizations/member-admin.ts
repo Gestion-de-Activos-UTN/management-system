@@ -1,5 +1,7 @@
 import type { PayloadRequest } from 'payload'
 import type { TenantContext } from '@/access/tenant/resolveTenantContext'
+import { canChangeMemberStatus, canEditMemberOffices } from '@/access/rbac/member-status'
+import { canDo } from '@/access/rbac/permissions'
 import { relationId } from '@/lib/relationId'
 import { ROLE_LABELS } from '@/lib/role-labels'
 import {
@@ -144,7 +146,11 @@ export async function createMember(
       throw new AdminDomainError('office_out_of_scope', 403, 'Sólo puedes asignar tus oficinas.')
     }
   } else if (input.office_ids.length) {
-    throw new AdminDomainError('invalid_offices', 400, 'Los OrgAdmins cubren todas las oficinas.')
+    throw new AdminDomainError(
+      'invalid_offices',
+      400,
+      'Los administradores de la organización tienen acceso a todas sus oficinas.'
+    )
   }
 
   // AUDIT: this action must emit an AuditLogs entry (user.create, chain_hash over {user, name, email}, previous hash for this organization_id)
@@ -213,6 +219,50 @@ export async function updateMember(
 ) {
   const organizationId = ctx.organizationId
   const membership = await loadMembership(req, organizationId, userId)
+  if (!canDo(ctx.role, 'organization-memberships', 'update', organizationId)) {
+    // The organization lock may have waited while another admin changed the actor's scope.
+    // Re-read delegated authority inside this transaction before authorizing any write.
+    const actor = await loadMembership(req, organizationId, ctx.userId)
+    const delegatedContext = {
+      ...ctx,
+      role: actor.role.slug,
+      roleRank: actor.role.rank,
+      officeIds: actor.offices,
+      isActive: actor.is_active,
+    }
+    const target = {
+      organizationId,
+      role: membership.role.slug,
+      rank: membership.role.rank,
+      officeIds: membership.offices,
+    }
+    const reactivating = input.is_active === true && !membership.is_active
+    const editingOffices =
+      input.is_active === undefined &&
+      input.office_ids !== undefined &&
+      canEditMemberOffices(delegatedContext, { ...target, isActive: membership.is_active })
+    const changingStatus =
+      typeof input.is_active === 'boolean' && canChangeMemberStatus(delegatedContext, target)
+    if (
+      (!editingOffices && !changingStatus) ||
+      input.role !== undefined ||
+      (input.office_ids !== undefined &&
+        ((!reactivating && !editingOffices) ||
+          !input.office_ids.every(id => delegatedContext.officeIds.includes(id))))
+    )
+      throw new AdminDomainError(
+        'forbidden',
+        403,
+        'No tienes permiso para cambiar el acceso de esta persona.'
+      )
+    await assertOrganizationActive(req, organizationId)
+  }
+  if (
+    !membership.is_active &&
+    !input.is_active &&
+    (input.role !== undefined || input.office_ids !== undefined)
+  )
+    await assertOrganizationActive(req, organizationId)
   if (input.is_active === false) {
     if (!input.confirm_email) {
       throw new AdminDomainError(
@@ -259,7 +309,7 @@ export async function updateMember(
   }
 
   let offices: string[] | undefined
-  if (role.slug !== 'org_admin' && active) {
+  if (role.slug !== 'org_admin' && (active || input.office_ids !== undefined)) {
     offices = await activeOfficeIds(req, organizationId, input.office_ids ?? membership.offices)
     if (input.office_ids && offices.length !== new Set(input.office_ids).size) {
       throw new AdminDomainError(
@@ -269,11 +319,7 @@ export async function updateMember(
       )
     }
     if (!offices.length) {
-      throw new AdminDomainError(
-        'offices_required',
-        400,
-        'Asigna al menos una oficina activa a esta persona.'
-      )
+      throw new AdminDomainError('offices_required', 400, 'Selecciona al menos una oficina activa.')
     }
   }
 
@@ -303,6 +349,10 @@ export async function updateMember(
   // La cascada de desactivación pasa Users.status a inactive pero, a propósito, no lo revierte
   // (doc 03, cascada de personas): reactivar es esta decisión explícita.
   if (reactivating) {
+    // AUDIT: this action must emit an AuditLogs entry (user reactivated through membership lifecycle, previous hash for this organization_id)
+    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+    // NOTIFY: this event should trigger a Notification Bell entry for {the reactivated user, org_admins of this organization}
+    // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
     await req.payload.update({
       collection: 'users',
       id: userId,

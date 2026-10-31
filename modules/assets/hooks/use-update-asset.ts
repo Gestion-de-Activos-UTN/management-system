@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { notifications } from '@mantine/notifications'
+import { notify } from '@/lib/notify'
 import type { HttpError } from '@/lib/http-client'
 import { showApiError } from '@/lib/notify-error'
 import { updateAsset } from '../service'
@@ -20,7 +20,7 @@ export function useUpdateAsset(id: string) {
         queryClient.invalidateQueries({ queryKey: ['assets'] }),
         invalidateSecurityReview(queryClient),
       ])
-      notifications.show({ color: 'green', message: 'Activo actualizado' })
+      notify({ color: 'green', title: 'Activo actualizado' })
     },
     onError: error => showApiError(error, 'No se pudo actualizar el activo'),
   })

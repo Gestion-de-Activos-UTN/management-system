@@ -1,7 +1,5 @@
-// Explicit 'en-US' locale — `toLocaleString()`/`toLocaleDateString()` with no locale argument
-// render using the browser's own locale, which would show Spanish month/day names or date
-// ordering on a machine set to es-*. El texto de la interfaz está en español por definición; the same has to hold
-// for anything the runtime formats implicitly, not just literal strings we wrote ourselves.
+// Las fechas y horas de lectura usan español argentino, independientemente del navegador.
+// Los campos editables muestran DD-MM-AAAA mediante el componente compartido DateField.
 export function formatDateTime(value: string | Date): string {
   return new Date(value).toLocaleString('es-AR')
 }

@@ -1,5 +1,8 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
+import { DateField } from '@/components/ui/DateField'
+
 import { textRuleError } from '@/lib/text-rules'
 import { useMemo, useState } from 'react'
 import {
@@ -349,7 +352,40 @@ export function PortalMessageForm({
     ) : null
 
   return (
-    <Stack gap="md">
+    <ModalLayout
+      footer={
+        <Group justify="space-between" pt="xs">
+          <Button
+            variant={previewOpen ? 'light' : 'subtle'}
+            leftSection={<Eye size={16} strokeWidth={1.5} />}
+            rightSection={
+              <ChevronDown
+                size={16}
+                strokeWidth={1.5}
+                style={{
+                  transform: previewOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                  transition: 'transform 200ms cubic-bezier(0.16, 1, 0.3, 1)',
+                }}
+              />
+            }
+            aria-expanded={previewOpen}
+            aria-controls="portal-message-preview"
+            onClick={() => setPreviewOpen(value => !value)}
+          >
+            {previewOpen ? 'Ocultar vista previa' : 'Vista previa'}
+          </Button>
+          <Button
+            leftSection={
+              message ? <Save size={16} strokeWidth={1.5} /> : <Plus size={16} strokeWidth={1.5} />
+            }
+            loading={save.isPending}
+            onClick={() => void submit()}
+          >
+            {message ? 'Guardar cambios' : 'Crear mensaje'}
+          </Button>
+        </Group>
+      }
+    >
       <Tabs
         value={activeTab}
         onChange={value => setActiveTab((value as Tab) ?? 'content')}
@@ -392,6 +428,7 @@ export function PortalMessageForm({
               />
               <Select
                 label="Tipo de mensaje"
+                withAsterisk
                 data={TYPE_OPTIONS}
                 value={form.messageType}
                 allowDeselect={false}
@@ -507,6 +544,7 @@ export function PortalMessageForm({
                 )}
                 <MultiSelect
                   label="¿A qué organizaciones?"
+                  withAsterisk
                   placeholder="Selecciona una o más organizaciones"
                   description="El mensaje solo se enviará a las organizaciones seleccionadas."
                   searchable
@@ -526,6 +564,7 @@ export function PortalMessageForm({
                 />
                 <Select
                   label="¿Quiénes dentro de esas organizaciones?"
+                  withAsterisk
                   allowDeselect={false}
                   data={[
                     { value: 'all', label: 'Todas las personas de cada organización' },
@@ -545,6 +584,7 @@ export function PortalMessageForm({
                 {form.targetKind === 'role' && (
                   <MultiSelect
                     label="¿Qué roles recibirán el mensaje?"
+                    withAsterisk
                     data={ROLE_OPTIONS}
                     value={form.roleSlugs}
                     error={fieldErrors.roleSlugs}
@@ -554,6 +594,7 @@ export function PortalMessageForm({
                 {form.targetKind === 'user' && (
                   <MultiSelect
                     label="¿Qué personas lo recibirán?"
+                    withAsterisk
                     searchable
                     maxDropdownHeight={220}
                     disabled={!organizationIds.length}
@@ -632,13 +673,12 @@ export function PortalMessageForm({
                 Puedes enlazar la sección.
               </Text>
             )}
-            <TextInput
+            <DateField
               label="Fecha de expiración"
               description="Se muestra hasta el final de ese día."
-              type="date"
               value={form.expiresAt}
               error={fieldErrors.expiresAt}
-              onChange={event => update('expiresAt', event.currentTarget.value)}
+              onChange={value => update('expiresAt', value)}
             />
             <SettingRow
               label="Mensaje activo"
@@ -661,37 +701,6 @@ export function PortalMessageForm({
 
       {errorMessage && <Alert color="red">{errorMessage}</Alert>}
 
-      <Group justify="space-between" pt="xs">
-        <Button
-          variant={previewOpen ? 'light' : 'subtle'}
-          leftSection={<Eye size={16} strokeWidth={1.5} />}
-          rightSection={
-            <ChevronDown
-              size={16}
-              strokeWidth={1.5}
-              style={{
-                transform: previewOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                transition: 'transform 200ms cubic-bezier(0.16, 1, 0.3, 1)',
-              }}
-            />
-          }
-          aria-expanded={previewOpen}
-          aria-controls="portal-message-preview"
-          onClick={() => setPreviewOpen(value => !value)}
-        >
-          {previewOpen ? 'Ocultar vista previa' : 'Vista previa'}
-        </Button>
-        <Button
-          leftSection={
-            message ? <Save size={16} strokeWidth={1.5} /> : <Plus size={16} strokeWidth={1.5} />
-          }
-          loading={save.isPending}
-          onClick={() => void submit()}
-        >
-          {message ? 'Guardar cambios' : 'Crear mensaje'}
-        </Button>
-      </Group>
-
       <Collapse id="portal-message-preview" in={previewOpen}>
         <Paper withBorder radius="md" p="md" bg="var(--mantine-color-default-hover)">
           <Stack gap="sm">
@@ -702,6 +711,6 @@ export function PortalMessageForm({
           </Stack>
         </Paper>
       </Collapse>
-    </Stack>
+    </ModalLayout>
   )
 }

@@ -1,10 +1,12 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { notifications } from '@mantine/notifications'
+import { useState } from 'react'
+import { notify } from '@/lib/notify'
 import type { HttpError } from '@/lib/http-client'
 import { showApiError } from '@/lib/notify-error'
 import type { CreateTasksInput, EditTaskInput, ReassignTaskInput } from '../schema'
+import { createTaskCommandGate } from '../task-command-gate'
 import {
   cancelTask,
   createTasks,
@@ -22,7 +24,7 @@ export function useCreateTasks() {
     mutationFn: createTasks,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['tasks'] })
-      notifications.show({ color: 'green', message: 'Tarea creada' })
+      notify({ color: 'green', title: 'Tarea creada' })
     },
     onError: error => showApiError(error, 'No se pudo crear la tarea'),
   })
@@ -34,7 +36,7 @@ export function useEditTask(id: string) {
     mutationFn: input => editTask(id, input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['tasks'] })
-      notifications.show({ color: 'green', message: 'Tarea actualizada' })
+      notify({ color: 'green', title: 'Tarea actualizada' })
     },
     onError: error => showApiError(error, 'No se pudo actualizar la tarea'),
   })
@@ -42,8 +44,9 @@ export function useEditTask(id: string) {
 
 export function useTaskCommand(id: string) {
   const queryClient = useQueryClient()
+  const [gate] = useState(createTaskCommandGate<TaskAction>)
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['tasks'] })
-  return useMutation<unknown, HttpError, { action: TaskAction; payload?: unknown }>({
+  const mutation = useMutation<unknown, HttpError, { action: TaskAction; payload?: unknown }>({
     mutationFn: ({ action, payload }) => {
       if (action === 'delete') return deleteTask(id)
       if (action === 'cancel') return cancelTask(id, String(payload ?? ''))
@@ -64,11 +67,35 @@ export function useTaskCommand(id: string) {
         delete: 'Tarea eliminada',
         reassign: 'Tarea reasignada',
       }
-      notifications.show({
+      notify({
         color: 'green',
-        message: labels[variables.action] ?? 'Tarea actualizada',
+        title: labels[variables.action] ?? 'Tarea actualizada',
       })
     },
-    onError: error => showApiError(error, 'No se pudo realizar la acción'),
+    onError: async (error, { action }) => {
+      const actions: Record<TaskAction, string> = {
+        claim: 'No se pudo reclamar la tarea',
+        release: 'No se pudo liberar la tarea',
+        complete: 'No se pudo completar la tarea',
+        force_complete: 'No se pudo completar la tarea por administración',
+        cancel: 'No se pudo cancelar la tarea',
+        archive: 'No se pudo archivar la tarea',
+        delete: 'No se pudo eliminar la tarea',
+        reassign: 'No se pudo reasignar la tarea',
+        edit: 'No se pudo editar la tarea',
+      }
+      showApiError(error, actions[action])
+      // A stale screen must refresh after a rejected command too, before enabling actions again.
+      await invalidate()
+    },
   })
+
+  const mutateAsync: typeof mutation.mutateAsync = (variables, options) =>
+    gate(variables.action, () => mutation.mutateAsync(variables, options))
+  const mutate: typeof mutation.mutate = (variables, options) => {
+    void mutateAsync(variables, options).catch(() => {
+      // The mutation reports the error; event handlers must not create unhandled rejections.
+    })
+  }
+  return { ...mutation, mutate, mutateAsync }
 }

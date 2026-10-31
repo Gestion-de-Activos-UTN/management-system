@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { Archive, ArrowRight, History, RefreshCw } from 'lucide-react'
 import { BackButton } from '@/components/ui/BackButton'
+import { ResourceError } from '@/components/ui/ResourceError'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useAssessment } from '@/modules/assessments/hooks/use-assessment'
 import { useAssessmentActions } from '@/modules/assessments/hooks/use-assessment-actions'
@@ -38,7 +39,17 @@ export default function AssessmentDetailPage() {
         <Loader color="pine" />
       </Center>
     )
-  if (!detail.data || detail.isError) return <Text c="red">No se pudo cargar esta revisión.</Text>
+  if (!detail.data || detail.isError)
+    return (
+      <ResourceError
+        error={detail.error}
+        resource="esta revisión"
+        backHref={portalHref('/portal/security-review', asOrganization)}
+        backLabel="Volver a Revisión de seguridad"
+        onRetry={() => void detail.refetch()}
+        retrying={detail.isFetching}
+      />
+    )
   const data = detail.data
   const readOnly =
     data.assessment.status === 'completed' ||

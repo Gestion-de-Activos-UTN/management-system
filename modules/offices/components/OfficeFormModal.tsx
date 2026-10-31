@@ -1,9 +1,10 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { textRuleError } from '@/lib/text-rules'
 import { userFacingErrorMessage } from '@/lib/user-facing-error'
 import { useState } from 'react'
-import { Alert, Button, Group, Modal, Select, Stack, TextInput } from '@mantine/core'
+import { Alert, Button, Group, Modal, Select, TextInput } from '@mantine/core'
 import { Plus, Save } from 'lucide-react'
 import type { Office } from '@/app/types/payload-types'
 import { departmentsOf, PROVINCES } from '@/lib/argentina-geo'
@@ -90,7 +91,25 @@ function OfficeForm({
   }
 
   return (
-    <Stack gap="md">
+    <ModalLayout
+      gap="md"
+      footer={
+        <Group justify="flex-end" gap="xs">
+          <Button variant="default" onClick={onDone}>
+            Cancelar
+          </Button>
+          <Button
+            loading={save.isPending}
+            leftSection={
+              office ? <Save size={16} strokeWidth={1.5} /> : <Plus size={16} strokeWidth={1.5} />
+            }
+            onClick={() => void submit()}
+          >
+            {office ? 'Guardar cambios' : 'Crear oficina'}
+          </Button>
+        </Group>
+      }
+    >
       <TextInput
         label="Nombre de la oficina"
         placeholder="Ej.: Casa central"
@@ -128,20 +147,6 @@ function OfficeForm({
         comboboxProps={{ withinPortal: true }}
       />
       {serverError && <Alert color="red">{serverError}</Alert>}
-      <Group justify="flex-end" gap="xs">
-        <Button variant="default" onClick={onDone}>
-          Cancelar
-        </Button>
-        <Button
-          loading={save.isPending}
-          leftSection={
-            office ? <Save size={16} strokeWidth={1.5} /> : <Plus size={16} strokeWidth={1.5} />
-          }
-          onClick={() => void submit()}
-        >
-          {office ? 'Guardar cambios' : 'Crear oficina'}
-        </Button>
-      </Group>
-    </Stack>
+    </ModalLayout>
   )
 }

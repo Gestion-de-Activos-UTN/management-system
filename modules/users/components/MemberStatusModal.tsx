@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { ModalLayout } from '@/components/ui/ModalLayout'
+import { useRef, useState } from 'react'
 import {
   Alert,
   Button,
@@ -44,6 +45,7 @@ export function MemberStatusModal({
       opened={Boolean(member)}
       onClose={onClose}
       title={member?.is_active ? 'Desactivar persona' : 'Reactivar persona'}
+      size="lg"
       centered
     >
       {member && (
@@ -94,8 +96,18 @@ function MemberStatusForm({
       reassignableOffices.every(officeId => memberCoversOffice(candidate, officeId))
   )
   const emailMatches = confirmationEmail.trim().toLowerCase() === member.email.trim().toLowerCase()
+  const [attempted, setAttempted] = useState(false)
+  const officesError =
+    attempted && needsOffices && !officeIds.length ? 'Selecciona al menos una oficina.' : undefined
+  // Lock before sending: the pending state alone leaves a double-click race, and a success keeps
+  // it locked through the close animation.
+  const submissionLock = useRef(false)
 
-  const confirm = () =>
+  const confirm = () => {
+    if (submissionLock.current) return
+    setAttempted(true)
+    if (needsOffices && !officeIds.length) return
+    submissionLock.current = true
     update.mutate(
       {
         userId: member.id,
@@ -107,11 +119,44 @@ function MemberStatusForm({
         },
         message: deactivating ? `${name} quedó desactivada.` : `${name} quedó reactivada.`,
       },
-      { onSuccess: onDone }
+      {
+        onSuccess: onDone,
+        onError: () => {
+          submissionLock.current = false
+        },
+      }
     )
+  }
 
   return (
-    <Stack gap="md">
+    <ModalLayout
+      gap="md"
+      footer={
+        <Group justify="flex-end" gap="xs">
+          <Button variant="default" onClick={onDone} disabled={update.isPending}>
+            Cancelar
+          </Button>
+          <Button
+            color={deactivating ? 'red' : undefined}
+            loading={update.isPending}
+            // Explicit confirmation and the impact preview may block; empty offices show an error.
+            disabled={
+              deactivating && (impact.isPending || impact.isError || !impact.data || !emailMatches)
+            }
+            leftSection={
+              deactivating ? (
+                <UserX size={16} strokeWidth={1.5} />
+              ) : (
+                <UserCheck size={16} strokeWidth={1.5} />
+              )
+            }
+            onClick={confirm}
+          >
+            {deactivating ? 'Desactivar' : 'Reactivar'}
+          </Button>
+        </Group>
+      }
+    >
       {deactivating ? (
         <>
           <Text size="sm">
@@ -145,19 +190,19 @@ function MemberStatusForm({
                     key: 'assets',
                     icon: Package,
                     value: ownedAssets.length,
-                    label: 'Activos a su cargo',
+                    label: 'Activos a cargo',
                   },
                   {
                     key: 'in-progress',
                     icon: ClipboardList,
                     value: impact.data.in_progress_tasks,
-                    label: 'Tareas en curso que vuelven a pendientes',
+                    label: 'Tareas en curso',
                   },
                   {
                     key: 'assigned',
                     icon: ClipboardList,
                     value: impact.data.assigned_tasks,
-                    label: 'Tareas asignadas que piden reasignación',
+                    label: 'Tareas asignadas',
                   },
                 ]}
               />
@@ -203,6 +248,7 @@ function MemberStatusForm({
       {deactivating && (
         <TextInput
           label="Para confirmar, escribe el correo de la persona"
+          withAsterisk
           description={member.email}
           type="email"
           autoComplete="off"
@@ -218,38 +264,17 @@ function MemberStatusForm({
           </Alert>
           <MultiSelect
             label="Oficinas"
+            withAsterisk
             placeholder="Selecciona una o más oficinas"
             searchable
             data={officeOptions}
             value={officeIds}
             onChange={setOfficeIds}
+            error={officesError}
             comboboxProps={{ withinPortal: true }}
           />
         </>
       )}
-      <Group justify="flex-end" gap="xs">
-        <Button variant="default" onClick={onDone}>
-          Cancelar
-        </Button>
-        <Button
-          color={deactivating ? 'red' : undefined}
-          loading={update.isPending}
-          disabled={
-            (needsOffices && !officeIds.length) ||
-            (deactivating && (impact.isPending || impact.isError || !impact.data || !emailMatches))
-          }
-          leftSection={
-            deactivating ? (
-              <UserX size={16} strokeWidth={1.5} />
-            ) : (
-              <UserCheck size={16} strokeWidth={1.5} />
-            )
-          }
-          onClick={confirm}
-        >
-          {deactivating ? 'Desactivar' : 'Reactivar'}
-        </Button>
-      </Group>
-    </Stack>
+    </ModalLayout>
   )
 }

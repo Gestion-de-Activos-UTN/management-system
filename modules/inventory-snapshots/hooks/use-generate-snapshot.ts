@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { notifications } from '@mantine/notifications'
+import { notify } from '@/lib/notify'
 import type { HttpError } from '@/lib/http-client'
 import { showApiError } from '@/lib/notify-error'
 import { generateSnapshot } from '../service'
@@ -14,7 +14,7 @@ export function useGenerateSnapshot() {
     mutationFn: officeId => generateSnapshot(officeId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory-snapshots'] })
-      notifications.show({ color: 'green', message: 'Instantánea generada' })
+      notify({ color: 'green', title: 'Instantánea generada' })
     },
     onError: error => showApiError(error, 'No se pudo generar la instantánea'),
   })

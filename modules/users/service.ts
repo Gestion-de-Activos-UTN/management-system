@@ -12,6 +12,8 @@ export type OrgMember = {
   office_ids: string[]
   status: 'onboarding' | 'active'
   is_active: boolean
+  can_change_status?: boolean
+  can_edit_offices?: boolean
 }
 
 export function memberCoversOffice(member: OrgMember, officeId: string): boolean {

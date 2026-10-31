@@ -1,5 +1,7 @@
 'use client'
 
+import { matchesSearch } from '@/lib/search-text'
+
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -34,12 +36,6 @@ import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelate
 import { portalHref } from '@/lib/portal-href'
 
 const ALL = ''
-
-function matchesSearch(haystacks: Array<string | null | undefined>, query: string): boolean {
-  if (!query.trim()) return true
-  const needle = query.trim().toLowerCase()
-  return haystacks.some(h => h?.toLowerCase().includes(needle))
-}
 
 // Congela en qué "bucket" (activo / inactivo) cae cada fila la primera vez que la vemos, y la
 // mantiene ahí aunque su status real cambie por una edición (que sí invalida y refetchea la

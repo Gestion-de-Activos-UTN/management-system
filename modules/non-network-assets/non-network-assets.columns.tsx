@@ -27,7 +27,7 @@ export function getNonNetworkAssetsColumns(
         return (
           <Stack gap={2} miw={0}>
             <Group gap="xs" wrap="nowrap" miw={0}>
-              <Tooltip label={asset.alias} openDelay={400}>
+              <Tooltip label={asset.alias}>
                 <Text size="sm" fw={600} truncate>
                   {asset.alias}
                 </Text>
@@ -96,7 +96,7 @@ export function getNonNetworkAssetsColumns(
         }
         const overdue = reviewStatus === 'overdue'
         return (
-          <Tooltip label={`Próxima revisión: ${formatDate(nextReviewAt)}`} openDelay={300}>
+          <Tooltip label={`Próxima revisión: ${formatDate(nextReviewAt)}`}>
             <Stack gap={4} align="center">
               <StatusBadge
                 tone={overdue ? 'danger' : 'success'}

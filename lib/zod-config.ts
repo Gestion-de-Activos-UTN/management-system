@@ -5,20 +5,23 @@ import { z } from 'zod'
 // servidor (payload.config.ts): los casos comunes con un texto amable, el resto con el locale
 // en español de Zod. Un mensaje escrito en el schema sigue teniendo prioridad.
 const friendly: z.core.$ZodErrorMap = issue => {
-  if (issue.code === 'invalid_type' && issue.input === undefined)
-    return 'Este campo es obligatorio.'
+  if (issue.code === 'invalid_value')
+    return issue.input == null || issue.input === ''
+      ? 'Selecciona una opción.'
+      : 'Selecciona una opción válida.'
+  if (issue.code === 'invalid_type' && issue.input === undefined) return 'Completa este campo.'
   if (issue.code === 'too_small' && issue.origin === 'string')
-    return Number(issue.minimum) <= 1
-      ? 'Este campo es obligatorio.'
+    return issue.input === '' || Number(issue.minimum) <= 1
+      ? 'Completa este campo.'
       : `Escribe al menos ${issue.minimum} caracteres.`
   if (issue.code === 'too_big' && issue.origin === 'string')
     return `Escribe como máximo ${issue.maximum} caracteres.`
   if (issue.code === 'too_small' && issue.origin === 'array')
     return Number(issue.minimum) <= 1
-      ? 'Elige al menos una opción.'
-      : `Elige al menos ${issue.minimum}.`
+      ? 'Selecciona al menos una opción.'
+      : `Selecciona al menos ${issue.minimum} opciones.`
   if (issue.code === 'too_big' && issue.origin === 'array')
-    return `Elige como máximo ${issue.maximum}.`
+    return `Selecciona como máximo ${issue.maximum} opciones.`
   return undefined
 }
 

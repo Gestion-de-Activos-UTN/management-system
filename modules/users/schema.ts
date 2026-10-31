@@ -18,7 +18,11 @@ export const UserCredentialsSchema = z.object({
     .email('Escribe un correo válido.')
     .max(254)
     .transform(value => value.toLowerCase()),
-  password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres.').max(128),
+  password: z
+    .string()
+    .min(1, 'Escribe una contraseña.')
+    .min(8, 'Escribe al menos 8 caracteres.')
+    .max(128),
 })
 
 export const MemberCreateSchema = UserCredentialsSchema.extend({

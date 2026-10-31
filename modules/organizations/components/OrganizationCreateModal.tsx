@@ -1,5 +1,6 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { useState } from 'react'
 import {
   Badge,
@@ -20,6 +21,8 @@ import {
 } from '@mantine/core'
 import { Building2, ClipboardCheck, MapPin, ShieldCheck, UsersRound } from 'lucide-react'
 import { departmentsOf, PROVINCES } from '@/lib/argentina-geo'
+import type { HttpError } from '@/lib/http-client'
+import { userFacingErrorMessage } from '@/lib/user-facing-error'
 import { textRuleError } from '@/lib/text-rules'
 import { OrganizationCreateSchema, type OrganizationCreateInput } from '../schema'
 import { ROLE_DESCRIPTIONS } from '@/modules/users/member-labels'
@@ -157,14 +160,33 @@ export function OrganizationCreateModal({
     setFieldErrors({})
     void onSubmit(parsed.data)
       .then(reset)
-      .catch(() => {
-        // El hook presenta el error; se conservan los datos para corregir o reintentar.
+      .catch(error => {
+        if ((error as Partial<HttpError>)?.code === 'email_unavailable') {
+          setFieldErrors({ adminEmail: userFacingErrorMessage(error, 'Escribe otro correo.') })
+          setStep(2)
+        }
+        // El hook presenta los errores generales; se conservan los datos.
       })
   }
 
   return (
     <Modal opened={opened} onClose={reset} title="Crear organización" size="lg" centered>
-      <Stack>
+      <ModalLayout
+        footer={
+          <Group justify="space-between">
+            <Button variant="default" onClick={step ? () => goToStep(step - 1) : reset}>
+              {step ? 'Anterior' : 'Cancelar'}
+            </Button>
+            {step < 3 ? (
+              <Button onClick={next}>Siguiente</Button>
+            ) : (
+              <Button loading={isPending} onClick={submit}>
+                Crear organización
+              </Button>
+            )}
+          </Group>
+        }
+      >
         <Tabs value={String(step)} onChange={value => value && goToStep(Number(value))}>
           <Tabs.List grow>
             <Tabs.Tab
@@ -435,19 +457,7 @@ export function OrganizationCreateModal({
             </Stack>
           </Tabs.Panel>
         </Tabs>
-        <Group justify="space-between">
-          <Button variant="default" onClick={step ? () => goToStep(step - 1) : reset}>
-            {step ? 'Anterior' : 'Cancelar'}
-          </Button>
-          {step < 3 ? (
-            <Button onClick={next}>Siguiente</Button>
-          ) : (
-            <Button loading={isPending} onClick={submit}>
-              Crear organización
-            </Button>
-          )}
-        </Group>
-      </Stack>
+      </ModalLayout>
     </Modal>
   )
 }

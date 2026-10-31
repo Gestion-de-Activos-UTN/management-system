@@ -1,16 +1,19 @@
 'use client'
 
 import Link from 'next/link'
+import { useState } from 'react'
 import { ActionIcon, Group, Menu, Tooltip } from '@mantine/core'
 import { Archive, Check, Ellipsis, ExternalLink, Eye, Hand, RotateCcw, Trash2 } from 'lucide-react'
 import type { TaskDTO } from '../service'
 import { getTaskReferenceHref, getTaskCurrentReferenceHref } from '../task-reference-link'
 import { useTaskCommand } from '../hooks/use-task-actions'
+import { TaskDeleteModal } from './TaskDeleteModal'
 
 // Componente aparte (no una cell inline) porque necesita su propio hook de mutación.
 // Acciones de un clic. Editar, reasignar y cancelar piden datos extra: viven en el detalle.
 export function RowActions({ task, asOrganization }: { task: TaskDTO; asOrganization?: string }) {
   const command = useTaskCommand(task.id)
+  const [deleteOpened, setDeleteOpened] = useState(false)
   const has = (action: TaskDTO['available_actions'][number]) =>
     task.available_actions.includes(action)
   const suffix = asOrganization ? `?asOrganization=${asOrganization}` : ''
@@ -108,10 +111,7 @@ export function RowActions({ task, asOrganization }: { task: TaskDTO; asOrganiza
                 color="red"
                 leftSection={<Trash2 size={14} strokeWidth={1.5} />}
                 disabled={command.isPending}
-                onClick={() =>
-                  window.confirm('¿Eliminar esta tarea pendiente?') &&
-                  command.mutate({ action: 'delete' })
-                }
+                onClick={() => setDeleteOpened(true)}
               >
                 Eliminar
               </Menu.Item>
@@ -119,6 +119,15 @@ export function RowActions({ task, asOrganization }: { task: TaskDTO; asOrganiza
           </Menu.Dropdown>
         </Menu>
       )}
+      <TaskDeleteModal
+        opened={deleteOpened}
+        title={task.title}
+        isPending={command.isPending}
+        onClose={() => setDeleteOpened(false)}
+        onConfirm={() =>
+          command.mutate({ action: 'delete' }, { onSuccess: () => setDeleteOpened(false) })
+        }
+      />
     </Group>
   )
 }

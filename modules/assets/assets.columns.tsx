@@ -78,7 +78,7 @@ export function getAssetsColumns(
                   </span>
                 </Tooltip>
               )}
-              <Tooltip label={name} disabled={!name} openDelay={400}>
+              <Tooltip label={name} disabled={!name}>
                 <Text
                   size="sm"
                   fw={600}

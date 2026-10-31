@@ -99,7 +99,7 @@ export const validateAssessmentInstance: CollectionBeforeChangeHook = async ({
       ) &&
       merged.status !== 'superseded'
     )
-      throw new Error('Solo las computadoras manuales activas pueden recibir ciclos de evaluación.')
+      throw new Error('El activo manual está dado de baja o su categoría no admite revisiones de seguridad.')
   }
 
   if (

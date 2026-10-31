@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import type { ColumnDef } from '@tanstack/react-table'
-import { ActionIcon, Checkbox, Group, Stack, Text, Tooltip } from '@mantine/core'
+import { ActionIcon, Anchor, Checkbox, Group, Stack, Text, Tooltip } from '@mantine/core'
+import { relationId } from '@/lib/relationId'
+import classes from './assessments.module.css'
 import { ClipboardCheck } from 'lucide-react'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDate } from '@/lib/format-date'
@@ -93,16 +95,46 @@ export function getDeviceReviewColumns(
     {
       accessorKey: 'target',
       header: 'Dispositivo',
-      cell: ({ row }) => (
-        <Stack gap={0}>
-          <Text size="sm" fw={600}>
-            {row.original.target}
-          </Text>
-          <Text size="xs" c="dimmed">
-            {row.original.manuallyEntered ? 'Activo manual' : 'Detectado por escáner'}
-          </Text>
-        </Stack>
-      ),
+      cell: ({ row }) => {
+        const latest = row.original.cycles[0]
+        const asset = latest.manual_asset || latest.asset
+        const href = asset
+          ? latest.manual_asset
+            ? portalHref(
+                '/portal/inventory',
+                asOrganization,
+                `nonNetworkAsset=${encodeURIComponent(relationId(asset))}`
+              )
+            : portalHref(
+                `/portal/inventory/${encodeURIComponent(relationId(asset))}`,
+                asOrganization
+              )
+          : null
+        return (
+          <Stack gap={0}>
+            {href ? (
+              <Anchor
+                component={Link}
+                href={href}
+                size="sm"
+                fw={600}
+                c="inherit"
+                underline="never"
+                className={classes.deviceLink}
+              >
+                {row.original.target}
+              </Anchor>
+            ) : (
+              <Text size="sm" fw={600}>
+                {row.original.target}
+              </Text>
+            )}
+            <Text size="xs" c="dimmed">
+              {row.original.manuallyEntered ? 'Activo manual' : 'Detectado por escáner'}
+            </Text>
+          </Stack>
+        )
+      },
     },
     {
       id: 'status',

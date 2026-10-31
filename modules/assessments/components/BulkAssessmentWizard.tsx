@@ -1,5 +1,7 @@
 'use client'
 
+import { matchesSearch } from '@/lib/search-text'
+
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
@@ -152,7 +154,7 @@ export function BulkAssessmentWizard({
   const selection = store.selected
   const tooMany = selection.length > MAX_BULK
   const candidates = (preview?.applicable ?? []).filter(item =>
-    item.asset_label.toLowerCase().includes(search.trim().toLowerCase())
+    matchesSearch([item.asset_label], search)
   )
   const visibleIds = candidates.map(item => item.assessment_id)
   const columns = getBulkSelectionColumns({

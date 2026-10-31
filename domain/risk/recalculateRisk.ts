@@ -131,18 +131,23 @@ function answerEvidence(row: ComplianceResult): RiskAnswerEvidence {
   }
 }
 
-/** Loads current evidence, runs the pure engine and appends one auditable evaluation. */
-export async function recalculateRisk(
+/** Read-only calculation shared by persisted evaluations and assigned-office consolidations. */
+export async function calculateRiskForScope(
   payload: Payload,
-  input: { organizationId: string; officeId?: string; now?: Date },
+  input: { organizationId: string; officeId?: string; officeIds?: readonly string[]; now?: Date },
   req?: PayloadRequest
 ) {
+  if (input.officeId && input.officeIds) throw new Error('Choose one office scope')
   const now = input.now ?? new Date()
   const organization = { organization: { equals: input.organizationId } }
   // Inactive offices never count: their assets left the organization's exposure.
   const activeOfficeIds = (await findActiveOffices(payload, input.organizationId, req))
     .map(office => String(office.id))
-    .filter(id => !input.officeId || id === input.officeId)
+    .filter(
+      id =>
+        (!input.officeId || id === input.officeId) &&
+        (input.officeIds === undefined || input.officeIds.includes(id))
+    )
   const scope: Where[] = [organization, { office: { in: activeOfficeIds } }]
   const notRetired = { status: { not_equals: 'retired' } }
 
@@ -213,9 +218,21 @@ export async function recalculateRisk(
     monitoring,
   })
   const result = calculateRisk(pairs, population)
-  return persistRiskEvaluation(
-    payload,
-    { ...input, policy, result, undeterminedExposure: alerts, evaluatedAt: now },
-    req
-  )
+  return {
+    policy,
+    result,
+    undeterminedExposure: alerts,
+    evaluatedAt: now,
+    officeIds: activeOfficeIds,
+  }
+}
+
+/** Loads current evidence, runs the pure engine and appends one auditable evaluation. */
+export async function recalculateRisk(
+  payload: Payload,
+  input: { organizationId: string; officeId?: string; now?: Date },
+  req?: PayloadRequest
+) {
+  const calculated = await calculateRiskForScope(payload, input, req)
+  return persistRiskEvaluation(payload, { ...input, ...calculated }, req)
 }

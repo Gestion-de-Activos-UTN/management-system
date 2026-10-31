@@ -11,6 +11,9 @@ const eslintConfig = [
   {
     ignores: ['.next/**', 'node_modules/**', 'migrations/**'],
   },
+  {
+    rules: { 'no-alert': 'error' },
+  },
 ]
 
 export default eslintConfig

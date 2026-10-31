@@ -18,7 +18,7 @@ export function BackButton({
   variant?: ButtonProps['variant']
   color?: ButtonProps['color']
   size?: ButtonProps['size']
-  fullWidth?: boolean
+  fullWidth?: boolean | 'always'
 }) {
   return (
     <Button
@@ -28,7 +28,7 @@ export function BackButton({
       color={color}
       size={size}
       leftSection={<ArrowLeft size={16} strokeWidth={1.5} />}
-      w={fullWidth ? { base: '100%', sm: 'auto' } : 'fit-content'}
+      w={fullWidth === 'always' ? '100%' : fullWidth ? { base: '100%', sm: 'auto' } : 'fit-content'}
       style={fullWidth ? undefined : { alignSelf: 'center' }}
     >
       {label}

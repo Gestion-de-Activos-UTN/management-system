@@ -1,6 +1,8 @@
 'use client'
 
-import { Collapse, Select, SimpleGrid, Stack, Text, TextInput } from '@mantine/core'
+import { DateField } from '@/components/ui/DateField'
+
+import { Collapse, Select, SimpleGrid, Stack, Text } from '@mantine/core'
 import { Controller, type Control, type FieldErrors, type Path } from 'react-hook-form'
 import type { z } from 'zod'
 import type { AssessmentScopeFieldsSchema } from '@/domain/assessments/assessment-scope-schema'
@@ -62,21 +64,14 @@ export function AssessmentExclusionFields<T extends ScopeFields>({
             name={'assessment_excluded_until' as Path<T>}
             control={control}
             render={({ field }) => (
-              <TextInput
-                type="date"
+              <DateField
                 label="Excluido hasta"
                 description="Fecha obligatoria; el máximo permitido es 90 días desde hoy."
                 inputWrapperOrder={['label', 'input', 'description', 'error']}
                 required
                 error={fieldErrors.assessment_excluded_until?.message}
                 value={field.value ? formatDateInput(field.value as string) : ''}
-                onChange={event =>
-                  field.onChange(
-                    event.currentTarget.value
-                      ? localDateEndToISOString(event.currentTarget.value)
-                      : null
-                  )
-                }
+                onChange={value => field.onChange(value ? localDateEndToISOString(value) : null)}
               />
             )}
           />

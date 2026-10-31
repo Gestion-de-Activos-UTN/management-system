@@ -1,0 +1,43 @@
+.day {
+  width: 1.875rem;
+  height: 1.875rem;
+  font-size: var(--mantine-font-size-xs);
+  position: relative;
+}
+
+.day[data-today]::after {
+  content: '';
+  position: absolute;
+  bottom: 2px;
+  left: calc(50% - 2px);
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+  pointer-events: none;
+}
+
+.calendarHeader {
+  max-width: 13.75rem;
+}
+
+.calendarHeaderControl,
+.calendarHeaderLevel {
+  height: 1.875rem;
+  font-size: var(--mantine-font-size-xs);
+}
+
+.weekday {
+  font-size: var(--mantine-font-size-xs);
+}
+
+@media (pointer: coarse) {
+  .day {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+
+  .calendarHeader {
+    max-width: 16.5rem;
+  }
+}

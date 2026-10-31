@@ -1,12 +1,12 @@
 import Link from 'next/link'
 import type { ColumnDef } from '@tanstack/react-table'
-import { ActionIcon, Group, Stack, Text, Tooltip } from '@mantine/core'
+import { ActionIcon, Group, Stack, Tooltip } from '@mantine/core'
 import { Eye } from 'lucide-react'
 import type { ScanReport } from '@/app/types/payload-types'
+import { OneLineText } from '@/components/ui/OneLineText'
 import { DateTimeCell } from '@/components/ui/DateTimeCell'
 import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { TechnicalText } from '@/components/ui/TechnicalText'
 import { parseRejectedAssets, totalAssetsInReport } from './service'
 import {
   SCAN_EXECUTION_DESCRIPTION,
@@ -51,11 +51,11 @@ export function getScanReportsColumns(
       header: 'Red',
       cell: ({ row }) => (
         <Stack gap={2}>
-          <TechnicalText>{row.original.network ?? '—'}</TechnicalText>
+          <OneLineText ff="monospace">{row.original.network ?? '—'}</OneLineText>
           {row.original.gateway_ip && (
-            <TechnicalText size="xs" c="dimmed">
-              Gateway {row.original.gateway_ip}
-            </TechnicalText>
+            <OneLineText ff="monospace" size="xs" c="dimmed">
+              {`Gateway ${row.original.gateway_ip}`}
+            </OneLineText>
           )}
         </Stack>
       ),
@@ -68,22 +68,16 @@ export function getScanReportsColumns(
       cell: ({ row }) => {
         const rejected = parseRejectedAssets(row.original.error).length
         if (!row.original.raw_payload) {
-          return (
-            <Text size="sm" c="dimmed">
-              Detalle archivado
-            </Text>
-          )
+          return <OneLineText c="dimmed">Detalle archivado</OneLineText>
         }
         const total = totalAssetsInReport(row.original.raw_payload)
         return (
           <Stack gap={0}>
-            <Text size="sm">
-              {total - rejected} de {total} aceptados
-            </Text>
+            <OneLineText>{`${total - rejected} de ${total} aceptados`}</OneLineText>
             {rejected > 0 && (
-              <Text size="xs" c="red">
-                {rejected} rechazado{rejected === 1 ? '' : 's'}
-              </Text>
+              <OneLineText size="xs" c="red">
+                {`${rejected} rechazado${rejected === 1 ? '' : 's'}`}
+              </OneLineText>
             )}
           </Stack>
         )

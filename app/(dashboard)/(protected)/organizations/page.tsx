@@ -1,5 +1,7 @@
 'use client'
 
+import { matchesSearch } from '@/lib/search-text'
+
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { Alert, Button, Stack, TextInput } from '@mantine/core'
@@ -20,6 +22,7 @@ import {
 } from '@/modules/organizations/organizations.columns'
 import { OrganizationStatusModal } from '@/modules/organizations/components/OrganizationStatusModal'
 import { OrganizationCreateModal } from '@/modules/organizations/components/OrganizationCreateModal'
+import { OrganizationEditModal } from '@/modules/organizations/components/OrganizationEditModal'
 import { MemberCreateModal } from '@/modules/users/components/MemberCreateModal'
 import { useCreatePlatformOrgAdmin } from '@/modules/users/hooks/use-org-members'
 
@@ -35,10 +38,14 @@ export default function OrganizationsPage() {
   const createOrganization = useCreateOrganization()
   const [statusTarget, setStatusTarget] = useState<Organization | null>(null)
   const [adminTarget, setAdminTarget] = useState<Organization | null>(null)
+  const [editTarget, setEditTarget] = useState<Organization | null>(null)
   const [creating, setCreating] = useState(false)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState<string[]>([])
-  const columns = useMemo(() => getOrganizationsColumns(setStatusTarget, setAdminTarget), [])
+  const columns = useMemo(
+    () => getOrganizationsColumns(setStatusTarget, setAdminTarget, setEditTarget),
+    []
+  )
   const createAdmin = useCreatePlatformOrgAdmin(String(adminTarget?.id ?? ''))
   const organizationRows = useMemo<OrganizationListRow[]>(
     () =>
@@ -57,9 +64,9 @@ export default function OrganizationsPage() {
     [data, operationalSummary.data, operationalSummary.isError]
   )
   const visibleOrganizations = useMemo(() => {
-    const normalizedSearch = search.trim().toLocaleLowerCase('es')
+    const normalizedSearch = search.trim()
     return organizationRows.filter(organization => {
-      const matchesName = organization.name.toLocaleLowerCase('es').includes(normalizedSearch)
+      const matchesName = matchesSearch([organization.name], normalizedSearch)
       const organizationStatus = organization.is_active === false ? 'inactive' : 'active'
       const matchesStatus = status.length === 0 || status.includes(organizationStatus)
       return matchesName && matchesStatus
@@ -108,6 +115,7 @@ export default function OrganizationsPage() {
         minWidth={850}
       />
       <OrganizationStatusModal organization={statusTarget} onClose={() => setStatusTarget(null)} />
+      <OrganizationEditModal organization={editTarget} onClose={() => setEditTarget(null)} />
       <OrganizationCreateModal
         opened={creating}
         onClose={() => setCreating(false)}

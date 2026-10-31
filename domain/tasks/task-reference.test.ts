@@ -1,6 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { roleCanReadTaskReference } from './task-reference'
+import { resolveTaskReference, roleCanReadTaskReference } from './task-reference'
+import { formatDateTime } from '@/lib/format-date'
+import type { PayloadRequest } from 'payload'
 
 const officeAsset = {
   relationTo: 'assets' as const,
@@ -42,3 +44,33 @@ test('una referencia organizacional exige alcance organizacional', () => {
   )
   assert.equal(roleCanReadTaskReference('org_admin', 'org-1', [], organizationAssessment), true)
 })
+
+for (const collection of ['inventory-snapshots', 'scan-reports'] as const) {
+  test(`${collection}: prioriza el nombre y conserva fecha de respaldo y oficina`, async () => {
+    const date = '2026-10-30T12:00:00.000Z'
+    for (const name of ['Evidencia de prueba', null, '   ']) {
+      const req = {
+        payload: {
+          findByID: async ({ collection: requested }: { collection: string }) =>
+            requested === 'offices'
+              ? { id: 'office-1', name: 'Casa central', organization: 'org-1' }
+              : {
+                  id: 'evidence-1',
+                  organization: 'org-1',
+                  office: 'office-1',
+                  display_name: name,
+                  taken_at: date,
+                  scan_start: date,
+                },
+        },
+      } as unknown as PayloadRequest
+      const reference = await resolveTaskReference(req, {
+        relationTo: collection,
+        value: 'evidence-1',
+      })
+      assert.equal(reference.label, `${name?.trim() ? name : formatDateTime(date)} · Casa central`)
+      assert.equal(reference.value, 'evidence-1')
+      assert.equal(reference.officeId, 'office-1')
+    }
+  })
+}

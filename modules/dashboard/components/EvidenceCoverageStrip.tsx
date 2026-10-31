@@ -5,11 +5,15 @@ import type { SecurityReviewSummary } from '@/modules/assessments/service'
 export function EvidenceCoverageStrip({
   summary,
   isPending,
+  isError = false,
 }: {
   summary?: SecurityReviewSummary
   isPending: boolean
+  isError?: boolean
 }) {
   if (isPending) return <Skeleton height={76} radius="lg" />
+  // The risk card already reports the failure; a 0 % strip would read as missing evidence.
+  if (isError && !summary) return null
   const coverage = Math.round(summary?.evaluated_percentage ?? 0)
   const applicable = summary?.applicable_checks ?? 0
   const evaluated = Math.max(0, applicable - (summary?.not_evaluable ?? 0))

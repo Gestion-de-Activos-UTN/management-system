@@ -1,9 +1,14 @@
 import type { Endpoint, PayloadRequest } from 'payload'
 import { getTenantContext } from '@/access/tenant/resolveTenantContext'
 import { isAgentOnline } from '@/domain/agents/agent-state'
-import { adminErrorResponse, organizationAdminLock } from '@/domain/organizations/admin-actions'
+import {
+  AdminDomainError,
+  adminErrorResponse,
+  organizationAdminLock,
+} from '@/domain/organizations/admin-actions'
 import { createOrgWithAdmin } from '@/domain/organizations/createOrgWithAdmin'
 import { createMember } from '@/domain/organizations/member-admin'
+import { updateOrganizationDetails } from '@/domain/organizations/update-organization-details'
 import { withTransaction } from '@/domain/with-transaction'
 import {
   deactivateOrganization,
@@ -12,6 +17,7 @@ import {
 } from '@/domain/organizations/organization-lifecycle'
 import {
   OrganizationCreateSchema,
+  OrganizationDetailsSchema,
   OrganizationStatusSchema,
   PlatformOrgAdminCreateSchema,
 } from '@/modules/organizations/schema'
@@ -242,9 +248,66 @@ const organizationStatusEndpoint: Endpoint = {
     }),
 }
 
+const updateOrganizationDetailsEndpoint: Endpoint = {
+  path: '/v1/platform-admin/organizations/:id',
+  method: 'patch',
+  handler: req =>
+    handle(async () => {
+      const denied = await platformAdmin(req)
+      if (denied) return denied
+      const parsed = OrganizationDetailsSchema.safeParse(await req.json!().catch(() => ({})))
+      if (!parsed.success)
+        return json({ error: 'invalid_organization', issues: parsed.error.issues }, 400)
+      const id = String(req.routeParams?.id ?? '')
+      await withTransaction(
+        req.payload,
+        req,
+        () => updateOrganizationDetails(req, id, parsed.data),
+        { lockKey: organizationAdminLock(id) }
+      )
+      return json({ ok: true })
+    }),
+}
+
+const organizationDetailsEndpoint: Endpoint = {
+  path: '/v1/platform-admin/organizations/:id',
+  method: 'get',
+  handler: req =>
+    handle(async () => {
+      const denied = await platformAdmin(req)
+      if (denied) return denied
+      const id = String(req.routeParams?.id ?? '')
+      const organizations = await req.payload.find({
+        collection: 'organizations',
+        where: { id: { equals: id } },
+        depth: 0,
+        limit: 1,
+        overrideAccess: true,
+        req,
+      })
+      if (!organizations.docs[0]) throw new AdminDomainError('not_found', 404)
+      const settings = await req.payload.find({
+        collection: 'organization-settings',
+        where: { organization: { equals: id } },
+        limit: 1,
+        depth: 0,
+        overrideAccess: true,
+        req,
+      })
+      if (!settings.docs[0]) throw new AdminDomainError('organization_settings_missing', 409)
+      return json({
+        name: organizations.docs[0].name,
+        industry: settings.docs[0].industry,
+        industry_details: settings.docs[0].industry_details ?? '',
+      })
+    }),
+}
+
 export const platformOrganizationEndpoints: Endpoint[] = [
   organizationOperationalSummaryEndpoint,
   createOrganizationEndpoint,
+  updateOrganizationDetailsEndpoint,
+  organizationDetailsEndpoint,
   createOrganizationAdminEndpoint,
   organizationStatusImpactEndpoint,
   organizationStatusEndpoint,
