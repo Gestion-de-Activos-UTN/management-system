@@ -38,7 +38,7 @@ import {
 import { TaskDomainError, taskErrorResponse } from '@/domain/tasks/task-error'
 import { listEligibleTaskMembers } from '@/domain/tasks/task-eligibility'
 import { resolveTaskReference, tenantCanReadTaskReference } from '@/domain/tasks/task-reference'
-import { defaultFeatures } from '@/domain/subscriptions/features'
+import { organizationFeatures } from '@/domain/subscriptions/features'
 
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 
@@ -50,20 +50,7 @@ async function authenticated(req: PayloadRequest): Promise<TenantContext | Respo
 }
 
 async function featureEnabled(req: PayloadRequest, organizationId: string): Promise<boolean> {
-  const result = await req.payload.find({
-    collection: 'subscriptions',
-    where: { organization: { equals: organizationId } },
-    overrideAccess: true,
-    req,
-    depth: 0,
-    limit: 1,
-  })
-  const features = result.docs[0]?.features
-  const normalized = {
-    ...defaultFeatures(),
-    ...(features && typeof features === 'object' && !Array.isArray(features) ? features : {}),
-  }
-  return normalized.tasks === true
+  return (await organizationFeatures(req, organizationId)).tasks
 }
 
 async function withTaskErrors(fn: () => Promise<Response>): Promise<Response> {

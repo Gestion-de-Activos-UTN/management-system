@@ -13,6 +13,15 @@ function json(body: unknown, status = 200) {
   return Response.json(body, { status })
 }
 
+// Memberships are read with depth 1; an unpopulated role (id only) yields no slug/rank, so every
+// rank-based check fails closed instead of guessing.
+function memberRole(membership: { role?: unknown }) {
+  const role = membership.role as { slug?: RoleSlug; rank?: number } | string | null | undefined
+  return typeof role === 'object' && role
+    ? { slug: role.slug ?? null, rank: role.rank ?? null }
+    : { slug: null, rank: null }
+}
+
 // No abre Users.read (esa colección sigue () => false a propósito — ver el ponytail: marcado en
 // app/portal/(protected)/admin/users/page.tsx, es una brecha aparte, no de este módulo). Esto
 // expone solo lo mínimo que un selector de `owner` (Assets/NonNetworkAssets, RF-51a) necesita:
@@ -48,10 +57,7 @@ export const orgMembersEndpoint: Endpoint = {
     })
 
     const orgWide = hasOrgWideScope(ctx.role)
-    const roleSlug = (m: (typeof memberships.docs)[number]) => {
-      const role = m.role as unknown as { slug: RoleSlug } | RoleSlug
-      return typeof role === 'string' ? role : role.slug
-    }
+    const roleSlug = (m: (typeof memberships.docs)[number]) => memberRole(m).slug
     // Office-scoped roles only see people who share one of their offices, plus org-wide members
     // (who cover every office); the rest of the directory belongs to other offices.
     const visible = orgWide
@@ -66,6 +72,7 @@ export const orgMembersEndpoint: Endpoint = {
       canChangeMemberStatus(ctx, {
         organizationId: ctx.organizationId!,
         role: roleSlug(m),
+        rank: memberRole(m).rank,
         officeIds: (m.offices ?? []).map(relationId),
       })
     // Inactive members outside delegated management must not become visible via this option.
@@ -85,6 +92,7 @@ export const orgMembersEndpoint: Endpoint = {
           can_edit_offices: canEditMemberOffices(ctx, {
             organizationId: ctx.organizationId!,
             role: roleSlug(m),
+            rank: memberRole(m).rank,
             officeIds: (m.offices ?? []).map(relationId),
             isActive: Boolean(m.is_active),
           }),
@@ -147,7 +155,6 @@ export const updateOrgMemberEndpoint: Endpoint = {
       if (
         !ctx.organizationId ||
         !(
-          canDo(ctx.role, 'organization-memberships', 'update', ctx.organizationId) ||
           canDo(ctx.role, 'organization-memberships', 'change_status', ctx.organizationId) ||
           canDo(ctx.role, 'organization-memberships', 'edit_offices', ctx.organizationId)
         )
@@ -187,10 +194,7 @@ export const orgMemberDeactivationImpactEndpoint: Endpoint = {
     if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
     if (
       !ctx.organizationId ||
-      !(
-        canDo(ctx.role, 'organization-memberships', 'update', ctx.organizationId) ||
-        canDo(ctx.role, 'organization-memberships', 'change_status', ctx.organizationId)
-      )
+      !canDo(ctx.role, 'organization-memberships', 'change_status', ctx.organizationId)
     ) {
       return json({ error: 'forbidden' }, 403)
     }
@@ -208,11 +212,13 @@ export const orgMemberDeactivationImpactEndpoint: Endpoint = {
     })
     if (!membership.docs[0]) return json({ error: 'member_not_found' }, 404)
     const target = membership.docs[0]
-    const targetRole = target.role as unknown as { slug: string }
+    const targetRole = memberRole(target)
+    if (!targetRole.slug) return json({ error: 'member_not_found' }, 404)
     if (
       !canChangeMemberStatus(ctx, {
         organizationId,
         role: targetRole.slug,
+        rank: targetRole.rank,
         officeIds: (target.offices ?? []).map(relationId),
       })
     )

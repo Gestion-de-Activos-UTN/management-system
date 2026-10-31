@@ -26,6 +26,7 @@ const v2Questions = (
         (assetType ? question.asset_types.includes(assetType) : scope !== 'asset'))
   )
 import { isAssetExcludedFromAssessments } from './asset-assessment-scope'
+import { normalizeFeatures } from '@/domain/subscriptions/features'
 
 export type ReconcileReason =
   | 'initial'
@@ -181,12 +182,7 @@ export async function reconcileAssessmentInstance(
     return { action: openResult.docs.length ? 'superseded' : 'none' }
   }
 
-  const features =
-    subscription?.features &&
-    typeof subscription.features === 'object' &&
-    !Array.isArray(subscription.features)
-      ? subscription.features
-      : null
+  const features = subscription ? normalizeFeatures(subscription.features) : null
   if (!settings || features?.security_assessments !== true) return { action: 'none' }
   const policy = POLICY_CATALOG.find(item => item.key === settings.assessment_policy_key)
   if (!policy)
@@ -310,12 +306,7 @@ export async function reconcileAssetAssessmentInstance(
 
   const settings = settingsResult.docs[0]
   const subscription = subscriptionResult.docs[0]
-  const features =
-    subscription?.features &&
-    typeof subscription.features === 'object' &&
-    !Array.isArray(subscription.features)
-      ? subscription.features
-      : null
+  const features = subscription ? normalizeFeatures(subscription.features) : null
   if (!settings || !subscription || features?.security_assessments !== true) {
     return { action: 'none' }
   }
@@ -461,12 +452,7 @@ export async function reconcileManualAssetAssessmentInstance(
 
   const settings = settingsResult.docs[0]
   const subscription = subscriptionResult.docs[0]
-  const features =
-    subscription?.features &&
-    typeof subscription.features === 'object' &&
-    !Array.isArray(subscription.features)
-      ? subscription.features
-      : null
+  const features = subscription ? normalizeFeatures(subscription.features) : null
   const policy = settings
     ? POLICY_CATALOG.find(item => item.key === (settings.assessment_policy_key as RiskPolicyKey))
     : null

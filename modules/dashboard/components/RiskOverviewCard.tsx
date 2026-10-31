@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Button, Card, Group, Paper, Skeleton, Stack, Text } from '@mantine/core'
+import { Alert, Button, Card, Group, Paper, Skeleton, Stack, Text } from '@mantine/core'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { ArrowRight } from 'lucide-react'
 import { RiskScopeExplanation } from '@/modules/risk/components/RiskScopeExplanation'
@@ -15,13 +15,18 @@ import type { SecurityReviewSummary } from '@/modules/assessments/service'
 export function RiskOverviewCard({
   summary,
   isPending,
+  isError = false,
   href,
 }: {
   summary?: SecurityReviewSummary
   isPending: boolean
+  isError?: boolean
   href: string
 }) {
   if (isPending) return <Skeleton height={190} radius="lg" />
+  // Without a summary a failure must not read as "no risk": the card says it could not load.
+  if (isError && !summary)
+    return <Alert color="red">No se pudo cargar el riesgo. Intenta de nuevo en unos minutos.</Alert>
   const score = summary?.risk_score ?? null
   const band = summary?.risk_band ?? null
   return (

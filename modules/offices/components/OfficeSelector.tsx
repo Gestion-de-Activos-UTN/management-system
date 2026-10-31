@@ -29,6 +29,7 @@ export function OfficeSelector() {
   const [dropdownOpened, setDropdownOpened] = useState(false)
   const [hovered, setHovered] = useState(false)
   const [focused, setFocused] = useState(false)
+  const pointerFocus = useRef(false)
   const [truncated, setTruncated] = useState(false)
 
   useEffect(() => {
@@ -89,11 +90,19 @@ export function OfficeSelector() {
           setHovered(true)
         }}
         onMouseLeave={() => setHovered(false)}
+        // A click keeps the input focused through the whole pick, so pointer focus must not reveal
+        // the full name; only keyboard focus does (inputs always match :focus-visible in Chrome).
+        onPointerDownCapture={() => {
+          pointerFocus.current = true
+        }}
         onFocusCapture={() => {
           measureLabel()
-          setFocused(true)
+          setFocused(!pointerFocus.current)
         }}
-        onBlurCapture={() => setFocused(false)}
+        onBlurCapture={() => {
+          pointerFocus.current = false
+          setFocused(false)
+        }}
       >
         <Select
           ref={inputRef}

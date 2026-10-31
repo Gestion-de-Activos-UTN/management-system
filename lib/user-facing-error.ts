@@ -73,6 +73,7 @@ const MESSAGES_BY_CODE: Record<string, string> = {
   assessment_already_open: 'Ya hay una revisión de seguridad abierta para este activo.',
   asset_changed: 'El activo cambió. Actualiza la vista antes de decidir.',
   feature_disabled: 'Esta función no está habilitada para la organización.',
+  risk_unavailable: 'No se pudo calcular el riesgo. Intenta de nuevo en unos minutos.',
   forbidden: 'No tienes permiso para realizar esta acción.',
   last_active_org_admin: 'La organización debe conservar al menos un administrador activo.',
   rank_escalation: 'No puedes asignar un rol de mayor autoridad que el tuyo.',

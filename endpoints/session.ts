@@ -2,7 +2,7 @@ import type { Endpoint } from 'payload'
 import { getTenantContext } from '../access/tenant/resolveTenantContext'
 import { canDo, hasOrgWideScope, type Action } from '../access/rbac/permissions'
 import { canReadAssignedOfficeRisk } from '@/access/rbac/risk-scope'
-import { defaultFeatures } from '../domain/subscriptions/features'
+import { normalizeFeatures } from '../domain/subscriptions/features'
 import { planLimits } from '../domain/subscriptions/plan-limits'
 
 function json(body: unknown, status = 200) {
@@ -30,14 +30,7 @@ export const sessionEndpoint: Endpoint = {
           limit: 1,
         })
       : null
-    const rawFeatures = subscription?.docs[0]?.features
-    const persistedFeatures =
-      rawFeatures && typeof rawFeatures === 'object' && !Array.isArray(rawFeatures)
-        ? rawFeatures
-        : {}
-    // Las suscripciones anteriores a una feature no tienen su clave en el JSON. Los defaults
-    // completan esas claves sin pisar un false explícito y evitan una migración bloqueante.
-    const features = { ...defaultFeatures(), ...persistedFeatures }
+    const features = normalizeFeatures(subscription?.docs[0]?.features)
     // The frontend reads the row scope from here instead of comparing role slugs.
     const taskActions: Action[] = [
       'create',
@@ -63,13 +56,11 @@ export const sessionEndpoint: Endpoint = {
         organizationMembers: {
           editOffices: Boolean(
             ctx.organizationId &&
-            (canDo(ctx.role, 'organization-memberships', 'edit_offices', ctx.organizationId) ||
-              canDo(ctx.role, 'organization-memberships', 'update', ctx.organizationId))
+            canDo(ctx.role, 'organization-memberships', 'edit_offices', ctx.organizationId)
           ),
           changeStatus: Boolean(
             ctx.organizationId &&
-            (canDo(ctx.role, 'organization-memberships', 'change_status', ctx.organizationId) ||
-              canDo(ctx.role, 'organization-memberships', 'update', ctx.organizationId))
+            canDo(ctx.role, 'organization-memberships', 'change_status', ctx.organizationId)
           ),
           create: Boolean(
             ctx.organizationId &&

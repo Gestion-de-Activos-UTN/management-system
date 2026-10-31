@@ -100,6 +100,7 @@ export default function SecurityReviewPage() {
         <SecurityReviewSummary
           assessments={summaryDocs}
           riskSummary={risk.data}
+          riskUnavailable={risk.isError && !risk.data}
           riskHref={portalHref('/portal/risk-score', asOrganization)}
         />
       )}

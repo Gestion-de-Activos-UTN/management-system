@@ -8,6 +8,8 @@ export class TenantResolutionError extends Error {}
 export interface TenantContext {
   userId: string
   role: RoleSlug | null
+  /** Role rank from the membership (1 = highest authority); absent for platform administrators. */
+  roleRank?: number | null
   organizationId: string | null
   officeIds: string[]
   selectedOfficeId: string | null
@@ -79,6 +81,7 @@ export async function resolveTenantContext(
   return {
     userId: identity.externalId,
     role: membership.role.slug,
+    roleRank: membership.role.rank,
     organizationId: membership.organization,
     officeIds: membership.offices,
     selectedOfficeId: membership.offices[0] ?? null,

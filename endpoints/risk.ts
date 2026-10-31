@@ -6,7 +6,7 @@ import {
   type RiskContributionView,
   type RiskEvaluationView,
 } from '@/domain/risk/assigned-office-risk'
-import { riskFeatureEnabled } from '@/domain/risk/feature-enabled'
+import { organizationFeatures } from '@/domain/subscriptions/features'
 import { canReadAssignedOfficeRisk } from '@/access/rbac/risk-scope'
 import type { AssetRiskScore } from '@/domain/risk/engine'
 import {
@@ -179,7 +179,7 @@ export const latestRiskEvaluationEndpoint: Endpoint = {
     if (!ctx.organizationId) return json({ error: 'organization_context_required' }, 400)
     if (!canDo(ctx.role, 'risk-evaluations', 'read', ctx.organizationId))
       return json({ error: 'forbidden' }, 403)
-    if (!(await riskFeatureEnabled(req, ctx.organizationId)))
+    if (!(await organizationFeatures(req, ctx.organizationId)).risk_score)
       return json({ error: 'feature_disabled' }, 403)
     const params = new URL(req.url ?? 'http://localhost', 'http://localhost').searchParams
     const query = querySchema.safeParse({
@@ -205,7 +205,12 @@ export const latestRiskEvaluationEndpoint: Endpoint = {
     if (officeError) return json({ error: officeError }, 403)
 
     if (assignedScope) {
-      const { evaluation, contributions } = await assignedOfficeRisk(req, ctx)
+      const assigned = await assignedOfficeRisk(req, ctx).catch((error: unknown) => {
+        req.payload.logger.error({ err: error }, 'assigned office risk calculation failed')
+        return null
+      })
+      if (!assigned) return json({ error: 'risk_unavailable' }, 503)
+      const { evaluation, contributions, recalculation } = assigned
       const alerts = evaluation.alerts as StoredAlerts
       const labels = await assetLabels(req, ctx.organizationId, [
         ...contributions.map(row => row.asset_key),
@@ -216,7 +221,7 @@ export const latestRiskEvaluationEndpoint: Endpoint = {
       return json({
         scope: 'assigned_offices',
         evaluation: evaluationDTO(evaluation, labels),
-        recalculation: 'current',
+        recalculation,
         contributions: sorted
           .slice((page - 1) * limit, page * limit)
           .map(row => contributionDTO(row, labels, scoreVisible(evaluation.confidence))),

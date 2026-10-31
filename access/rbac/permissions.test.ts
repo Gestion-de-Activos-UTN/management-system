@@ -124,3 +124,20 @@ test("platform admin has OrgAdmin permissions only with explicit organization", 
   assert.equal(canDo("platform_admin", "tasks", "create", "org-1"), true)
   assert.equal(canDo("platform_admin", "tasks", "create", null), false)
 })
+
+test('organization-memberships: org_admin gestiona estado y oficinas desde la matriz', () => {
+  for (const action of ['update', 'change_status', 'edit_offices'] as const)
+    assert.equal(canDo('org_admin', 'organization-memberships', action, 'org-1'), true, action)
+  // El PlatformAdmin visitante hereda la fila de org_admin sólo dentro de una organización.
+  assert.equal(canDo('platform_admin', 'organization-memberships', 'change_status', 'org-1'), true)
+  assert.equal(canDo('platform_admin', 'organization-memberships', 'change_status', null), false)
+})
+
+test('risk-evaluations: sólo el Manager lee el consolidado de sus oficinas asignadas', () => {
+  for (const role of ['platform_admin', 'org_admin', 'office_manager', 'org_viewer'] as const)
+    assert.equal(
+      canDo(role, 'risk-evaluations', 'read_assigned', 'org-1'),
+      role === 'office_manager',
+      role
+    )
+})

@@ -1,4 +1,5 @@
 export const RISK_ENGINE_VERSION = 2 as const
+export const RISK_CATALOG_VERSION = 2 as const
 
 export const CRITICALITY_WEIGHTS = {
   low: 1,

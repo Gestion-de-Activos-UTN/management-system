@@ -1,4 +1,4 @@
-import { riskFeatureEnabled } from '@/domain/risk/feature-enabled'
+import { organizationFeatures } from '@/domain/subscriptions/features'
 import { assignedOfficeRisk, type RiskEvaluationView } from '@/domain/risk/assigned-office-risk'
 import { canReadAssignedOfficeRisk } from '@/access/rbac/risk-scope'
 import { riskRecalculationStatus } from '@/domain/risk/recalculation-status'
@@ -51,21 +51,7 @@ export async function featureEnabled(
   req: PayloadRequest,
   organizationId: string
 ): Promise<boolean> {
-  const result = await req.payload.find({
-    collection: 'subscriptions',
-    where: { organization: { equals: organizationId } },
-    overrideAccess: true,
-    req,
-    depth: 0,
-    limit: 1,
-  })
-  const value = result.docs[0]?.features
-  return Boolean(
-    value &&
-    typeof value === 'object' &&
-    !Array.isArray(value) &&
-    value.security_assessments === true
-  )
+  return (await organizationFeatures(req, organizationId)).security_assessments
 }
 
 async function loadAssessment(req: PayloadRequest, id: string) {
@@ -268,16 +254,20 @@ export const securityReviewSummaryEndpoint: Endpoint = {
     const ctx = await authenticated(req)
     if (ctx instanceof Response) return ctx
     if (!ctx.organizationId) return json({ error: 'organization_context_required' }, 400)
-    if (!(await featureEnabled(req, ctx.organizationId)))
-      return json({ error: 'feature_disabled' }, 403)
+    // One subscription read for both features this summary depends on.
+    const features = await organizationFeatures(req, ctx.organizationId)
+    if (!features.security_assessments) return json({ error: 'feature_disabled' }, 403)
     const officeId = new URL(req.url ?? 'http://localhost', 'http://localhost').searchParams.get(
       'office_id'
     )
     if (!officeId && canReadAssignedOfficeRisk(ctx)) {
-      if (!(await riskFeatureEnabled(req, ctx.organizationId)))
-        return json({ error: 'feature_disabled' }, 403)
-      const { evaluation } = await assignedOfficeRisk(req, ctx)
-      return json(riskSummaryDTO(evaluation, 'assigned_offices', 'current'))
+      if (!features.risk_score) return json({ error: 'feature_disabled' }, 403)
+      const assigned = await assignedOfficeRisk(req, ctx).catch((error: unknown) => {
+        req.payload.logger.error({ err: error }, 'assigned office risk calculation failed')
+        return null
+      })
+      if (!assigned) return json({ error: 'risk_unavailable' }, 503)
+      return json(riskSummaryDTO(assigned.evaluation, 'assigned_offices', assigned.recalculation))
     }
     const officeError = officeQueryError(ctx, officeId)
     if (officeError) return json({ error: officeError }, 403)

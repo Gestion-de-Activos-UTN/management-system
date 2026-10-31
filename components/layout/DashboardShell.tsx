@@ -86,7 +86,8 @@ export function DashboardShell({
         id="main-navigation"
         aria-label="Navegación principal"
         inert={!desktop && !mobileNavOpened ? true : undefined}
-        style={{ overflowY: 'auto' }}
+        // Reserve the scrollbar's width so expanding a submenu does not shift the items sideways.
+        style={{ overflowY: 'auto', scrollbarGutter: 'stable' }}
       >
         <Stack justify="space-between" h="100%" gap={0}>
           <Sidebar items={navItems} onNavigate={() => setMobileNavOpened(false)} />

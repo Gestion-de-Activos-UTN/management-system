@@ -1,7 +1,7 @@
 'use client'
 
 import { ModalLayout } from '@/components/ui/ModalLayout'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ActionIcon, Button, Group, Modal, TextInput, Tooltip } from '@mantine/core'
 import { Pencil } from 'lucide-react'
 
@@ -26,12 +26,21 @@ export function RenameAction({
 }) {
   const [draft, setDraft] = useState<string | null>(null)
   const error = draft === null ? null : validate(draft)
+  // Lock before calling onSave: `saving` arrives one render later and Enter can repeat meanwhile.
+  const submissionLock = useRef(false)
   const save = () => {
-    if (draft === null || error) return
+    if (draft === null || error || submissionLock.current) return
+    submissionLock.current = true
     onSave(draft).then(
       () => setDraft(null),
-      () => undefined
+      () => {
+        submissionLock.current = false
+      }
     )
+  }
+  const open = () => {
+    submissionLock.current = false
+    setDraft(value)
   }
 
   return (
@@ -41,7 +50,7 @@ export function RenameAction({
           variant="light"
           size="md"
           aria-label="Cambiar nombre"
-          onClick={() => setDraft(value)}
+          onClick={open}
         >
           <Pencil size={16} strokeWidth={1.5} />
         </ActionIcon>
@@ -60,7 +69,7 @@ export function RenameAction({
                 <Button variant="default" onClick={() => setDraft(null)} disabled={saving}>
                   Cancelar
                 </Button>
-                <Button type="submit" loading={saving} disabled={Boolean(error)}>
+                <Button type="submit" loading={saving}>
                   Guardar
                 </Button>
               </Group>

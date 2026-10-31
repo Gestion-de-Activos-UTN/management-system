@@ -32,6 +32,8 @@ export type Action =
   | 'archive'
   | 'change_status'
   | 'edit_offices'
+  // Live consolidation of the actor's assigned offices (risk-evaluations).
+  | 'read_assigned'
 
 // Matriz estática — decisión explícita (documentation/01-erd-core.md nota 9): el sistema no
 // tiene hoy suficientes funcionalidades como para justificar overrides dinámicos por
@@ -65,7 +67,7 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     // Administración general de oficinas y miembros. El Manager sólo recibe el flujo delegado
     // de alta/estado de Viewers; las colecciones siguen cerradas al CRUD directo.
     offices: ['create', 'read', 'update'],
-    'organization-memberships': ['create', 'read', 'update'],
+    'organization-memberships': ['create', 'read', 'update', 'change_status', 'edit_offices'],
     agents: ['create', 'read', 'update'],
     assets: ['read', 'update', 'delete'],
     'non-network-assets': ['create', 'read', 'update', 'delete'],
@@ -122,7 +124,7 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
     'assessment-answers': ['read'],
 
     'compliance-results': ['read'],
-    'risk-evaluations': ['read'],
+    'risk-evaluations': ['read', 'read_assigned'],
     'risk-contributions': ['read'],
     tasks: [
       'create',

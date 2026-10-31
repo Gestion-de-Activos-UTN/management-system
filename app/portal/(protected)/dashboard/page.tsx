@@ -51,11 +51,14 @@ export default function PortalDashboardPage() {
   const href = (path: string, extra?: string) => portalHref(path, asOrganization, extra)
 
   const riskSummary = requiresOfficeSelection ? undefined : risk.data
+  // A failed risk request must not be counted as zero items needing attention.
+  const riskUnavailable = !requiresOfficeSelection && risk.isError && !risk.data
+  const riskKeys = new Set(['unconfirmed', 'controls'])
   const data = metrics.data
   const overdueTasks = (tasks.data ?? []).filter(task => task.is_overdue).length
   const offlineScanners = data ? data.total_scanners - data.online_scanners : 0
 
-  const attention: AttentionItem[] = [
+  const attentionItems: AttentionItem[] = [
     {
       key: 'overdue-tasks',
       label: plural(overdueTasks, 'tarea vencida', 'tareas vencidas'),
@@ -114,6 +117,9 @@ export default function PortalDashboardPage() {
       color: 'gray',
     },
   ]
+  const attention = riskUnavailable
+    ? attentionItems.filter(item => !riskKeys.has(item.key))
+    : attentionItems
 
   return (
     <Stack gap="lg">
@@ -130,6 +136,7 @@ export default function PortalDashboardPage() {
             <RiskOverviewCard
               summary={risk.data}
               isPending={risk.isPending}
+              isError={risk.isError}
               href={href('/portal/risk-score')}
             />
           )}
@@ -177,7 +184,11 @@ export default function PortalDashboardPage() {
             ]}
           />
           {!requiresOfficeSelection && (
-            <EvidenceCoverageStrip summary={risk.data} isPending={risk.isPending} />
+            <EvidenceCoverageStrip
+              summary={risk.data}
+              isPending={risk.isPending}
+              isError={risk.isError}
+            />
           )}
         </div>
         <div className={styles.activity}>

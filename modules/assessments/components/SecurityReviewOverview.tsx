@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import {
+  Alert,
   Anchor,
   Box,
   Button,
@@ -32,13 +33,31 @@ import { DataTable } from '@/components/ui/DataTable'
 export function SecurityReviewSummary({
   assessments,
   riskSummary,
+  riskUnavailable = false,
   riskHref,
 }: {
   assessments: AssessmentInstance[]
   riskSummary?: SecurityReviewSummaryData
+  riskUnavailable?: boolean
   riskHref: string
 }) {
   const open = assessments.filter(item => ['pending', 'in_progress'].includes(item.status))
+  // A failed risk request must not read as 0 % coverage or zero excluded equipment.
+  if (riskUnavailable)
+    return (
+      <Card withBorder radius="lg" p="lg">
+        <Group justify="space-between" align="flex-start" wrap="wrap" gap="xl">
+          <Alert color="red" style={{ flex: 1 }} miw={220}>
+            No se pudo cargar el riesgo. Intenta de nuevo en unos minutos.
+          </Alert>
+          <Stat
+            label="Revisiones por responder"
+            value={open.length}
+            hint="Revisiones sin completar en esta vista."
+          />
+        </Group>
+      </Card>
+    )
   const coverage = riskSummary?.evaluated_percentage ?? 0
   const applicable = riskSummary?.applicable_checks ?? 0
   const evaluated = Math.max(0, applicable - (riskSummary?.not_evaluable ?? 0))

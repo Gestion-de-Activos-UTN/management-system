@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, expect, it } from 'vitest'
+import { afterAll, beforeAll, expect, it, vi } from 'vitest'
 import { getPayload, handleEndpoints, type Payload, type SanitizedConfig } from 'payload'
 import { member, manualResult, seedRiskOrganization } from '@/domain/risk/risk-integration-seed'
 import { calculateRiskForScope, recalculateRisk } from '@/domain/risk/recalculateRisk'
@@ -324,4 +324,60 @@ it('keeps hidden scores and bands private in the live consolidation too', async 
   const short = await api(summary, hiddenCookie)
   expect(short.body.risk_score).toBeNull()
   expect(short.body.risk_band).toBeNull()
+})
+
+it('reuses the consolidation across pages until the organization evidence signal changes', async () => {
+  await recalculateRisk(payload, { organizationId: org })
+  const before = (await api(endpoint + '?limit=10')).body.pagination.totalDocs
+  // Jobs are disabled here, so new evidence does not move the signal by itself.
+  const extra = await asset(a, 'Cache probe', 'low', 1)
+  try {
+    expect((await api(endpoint + '?limit=10&page=2')).body.pagination.totalDocs).toBe(before)
+    await recalculateRisk(payload, { organizationId: org })
+    expect((await api(endpoint + '?limit=10')).body.pagination.totalDocs).toBeGreaterThan(before)
+  } finally {
+    await payload.update({
+      collection: 'non-network-assets',
+      id: extra,
+      overrideAccess: true,
+      data: { status: 'retired' },
+    })
+    await recalculateRisk(payload, { organizationId: org })
+  }
+})
+
+it('shows the organization recalculation state to the Manager as it does to OrgAdmin', async () => {
+  const job = await payload.jobs.queue({
+    task: 'recalculate-risk',
+    queue: 'risk',
+    input: { organization_id: org },
+  })
+  try {
+    expect((await api(endpoint)).body.recalculation).toBe('pending')
+    expect((await api(summary)).body.recalculation).toBe('pending')
+    expect((await api(summary, adminCookie)).body.recalculation).toBe('pending')
+  } finally {
+    await payload.delete({ collection: 'payload-jobs', id: job.id, overrideAccess: true })
+  }
+  expect((await api(summary)).body.recalculation).toBe('current')
+})
+
+it('answers a failed live calculation with risk_unavailable, without internals, and keeps no failure', async () => {
+  await recalculateRisk(payload, { organizationId: org })
+  const find = payload.find.bind(payload)
+  const spy = vi.spyOn(payload, 'find').mockImplementation(((args: { collection: string }) =>
+    args.collection === 'compliance-results'
+      ? Promise.reject(new Error('internal detail 42'))
+      : find(args as Parameters<typeof find>[0])) as typeof payload.find)
+  try {
+    for (const path of [endpoint, summary]) {
+      const failed = await api(path)
+      expect(failed.status).toBe(503)
+      expect(failed.body).toEqual({ error: 'risk_unavailable' })
+      expect(JSON.stringify(failed.body)).not.toContain('internal detail')
+    }
+  } finally {
+    spy.mockRestore()
+  }
+  expect((await api(summary)).status).toBe(200)
 })

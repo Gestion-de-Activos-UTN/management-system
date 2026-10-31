@@ -226,10 +226,16 @@ export async function updateMember(
     const delegatedContext = {
       ...ctx,
       role: actor.role.slug,
+      roleRank: actor.role.rank,
       officeIds: actor.offices,
       isActive: actor.is_active,
     }
-    const target = { organizationId, role: membership.role.slug, officeIds: membership.offices }
+    const target = {
+      organizationId,
+      role: membership.role.slug,
+      rank: membership.role.rank,
+      officeIds: membership.offices,
+    }
     const reactivating = input.is_active === true && !membership.is_active
     const editingOffices =
       input.is_active === undefined &&

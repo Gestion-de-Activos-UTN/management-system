@@ -5,7 +5,7 @@ import { Box, Button, Card, Flex, Group, Modal, Paper, Stack, Text, ThemeIcon } 
 import { ArrowRight } from 'lucide-react'
 import { STATUS_TONE_COLOR } from '@/components/ui/StatusBadge'
 import { ModalLayout } from '@/components/ui/ModalLayout'
-import modalStyles from '@/components/ui/ModalLayout.module.css'
+import { TruncatedButton } from '@/components/ui/TruncatedButton'
 import type { PortalMessageDTO } from '../service'
 import {
   PORTAL_MESSAGE_TYPE_ICONS,
@@ -83,7 +83,7 @@ export function PortalMessageDialog({
 
   // data-autofocus: el modal enfoca la acción principal, no el primer botón que encuentre.
   const primary = (
-    <Button
+    <TruncatedButton
       fullWidth
       data-autofocus
       onClick={onAction}
@@ -92,7 +92,7 @@ export function PortalMessageDialog({
       rightSection={shown.entity ? <ArrowRight size={16} strokeWidth={1.5} /> : undefined}
     >
       {shown.cta_label?.trim() || 'Ver'}
-    </Button>
+    </TruncatedButton>
   )
 
   // Las acciones van en una fila, todas del mismo ancho, con la principal a la derecha. En
@@ -109,29 +109,29 @@ export function PortalMessageDialog({
   const footer = actionable
     ? revisit
       ? actions(
-          <Button fullWidth variant="default" onClick={onClose}>
+          <TruncatedButton fullWidth variant="default" onClick={onClose}>
             Cerrar
-          </Button>,
+          </TruncatedButton>,
           primary
         )
       : actions(
-          <Button fullWidth variant="default" onClick={onNoThanks} loading={loadingNoThanks}>
+          <TruncatedButton fullWidth variant="default" onClick={onNoThanks} loading={loadingNoThanks}>
             No gracias
-          </Button>,
-          <Button fullWidth variant="default" onClick={onRemindLater}>
+          </TruncatedButton>,
+          <TruncatedButton fullWidth variant="default" onClick={onRemindLater}>
             Recordarme más tarde
-          </Button>,
+          </TruncatedButton>,
           primary
         )
     : actions(
         revisit ? (
-          <Button fullWidth variant="default" data-autofocus onClick={onClose}>
+          <TruncatedButton fullWidth variant="default" data-autofocus onClick={onClose}>
             Cerrar
-          </Button>
+          </TruncatedButton>
         ) : (
-          <Button fullWidth data-autofocus onClick={onAcknowledge}>
+          <TruncatedButton fullWidth data-autofocus onClick={onAcknowledge}>
             Entendido
-          </Button>
+          </TruncatedButton>
         )
       )
 
@@ -171,12 +171,17 @@ export function PortalMessageDialog({
     )
   }
 
+  // Compound modal on purpose: the header carries an icon and the queue label while the accessible
+  // name stays the title alone (Modal's `title` renders an h2 that cannot hold that layout). The
+  // theme already applies ModalLayout's content/header/body classes to these parts; never pass
+  // them again here, because Modal.Content's className also lands on Mantine's outer `.inner` wrapper.
   return (
     <Modal.Root
       opened={opened && Boolean(message)}
       onClose={onClose}
-      // lg: las tres acciones tienen que entrar del mismo ancho en una sola fila.
-      size="lg"
+      // Las tres acciones tienen que entrar del mismo ancho en una sola fila: con lg (620 px)
+      // «Recordarme más tarde» se corta; 680 deja margen para fuentes del sistema más anchas.
+      size={680}
       centered
       transitionProps={{
         transition: 'pop',
@@ -185,8 +190,8 @@ export function PortalMessageDialog({
       }}
     >
       <Modal.Overlay />
-      <Modal.Content radius="lg" className={modalStyles.content}>
-        <Modal.Header className={modalStyles.header} style={{ alignItems: 'flex-start' }}>
+      <Modal.Content radius="lg">
+        <Modal.Header style={{ alignItems: 'flex-start' }}>
           {header(
             <Modal.Title fw={700} fz="lg" lh={1.3}>
               {shown.title}
@@ -194,7 +199,7 @@ export function PortalMessageDialog({
           )}
           <Modal.CloseButton aria-label="Cerrar mensaje" />
         </Modal.Header>
-        <Modal.Body className={modalStyles.body}>
+        <Modal.Body>
           <ModalLayout footer={footer}>
             {/* Sólo se anima el cambio entre mensajes de la cola; la apertura ya la anima el modal. */}
             <div

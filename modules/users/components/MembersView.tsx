@@ -46,14 +46,8 @@ export function MembersView({ mode }: { mode: 'administration' | 'team' }) {
   const { data: tenantContext } = useTenantContext(asOrganization)
   const { data: offices } = useOfficesList(asOrganization)
   const canManage = administration && Boolean(tenantContext?.permissions.organizationMembers.update)
-  const canEditOffices = Boolean(
-    tenantContext?.permissions.organizationMembers.editOffices ||
-    tenantContext?.permissions.organizationMembers.update
-  )
-  const canChangeStatus = Boolean(
-    tenantContext?.permissions.organizationMembers.changeStatus ||
-    tenantContext?.permissions.organizationMembers.update
-  )
+  const canEditOffices = Boolean(tenantContext?.permissions.organizationMembers.editOffices)
+  const canChangeStatus = Boolean(tenantContext?.permissions.organizationMembers.changeStatus)
   const canCreate = Boolean(tenantContext?.permissions.organizationMembers.create)
   const [editing, setEditing] = useState<OrgMember | null>(null)
   const [toggling, setToggling] = useState<OrgMember | null>(null)
@@ -135,7 +129,7 @@ export function MembersView({ mode }: { mode: 'administration' | 'team' }) {
         return <StatusBadge tone={MEMBER_STATUS_TONES[value]} label={MEMBER_STATUS_LABELS[value]} />
       },
     },
-    ...(canManage || canChangeStatus || canEditOffices
+    ...(canChangeStatus || canEditOffices
       ? [
           {
             id: 'actions',
@@ -223,7 +217,7 @@ export function MembersView({ mode }: { mode: 'administration' | 'team' }) {
         emptyLabel={term ? 'Nadie coincide con la búsqueda' : 'No hay personas'}
         minWidth={820}
       />
-      {(canManage || canEditOffices) && (
+      {canEditOffices && (
         <>
           <MemberAccessModal
             member={editing}

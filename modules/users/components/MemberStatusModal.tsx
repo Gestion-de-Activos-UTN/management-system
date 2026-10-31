@@ -1,7 +1,7 @@
 'use client'
 
 import { ModalLayout } from '@/components/ui/ModalLayout'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   Alert,
   Button,
@@ -96,8 +96,18 @@ function MemberStatusForm({
       reassignableOffices.every(officeId => memberCoversOffice(candidate, officeId))
   )
   const emailMatches = confirmationEmail.trim().toLowerCase() === member.email.trim().toLowerCase()
+  const [attempted, setAttempted] = useState(false)
+  const officesError =
+    attempted && needsOffices && !officeIds.length ? 'Selecciona al menos una oficina.' : undefined
+  // Lock before sending: the pending state alone leaves a double-click race, and a success keeps
+  // it locked through the close animation.
+  const submissionLock = useRef(false)
 
-  const confirm = () =>
+  const confirm = () => {
+    if (submissionLock.current) return
+    setAttempted(true)
+    if (needsOffices && !officeIds.length) return
+    submissionLock.current = true
     update.mutate(
       {
         userId: member.id,
@@ -109,24 +119,29 @@ function MemberStatusForm({
         },
         message: deactivating ? `${name} quedó desactivada.` : `${name} quedó reactivada.`,
       },
-      { onSuccess: onDone }
+      {
+        onSuccess: onDone,
+        onError: () => {
+          submissionLock.current = false
+        },
+      }
     )
+  }
 
   return (
     <ModalLayout
       gap="md"
       footer={
         <Group justify="flex-end" gap="xs">
-          <Button variant="default" onClick={onDone}>
+          <Button variant="default" onClick={onDone} disabled={update.isPending}>
             Cancelar
           </Button>
           <Button
             color={deactivating ? 'red' : undefined}
             loading={update.isPending}
+            // Explicit confirmation and the impact preview may block; empty offices show an error.
             disabled={
-              (needsOffices && !officeIds.length) ||
-              (deactivating &&
-                (impact.isPending || impact.isError || !impact.data || !emailMatches))
+              deactivating && (impact.isPending || impact.isError || !impact.data || !emailMatches)
             }
             leftSection={
               deactivating ? (
@@ -255,6 +270,7 @@ function MemberStatusForm({
             data={officeOptions}
             value={officeIds}
             onChange={setOfficeIds}
+            error={officesError}
             comboboxProps={{ withinPortal: true }}
           />
         </>
