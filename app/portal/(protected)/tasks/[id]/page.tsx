@@ -1,7 +1,8 @@
 'use client'
 
 import { useParams, useSearchParams } from 'next/navigation'
-import { Center, Loader, Stack, Text } from '@mantine/core'
+import { Center, Loader, Stack } from '@mantine/core'
+import { ResourceError } from '@/components/ui/ResourceError'
 import { BackButton } from '@/components/ui/BackButton'
 import { portalHref } from '@/lib/portal-href'
 import { useTask } from '@/modules/tasks/hooks/use-tasks'
@@ -17,7 +18,17 @@ export default function TaskDetailPage() {
         <Loader />
       </Center>
     )
-  if (!task.data || task.isError) return <Text c="red">No se pudo cargar esta tarea.</Text>
+  if (!task.data || task.isError)
+    return (
+      <ResourceError
+        error={task.error}
+        resource="esta tarea"
+        backHref={portalHref('/portal/tasks', asOrganization)}
+        backLabel="Volver a tareas"
+        onRetry={() => void task.refetch()}
+        retrying={task.isFetching}
+      />
+    )
   return (
     <Stack gap="md">
       <BackButton href={portalHref('/portal/tasks', asOrganization)} label="Volver a tareas" />
