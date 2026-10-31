@@ -6,6 +6,7 @@ import {
   Card,
   Collapse,
   Modal,
+  InputWrapper,
   Select,
   Switch,
   Tooltip,
@@ -17,6 +18,7 @@ import {
   type VariantColorsResolver,
 } from '@mantine/core'
 import dropdownStyles from './DropdownOptions.module.css'
+import modalStyles from '@/components/ui/ModalLayout.module.css'
 import { searchOptionsFilter } from './search-options-filter'
 
 /**
@@ -137,7 +139,17 @@ export const theme = createTheme({
     // Soft elevation by default — cards/modals/papers read as "raised" surfaces
     // instead of flat outlined boxes (hover lift, only for link cards, lives in globals.css).
     Card: Card.extend({ defaultProps: { shadow: 'sm' } }),
-    Modal: Modal.extend({ defaultProps: { shadow: 'lg' } }),
+    Modal: Modal.extend({
+      defaultProps: { shadow: 'lg' },
+      classNames: {
+        content: modalStyles.content,
+        body: modalStyles.body,
+        header: modalStyles.header,
+      },
+    }),
+    InputWrapper: InputWrapper.extend({
+      defaultProps: { inputWrapperOrder: ['label', 'input', 'description', 'error'] },
+    }),
     // Un solo ritmo para todo bloque que se muestra u oculta (submenús, campos que dependen de
     // una elección, avisos): corto para no frenar la carga de datos, con fundido.
     Collapse: Collapse.extend({

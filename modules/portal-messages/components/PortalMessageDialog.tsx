@@ -4,6 +4,8 @@ import { useRef, type ReactNode } from 'react'
 import { Box, Button, Card, Flex, Group, Modal, Paper, Stack, Text, ThemeIcon } from '@mantine/core'
 import { ArrowRight } from 'lucide-react'
 import { STATUS_TONE_COLOR } from '@/components/ui/StatusBadge'
+import { ModalLayout } from '@/components/ui/ModalLayout'
+import modalStyles from '@/components/ui/ModalLayout.module.css'
 import type { PortalMessageDTO } from '../service'
 import {
   PORTAL_MESSAGE_TYPE_ICONS,
@@ -150,7 +152,6 @@ export function PortalMessageDialog({
           loading={loadingPrimary}
         />
       )}
-      <div style={{ marginTop: 'var(--mantine-spacing-xs)' }}>{footer}</div>
     </Stack>
   )
 
@@ -164,6 +165,7 @@ export function PortalMessageDialog({
             </Text>
           )}
           {body}
+          {footer}
         </Stack>
       </Card>
     )
@@ -183,8 +185,8 @@ export function PortalMessageDialog({
       }}
     >
       <Modal.Overlay />
-      <Modal.Content radius="lg">
-        <Modal.Header style={{ alignItems: 'flex-start' }}>
+      <Modal.Content radius="lg" className={modalStyles.content}>
+        <Modal.Header className={modalStyles.header} style={{ alignItems: 'flex-start' }}>
           {header(
             <Modal.Title fw={700} fz="lg" lh={1.3}>
               {shown.title}
@@ -192,14 +194,16 @@ export function PortalMessageDialog({
           )}
           <Modal.CloseButton aria-label="Cerrar mensaje" />
         </Modal.Header>
-        <Modal.Body>
-          {/* Sólo se anima el cambio entre mensajes de la cola; la apertura ya la anima el modal. */}
-          <div
-            key={`${shown.id}:${queuePosition ?? 0}`}
-            className={queuePosition && queuePosition > 1 ? styles.messageContent : undefined}
-          >
-            {body}
-          </div>
+        <Modal.Body className={modalStyles.body}>
+          <ModalLayout footer={footer}>
+            {/* Sólo se anima el cambio entre mensajes de la cola; la apertura ya la anima el modal. */}
+            <div
+              key={`${shown.id}:${queuePosition ?? 0}`}
+              className={queuePosition && queuePosition > 1 ? styles.messageContent : undefined}
+            >
+              {body}
+            </div>
+          </ModalLayout>
         </Modal.Body>
       </Modal.Content>
     </Modal.Root>

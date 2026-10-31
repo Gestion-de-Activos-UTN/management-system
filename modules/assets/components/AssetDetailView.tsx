@@ -1,5 +1,6 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -597,30 +598,34 @@ export function AssetDetailView({
         title="Quitar identificación"
         centered
       >
-        <Stack gap="md">
+        <ModalLayout
+          gap="md"
+          footer={
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setUnidentifyConfirmOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                color="red"
+                loading={unidentifyAsset.isPending}
+                onClick={() =>
+                  unidentifyAsset.mutate(
+                    { id: asset.id },
+                    { onSuccess: () => setUnidentifyConfirmOpen(false) }
+                  )
+                }
+              >
+                Quitar identificación
+              </Button>
+            </Group>
+          }
+        >
           <Text size="sm">
             Este activo volverá a estar &quot;no identificado&quot;. El responsable, la criticidad,
             el alias y la ubicación quedarán guardados para completar el formulario si vuelves a
             identificarlo, pero dejarán de contar en los cálculos de riesgo hasta entonces.
           </Text>
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setUnidentifyConfirmOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              color="red"
-              loading={unidentifyAsset.isPending}
-              onClick={() =>
-                unidentifyAsset.mutate(
-                  { id: asset.id },
-                  { onSuccess: () => setUnidentifyConfirmOpen(false) }
-                )
-              }
-            >
-              Quitar identificación
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </Modal>
 
       <Tabs value={tab} onChange={changeTab}>
@@ -965,34 +970,37 @@ export function AssetDetailView({
         title="¿Excluir un dispositivo no autorizado?"
         centered
       >
-        <Stack>
+        <ModalLayout
+          footer={
+            <Group justify="flex-end">
+              <Button
+                variant="default"
+                onClick={() => {
+                  setValue('assessment_scope', 'included', { shouldDirty: true })
+                  setConfirmUnauthorizedExclusion(false)
+                }}
+              >
+                Mantener incluido
+              </Button>
+              <Button
+                color="orange"
+                onClick={() => {
+                  warnedUnauthorizedExclusion.current = true
+                  setValue('assessment_scope', 'excluded', { shouldDirty: true })
+                  setConfirmUnauthorizedExclusion(false)
+                }}
+              >
+                Excluir de todos modos
+              </Button>
+            </Group>
+          }
+        >
           <Alert color="orange">
             SIAM recomienda mantener dentro del alcance los dispositivos no autorizados porque
             representan un hallazgo de seguridad. Aun así, puedes excluir este dispositivo si esa es
             la decisión de tu organización.
           </Alert>
-          <Group justify="flex-end">
-            <Button
-              variant="default"
-              onClick={() => {
-                setValue('assessment_scope', 'included', { shouldDirty: true })
-                setConfirmUnauthorizedExclusion(false)
-              }}
-            >
-              Mantener incluido
-            </Button>
-            <Button
-              color="orange"
-              onClick={() => {
-                warnedUnauthorizedExclusion.current = true
-                setValue('assessment_scope', 'excluded', { shouldDirty: true })
-                setConfirmUnauthorizedExclusion(false)
-              }}
-            >
-              Excluir de todos modos
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </Modal>
     </Stack>
   )

@@ -1,5 +1,6 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { useEffect } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -11,8 +12,6 @@ import {
   Group,
   Select,
   SimpleGrid,
-  Stack,
-  Text,
   Textarea,
   TextInput,
 } from '@mantine/core'
@@ -151,7 +150,16 @@ export function NonNetworkAssetForm({
     // validation makes RHF+Zod the single source of truth, which already reports every invalid
     // field in one pass, not just the first.
     <form onSubmit={onSubmit} noValidate>
-      <Stack gap="md">
+      <ModalLayout
+        gap="md"
+        footer={
+          <Group justify="flex-end">
+            <Button type="submit" loading={save.isPending} w={{ base: '100%', sm: 'auto' }}>
+              {asset ? 'Guardar cambios' : 'Crear activo'}
+            </Button>
+          </Group>
+        }
+      >
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
           <Controller
             name="alias"
@@ -172,6 +180,7 @@ export function NonNetworkAssetForm({
             render={({ field }) => (
               <Select
                 label="Categoría"
+                required
                 placeholder="Busca o selecciona una categoría"
                 searchable
                 clearable
@@ -186,111 +195,131 @@ export function NonNetworkAssetForm({
               />
             )}
           />
-          {categoryGroup === 'product_details' && (
-            <>
-              <Controller
-                name="product_details.software_vendor"
-                control={control}
-                render={({ field }) => (
-                  <Autocomplete
-                    label="Proveedor"
-                    // El error conocido de esta feature: el usuario escribe el producto donde va
-                    // el fabricante. El placeholder es la mitigación barata; el autocompletado es
-                    // la otra. No se elimina, se reduce.
-                    placeholder="Canonical, no Ubuntu"
-                    data={suggestions?.vendors ?? []}
-                    value={field.value ?? ''}
-                    onChange={value => field.onChange(value || null)}
-                    error={errors.product_details?.software_vendor?.message}
-                  />
-                )}
-              />
-              <Controller
-                name="product_details.software_product"
-                control={control}
-                render={({ field }) => (
-                  <Autocomplete
-                    label="Producto"
-                    placeholder="Busca o escribe un producto"
-                    data={suggestions?.products ?? []}
-                    value={field.value ?? ''}
-                    onChange={value => field.onChange(value || null)}
-                    error={errors.product_details?.software_product?.message}
-                  />
-                )}
-              />
-              <Controller
-                name="product_details.software_version"
-                control={control}
-                render={({ field }) => (
-                  <TextInput
-                    label="Versión"
-                    placeholder="Opcional"
-                    value={field.value ?? ''}
-                    onChange={e => field.onChange(e.currentTarget.value || null)}
-                    error={errors.product_details?.software_version?.message}
-                  />
-                )}
-              />
-            </>
-          )}
-          {categoryGroup === 'cloud_details' && (
-            <>
-              <Controller
-                name="cloud_details.kind"
-                control={control}
-                render={({ field }) => (
-                  <Select
-                    label="Tipo de servicio cloud"
-                    required
-                    data={[...CLOUD_ASSET_KIND_OPTIONS]}
-                    value={field.value ?? null}
-                    onChange={value => field.onChange(value || null)}
-                    error={errors.cloud_details?.kind?.message}
-                  />
-                )}
-              />
-              <Controller
-                name="cloud_details.vendor"
-                control={control}
-                render={({ field }) => (
-                  <TextInput
-                    label="Proveedor"
-                    placeholder="Opcional"
-                    value={field.value ?? ''}
-                    onChange={e => field.onChange(e.currentTarget.value || null)}
-                    error={errors.cloud_details?.vendor?.message}
-                  />
-                )}
-              />
-            </>
-          )}
-          {categoryGroup === 'repository_details' && (
+        </SimpleGrid>
+        {categoryGroup === 'product_details' && (
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
             <Controller
-              name="repository_details.kind"
+              name="product_details.software_vendor"
               control={control}
               render={({ field }) => (
-                <Select
-                  label="Tipo de repositorio"
+                <Autocomplete
+                  label="Proveedor"
                   required
-                  data={[...REPOSITORY_KIND_OPTIONS]}
-                  value={field.value ?? null}
+                  // El error conocido de esta feature: el usuario escribe el producto donde va
+                  // el fabricante. El placeholder es la mitigación barata; el autocompletado es
+                  // la otra. No se elimina, se reduce.
+                  placeholder="Canonical, no Ubuntu"
+                  data={suggestions?.vendors ?? []}
+                  value={field.value ?? ''}
                   onChange={value => field.onChange(value || null)}
-                  error={errors.repository_details?.kind?.message}
+                  error={errors.product_details?.software_vendor?.message}
                 />
               )}
             />
-          )}
+            <Controller
+              name="product_details.software_product"
+              control={control}
+              render={({ field }) => (
+                <Autocomplete
+                  label="Producto"
+                  required
+                  placeholder="Busca o escribe un producto"
+                  data={suggestions?.products ?? []}
+                  value={field.value ?? ''}
+                  onChange={value => field.onChange(value || null)}
+                  error={errors.product_details?.software_product?.message}
+                />
+              )}
+            />
+            <Controller
+              name="product_details.software_version"
+              control={control}
+              render={({ field }) => (
+                <TextInput
+                  label="Versión"
+                  placeholder="Opcional"
+                  value={field.value ?? ''}
+                  onChange={e => field.onChange(e.currentTarget.value || null)}
+                  error={errors.product_details?.software_version?.message}
+                />
+              )}
+            />
+          </SimpleGrid>
+        )}
+        {categoryGroup === 'cloud_details' && (
+          <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+            <Controller
+              name="cloud_details.kind"
+              control={control}
+              render={({ field }) => (
+                <Select
+                  label="Tipo de servicio cloud"
+                  required
+                  data={[...CLOUD_ASSET_KIND_OPTIONS]}
+                  value={field.value ?? null}
+                  onChange={value => field.onChange(value || null)}
+                  error={errors.cloud_details?.kind?.message}
+                />
+              )}
+            />
+            <Controller
+              name="cloud_details.vendor"
+              control={control}
+              render={({ field }) => (
+                <TextInput
+                  label="Proveedor"
+                  placeholder="Opcional"
+                  value={field.value ?? ''}
+                  onChange={e => field.onChange(e.currentTarget.value || null)}
+                  error={errors.cloud_details?.vendor?.message}
+                />
+              )}
+            />
+          </SimpleGrid>
+        )}
+        {categoryGroup === 'repository_details' && (
+          <Controller
+            name="repository_details.kind"
+            control={control}
+            render={({ field }) => (
+              <Select
+                label="Tipo de repositorio"
+                required
+                data={[...REPOSITORY_KIND_OPTIONS]}
+                value={field.value ?? null}
+                onChange={value => field.onChange(value || null)}
+                error={errors.repository_details?.kind?.message}
+              />
+            )}
+          />
+        )}
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
           <Controller
             name="criticality"
             control={control}
             render={({ field }) => (
               <Select
                 label="Criticidad"
+                required
                 data={CRITICALITY_OPTIONS}
                 value={field.value}
                 onChange={v => field.onChange(v ?? 'medium')}
                 error={errors.criticality?.message}
+              />
+            )}
+          />
+          <Controller
+            name="review_interval"
+            control={control}
+            render={({ field }) => (
+              <Select
+                label="Frecuencia de revisión"
+                required
+                description="Cada cuánto debe volver a confirmarse este activo"
+                data={REVIEW_INTERVAL_OPTIONS}
+                value={field.value}
+                onChange={v => field.onChange(v ?? 'never')}
+                error={errors.review_interval?.message}
               />
             )}
           />
@@ -348,28 +377,11 @@ export function NonNetworkAssetForm({
             render={({ field }) => (
               <Select
                 label="Estado"
-                // Espacio invisible: reserva la misma altura de línea que la description de
-                // "Review recurrence" (su vecino en la misma fila del grid) para que ambos
-                // Select queden alineados en vez de que este quede más arriba por no tener una.
-                description=" "
+                required
                 data={NON_NETWORK_ASSET_STATUS_OPTIONS}
                 value={field.value}
                 onChange={v => field.onChange(v ?? 'active')}
                 error={errors.status?.message}
-              />
-            )}
-          />
-          <Controller
-            name="review_interval"
-            control={control}
-            render={({ field }) => (
-              <Select
-                label="Frecuencia de revisión"
-                description="Cada cuánto debe volver a confirmarse este activo"
-                data={REVIEW_INTERVAL_OPTIONS}
-                value={field.value}
-                onChange={v => field.onChange(v ?? 'never')}
-                error={errors.review_interval?.message}
               />
             )}
           />
@@ -394,6 +406,7 @@ export function NonNetworkAssetForm({
             render={({ field }) => (
               <Select
                 label="Alcance de la evaluación de seguridad"
+                required
                 data={[
                   { value: 'included', label: 'Incluido' },
                   { value: 'excluded', label: 'Excluido' },
@@ -412,12 +425,7 @@ export function NonNetworkAssetForm({
           excluded={assessmentScope === 'excluded'}
           noteRequired={exclusionReason === 'other'}
         />
-        <Group justify="flex-end">
-          <Button type="submit" loading={save.isPending} w={{ base: '100%', sm: 'auto' }}>
-            {asset ? 'Guardar cambios' : 'Crear activo'}
-          </Button>
-        </Group>
-      </Stack>
+      </ModalLayout>
     </form>
   )
 }

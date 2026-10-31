@@ -1,7 +1,8 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { useState } from 'react'
-import { Button, Divider, Group, Modal, SegmentedControl, Stack, Text } from '@mantine/core'
+import { Button, Divider, Group, Input, Modal, SegmentedControl, Stack, Text } from '@mantine/core'
 import { Download, ShieldAlert, ShieldCheck } from 'lucide-react'
 import type { Office } from '@/app/types/payload-types'
 import type { AgentPlatform } from '@/domain/agents/buildAgentPackage'
@@ -92,7 +93,24 @@ export function AgentProvisionModal({
         centered
         size="md"
       >
-        <Stack gap="md">
+        <ModalLayout
+          gap="md"
+          footer={
+            <Group justify="flex-end" wrap="wrap">
+              <Button variant="default" onClick={handleClose} disabled={provision.isPending}>
+                Cancelar
+              </Button>
+              <Button
+                leftSection={<Download size={16} strokeWidth={1.5} />}
+                loading={provision.isPending}
+                disabled={officeSlotsAvailable === 0}
+                onClick={handleProvision}
+              >
+                Generar y descargar
+              </Button>
+            </Group>
+          }
+        >
           <Group gap="sm" align="flex-start" wrap="nowrap">
             <ShieldCheck size={22} strokeWidth={1.5} />
             <Stack gap={4} style={{ minWidth: 0 }}>
@@ -138,10 +156,11 @@ export function AgentProvisionModal({
           )}
           {hasAgents && <Divider label="Agregar otro escáner" labelPosition="left" />}
           <Stack gap={6}>
-            <Text size="sm" fw={500}>
+            <Input.Label id="agent-platform-label" required>
               Sistema operativo
-            </Text>
+            </Input.Label>
             <SegmentedControl
+              aria-labelledby="agent-platform-label"
               fullWidth
               data={PLATFORM_OPTIONS}
               value={platform}
@@ -165,20 +184,7 @@ export function AgentProvisionModal({
               )}
             </Stack>
           )}
-          <Group justify="flex-end" wrap="wrap">
-            <Button variant="default" onClick={handleClose} disabled={provision.isPending}>
-              Cancelar
-            </Button>
-            <Button
-              leftSection={<Download size={16} strokeWidth={1.5} />}
-              loading={provision.isPending}
-              disabled={officeSlotsAvailable === 0}
-              onClick={handleProvision}
-            >
-              Generar y descargar
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </Modal>
       <Modal
         opened={agentToDeactivate !== null}
@@ -190,7 +196,23 @@ export function AgentProvisionModal({
         closeOnEscape={!revoke.isPending}
         withCloseButton={!revoke.isPending}
       >
-        <Stack gap="lg">
+        <ModalLayout
+          gap="lg"
+          footer={
+            <Group justify="flex-end">
+              <Button
+                variant="default"
+                disabled={revoke.isPending}
+                onClick={() => setAgentToDeactivate(null)}
+              >
+                Cancelar
+              </Button>
+              <Button color="red" loading={revoke.isPending} onClick={confirmDeactivation}>
+                Desactivar escáner
+              </Button>
+            </Group>
+          }
+        >
           <Group align="flex-start" wrap="nowrap">
             <ShieldAlert size={24} color="var(--mantine-color-red-6)" strokeWidth={1.5} />
             <Stack gap={4}>
@@ -204,19 +226,7 @@ export function AgentProvisionModal({
               </Text>
             </Stack>
           </Group>
-          <Group justify="flex-end">
-            <Button
-              variant="default"
-              disabled={revoke.isPending}
-              onClick={() => setAgentToDeactivate(null)}
-            >
-              Cancelar
-            </Button>
-            <Button color="red" loading={revoke.isPending} onClick={confirmDeactivation}>
-              Desactivar escáner
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </Modal>
     </>
   )

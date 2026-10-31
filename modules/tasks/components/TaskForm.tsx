@@ -1,8 +1,9 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { DateField } from '@/components/ui/DateField'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
@@ -58,6 +59,9 @@ export function TaskForm({
   onSaved?: () => void
 }) {
   const create = useCreateTasks()
+  const submissionLock = useRef(false)
+  const submissionSucceeded = useRef(false)
+  const [submitted, setSubmitted] = useState(false)
   const { data: tenant } = useTenantContext(asOrganization)
   const { data: offices } = useOfficesList(asOrganization)
   const [referenceType, setReferenceType] = useState<TaskReferenceInput['relationTo'] | null>(
@@ -70,7 +74,7 @@ export function TaskForm({
     setValue,
     setError,
     clearErrors,
-    formState: { errors },
+    formState: { errors, isSubmitting },
   } = useForm<CreateTasksInput>({
     resolver: zodResolver(CreateTasksSchema),
     mode: 'onChange',
@@ -203,19 +207,48 @@ export function TaskForm({
     />
   )
 
-  const submit = handleSubmit(values => {
+  const validateAndSubmit = handleSubmit(async values => {
     // Elegir un tipo sin entidad crearía la tarea sin vínculo, en silencio. Se exige completar
     // la entidad o quitar el tipo.
     if (referenceType && !values.related_entity) {
       setError('related_entity', { message: 'Selecciona una entidad.' })
       return
     }
-    create.mutate(values, { onSuccess: onSaved })
+    try {
+      await create.mutateAsync(values)
+      // The modal remains mounted during its exit animation. Never reopen this submission.
+      submissionSucceeded.current = true
+      setSubmitted(true)
+      onSaved?.()
+    } catch {
+      // The mutation hook reports the error. Keep the form available for a corrected retry.
+    }
   })
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    // Lock before async validation: the mutation's pending state alone leaves a click race.
+    if (submissionLock.current) return
+    submissionLock.current = true
+    try {
+      await validateAndSubmit(event)
+    } finally {
+      if (!submissionSucceeded.current) submissionLock.current = false
+    }
+  }
 
   return (
     <form onSubmit={submit} noValidate>
-      <Stack gap="md">
+      <ModalLayout
+        gap="md"
+        footer={
+          <Group justify="flex-end">
+            <Button type="submit" loading={isSubmitting || create.isPending} disabled={submitted}>
+              {officeIds.length > 1 ? `Crear ${officeIds.length} tareas` : 'Crear tarea'}
+            </Button>
+          </Group>
+        }
+      >
         {referenceLocked && initialReference && (
           <TaskReferenceSummary
             relationTo={initialReference.relationTo}
@@ -260,6 +293,7 @@ export function TaskForm({
             render={({ field }) => (
               <Select
                 label="Prioridad"
+                withAsterisk
                 data={[
                   { value: 'low', label: 'Baja' },
                   { value: 'normal', label: 'Normal' },
@@ -449,12 +483,7 @@ export function TaskForm({
             )
           }
         />
-        <Group justify="flex-end">
-          <Button type="submit" loading={create.isPending}>
-            {officeIds.length > 1 ? `Crear ${officeIds.length} tareas` : 'Crear tarea'}
-          </Button>
-        </Group>
-      </Stack>
+      </ModalLayout>
     </form>
   )
 }

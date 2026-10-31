@@ -3,6 +3,13 @@ import { userFacingErrorMessage } from './user-facing-error'
 
 it.each([
   ['already_claimed', 'Otra persona ya reclamó esta tarea. Actualiza la lista.'],
+  [
+    'task_completed_by_admin',
+    'La tarea ya fue completada por un administrador. Revisa su actividad.',
+  ],
+  ['task_already_completed', 'La tarea ya fue completada. Revisa su actividad.'],
+  ['task_cancelled', 'La tarea fue cancelada y ya no se puede completar ni liberar.'],
+  ['task_state_changed', 'La tarea ya no está en curso. Revisa su estado actualizado.'],
   ['task_cannot_be_deleted', 'Solo puedes eliminar tareas pendientes que nunca fueron reclamadas.'],
   ['task_not_terminal', 'Solo puedes archivar tareas completadas o canceladas.'],
   ['office_limit_reached', 'Alcanzaste el límite de oficinas activas de tu plan.'],

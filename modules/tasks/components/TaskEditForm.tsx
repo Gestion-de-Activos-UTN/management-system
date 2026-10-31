@@ -1,10 +1,11 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { DateField } from '@/components/ui/DateField'
 
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { Button, Group, Select, SimpleGrid, Stack, TextInput } from '@mantine/core'
+import { Button, Group, Select, SimpleGrid, TextInput } from '@mantine/core'
 import { CharacterCountTextarea } from '@/components/ui/CharacterCountTextarea'
 import type { TaskDTO } from '../service'
 import { EditTaskSchema, type EditTaskInput } from '../schema'
@@ -34,7 +35,16 @@ export function TaskEditForm({ task, onSaved }: { task: TaskDTO; onSaved: () => 
   })
   return (
     <form noValidate onSubmit={handleSubmit(values => edit.mutate(values, { onSuccess: onSaved }))}>
-      <Stack gap="md">
+      <ModalLayout
+        gap="md"
+        footer={
+          <Group justify="flex-end">
+            <Button type="submit" loading={edit.isPending}>
+              Guardar
+            </Button>
+          </Group>
+        }
+      >
         <Controller
           name="title"
           control={control}
@@ -69,6 +79,7 @@ export function TaskEditForm({ task, onSaved }: { task: TaskDTO; onSaved: () => 
             render={({ field }) => (
               <Select
                 label="Prioridad"
+                withAsterisk
                 data={[
                   { value: 'low', label: 'Baja' },
                   { value: 'normal', label: 'Normal' },
@@ -107,12 +118,7 @@ export function TaskEditForm({ task, onSaved }: { task: TaskDTO; onSaved: () => 
             )}
           />
         </SimpleGrid>
-        <Group justify="flex-end">
-          <Button type="submit" loading={edit.isPending}>
-            Guardar
-          </Button>
-        </Group>
-      </Stack>
+      </ModalLayout>
     </form>
   )
 }

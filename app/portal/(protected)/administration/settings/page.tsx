@@ -1,5 +1,6 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
@@ -144,30 +145,33 @@ export default function AdminSettingsPage() {
         title="¿Cambiar la política de revisión?"
         centered
       >
-        <Stack>
+        <ModalLayout
+          footer={
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setPendingPolicy(null)}>
+                Cancelar
+              </Button>
+              <Button
+                color="pine"
+                loading={policy.isPending}
+                onClick={() =>
+                  pendingPolicy &&
+                  policy.mutate(
+                    { policy_key: pendingPolicy, policy_version: RISK_CATALOG_V2.version },
+                    { onSuccess: () => setPendingPolicy(null) }
+                  )
+                }
+              >
+                Confirmar cambio
+              </Button>
+            </Group>
+          }
+        >
           <Text size="sm">
             Esto abre nuevos ciclos de revisión con la política seleccionada. Las revisiones
             completadas no se modifican.
           </Text>
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setPendingPolicy(null)}>
-              Cancelar
-            </Button>
-            <Button
-              color="pine"
-              loading={policy.isPending}
-              onClick={() =>
-                pendingPolicy &&
-                policy.mutate(
-                  { policy_key: pendingPolicy, policy_version: RISK_CATALOG_V2.version },
-                  { onSuccess: () => setPendingPolicy(null) }
-                )
-              }
-            >
-              Confirmar cambio
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </Modal>
     </Stack>
   )

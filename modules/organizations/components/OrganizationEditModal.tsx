@@ -1,16 +1,7 @@
 'use client'
 
-import {
-  Alert,
-  Button,
-  Group,
-  Loader,
-  Modal,
-  Select,
-  Stack,
-  TextInput,
-  Textarea,
-} from '@mantine/core'
+import { ModalLayout } from '@/components/ui/ModalLayout'
+import { Alert, Button, Group, Loader, Modal, Select, TextInput, Textarea } from '@mantine/core'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import type { Organization } from '@/app/types/payload-types'
@@ -80,7 +71,19 @@ function OrganizationEditForm({
       noValidate
       onSubmit={handleSubmit(input => save.mutate({ id, input }, { onSuccess: onClose }))}
     >
-      <Stack gap="md">
+      <ModalLayout
+        gap="md"
+        footer={
+          <Group justify="flex-end">
+            <Button variant="default" onClick={onClose} disabled={save.isPending}>
+              Cancelar
+            </Button>
+            <Button type="submit" loading={save.isPending} disabled={!isDirty}>
+              Guardar cambios
+            </Button>
+          </Group>
+        }
+      >
         <Controller
           name="name"
           control={control}
@@ -128,15 +131,7 @@ function OrganizationEditForm({
             )}
           />
         )}
-        <Group justify="flex-end">
-          <Button variant="default" onClick={onClose} disabled={save.isPending}>
-            Cancelar
-          </Button>
-          <Button type="submit" loading={save.isPending} disabled={!isDirty}>
-            Guardar cambios
-          </Button>
-        </Group>
-      </Stack>
+      </ModalLayout>
     </form>
   )
 }

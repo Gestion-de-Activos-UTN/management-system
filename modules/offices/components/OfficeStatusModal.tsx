@@ -1,5 +1,6 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { useState } from 'react'
 import {
   Alert,
@@ -90,7 +91,28 @@ function ReactivateOffice({
 }) {
   const setStatus = useSetOfficeStatus(asOrganization)
   return (
-    <Stack gap="md">
+    <ModalLayout
+      gap="md"
+      footer={
+        <Group justify="flex-end" gap="xs">
+          <Button variant="default" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            loading={setStatus.isPending}
+            leftSection={<Power size={16} strokeWidth={1.5} />}
+            onClick={() =>
+              setStatus.mutate(
+                { id: String(office.id), input: { is_active: true } },
+                { onSuccess: onClose }
+              )
+            }
+          >
+            Reactivar oficina
+          </Button>
+        </Group>
+      }
+    >
       <Text size="sm">
         <strong>{office.name}</strong> vuelve a estar disponible y se abre una nueva revisión de
         seguridad de la oficina, visible para quienes administran la organización.
@@ -100,24 +122,7 @@ function ReactivateOffice({
         movidos o dados de baja quedan como están. Hay que instalar un escáner nuevo y reactivar a
         cada persona desde Usuarios.
       </Alert>
-      <Group justify="flex-end" gap="xs">
-        <Button variant="default" onClick={onClose}>
-          Cancelar
-        </Button>
-        <Button
-          loading={setStatus.isPending}
-          leftSection={<Power size={16} strokeWidth={1.5} />}
-          onClick={() =>
-            setStatus.mutate(
-              { id: String(office.id), input: { is_active: true } },
-              { onSuccess: onClose }
-            )
-          }
-        >
-          Reactivar oficina
-        </Button>
-      </Group>
-    </Stack>
+    </ModalLayout>
   )
 }
 
@@ -220,7 +225,25 @@ function DeactivateOffice({
     )
 
   return (
-    <Stack gap="md">
+    <ModalLayout
+      gap="md"
+      footer={
+        <Group justify="flex-end" gap="xs">
+          <Button variant="default" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            color="red"
+            disabled={!nameMatches || !allDecided}
+            loading={setStatus.isPending}
+            leftSection={<PowerOff size={16} strokeWidth={1.5} />}
+            onClick={confirm}
+          >
+            Desactivar oficina
+          </Button>
+        </Group>
+      }
+    >
       <Text size="sm">
         Al desactivar <strong>{office.name}</strong> pasa todo esto en un solo paso:
       </Text>
@@ -235,9 +258,9 @@ function DeactivateOffice({
         <Stack gap="xs">
           <Divider label="Activos manuales: decide qué pasa con cada uno" labelPosition="left" />
           <Text size="sm" c="dimmed">
-            Decide desde cada fila o selecciona varias para aplicarles la misma acción. Mover conserva
-            el historial y las tareas, pero quita responsable y ubicación; dar de baja cancela las
-            tareas abiertas. Los cambios se aplican al confirmar.
+            Decide desde cada fila o selecciona varias para aplicarles la misma acción. Mover
+            conserva el historial y las tareas, pero quita responsable y ubicación; dar de baja
+            cancela las tareas abiertas. Los cambios se aplican al confirmar.
           </Text>
           {selected.size > 0 && (
             <Group gap="xs" align="center" wrap="wrap">
@@ -312,27 +335,13 @@ function DeactivateOffice({
 
       <TextInput
         label="Para confirmar, escribe el nombre de la oficina"
+        withAsterisk
         description={office.name}
         value={confirmName}
         onChange={event => setConfirmName(event.currentTarget.value)}
         autoComplete="off"
       />
-
-      <Group justify="flex-end" gap="xs">
-        <Button variant="default" onClick={onClose}>
-          Cancelar
-        </Button>
-        <Button
-          color="red"
-          disabled={!nameMatches || !allDecided}
-          loading={setStatus.isPending}
-          leftSection={<PowerOff size={16} strokeWidth={1.5} />}
-          onClick={confirm}
-        >
-          Desactivar oficina
-        </Button>
-      </Group>
-    </Stack>
+    </ModalLayout>
   )
 }
 

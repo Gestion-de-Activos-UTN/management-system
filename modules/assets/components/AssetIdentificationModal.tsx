@@ -1,19 +1,10 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { useEffect } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import {
-  Button,
-  Collapse,
-  Group,
-  Modal,
-  Select,
-  SimpleGrid,
-  Stack,
-  Text,
-  TextInput,
-} from '@mantine/core'
+import { Button, Collapse, Group, Modal, Select, SimpleGrid, Text, TextInput } from '@mantine/core'
 import type { Asset } from '@/app/types/payload-types'
 import { CRITICALITY_OPTIONS } from '@/lib/enum-labels'
 import {
@@ -102,7 +93,19 @@ export function AssetIdentificationModal({
       size="lg"
     >
       <form onSubmit={submit} noValidate>
-        <Stack gap="md">
+        <ModalLayout
+          gap="md"
+          footer={
+            <Group justify="flex-end">
+              <Button variant="default" onClick={onClose}>
+                Cancelar
+              </Button>
+              <Button type="submit" loading={identify.isPending}>
+                Confirmar activo
+              </Button>
+            </Group>
+          }
+        >
           <Text size="sm" c="dimmed">
             {suggestionMessage} Revisa la clasificación y completa la información de negocio
             disponible.
@@ -120,6 +123,7 @@ export function AssetIdentificationModal({
               render={({ field }) => (
                 <Select
                   label="Tipo de dispositivo"
+                  withAsterisk
                   data={[...SCANNED_ASSET_TYPE_OPTIONS]}
                   value={field.value}
                   onChange={field.onChange}
@@ -133,6 +137,7 @@ export function AssetIdentificationModal({
               render={({ field }) => (
                 <Select
                   label="Estado de autorización"
+                  withAsterisk
                   data={[
                     { value: 'authorized', label: 'Autorizado' },
                     { value: 'unauthorized', label: 'No autorizado' },
@@ -209,15 +214,7 @@ export function AssetIdentificationModal({
               )}
             />
           </SimpleGrid>
-          <Group justify="flex-end">
-            <Button variant="default" onClick={onClose}>
-              Cancelar
-            </Button>
-            <Button type="submit" loading={identify.isPending}>
-              Confirmar activo
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </form>
     </Modal>
   )

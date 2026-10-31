@@ -43,6 +43,7 @@ export function TaskAssignmentFields({
     <SimpleGrid cols={{ base: 1, sm: 2 }}>
       <Select
         label="Asignación"
+        withAsterisk
         inputWrapperOrder={['label', 'input', 'description', 'error']}
         disabled={disabled}
         description={KIND_DESCRIPTIONS[kind]}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useRef } from 'react'
 import { notify } from '@/lib/notify'
 import type { HttpError } from '@/lib/http-client'
 import { showApiError } from '@/lib/notify-error'
@@ -42,8 +43,9 @@ export function useEditTask(id: string) {
 
 export function useTaskCommand(id: string) {
   const queryClient = useQueryClient()
+  const inFlight = useRef<Promise<unknown> | null>(null)
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['tasks'] })
-  return useMutation<unknown, HttpError, { action: TaskAction; payload?: unknown }>({
+  const mutation = useMutation<unknown, HttpError, { action: TaskAction; payload?: unknown }>({
     mutationFn: ({ action, payload }) => {
       if (action === 'delete') return deleteTask(id)
       if (action === 'cancel') return cancelTask(id, String(payload ?? ''))
@@ -69,7 +71,7 @@ export function useTaskCommand(id: string) {
         title: labels[variables.action] ?? 'Tarea actualizada',
       })
     },
-    onError: (error, { action }) => {
+    onError: async (error, { action }) => {
       const actions: Record<TaskAction, string> = {
         claim: 'No se pudo reclamar la tarea',
         release: 'No se pudo liberar la tarea',
@@ -82,6 +84,25 @@ export function useTaskCommand(id: string) {
         edit: 'No se pudo editar la tarea',
       }
       showApiError(error, actions[action])
+      // A stale screen must refresh after a rejected command too, before enabling actions again.
+      await invalidate()
     },
   })
+
+  const mutateAsync: typeof mutation.mutateAsync = (variables, options) => {
+    if (inFlight.current) return inFlight.current
+    const pending = mutation.mutateAsync(variables, options)
+    inFlight.current = pending
+    const release = () => {
+      if (inFlight.current === pending) inFlight.current = null
+    }
+    void pending.then(release, release)
+    return pending
+  }
+  const mutate: typeof mutation.mutate = (variables, options) => {
+    void mutateAsync(variables, options).catch(() => {
+      // The mutation reports the error; event handlers must not create unhandled rejections.
+    })
+  }
+  return { ...mutation, mutate, mutateAsync }
 }

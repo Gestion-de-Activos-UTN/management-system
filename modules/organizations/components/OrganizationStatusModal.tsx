@@ -1,7 +1,8 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { useState } from 'react'
-import { Alert, Button, Group, Loader, Modal, Stack, Text, TextInput } from '@mantine/core'
+import { Alert, Button, Group, Loader, Modal, Text, TextInput } from '@mantine/core'
 import {
   Building2,
   ClipboardX,
@@ -100,7 +101,13 @@ function OrganizationStatusForm({
   if (!impact.data.is_active) {
     const { admin, office } = impact.data.reactivation
     return (
-      <Stack gap="md">
+      <ModalLayout
+        footer={actions(
+          'Reactivar organización',
+          () => setStatus.mutate({ id, input: { is_active: true } }, { onSuccess: onClose }),
+          { danger: false, disabled: !admin || !office }
+        )}
+      >
         {admin && office ? (
           <Text size="sm">
             Al reactivar <strong>{organization.name}</strong>, vuelven a estar disponibles{' '}
@@ -116,19 +123,24 @@ function OrganizationStatusForm({
           No se restaura nada más: las demás personas y oficinas, los escáneres revocados y los
           activos dados de baja quedan como están. Reactívalos por separado si corresponde.
         </Alert>
-        {actions(
-          'Reactivar organización',
-          () => setStatus.mutate({ id, input: { is_active: true } }, { onSuccess: onClose }),
-          { danger: false, disabled: !admin || !office }
-        )}
-      </Stack>
+      </ModalLayout>
     )
   }
 
   const data = impact.data.deactivation
   const nameMatches = confirmName.trim() === organization.name.trim()
   return (
-    <Stack gap="md">
+    <ModalLayout
+      footer={actions(
+        'Desactivar organización',
+        () =>
+          setStatus.mutate(
+            { id, input: { is_active: false, confirm_name: confirmName.trim() } },
+            { onSuccess: onClose, onError: () => void impact.refetch() }
+          ),
+        { danger: true, disabled: !nameMatches }
+      )}
+    >
       <Text size="sm">
         Al desactivar <strong>{organization.name}</strong> se da de baja todo en un solo paso:
       </Text>
@@ -164,20 +176,12 @@ function OrganizationStatusForm({
       </Alert>
       <TextInput
         label="Para confirmar, escribe el nombre de la organización"
+        withAsterisk
         description={organization.name}
         value={confirmName}
         onChange={event => setConfirmName(event.currentTarget.value)}
         autoComplete="off"
       />
-      {actions(
-        'Desactivar organización',
-        () =>
-          setStatus.mutate(
-            { id, input: { is_active: false, confirm_name: confirmName.trim() } },
-            { onSuccess: onClose, onError: () => void impact.refetch() }
-          ),
-        { danger: true, disabled: !nameMatches }
-      )}
-    </Stack>
+    </ModalLayout>
   )
 }

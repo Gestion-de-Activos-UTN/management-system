@@ -1,5 +1,6 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { useState } from 'react'
 import {
   Alert,
@@ -112,7 +113,35 @@ function MemberStatusForm({
     )
 
   return (
-    <Stack gap="md">
+    <ModalLayout
+      gap="md"
+      footer={
+        <Group justify="flex-end" gap="xs">
+          <Button variant="default" onClick={onDone}>
+            Cancelar
+          </Button>
+          <Button
+            color={deactivating ? 'red' : undefined}
+            loading={update.isPending}
+            disabled={
+              (needsOffices && !officeIds.length) ||
+              (deactivating &&
+                (impact.isPending || impact.isError || !impact.data || !emailMatches))
+            }
+            leftSection={
+              deactivating ? (
+                <UserX size={16} strokeWidth={1.5} />
+              ) : (
+                <UserCheck size={16} strokeWidth={1.5} />
+              )
+            }
+            onClick={confirm}
+          >
+            {deactivating ? 'Desactivar' : 'Reactivar'}
+          </Button>
+        </Group>
+      }
+    >
       {deactivating ? (
         <>
           <Text size="sm">
@@ -204,6 +233,7 @@ function MemberStatusForm({
       {deactivating && (
         <TextInput
           label="Para confirmar, escribe el correo de la persona"
+          withAsterisk
           description={member.email}
           type="email"
           autoComplete="off"
@@ -219,6 +249,7 @@ function MemberStatusForm({
           </Alert>
           <MultiSelect
             label="Oficinas"
+            withAsterisk
             placeholder="Selecciona una o más oficinas"
             searchable
             data={officeOptions}
@@ -228,29 +259,6 @@ function MemberStatusForm({
           />
         </>
       )}
-      <Group justify="flex-end" gap="xs">
-        <Button variant="default" onClick={onDone}>
-          Cancelar
-        </Button>
-        <Button
-          color={deactivating ? 'red' : undefined}
-          loading={update.isPending}
-          disabled={
-            (needsOffices && !officeIds.length) ||
-            (deactivating && (impact.isPending || impact.isError || !impact.data || !emailMatches))
-          }
-          leftSection={
-            deactivating ? (
-              <UserX size={16} strokeWidth={1.5} />
-            ) : (
-              <UserCheck size={16} strokeWidth={1.5} />
-            )
-          }
-          onClick={confirm}
-        >
-          {deactivating ? 'Desactivar' : 'Reactivar'}
-        </Button>
-      </Group>
-    </Stack>
+    </ModalLayout>
   )
 }

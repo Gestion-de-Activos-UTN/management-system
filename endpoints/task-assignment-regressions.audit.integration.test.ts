@@ -9,6 +9,7 @@ let admin: string,
   adminCookie: string,
   viewerCookie: string,
   secondViewerCookie: string
+let manager: string, managerCookie: string
 
 async function api(
   path: string,
@@ -64,10 +65,105 @@ beforeAll(async () => {
   adminCookie = await login(admin)
   viewerCookie = await login(viewer)
   secondViewerCookie = await login(secondViewer)
+  manager = await member(payload, org, [office], 'office_manager')
+  managerCookie = await login(manager)
 }, 60000)
 
 afterAll(async () => {
   if (payload) await payload.destroy()
+})
+
+it('reports administrative completion to a stale manager without changing the completed task', async () => {
+  const created = await api('/api/v1/tasks', {
+    title: 'Finalización administrativa con vista desactualizada',
+    priority: 'normal',
+    global: false,
+    office_ids: [office],
+    assignment_kind: 'user',
+    assigned_user: manager,
+  })
+  expect(created.status).toBe(201)
+  const id = String(created.body.docs[0].id)
+  expect((await api(`/api/v1/tasks/${id}/claim`, {}, managerCookie)).status).toBe(200)
+  expect(
+    (await api(`/api/v1/tasks/${id}/force-complete`, { reason: 'Resuelta por administración.' }))
+      .status
+  ).toBe(200)
+  const previous = await payload.findByID({
+    collection: 'tasks',
+    id,
+    overrideAccess: true,
+    depth: 0,
+  })
+  for (const action of ['complete', 'release']) {
+    const result = await api(`/api/v1/tasks/${id}/${action}`, {}, managerCookie)
+    expect(result.status).toBe(409)
+    expect(result.body.error).toBe('task_completed_by_admin')
+  }
+  const repeated = await api(`/api/v1/tasks/${id}/force-complete`, { reason: 'Segundo intento.' })
+  expect(repeated.status).toBe(409)
+  expect(repeated.body.error).toBe('task_completed_by_admin')
+  const saved = await payload.findByID({ collection: 'tasks', id, overrideAccess: true, depth: 0 })
+  expect(saved.status).toBe('completed')
+  expect(saved.completed_by).toEqual(previous.completed_by)
+  expect(saved.completed_at).toEqual(previous.completed_at)
+  expect(saved.completion_reason).toBe('Resuelta por administración.')
+  expect(saved.claimed_by).toEqual(previous.claimed_by)
+  const detail = await api(`/api/v1/tasks/${id}`, undefined, managerCookie)
+  expect(detail.status).toBe(200)
+  expect(detail.body.available_actions).not.toContain('complete')
+  expect(detail.body.available_actions).not.toContain('release')
+  const outsideOffice = await api(`/api/v1/tasks/${id}/complete`, {}, secondViewerCookie)
+  expect(outsideOffice.status).toBe(404)
+  expect(outsideOffice.body.error).toBe('task_not_found')
+})
+
+it('distinguishes completion conflicts from another person owning an active claim', async () => {
+  const created = await api('/api/v1/tasks', {
+    title: 'Conflicto de estado o reclamo ajeno',
+    priority: 'normal',
+    global: false,
+    office_ids: [office],
+    assignment_kind: 'open_pool',
+  })
+  expect(created.status).toBe(201)
+  const id = String(created.body.docs[0].id)
+  const pending = await api(`/api/v1/tasks/${id}/complete`, {}, managerCookie)
+  expect(pending.status).toBe(409)
+  expect(pending.body.error).toBe('task_state_changed')
+  expect((await api(`/api/v1/tasks/${id}/claim`, {}, managerCookie)).status).toBe(200)
+  const otherClaimant = await api(`/api/v1/tasks/${id}/complete`, {}, viewerCookie)
+  expect(otherClaimant.status).toBe(403)
+  expect(otherClaimant.body.error).toBe('not_claimant')
+  expect((await api(`/api/v1/tasks/${id}/complete`, {}, managerCookie)).status).toBe(200)
+  const repeated = await api(`/api/v1/tasks/${id}/complete`, {}, managerCookie)
+  expect(repeated.status).toBe(409)
+  expect(repeated.body.error).toBe('task_already_completed')
+})
+
+it('reports cancellation instead of blaming the previous claimant', async () => {
+  const created = await api('/api/v1/tasks', {
+    title: 'Cancelación con vista desactualizada',
+    priority: 'normal',
+    global: false,
+    office_ids: [office],
+    assignment_kind: 'user',
+    assigned_user: manager,
+  })
+  expect(created.status).toBe(201)
+  const id = String(created.body.docs[0].id)
+  expect((await api(`/api/v1/tasks/${id}/claim`, {}, managerCookie)).status).toBe(200)
+  expect((await api(`/api/v1/tasks/${id}/cancel`, { reason: 'Ya no es necesaria.' })).status).toBe(
+    200
+  )
+  for (const action of ['complete', 'release']) {
+    const result = await api(`/api/v1/tasks/${id}/${action}`, {}, managerCookie)
+    expect(result.status).toBe(409)
+    expect(result.body.error).toBe('task_cancelled')
+  }
+  const saved = await payload.findByID({ collection: 'tasks', id, overrideAccess: true, depth: 0 })
+  expect(saved.status).toBe('cancelled')
+  expect(saved.completed_at).toBeNull()
 })
 
 it('offers roles and users for a single office through an authenticated request', async () => {

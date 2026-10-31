@@ -1,5 +1,6 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { useState } from 'react'
 import {
   Button,
@@ -114,7 +115,18 @@ export function MemberCreateModal({
           void submit()
         }}
       >
-        <Stack>
+        <ModalLayout
+          footer={
+            <Group justify="flex-end">
+              <Button variant="default" onClick={close}>
+                Cancelar
+              </Button>
+              <Button loading={isPending} type="submit">
+                Crear
+              </Button>
+            </Group>
+          }
+        >
           <TextInput
             label="Nombre y apellido"
             value={name}
@@ -190,15 +202,7 @@ export function MemberCreateModal({
               required
             />
           )}
-          <Group justify="flex-end">
-            <Button variant="default" onClick={close}>
-              Cancelar
-            </Button>
-            <Button loading={isPending} type="submit">
-              Crear
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </form>
     </Modal>
   )

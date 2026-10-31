@@ -531,7 +531,8 @@ async function releaseTaskLocked(
   assertAction(ctx, 'release')
   const task = await loadTask(req, id)
   assertTaskScope(ctx, task)
-  if (task.status !== 'in_progress' || !actorMatches(task.claimed_by, ctx)) {
+  assertTaskInProgress(task)
+  if (!actorMatches(task.claimed_by, ctx)) {
     throw new TaskDomainError('not_claimant', 403, 'Sólo quien reclamó la tarea puede liberarla.')
   }
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {task release, claimant}, previous hash for this organization_id)
@@ -606,6 +607,24 @@ async function reassignTaskLocked(
   })
 }
 
+function assertTaskInProgress(task: Task): void {
+  if (task.status === 'completed') {
+    throw new TaskDomainError(
+      task.completion_reason ? 'task_completed_by_admin' : 'task_already_completed',
+      409,
+      task.completion_reason
+        ? 'La tarea ya fue completada por un administrador.'
+        : 'La tarea ya fue completada.'
+    )
+  }
+  if (task.status === 'cancelled') {
+    throw new TaskDomainError('task_cancelled', 409, 'La tarea fue cancelada.')
+  }
+  if (task.status !== 'in_progress') {
+    throw new TaskDomainError('task_state_changed', 409, 'La tarea ya no está en curso.')
+  }
+}
+
 async function completeTaskLocked(
   req: PayloadRequest,
   ctx: TenantContext,
@@ -615,7 +634,8 @@ async function completeTaskLocked(
   const task = await loadTask(req, id)
   assertTaskScope(ctx, task)
   await assertReferenceReadable(req, ctx, task)
-  if (task.status !== 'in_progress' || !actorMatches(task.claimed_by, ctx)) {
+  assertTaskInProgress(task)
+  if (!actorMatches(task.claimed_by, ctx)) {
     throw new TaskDomainError(
       'not_claimant',
       403,
@@ -649,7 +669,8 @@ async function forceCompleteTaskLocked(
   const task = await loadTask(req, id)
   assertTaskScope(ctx, task)
   await assertReferenceReadable(req, ctx, task)
-  if (task.status !== 'in_progress' || !task.claimed_by || actorMatches(task.claimed_by, ctx)) {
+  assertTaskInProgress(task)
+  if (!task.claimed_by || actorMatches(task.claimed_by, ctx)) {
     throw new TaskDomainError(
       'task_not_force_completable',
       409,

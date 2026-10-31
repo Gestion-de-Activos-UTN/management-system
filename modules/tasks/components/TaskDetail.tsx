@@ -1,5 +1,6 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { textRuleError } from '@/lib/text-rules'
 import { useState, type CSSProperties } from 'react'
 import {
@@ -236,6 +237,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
           <Button
             variant="default"
             leftSection={<Pencil size={16} strokeWidth={1.5} />}
+            disabled={command.isPending}
             onClick={() => setEditOpened(true)}
           >
             Editar
@@ -295,6 +297,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             color="red"
             variant="light"
             leftSection={<XCircle size={16} strokeWidth={1.5} />}
+            disabled={command.isPending}
             onClick={() => setCancelOpened(true)}
           >
             Cancelar tarea
@@ -365,7 +368,21 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
         size="lg"
         centered
       >
-        <Stack>
+        <ModalLayout
+          footer={
+            <Group justify="flex-end">
+              <Button
+                onClick={reassign}
+                loading={command.isPending && command.variables?.action === 'reassign'}
+                disabled={
+                  command.isPending || assignmentOptions.isPending || assignmentOptions.isError
+                }
+              >
+                Reasignar
+              </Button>
+            </Group>
+          }
+        >
           {assignmentOptions.isError && (
             <Alert color="red" title="No se pudieron cargar los destinatarios">
               <Button
@@ -393,18 +410,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
               setAssignmentError(undefined)
             }}
           />
-          <Group justify="flex-end">
-            <Button
-              onClick={reassign}
-              loading={command.isPending && command.variables?.action === 'reassign'}
-              disabled={
-                command.isPending || assignmentOptions.isPending || assignmentOptions.isError
-              }
-            >
-              Reasignar
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </Modal>
       <Modal
         opened={forceCompleteOpened}
@@ -412,7 +418,31 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
         title="Completar tarea reclamada por otra persona"
         centered
       >
-        <Stack>
+        <ModalLayout
+          footer={
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setForceCompleteOpened(false)}>
+                Volver
+              </Button>
+              <Button
+                color="orange"
+                loading={command.isPending && command.variables?.action === 'force_complete'}
+                disabled={
+                  command.isPending ||
+                  forceCompleteReason.trim().length < 3 ||
+                  Boolean(textRuleError(forceCompleteReason, 'free'))
+                }
+                onClick={() => {
+                  run('force_complete', forceCompleteReason)
+                  setForceCompleteOpened(false)
+                  setForceCompleteReason('')
+                }}
+              >
+                Confirmar finalización
+              </Button>
+            </Group>
+          }
+        >
           <Alert color="orange" icon={<ShieldAlert size={18} strokeWidth={1.5} />}>
             La tarea está en progreso y fue reclamada por{' '}
             <strong>{task.actor_labels?.claimed_by ?? 'otra persona'}</strong>. Al continuar, la
@@ -429,28 +459,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             error={textRuleError(forceCompleteReason, 'free')}
             onChange={event => setForceCompleteReason(event.currentTarget.value)}
           />
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setForceCompleteOpened(false)}>
-              Volver
-            </Button>
-            <Button
-              color="orange"
-              loading={command.isPending && command.variables?.action === 'force_complete'}
-              disabled={
-                command.isPending ||
-                forceCompleteReason.trim().length < 3 ||
-                Boolean(textRuleError(forceCompleteReason, 'free'))
-              }
-              onClick={() => {
-                run('force_complete', forceCompleteReason)
-                setForceCompleteOpened(false)
-                setForceCompleteReason('')
-              }}
-            >
-              Confirmar finalización
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </Modal>
       <Modal
         opened={cancelOpened}
@@ -458,7 +467,24 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
         title="Cancelar tarea"
         centered
       >
-        <Stack>
+        <ModalLayout
+          footer={
+            <Group justify="flex-end">
+              <Button
+                color="red"
+                disabled={
+                  cancelReason.trim().length < 3 || Boolean(textRuleError(cancelReason, 'free'))
+                }
+                onClick={() => {
+                  run('cancel', cancelReason)
+                  setCancelOpened(false)
+                }}
+              >
+                Cancelar tarea
+              </Button>
+            </Group>
+          }
+        >
           <CharacterCountTextarea
             label="Motivo"
             required
@@ -468,21 +494,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             error={textRuleError(cancelReason, 'free')}
             onChange={event => setCancelReason(event.currentTarget.value)}
           />
-          <Group justify="flex-end">
-            <Button
-              color="red"
-              disabled={
-                cancelReason.trim().length < 3 || Boolean(textRuleError(cancelReason, 'free'))
-              }
-              onClick={() => {
-                run('cancel', cancelReason)
-                setCancelOpened(false)
-              }}
-            >
-              Cancelar tarea
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </Modal>
     </Stack>
   )

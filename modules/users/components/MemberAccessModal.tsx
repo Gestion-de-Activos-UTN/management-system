@@ -1,5 +1,6 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { useState } from 'react'
 import { Alert, Button, Group, Modal, MultiSelect, Radio, Stack, Text } from '@mantine/core'
 import { Save, TriangleAlert } from 'lucide-react'
@@ -97,7 +98,24 @@ function MemberAccessForm({
   }
 
   return (
-    <Stack gap="md">
+    <ModalLayout
+      gap="md"
+      footer={
+        <Group justify="flex-end" gap="xs">
+          <Button variant="default" onClick={onDone}>
+            Cancelar
+          </Button>
+          <Button
+            color={isSelf && losingAuthority ? 'yellow' : undefined}
+            loading={update.isPending}
+            leftSection={<Save size={16} strokeWidth={1.5} />}
+            onClick={submit}
+          >
+            {isSelf && losingAuthority ? 'Bajar mi rol' : 'Guardar cambios'}
+          </Button>
+        </Group>
+      }
+    >
       <Text size="sm" c="dimmed">
         {member.name || member.email}
         {member.name && ` · ${member.email}`}
@@ -111,6 +129,7 @@ function MemberAccessForm({
       {allowRoleChange ? (
         <Radio.Group
           label="Rol"
+          withAsterisk
           value={role}
           onChange={value => {
             setRole(value as OrganizationRoleSlug)
@@ -164,6 +183,7 @@ function MemberAccessForm({
       {needsOffices ? (
         <MultiSelect
           label="Oficinas"
+          withAsterisk
           description={
             member.is_active
               ? 'Sólo verá y gestionará la información de estas oficinas.'
@@ -196,19 +216,6 @@ function MemberAccessForm({
           conserve no se modificarán.
         </Alert>
       )}
-      <Group justify="flex-end" gap="xs">
-        <Button variant="default" onClick={onDone}>
-          Cancelar
-        </Button>
-        <Button
-          color={isSelf && losingAuthority ? 'yellow' : undefined}
-          loading={update.isPending}
-          leftSection={<Save size={16} strokeWidth={1.5} />}
-          onClick={submit}
-        >
-          {isSelf && losingAuthority ? 'Bajar mi rol' : 'Guardar cambios'}
-        </Button>
-      </Group>
-    </Stack>
+    </ModalLayout>
   )
 }

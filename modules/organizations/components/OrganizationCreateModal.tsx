@@ -1,5 +1,6 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { useState } from 'react'
 import {
   Badge,
@@ -170,7 +171,22 @@ export function OrganizationCreateModal({
 
   return (
     <Modal opened={opened} onClose={reset} title="Crear organización" size="lg" centered>
-      <Stack>
+      <ModalLayout
+        footer={
+          <Group justify="space-between">
+            <Button variant="default" onClick={step ? () => goToStep(step - 1) : reset}>
+              {step ? 'Anterior' : 'Cancelar'}
+            </Button>
+            {step < 3 ? (
+              <Button onClick={next}>Siguiente</Button>
+            ) : (
+              <Button loading={isPending} onClick={submit}>
+                Crear organización
+              </Button>
+            )}
+          </Group>
+        }
+      >
         <Tabs value={String(step)} onChange={value => value && goToStep(Number(value))}>
           <Tabs.List grow>
             <Tabs.Tab
@@ -441,19 +457,7 @@ export function OrganizationCreateModal({
             </Stack>
           </Tabs.Panel>
         </Tabs>
-        <Group justify="space-between">
-          <Button variant="default" onClick={step ? () => goToStep(step - 1) : reset}>
-            {step ? 'Anterior' : 'Cancelar'}
-          </Button>
-          {step < 3 ? (
-            <Button onClick={next}>Siguiente</Button>
-          ) : (
-            <Button loading={isPending} onClick={submit}>
-              Crear organización
-            </Button>
-          )}
-        </Group>
-      </Stack>
+      </ModalLayout>
     </Modal>
   )
 }
