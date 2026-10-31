@@ -20,7 +20,7 @@ import { Archive, Check, Hand, Pencil, RotateCcw, ShieldAlert, Trash2, XCircle }
 import { STATUS_TONE_COLOR, StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDate, formatDateTime } from '@/lib/format-date'
 import { relationId } from '@/lib/relationId'
-import type { ReassignTaskInput } from '../schema'
+import { ReassignTaskSchema } from '../schema'
 import type { TaskAction, TaskDTO } from '../service'
 import { TASK_PRIORITY_LABELS, TASK_STATUS_LABELS, TASK_STATUS_TONES } from '../task-labels'
 import { getTaskReferenceHref, getTaskCurrentReferenceHref } from '../task-reference-link'
@@ -46,6 +46,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
   const [forceCompleteReason, setForceCompleteReason] = useState('')
   const [assignmentKind, setAssignmentKind] = useState<TaskAssignmentKind>('open_pool')
   const [assignmentTarget, setAssignmentTarget] = useState<string | null>(null)
+  const [assignmentError, setAssignmentError] = useState<string>()
   const reference = task.related_entity_info
     ? { relationTo: task.related_entity_info.relationTo, value: task.related_entity_info.value }
     : undefined
@@ -61,15 +62,35 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
   const has = (action: TaskAction) => task.available_actions.includes(action)
   const run = (action: TaskAction, payload?: unknown) => command.mutate({ action, payload })
 
+  const openReassign = () => {
+    setAssignmentKind(task.assignment_kind)
+    const target =
+      task.assignment_kind === 'role'
+        ? task.assigned_role
+        : task.assignment_kind === 'user'
+          ? task.assigned_user
+          : null
+    setAssignmentTarget(target ? relationId(target) : null)
+    setAssignmentError(undefined)
+    setReassignOpened(true)
+  }
+
   const reassign = () => {
-    const payload: ReassignTaskInput =
+    const payload =
       assignmentKind === 'role'
-        ? { assignment_kind: 'role', assigned_role: assignmentTarget! }
+        ? { assignment_kind: 'role', assigned_role: assignmentTarget ?? undefined }
         : assignmentKind === 'user'
-          ? { assignment_kind: 'user', assigned_user: assignmentTarget! }
+          ? { assignment_kind: 'user', assigned_user: assignmentTarget ?? undefined }
           : { assignment_kind: 'open_pool' }
-    run('reassign', payload)
-    setReassignOpened(false)
+    const parsed = ReassignTaskSchema.safeParse(payload)
+    if (!parsed.success) {
+      setAssignmentError(parsed.error.issues[0]?.message)
+      return
+    }
+    command.mutate(
+      { action: 'reassign', payload: parsed.data },
+      { onSuccess: () => setReassignOpened(false) }
+    )
   }
 
   const activity = taskActivity(task)
@@ -115,6 +136,41 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
         <Stack gap="md">
           <Text style={{ whiteSpace: 'pre-wrap' }}>{task.description || 'Sin descripción.'}</Text>
           <SimpleGrid cols={{ base: 1, xs: 3 }}>
+            <Fact label="Ámbito" value={task.office ? 'Oficina' : 'Organización'} />
+            {task.office && (
+              <Fact
+                label="Oficina"
+                value={task.assignment_info?.office_name ?? 'Oficina no disponible'}
+              />
+            )}
+            <Fact
+              label="Asignación"
+              value={
+                task.assignment_kind === 'role'
+                  ? 'Rol'
+                  : task.assignment_kind === 'user'
+                    ? 'Persona'
+                    : 'Pool abierto'
+              }
+            />
+            {task.assignment_kind === 'role' && (
+              <Fact
+                label="Rol asignado"
+                value={task.assignment_info?.role_name ?? 'Rol no disponible'}
+              />
+            )}
+            {task.assignment_kind === 'user' && (
+              <Fact
+                label="Persona asignada"
+                value={task.assignment_info?.user_name ?? 'Persona no disponible'}
+              />
+            )}
+            {task.claimed_by && (
+              <Fact
+                label="Reclamada por"
+                value={task.actor_labels?.claimed_by ?? 'Persona no disponible'}
+              />
+            )}
             <Fact label="Prioridad" value={TASK_PRIORITY_LABELS[task.priority]} />
             <Fact label="Inicio" value={formatDate(task.start_at)} />
             <Fact
@@ -207,7 +263,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
           </Button>
         )}
         {has('reassign') && (
-          <Button variant="light" onClick={() => setReassignOpened(true)}>
+          <Button variant="light" onClick={openReassign} disabled={command.isPending}>
             Reasignar
           </Button>
         )}
@@ -299,26 +355,51 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
       </Modal>
       <Modal
         opened={reassignOpened}
-        onClose={() => setReassignOpened(false)}
+        onClose={() => {
+          if (!command.isPending) setReassignOpened(false)
+        }}
+        closeOnClickOutside={!command.isPending}
+        closeOnEscape={!command.isPending}
+        closeButtonProps={{ disabled: command.isPending }}
         title="Reasignar tarea"
         size="lg"
         centered
       >
         <Stack>
+          {assignmentOptions.isError && (
+            <Alert color="red" title="No se pudieron cargar los destinatarios">
+              <Button
+                variant="subtle"
+                size="compact-sm"
+                onClick={() => void assignmentOptions.refetch()}
+              >
+                Reintentar
+              </Button>
+            </Alert>
+          )}
           <TaskAssignmentFields
             kind={assignmentKind}
             target={assignmentTarget}
             options={assignmentOptions.data}
+            targetError={assignmentError}
+            disabled={command.isPending || assignmentOptions.isPending || assignmentOptions.isError}
             onKindChange={kind => {
               setAssignmentKind(kind)
               setAssignmentTarget(null)
+              setAssignmentError(undefined)
             }}
-            onTargetChange={setAssignmentTarget}
+            onTargetChange={value => {
+              setAssignmentTarget(value)
+              setAssignmentError(undefined)
+            }}
           />
           <Group justify="flex-end">
             <Button
               onClick={reassign}
-              disabled={assignmentKind !== 'open_pool' && !assignmentTarget}
+              loading={command.isPending && command.variables?.action === 'reassign'}
+              disabled={
+                command.isPending || assignmentOptions.isPending || assignmentOptions.isError
+              }
             >
               Reasignar
             </Button>

@@ -25,6 +25,11 @@ export type TaskReferenceInfo = TaskReferenceInput & {
 }
 
 export type TaskDTO = Task & {
+  assignment_info?: {
+    office_name: string | null
+    role_name: string | null
+    user_name: string | null
+  }
   effective_status: 'planned' | 'pending' | 'in_progress' | 'completed' | 'cancelled'
   related_entity_info: TaskReferenceInfo | null
   actor_labels?: {
@@ -33,13 +38,13 @@ export type TaskDTO = Task & {
     completed_by: string | null
     cancelled_by: string | null
     archived_by: string | null
-    /** Cada reclamo y liberación, en el orden en que ocurrieron. */
+    /** Reclamos, liberaciones y reasignaciones, en el orden en que ocurrieron. */
     claim_events: Array<{
-      action: 'claimed' | 'released'
+      action: 'claimed' | 'released' | 'reassigned'
       at: string
       actor: string | null
-      /** Liberada por el sistema: la persona se desactivó o perdió acceso a la oficina. */
-      reason?: 'member_deactivated' | 'office_access_removed'
+      /** Motivo de una liberación automática. */
+      reason?: 'member_deactivated' | 'office_access_removed' | 'task_reassigned'
     }>
   }
   available_actions: TaskAction[]

@@ -4,6 +4,7 @@ import type { Task } from '@/app/types/payload-types'
 import { getTenantContext, type TenantContext } from '@/access/tenant/resolveTenantContext'
 import { canDo, hasOrgWideScope } from '@/access/rbac/permissions'
 import { relationId } from '@/lib/relationId'
+import { roleSlugLabel } from '@/lib/role-labels'
 import {
   CancelTaskSchema,
   CreateTasksSchema,
@@ -240,7 +241,12 @@ const listTasksEndpoint: Endpoint = {
           or: [{ office: { in: ctx.officeIds } }, { office: { exists: false } }],
         })
       }
-      if (parsed.data.office_id) clauses.push({ office: { equals: parsed.data.office_id } })
+      // Las tareas organizacionales también corresponden a quienes trabajan en esta oficina;
+      // el permiso sobre la tarea y su referencia se verifica antes de incluir cada resultado.
+      if (parsed.data.office_id)
+        clauses.push({
+          or: [{ office: { equals: parsed.data.office_id } }, { office: { exists: false } }],
+        })
       if (parsed.data.priority) clauses.push({ priority: { in: parsed.data.priority } })
       if (!parsed.data.include_archived) clauses.push({ archived_at: { exists: false } })
       // "Planificada" no se guarda: es una pendiente con inicio futuro, así que en la base se
@@ -292,6 +298,47 @@ const listTasksEndpoint: Endpoint = {
     }),
 }
 
+/** Only called after the actor has been authorized to read the task. No raw user documents. */
+async function taskAssignmentInfo(req: PayloadRequest, task: Task) {
+  const [office, role, user] = await Promise.all([
+    task.office
+      ? req.payload.findByID({
+          collection: 'offices',
+          id: relationId(task.office),
+          overrideAccess: true,
+          req,
+          depth: 0,
+          select: { name: true },
+        })
+      : null,
+    task.assignment_kind === 'role' && task.assigned_role
+      ? req.payload.findByID({
+          collection: 'roles',
+          id: relationId(task.assigned_role),
+          overrideAccess: true,
+          req,
+          depth: 0,
+          select: { slug: true },
+        })
+      : null,
+    task.assignment_kind === 'user' && task.assigned_user
+      ? req.payload.findByID({
+          collection: 'users',
+          id: relationId(task.assigned_user),
+          overrideAccess: true,
+          req,
+          depth: 0,
+          select: { name: true },
+        })
+      : null,
+  ])
+  return {
+    office_name: office?.name ?? null,
+    role_name: role ? roleSlugLabel(role.slug) : null,
+    user_name: user?.name ?? null,
+  }
+}
+
 const taskDetailEndpoint: Endpoint = {
   path: '/v1/tasks/:id',
   method: 'get',
@@ -303,6 +350,7 @@ const taskDetailEndpoint: Endpoint = {
       const reference = await assertCanReadTask(req, ctx, task)
       return json({
         ...taskWithDerivedState(task),
+        assignment_info: await taskAssignmentInfo(req, task),
         actor_labels: await taskActorLabels(req, task),
         related_entity_info: taskReferenceInfo(task, reference),
         available_actions: await availableTaskActions(req, ctx, task, reference),

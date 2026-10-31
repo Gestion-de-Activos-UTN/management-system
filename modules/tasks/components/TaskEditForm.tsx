@@ -1,5 +1,7 @@
 'use client'
 
+import { DateField } from '@/components/ui/DateField'
+
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Button, Group, Select, SimpleGrid, Stack, TextInput } from '@mantine/core'
@@ -82,16 +84,11 @@ export function TaskEditForm({ task, onSaved }: { task: TaskDTO; onSaved: () => 
             name="start_at"
             control={control}
             render={({ field }) => (
-              <TextInput
-                type="date"
+              <DateField
                 label="Inicio"
                 value={field.value ? formatDateInput(field.value) : ''}
-                onChange={event =>
-                  field.onChange(
-                    event.currentTarget.value
-                      ? localDateStartToISOString(event.currentTarget.value)
-                      : undefined
-                  )
+                onChange={value =>
+                  field.onChange(value ? localDateStartToISOString(value) : undefined)
                 }
                 error={errors.start_at?.message}
               />
@@ -101,17 +98,10 @@ export function TaskEditForm({ task, onSaved }: { task: TaskDTO; onSaved: () => 
             name="due_at"
             control={control}
             render={({ field }) => (
-              <TextInput
-                type="date"
+              <DateField
                 label="Vencimiento"
                 value={field.value ? formatDateInput(field.value) : ''}
-                onChange={event =>
-                  field.onChange(
-                    event.currentTarget.value
-                      ? localDateEndToISOString(event.currentTarget.value)
-                      : null
-                  )
-                }
+                onChange={value => field.onChange(value ? localDateEndToISOString(value) : null)}
                 error={errors.due_at?.message}
               />
             )}

@@ -78,3 +78,57 @@ test('taskActivity explica por qué el sistema liberó una tarea tomada', () => 
     ]
   )
 })
+
+test('taskActivity agrupa la liberación y reasignación en un solo paso entre reclamos', () => {
+  const at = '2026-10-12T09:00:00.000Z'
+  const events = taskActivity({
+    createdAt: '2026-10-10T16:00:00.000Z',
+    actor_labels: {
+      created_by: 'Marcos',
+      claimed_by: 'Lucía',
+      completed_by: null,
+      cancelled_by: null,
+      archived_by: null,
+      claim_events: [
+        { action: 'claimed', at: '2026-10-11T09:00:00.000Z', actor: 'Ana' },
+        { action: 'released', at, actor: 'Marcos', reason: 'task_reassigned' },
+        { action: 'reassigned', at, actor: 'Marcos' },
+        { action: 'claimed', at, actor: 'Lucía' },
+      ],
+    },
+  })
+  assert.deepEqual(
+    events.map(event => event.label),
+    ['Reclamada', 'Reasignada', 'Reclamada', 'Creada']
+  )
+  assert.equal(events[1].actor, 'Marcos')
+  assert.equal(events[1].note, 'Se liberó el reclamo anterior.')
+  assert.equal(events[2].actor, 'Ana')
+})
+
+test('taskActivity conserva las liberaciones sin pareja y no atribuye liberación a una reasignación pendiente', () => {
+  const events = taskActivity({
+    createdAt: '2026-10-10T16:00:00.000Z',
+    actor_labels: {
+      created_by: 'Marcos',
+      claimed_by: null,
+      completed_by: null,
+      cancelled_by: null,
+      archived_by: null,
+      claim_events: [
+        {
+          action: 'released',
+          at: '2026-10-11T09:00:00.000Z',
+          actor: 'Ana',
+          reason: 'task_reassigned',
+        },
+        { action: 'reassigned', at: '2026-10-12T09:00:00.000Z', actor: 'Marcos' },
+      ],
+    },
+  })
+  assert.deepEqual(
+    events.map(event => event.label),
+    ['Reasignada', 'Liberada por reasignación', 'Creada']
+  )
+  assert.equal(events[0].note, null)
+})

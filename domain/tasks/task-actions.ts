@@ -352,10 +352,10 @@ async function editTaskLocked(
 }
 
 /** Por qué el sistema liberó una tarea que nadie soltó a mano. */
-export type ClaimReleaseReason = 'member_deactivated' | 'office_access_removed'
+export type ClaimReleaseReason = 'member_deactivated' | 'office_access_removed' | 'task_reassigned'
 
 export type ClaimEvent = {
-  action: 'claimed' | 'released'
+  action: 'claimed' | 'released' | 'reassigned'
   at: string
   by: ReturnType<typeof actorRelation> | null
   reason?: ClaimReleaseReason
@@ -578,6 +578,12 @@ async function reassignTaskLocked(
     assignment,
     reference
   )
+  const now = new Date().toISOString()
+  const actor = actorRelation(req, ctx.userId)
+  const releasedTask =
+    task.status === 'in_progress' && task.claimed_by
+      ? { ...task, claim_history: withClaimEvent(task, 'released', actor, now, 'task_reassigned') }
+      : task
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {task reassignment}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   // NOTIFY: this event should trigger a Notification Bell entry for {previous claimant and new eligible audience}
@@ -595,6 +601,7 @@ async function reassignTaskLocked(
       status: 'pending',
       claimed_by: null,
       claimed_at: null,
+      claim_history: withClaimEvent(releasedTask, 'reassigned', actor, now),
     },
   })
 }

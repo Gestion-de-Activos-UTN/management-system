@@ -126,10 +126,16 @@ export async function resolveTaskReference(
       break
     // El tipo de entidad se muestra aparte en la UI; acá sólo va lo que la distingue de sus pares.
     case 'inventory-snapshots':
-      label = doc.taken_at ? formatDateTime(String(doc.taken_at)) : `Instantánea ${doc.id}`
+      label = text(
+        doc.display_name,
+        doc.taken_at ? formatDateTime(String(doc.taken_at)) : `Instantánea ${doc.id}`
+      )
       break
     case 'scan-reports':
-      label = doc.scan_start ? formatDateTime(String(doc.scan_start)) : `Escaneo ${doc.id}`
+      label = text(
+        doc.display_name,
+        doc.scan_start ? formatDateTime(String(doc.scan_start)) : `Escaneo ${doc.id}`
+      )
       break
     case 'risk-evaluations':
       label = doc.evaluated_at ? formatDateTime(String(doc.evaluated_at)) : `Evaluación ${doc.id}`
@@ -164,8 +170,15 @@ export async function resolveTaskReference(
       'No se pudo resolver la organización de la entidad.'
     )
   }
-  return { ...reference, organizationId, officeId, label,
-    ...(['assets', 'non-network-assets'].includes(reference.relationTo) ? { unavailable: doc.status === 'retired' || Boolean(doc.deleted_at) } : {}) }
+  return {
+    ...reference,
+    organizationId,
+    officeId,
+    label,
+    ...(['assets', 'non-network-assets'].includes(reference.relationTo)
+      ? { unavailable: doc.status === 'retired' || Boolean(doc.deleted_at) }
+      : {}),
+  }
 }
 
 export function roleCanReadTaskReference(

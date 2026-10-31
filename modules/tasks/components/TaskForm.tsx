@@ -1,10 +1,13 @@
 'use client'
 
+import { DateField } from '@/components/ui/DateField'
+
 import { useEffect, useMemo, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   Button,
+  Alert,
   Collapse,
   Group,
   MultiSelect,
@@ -98,11 +101,12 @@ export function TaskForm({
     asOrganization,
     referenceLocked ? initialReference?.value : undefined
   )
+  const assignmentScopeReady = Boolean(
+    tenant?.permissions.tasks.includes('create') &&
+    (reference || (!referenceType && (officeIds.length || (tenant.orgWide && global))))
+  )
   const assignmentOptions = useTaskAssignmentOptions(officeIds, reference, asOrganization, {
-    enabled: Boolean(
-      tenant?.permissions.tasks.includes('create') &&
-      (reference || (!referenceType && (officeIds.length || (tenant.orgWide && global))))
-    ),
+    enabled: assignmentScopeReady,
   })
   useEffect(() => {
     if (tenant && !tenant.orgWide && global) setValue('global', false)
@@ -271,16 +275,11 @@ export function TaskForm({
             name="start_at"
             control={control}
             render={({ field }) => (
-              <TextInput
-                type="date"
+              <DateField
                 label="Inicio"
                 value={field.value ? formatDateInput(field.value) : ''}
-                onChange={event =>
-                  field.onChange(
-                    event.currentTarget.value
-                      ? localDateStartToISOString(event.currentTarget.value)
-                      : undefined
-                  )
+                onChange={value =>
+                  field.onChange(value ? localDateStartToISOString(value) : undefined)
                 }
                 error={errors.start_at?.message}
               />
@@ -290,16 +289,11 @@ export function TaskForm({
             name="due_at"
             control={control}
             render={({ field }) => (
-              <TextInput
-                type="date"
+              <DateField
                 label="Vencimiento"
                 value={field.value ? formatDateInput(field.value) : ''}
-                onChange={event =>
-                  field.onChange(
-                    event.currentTarget.value
-                      ? localDateEndToISOString(event.currentTarget.value)
-                      : undefined
-                  )
+                onChange={value =>
+                  field.onChange(value ? localDateEndToISOString(value) : undefined)
                 }
                 error={errors.due_at?.message}
               />
@@ -317,7 +311,9 @@ export function TaskForm({
               <Select
                 label="Tipo de entidad relacionada"
                 clearable
-                data={TASK_REFERENCE_COLLECTIONS.map(value => ({
+                data={TASK_REFERENCE_COLLECTIONS.filter(
+                  value => value !== 'compliance-results'
+                ).map(value => ({
                   value,
                   label: TASK_REFERENCE_LABELS[value],
                 }))}
@@ -413,10 +409,24 @@ export function TaskForm({
           </>
         )}
 
+        {assignmentOptions.isError && (
+          <Alert color="red" title="No se pudieron cargar los destinatarios">
+            <Button
+              variant="subtle"
+              size="compact-sm"
+              onClick={() => void assignmentOptions.refetch()}
+            >
+              Reintentar
+            </Button>
+          </Alert>
+        )}
         <TaskAssignmentFields
           kind={assignmentKind}
           target={(assignmentKind === 'role' ? assignedRole : assignedUser) ?? null}
           options={assignmentOptions.data}
+          loading={assignmentOptions.isFetching}
+          scopeReady={assignmentScopeReady}
+          disabled={create.isPending || assignmentOptions.isError}
           targetError={
             'assigned_role' in errors
               ? errors.assigned_role?.message

@@ -1,5 +1,7 @@
 'use client'
 
+import { DateField } from '@/components/ui/DateField'
+
 import { textRuleError } from '@/lib/text-rules'
 import { useMemo, useState } from 'react'
 import {
@@ -632,13 +634,12 @@ export function PortalMessageForm({
                 Puedes enlazar la sección.
               </Text>
             )}
-            <TextInput
+            <DateField
               label="Fecha de expiración"
               description="Se muestra hasta el final de ese día."
-              type="date"
               value={form.expiresAt}
               error={fieldErrors.expiresAt}
-              onChange={event => update('expiresAt', event.currentTarget.value)}
+              onChange={value => update('expiresAt', value)}
             />
             <SettingRow
               label="Mensaje activo"

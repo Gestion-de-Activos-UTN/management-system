@@ -43,11 +43,13 @@ import { portalHref } from '@/lib/portal-href'
 import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { getRiskCalculationMessage } from '@/modules/risk/risk-calculation-message'
+import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
 
 export default function RiskScorePage() {
   const searchParams = useSearchParams()
   const asOrganization = searchParams.get('asOrganization') ?? undefined
   const evaluationId = searchParams.get('evaluation') ?? undefined
+  const tenant = useTenantContext(asOrganization)
   const { officeId, ready, requiresOfficeSelection } = useConcreteOfficeId(asOrganization)
   const [page, setPage] = useState(1)
   // Al cambiar de página la lista vuelve a su encabezado, no se queda en el pie de la anterior.
@@ -112,6 +114,15 @@ export default function RiskScorePage() {
         }
       />
       <RiskScopeExplanation scope={query.data?.scope} />
+      {query.data?.scope === 'assigned_offices' &&
+        !data?.id &&
+        !query.isPending &&
+        !query.isError &&
+        tenant.data?.permissions.tasks.includes('create') && (
+          <Text size="sm" c="dimmed">
+            Selecciona una oficina para crear una tarea relacionada con su evaluación.
+          </Text>
+        )}
       {query.isError && <Alert color="red">No se pudo cargar la última evaluación.</Alert>}
       {calculationMessage && (
         <Alert color={calculationMessage.color} title={calculationMessage.title}>
