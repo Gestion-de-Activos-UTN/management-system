@@ -82,11 +82,11 @@ export function DataTable<T>({
 
   return (
     <Table.ScrollContainer
+      type="native"
       minWidth={minWidth}
       mah={maxHeight}
       aria-busy={refreshing}
       style={{
-        overflowY: 'auto',
         opacity: refreshing ? 0.55 : 1,
         transition: 'opacity 150ms ease',
       }}

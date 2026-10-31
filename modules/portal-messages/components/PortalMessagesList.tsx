@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Group, Skeleton, Stack, Text, UnstyledButton } from '@mantine/core'
-import { StatusBadge } from '@/components/ui/StatusBadge'
+import { Box, Skeleton, Stack, Text, UnstyledButton } from '@mantine/core'
 import { useSession } from '@/lib/use-session'
 import { formatRelativeDays } from '@/lib/format-date'
 import { usePortalMessageReceipt, usePortalMessages } from '../hooks/use-portal-messages'
@@ -15,6 +14,7 @@ import {
 } from '../portal-message-labels'
 import { PortalMessageDialog } from './PortalMessageDialog'
 import { markPortalMessageShown } from '../session-state'
+import classes from './PortalMessagesList.module.css'
 
 /** Mensajes vigentes del usuario: sin leer primero; los leídos hasta cumplir 30 días. */
 export function PortalMessagesList() {
@@ -47,9 +47,9 @@ export function PortalMessagesList() {
   const content = (
     <Stack gap="md">
       {unread > 0 && (
-        <Group justify="flex-end">
-          <StatusBadge tone="info" label={`${unread} sin leer`} />
-        </Group>
+        <Text size="xs" c="dimmed" ta="right" aria-live="polite">
+          {unread} sin leer
+        </Text>
       )}
       {session && !isMember ? (
         <Text size="sm" c="dimmed" py="md">
@@ -75,27 +75,26 @@ export function PortalMessagesList() {
             <UnstyledButton
               key={message.id}
               onClick={() => open(message)}
-              aria-label={`Abrir mensaje: ${message.title}`}
+              className={classes.readerItem}
+              aria-label={`Abrir mensaje: ${message.title} (${message.seen ? 'leído' : 'sin leer'})`}
             >
-              <Group justify="space-between" wrap="nowrap" gap="sm">
-                <div style={{ minWidth: 0 }}>
-                  <Text size="sm" fw={message.seen ? 400 : 600} lineClamp={1}>
-                    {message.title}
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    {message.dismissed
-                      ? 'Ya respondido'
-                      : PORTAL_MESSAGE_RECIPIENT_TYPE_LABELS[message.message_type]}
-                    {message.createdAt && ` · ${formatRelativeDays(message.createdAt)}`}
-                  </Text>
-                </div>
-                <div style={{ flexShrink: 0 }}>
-                  <StatusBadge
-                    tone={message.seen ? 'neutral' : 'info'}
-                    label={message.seen ? 'Leído' : 'Nuevo'}
-                  />
-                </div>
-              </Group>
+              <Box
+                component="span"
+                className={classes.unreadDot}
+                data-read={message.seen || undefined}
+                aria-hidden="true"
+              />
+              <div className={classes.readerContent}>
+                <Text size="sm" fw={message.seen ? 400 : 600} style={{ overflowWrap: 'anywhere' }}>
+                  {message.title}
+                </Text>
+                <Text size="xs" c="dimmed">
+                  {message.dismissed
+                    ? 'Ya respondido'
+                    : PORTAL_MESSAGE_RECIPIENT_TYPE_LABELS[message.message_type]}
+                  {message.createdAt && ` · ${formatRelativeDays(message.createdAt)}`}
+                </Text>
+              </div>
             </UnstyledButton>
           ))}
         </Stack>
