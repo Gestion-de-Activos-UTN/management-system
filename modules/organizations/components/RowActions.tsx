@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { ActionIcon, Group, Menu, Tooltip } from '@mantine/core'
 import { Ellipsis, ExternalLink, Pencil, Power, PowerOff, UserPlus } from 'lucide-react'
 import type { Organization } from '@/app/types/payload-types'
+import { ROLE_LABELS } from '@/lib/role-labels'
 
 export function RowActions({
   organization,
@@ -75,7 +76,7 @@ export function RowActions({
               leftSection={<UserPlus size={14} strokeWidth={1.5} />}
               onClick={() => onAddOrgAdmin(organization)}
             >
-              Añadir OrgAdmin
+              Añadir {ROLE_LABELS.org_admin.toLocaleLowerCase('es')}
             </Menu.Item>
           </Menu.Dropdown>
         </Menu>

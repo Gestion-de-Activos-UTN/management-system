@@ -146,7 +146,11 @@ export async function createMember(
       throw new AdminDomainError('office_out_of_scope', 403, 'Sólo puedes asignar tus oficinas.')
     }
   } else if (input.office_ids.length) {
-    throw new AdminDomainError('invalid_offices', 400, 'Los OrgAdmins cubren todas las oficinas.')
+    throw new AdminDomainError(
+      'invalid_offices',
+      400,
+      'Los administradores de la organización tienen acceso a todas sus oficinas.'
+    )
   }
 
   // AUDIT: this action must emit an AuditLogs entry (user.create, chain_hash over {user, name, email}, previous hash for this organization_id)
