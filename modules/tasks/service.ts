@@ -46,6 +46,8 @@ export type TaskDTO = Task & {
       /** Motivo de una liberación automática. */
       reason?: 'member_deactivated' | 'office_access_removed' | 'task_reassigned'
     }>
+    /** Ediciones guardadas: sólo quién y cuándo (el detalle de campos queda para el AuditLog). */
+    edit_events?: Array<{ at: string; actor: string | null; replanned?: true }>
   }
   available_actions: TaskAction[]
   requires_reassignment: boolean
@@ -57,7 +59,15 @@ export type TaskReferenceOption = TaskReferenceInput & {
 }
 
 export type TaskAssignmentOptions = {
-  users: Array<{ id: string; name: string; email: string; role_id: string; role: string }>
+  users: Array<{
+    id: string
+    name: string
+    /** Only for people who manage members. */
+    email?: string
+    office_names: string[]
+    role_id: string
+    role: string
+  }>
   roles: Array<{ id: string; slug: string }>
 }
 
@@ -116,20 +126,22 @@ export function deleteTask(id: string) {
   return httpClient.delete<TaskDTO>(`/api/v1/tasks/${id}`)
 }
 
+/** Hasta 20 opciones (las más recientes o las que coinciden con `q`); `has_more` si hay más. */
 export function listTaskReferenceOptions(params: {
   type: TaskReferenceInput['relationTo']
-  officeId?: string | null
   asOrganization?: string
   id?: string
+  q?: string
 }) {
-  return httpClient
-    .get<{ docs: TaskReferenceOption[] }>('/api/v1/tasks/reference-options', {
+  return httpClient.get<{ docs: TaskReferenceOption[]; has_more?: boolean }>(
+    '/api/v1/tasks/reference-options',
+    {
       type: params.type,
-      office_id: params.officeId ?? undefined,
       asOrganization: params.asOrganization,
       id: params.id,
-    })
-    .then(response => response.docs)
+      q: params.q || undefined,
+    }
+  )
 }
 
 export function getTaskAssignmentOptions(params: {

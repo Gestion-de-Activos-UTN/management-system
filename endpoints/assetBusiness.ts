@@ -5,6 +5,7 @@ import { assertOrganizationMatches } from '@/access/tenant/assertOrganizationMat
 import { assertOfficeInScope } from '@/collections/NonNetworkAssets/invariants'
 import { relationId } from '@/lib/relationId'
 import { AssetBusinessUpdateSchema } from '@/modules/assets/schema'
+import { organizationWriteError } from '@/domain/organizations/admin-actions'
 
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 
@@ -25,6 +26,8 @@ export const assetBusinessEndpoint: Endpoint = {
     const unrestricted = ctx.isPlatformAdmin && !ctx.organizationId
     assertOfficeInScope(relationId(existing.office), ctx.officeIds, unrestricted)
     assertOrganizationMatches(relationId(existing.organization), ctx.organizationId, unrestricted)
+    const denied = await organizationWriteError(req, relationId(existing.organization))
+    if (denied) return denied
     const parsed = AssetBusinessUpdateSchema.safeParse(await req.json!().catch(() => ({})))
     if (!parsed.success || Object.keys(parsed.data).length === 0)
       return json(
@@ -51,6 +54,8 @@ export const assetBusinessEndpoint: Endpoint = {
       id,
       overrideAccess: true,
       req,
+      // Relationships stay as IDs; never expand private scanner credentials into the response.
+      depth: 0,
       data: parsed.data,
     })
     return json(updated)

@@ -5,6 +5,7 @@ import { assertOfficeInScope } from '../collections/NonNetworkAssets/invariants'
 import { assertOrganizationMatches } from '../access/tenant/assertOrganizationMatches'
 import { relationId } from '../lib/relationId'
 import { EvidenceNameSchema } from '../modules/scan-reports/schema'
+import { organizationWriteError } from '@/domain/organizations/admin-actions'
 
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 
@@ -19,7 +20,7 @@ function renameEndpoint(collection: EvidenceCollection, path: string): Endpoint 
     handler: async (req: PayloadRequest) => {
       const ctx = await getTenantContext(req)
       if (!ctx || !ctx.isActive) return json({ error: 'unauthenticated' }, 401)
-      // Un admin de plataforma "visitando" una organización no tiene 'update' en la matriz.
+      // A visited organization uses its effective tenant permissions.
       if (!ctx.organizationId || !canDo(ctx.role, collection, 'update', ctx.organizationId)) {
         return json({ error: 'forbidden' }, 403)
       }
@@ -45,6 +46,8 @@ function renameEndpoint(collection: EvidenceCollection, path: string): Endpoint 
         depth: 0,
       })
       assertOrganizationMatches(relationId(office.organization), ctx.organizationId, false)
+      const denied = await organizationWriteError(req, relationId(office.organization))
+      if (denied) return denied
 
       // AUDIT: this action must emit an AuditLogs entry (chain_hash over {collection, id, display_name}, previous hash for this organization_id)
       // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists

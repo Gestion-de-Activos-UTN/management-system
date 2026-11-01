@@ -52,6 +52,7 @@ export const resolveTenantAndReview: CollectionBeforeChangeHook = async ({
 
   const office = await findOffice(req, officeId as string)
   const organizationId = office.organizationId
+  // Organización inactiva: rejectWritesInInactiveOrganization (domain/organizations/admin-actions.ts).
 
   // "Cambió" = distinto de lo guardado, no "vino en el request": el formulario manda todos los
   // campos, y una cascada del sistema escribe sobre activos que ya están en oficinas inactivas.

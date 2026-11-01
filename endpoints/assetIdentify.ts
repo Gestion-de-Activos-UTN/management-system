@@ -6,6 +6,7 @@ import { assertOfficeInScope } from '../collections/NonNetworkAssets/invariants'
 import { assertOrganizationMatches } from '../access/tenant/assertOrganizationMatches'
 import { relationId } from '../lib/relationId'
 import { AssetIdentificationSchema } from '../modules/assets/schema'
+import { organizationWriteError } from '@/domain/organizations/admin-actions'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
@@ -36,6 +37,8 @@ export const assetIdentifyEndpoint: Endpoint = {
     // Defensa en profundidad (ver access/tenant/assertOrganizationMatches.ts): no confiar solo
     // en officeIds — verificar la organización real del documento antes de mutarlo.
     assertOrganizationMatches(relationId(existing.organization), ctx.organizationId, unrestricted)
+    const denied = await organizationWriteError(req, relationId(existing.organization))
+    if (denied) return denied
 
     const parsed = AssetIdentificationSchema.safeParse(await req.json!().catch(() => ({})))
     if (!parsed.success) {
@@ -51,6 +54,8 @@ export const assetIdentifyEndpoint: Endpoint = {
       id,
       overrideAccess: true,
       req,
+      // The frontend refetches the asset; private agent relations must not be expanded here.
+      depth: 0,
       data: {
         ...body,
         owner: body.authorization_status === 'authorized' ? body.owner : null,

@@ -128,6 +128,7 @@ export async function updateOfficeDetails(
   office: OfficeDoc,
   input: { name: string } & OfficeLocation
 ) {
+  await assertOrganizationActive(req, relationId(office.organization))
   // AUDIT: this action must emit an AuditLogs entry (office.update, chain_hash over {office, name, location}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   return req.payload.update({

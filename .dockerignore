@@ -1,3 +1,5 @@
 node_modules
 .next
 .git
+# Almacén que crea `pnpm install` dentro del contenedor (montaje .:/app); ~1 GB, nunca va a la imagen.
+.pnpm-store

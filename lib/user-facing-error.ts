@@ -6,6 +6,8 @@ type ErrorLike = {
 const MESSAGES_BY_CODE: Record<string, string> = {
   already_claimed: 'Otra persona ya reclamó esta tarea. Actualiza la lista.',
   task_not_found: 'La tarea ya no está disponible. Actualiza la lista.',
+  task_operation_conflict:
+    'Esta tarea ya se creó con los datos del primer intento. Actualiza la lista antes de crear otra.',
   task_terminal: 'La tarea ya finalizó o fue cancelada y no admite cambios.',
   task_not_pending: 'La tarea ya no está pendiente. Actualiza la lista.',
   task_planned: 'La tarea todavía no llegó a su fecha de inicio.',
@@ -16,7 +18,6 @@ const MESSAGES_BY_CODE: Record<string, string> = {
   task_cancelled: 'La tarea fue cancelada y ya no se puede completar ni liberar.',
   task_state_changed: 'La tarea ya no está en curso. Revisa su estado actualizado.',
   task_not_force_completable: 'La tarea debe estar en curso y reclamada por otra persona.',
-  task_not_in_progress: 'Solo puedes cancelar tareas en curso.',
   task_not_terminal: 'Solo puedes archivar tareas completadas o canceladas.',
   task_cannot_be_deleted: 'Solo puedes eliminar tareas pendientes que nunca fueron reclamadas.',
   no_eligible_assignees: 'No hay personas con acceso para realizar esta tarea.',

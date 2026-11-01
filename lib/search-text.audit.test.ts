@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { matchesSearch, normalizeSearchText } from './search-text'
+import { accentInsensitiveLikePattern, matchesSearch, normalizeSearchText } from './search-text'
 
 it.each([
   ['portátil', 'portatil'],
@@ -27,4 +27,11 @@ it('keeps punctuation and numbers meaningful for host names, IPs and email addre
   expect(normalizeSearchText(' HOST-01.Test@SIAM.COM ')).toBe('host-01.test@siam.com')
   expect(matchesSearch(['192.168.10.20'], '168.10')).toBe(true)
   expect(matchesSearch(['192.168.10.20'], '192168')).toBe(false)
+})
+
+it('builds an ILIKE pattern that tolerates accents and drops user wildcards', () => {
+  expect(accentInsensitiveLikePattern(' Depósito ')).toBe('d_p_s_t_')
+  expect(accentInsensitiveLikePattern('SEÑAL')).toBe('s___l')
+  expect(accentInsensitiveLikePattern('10.20%_')).toBe('10.20')
+  expect(accentInsensitiveLikePattern('   ')).toBe('')
 })

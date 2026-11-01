@@ -193,3 +193,18 @@ test('X-Agent-ID ausente no rechaza (heartbeat/vendor no lo mandan)', async () =
   )
   assert.equal(result.agentId, 'agent-001')
 })
+
+test('findAgentByPrefix: lee el hash oculto de la credencial', async () => {
+  const { createPayloadAgentAuthDeps } = await import('./resolveAgentAuth')
+  const agent = await makeAgent()
+  let args: Record<string, unknown> = {}
+  const fakePayload = {
+    find: async (options: Record<string, unknown>) => {
+      args = options
+      return { docs: [agent] }
+    },
+  } as unknown as Parameters<typeof createPayloadAgentAuthDeps>[0]
+  const found = await createPayloadAgentAuthDeps(fakePayload).findAgentByPrefix(PREFIX)
+  assert.equal(args.showHiddenFields, true)
+  assert.equal(found?.apiKeyHash, agent.apiKeyHash)
+})

@@ -4,6 +4,7 @@ import { canDo } from '../access/rbac/permissions'
 import { assertOfficeInScope } from '../collections/NonNetworkAssets/invariants'
 import { assertOrganizationMatches } from '../access/tenant/assertOrganizationMatches'
 import { relationId } from '../lib/relationId'
+import { organizationWriteError } from '@/domain/organizations/admin-actions'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
@@ -34,6 +35,8 @@ export const assetUnidentifyEndpoint: Endpoint = {
     const unrestricted = ctx.isPlatformAdmin && !ctx.organizationId
     assertOfficeInScope(relationId(existing.office), ctx.officeIds, unrestricted)
     assertOrganizationMatches(relationId(existing.organization), ctx.organizationId, unrestricted)
+    const denied = await organizationWriteError(req, relationId(existing.organization))
+    if (denied) return denied
 
     // AUDIT: this action must emit an AuditLogs entry (chain_hash over {id, identification_status: 'pending'}, previous hash for this organization_id)
     // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
@@ -42,6 +45,7 @@ export const assetUnidentifyEndpoint: Endpoint = {
       id,
       overrideAccess: true,
       req,
+      depth: 0,
       data: {
         identified: false,
         identification_status: 'pending',

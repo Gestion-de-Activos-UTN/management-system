@@ -40,7 +40,11 @@ async function login(id: string) {
 }
 
 beforeAll(async () => {
-  if (process.env.DATABASE_URL !== 'postgresql://siam_test@127.0.0.1:55448/siam_task_checks')
+  if (
+    !/^postgresql:\/\/siam_test@127\.0\.0\.1:55448\/siam_task_checks(?:_[a-z0-9]+)?$/.test(
+      process.env.DATABASE_URL ?? ''
+    )
+  )
     throw new Error('Use the isolated task checks database')
   config = await (await import('../payload.config')).default
   config.typescript.autoGenerate = false

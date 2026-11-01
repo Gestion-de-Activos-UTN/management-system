@@ -4,6 +4,7 @@ import { assertCanReadTask, loadTask } from '@/domain/tasks/task-actions'
 import { resolveTaskReference, tenantCanReadTaskReference } from '@/domain/tasks/task-reference'
 import { messageTargetsUser } from '@/domain/portal-messages/targeting'
 import { relationId } from '@/lib/relationId'
+import { transactionLock, withTransaction } from '@/domain/with-transaction'
 import { getTaskReferenceHref } from '@/modules/tasks/task-reference-link'
 import { PORTAL_MESSAGE_SECTION_LINKS } from '@/modules/portal-messages/portal-message-labels'
 import { PORTAL_MESSAGE_ROLES, PortalMessageInputSchema } from '@/modules/portal-messages/schema'
@@ -575,63 +576,48 @@ const messageReceiptEndpoint: Endpoint = {
       return json({ error: 'invalid_receipt' }, 400)
     }
     if (requestedVersion !== deliveryVersion) return json({ ok: true, stale: true })
-    const existing = await req.payload.find({
-      collection: 'portal-message-receipts',
-      where: { and: [{ message: { equals: messageId } }, { user: { equals: auth.ctx.userId } }] },
-      overrideAccess: true,
-      req,
-      depth: 0,
-      limit: 1,
-    })
-    const timestamp = new Date().toISOString()
-    const sameVersion =
-      existing.docs[0] && Number(existing.docs[0].delivery_version ?? 1) === deliveryVersion
-    const data =
-      body.status === 'dismissed'
-        ? { delivery_version: deliveryVersion, seen_at: timestamp, dismissed_at: timestamp }
-        : {
-            delivery_version: deliveryVersion,
-            seen_at: timestamp,
-            ...(!sameVersion ? { dismissed_at: null } : {}),
-          }
-    if (existing.docs[0]) {
-      await req.payload.update({
+    // One receipt write at a time per message and person: a seen decided from a read taken
+    // before a concurrent dismissal would otherwise clear that dismissal. READ COMMITTED reads
+    // after the lock see the winner's commit, so waiting inside the transaction is enough.
+    await withTransaction(req.payload, req, async () => {
+      await transactionLock(req, `portal-message-receipt:${messageId}:${auth.ctx.userId}`)
+      const existing = await req.payload.find({
         collection: 'portal-message-receipts',
-        id: existing.docs[0].id,
-        data,
+        where: {
+          and: [{ message: { equals: messageId } }, { user: { equals: auth.ctx.userId } }],
+        },
         overrideAccess: true,
         req,
+        depth: 0,
+        limit: 1,
       })
-    } else {
-      try {
+      const timestamp = new Date().toISOString()
+      const sameVersion =
+        existing.docs[0] && Number(existing.docs[0].delivery_version ?? 1) === deliveryVersion
+      const data =
+        body.status === 'dismissed'
+          ? { delivery_version: deliveryVersion, seen_at: timestamp, dismissed_at: timestamp }
+          : {
+              delivery_version: deliveryVersion,
+              seen_at: timestamp,
+              ...(!sameVersion ? { dismissed_at: null } : {}),
+            }
+      if (existing.docs[0])
+        await req.payload.update({
+          collection: 'portal-message-receipts',
+          id: existing.docs[0].id,
+          data,
+          overrideAccess: true,
+          req,
+        })
+      else
         await req.payload.create({
           collection: 'portal-message-receipts',
           data: { message: messageId, user: auth.ctx.userId, ...data },
           overrideAccess: true,
           req,
         })
-      } catch {
-        // The unique (message, user) index can win a concurrent first-read request.
-        const raced = await req.payload.find({
-          collection: 'portal-message-receipts',
-          where: {
-            and: [{ message: { equals: messageId } }, { user: { equals: auth.ctx.userId } }],
-          },
-          overrideAccess: true,
-          req,
-          depth: 0,
-          limit: 1,
-        })
-        if (!raced.docs[0]) throw new Error('receipt_write_failed')
-        await req.payload.update({
-          collection: 'portal-message-receipts',
-          id: raced.docs[0].id,
-          data,
-          overrideAccess: true,
-          req,
-        })
-      }
-    }
+    })
     return json({ ok: true })
   },
 }

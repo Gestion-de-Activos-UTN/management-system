@@ -17,6 +17,7 @@
     "generate:contracts": "node --import tsx scripts/generate-contracts.ts",
     "spell-check": "cspell \"**/*\" --config cspell.json --exclude \".git/**\" --exclude \"node_modules/**\" --exclude \".next/**\"",
     "test:audit": "vitest run --config vitest.audit.config.ts",
+    "test:components": "vitest run --config vitest.components.config.ts",
     "test:audit:integration": "cross-env SIAM_AUDIT_INTEGRATION=1 vitest run --config vitest.audit.config.ts"
   },
   "dependencies": {
@@ -51,6 +52,8 @@
   "devDependencies": {
     "@eslint/eslintrc": "latest",
     "@tailwindcss/postcss": "latest",
+    "@testing-library/react": "16.3.0",
+    "@testing-library/user-event": "14.6.1",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
@@ -60,6 +63,7 @@
     "eslint": "^10.0.0",
     "eslint-config-next": "^16.1.6",
     "eslint-config-prettier": "^10.1.8",
+    "happy-dom": "20.10.6",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "postcss-preset-mantine": "^1.18.0",

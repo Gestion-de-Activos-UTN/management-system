@@ -132,3 +132,34 @@ test('taskActivity conserva las liberaciones sin pareja y no atribuye liberació
   )
   assert.equal(events[0].note, null)
 })
+
+test('taskActivity muestra cada edición como "Modificada" y explica una replanificación', () => {
+  const events = taskActivity({
+    createdAt: '2026-10-10T16:00:00.000Z',
+    completed_at: null,
+    completion_reason: null,
+    cancelled_at: null,
+    cancellation_reason: null,
+    archived_at: null,
+    actor_labels: {
+      created_by: 'Marcos',
+      claimed_by: null,
+      completed_by: null,
+      cancelled_by: null,
+      archived_by: null,
+      claim_events: [{ action: 'claimed', at: '2026-10-11T09:00:00.000Z', actor: 'Ana' }],
+      edit_events: [
+        { at: '2026-10-11T08:00:00.000Z', actor: 'Marcos' },
+        { at: '2026-10-12T10:00:00.000Z', actor: 'Marcos', replanned: true },
+      ],
+    },
+    lifecycle_history: null,
+  })
+  assert.deepEqual(
+    events.map(event => event.label),
+    ['Modificada', 'Reclamada', 'Modificada', 'Creada']
+  )
+  assert.equal(events[0].note, 'Volvió a pendiente: se liberó el reclamo.')
+  assert.equal(events[2].actor, 'Marcos')
+  assert.equal(events[2].note, null)
+})

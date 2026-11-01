@@ -10,12 +10,7 @@ import { createHash } from 'node:crypto'
 import { APIError } from 'payload'
 import { relationId } from '@/lib/relationId'
 import { transactionLock, withTransaction } from '@/domain/with-transaction'
-
-function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
-  if (value && typeof value === 'object') return `{${Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}`
-  return JSON.stringify(value)
-}
+import { canonicalJson } from '@/lib/canonical-json'
 
 export interface ProcessScanReportResult extends IngestResult {
   reportId: string
@@ -42,7 +37,7 @@ export async function processScanReport(
   // Serialize all inventory observations of an organization before identity lookup/upsert.
   return withTransaction(payload, request, async req => {
   await transactionLock(req, `scan-report:${body.report_id}`)
-  const fingerprint = createHash('sha256').update(canonical(body)).digest('hex')
+  const fingerprint = createHash('sha256').update(canonicalJson(body)).digest('hex')
   const existing = await payload.find({
     collection: 'scan-reports',
     req,

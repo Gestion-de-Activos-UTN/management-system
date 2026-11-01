@@ -62,6 +62,12 @@ export function taskActivity(
                 : null,
           }
     ),
+    ...(labels?.edit_events ?? []).map(event => ({
+      label: 'Modificada',
+      at: event.at,
+      actor: event.actor,
+      note: event.replanned ? 'Volvió a pendiente: se liberó el reclamo.' : null,
+    })),
     task.completed_at
       ? {
           label: 'Completada',

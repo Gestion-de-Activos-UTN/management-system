@@ -35,7 +35,7 @@ export type Action =
   // Live consolidation of the actor's assigned offices (risk-evaluations).
   | 'read_assigned'
 
-// Matriz estática — decisión explícita (documentation/01-erd-core.md nota 9): el sistema no
+// Matriz estática — decisión explícita: el sistema no
 // tiene hoy suficientes funcionalidades como para justificar overrides dinámicos por
 // organización guardados en DB. Cero lectura a base para decidir un permiso.
 //
@@ -143,9 +143,8 @@ const MATRIX: Record<RoleSlug, Partial<Record<CollectionSlug, Action[]>>> = {
 }
 
 // _organizationId: reservado, no participa de la decisión hoy — la matriz estática no tiene
-// overrides por organización. Se mantiene en la firma por fidelidad a documentation/02 y
-// documentation/03 (canDo(role, Collection, Action, organizationId)); el día que exista un
-// override real, entra acá sin romper el call-site.
+// overrides por organización. Se mantiene en la firma para que, el día que exista un override
+// real, entre acá sin romper los call-sites.
 export function canDo(
   roleSlug: RoleSlug | null | undefined,
   collection: CollectionSlug,
@@ -163,4 +162,12 @@ export function canDo(
 // Único lugar con esta regla — endpoints, access y frontend (vía /v1/session) la consultan acá.
 export function hasOrgWideScope(roleSlug: RoleSlug | null | undefined): boolean {
   return roleSlug === 'platform_admin' || roleSlug === 'org_admin'
+}
+
+// Los emails del directorio sólo llegan a quien gestiona miembros; el resto identifica a una
+// persona por nombre, rol y oficina. Único lugar con esta regla (orgMembers, assignment-options).
+export function seesMemberEmails(roleSlug: RoleSlug | null, organizationId: string | null) {
+  return (['read', 'create', 'change_status'] as const).some(action =>
+    canDo(roleSlug, 'organization-memberships', action, organizationId)
+  )
 }

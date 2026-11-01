@@ -70,7 +70,7 @@ export function MembersView({ mode }: { mode: 'administration' | 'team' }) {
     member =>
       (!role.length || role.includes(member.role)) &&
       (!status.length || status.includes(memberStatus(member))) &&
-      matchesSearch([`${member.name} ${member.email}`], term)
+      matchesSearch([`${member.name} ${member.email ?? ''}`], term)
   )
 
   const columns: ColumnDef<OrgMember, unknown>[] = [

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { inventoryAssetPath } from '@/modules/assets/asset-path'
 import type { ColumnDef } from '@tanstack/react-table'
 import { ActionIcon, Anchor, Checkbox, Group, Stack, Text, Tooltip } from '@mantine/core'
 import { relationId } from '@/lib/relationId'
@@ -99,16 +100,10 @@ export function getDeviceReviewColumns(
         const latest = row.original.cycles[0]
         const asset = latest.manual_asset || latest.asset
         const href = asset
-          ? latest.manual_asset
-            ? portalHref(
-                '/portal/inventory',
-                asOrganization,
-                `nonNetworkAsset=${encodeURIComponent(relationId(asset))}`
-              )
-            : portalHref(
-                `/portal/inventory/${encodeURIComponent(relationId(asset))}`,
-                asOrganization
-              )
+          ? portalHref(
+              inventoryAssetPath(latest.manual_asset ? 'manual' : 'scanned', relationId(asset)),
+              asOrganization
+            )
           : null
         return (
           <Stack gap={0}>

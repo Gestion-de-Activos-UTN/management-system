@@ -1078,6 +1078,15 @@ export interface Task {
     | number
     | boolean
     | null;
+  edit_history?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   seed_key?: string | null;
   title: string;
   description?: string | null;
@@ -1182,6 +1191,8 @@ export interface Task {
         value: string | Admin;
       };
   creation_batch_id?: string | null;
+  operation_id?: string | null;
+  operation_fingerprint?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -2169,6 +2180,7 @@ export interface TasksSelect<T extends boolean = true> {
   requires_reassignment?: T;
   lifecycle_history?: T;
   claim_history?: T;
+  edit_history?: T;
   seed_key?: T;
   title?: T;
   description?: T;
@@ -2197,6 +2209,8 @@ export interface TasksSelect<T extends boolean = true> {
   office?: T;
   created_by?: T;
   creation_batch_id?: T;
+  operation_id?: T;
+  operation_fingerprint?: T;
   updatedAt?: T;
   createdAt?: T;
 }
