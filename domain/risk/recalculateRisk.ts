@@ -1,6 +1,7 @@
 import type { CollectionSlug, Payload, PayloadRequest, Where } from 'payload'
 import type { Asset, ComplianceResult, NonNetworkAsset } from '@/app/types/payload-types'
 import { relationId } from '@/lib/relationId'
+import { findActiveOffices } from '@/domain/offices/active-offices'
 import { evaluateNetworkBaseline } from '@/domain/assessments/evaluateNetworkBaseline'
 import { evaluateOfficeMonitoring } from '@/domain/assessments/evaluateAutomaticCompliance'
 import { isAssetExcludedFromAssessments } from '@/domain/assessments/asset-assessment-scope'
@@ -83,8 +84,12 @@ function networkAsset(doc: Asset, now: Date): RiskInputAsset {
     excluded: isAssetExcludedFromAssessments(doc, now),
     network: {
       current: doc.status !== 'offline',
-      complete: coverage?.port_scan === 'complete' && coverage?.service_detection === 'complete' &&
-        !(doc.services ?? []).some(service => !['open', 'closed'].includes(service.state ?? 'unknown')),
+      complete:
+        coverage?.port_scan === 'complete' &&
+        coverage?.service_detection === 'complete' &&
+        !(doc.services ?? []).some(
+          service => !['open', 'closed'].includes(service.state ?? 'unknown')
+        ),
       services: classified,
     },
   }
@@ -126,17 +131,24 @@ function answerEvidence(row: ComplianceResult): RiskAnswerEvidence {
   }
 }
 
-/** Loads current evidence, runs the pure engine and appends one auditable evaluation. */
-export async function recalculateRisk(
+/** Read-only calculation shared by persisted evaluations and assigned-office consolidations. */
+export async function calculateRiskForScope(
   payload: Payload,
-  input: { organizationId: string; officeId?: string; now?: Date },
+  input: { organizationId: string; officeId?: string; officeIds?: readonly string[]; now?: Date },
   req?: PayloadRequest
 ) {
+  if (input.officeId && input.officeIds) throw new Error('Choose one office scope')
   const now = input.now ?? new Date()
   const organization = { organization: { equals: input.organizationId } }
-  const scope: Where[] = input.officeId
-    ? [organization, { office: { equals: input.officeId } }]
-    : [organization]
+  // Inactive offices never count: their assets left the organization's exposure.
+  const activeOfficeIds = (await findActiveOffices(payload, input.organizationId, req))
+    .map(office => String(office.id))
+    .filter(
+      id =>
+        (!input.officeId || id === input.officeId) &&
+        (input.officeIds === undefined || input.officeIds.includes(id))
+    )
+  const scope: Where[] = [organization, { office: { in: activeOfficeIds } }]
   const notRetired = { status: { not_equals: 'retired' } }
 
   const [settings, networkDocs, manualDocs, results] = await Promise.all([
@@ -148,8 +160,17 @@ export async function recalculateRisk(
       depth: 0,
       limit: 1,
     }),
-    findAll<Asset>(payload, 'assets', { and: [...scope, notRetired] }, req),
-    findAll<NonNetworkAsset>(payload, 'non-network-assets', { and: [...scope, notRetired] }, req),
+    activeOfficeIds.length
+      ? findAll<Asset>(payload, 'assets', { and: [...scope, notRetired] }, req)
+      : Promise.resolve([] as Asset[]),
+    activeOfficeIds.length
+      ? findAll<NonNetworkAsset>(
+          payload,
+          'non-network-assets',
+          { and: [...scope, notRetired] },
+          req
+        )
+      : Promise.resolve([] as NonNetworkAsset[]),
     // Organization-wide on purpose: an office evaluation still inherits organization answers.
     // Only current answers are loaded; expired ones leave the pair not evaluable (aging, §3.10).
     findAll<ComplianceResult>(
@@ -197,9 +218,21 @@ export async function recalculateRisk(
     monitoring,
   })
   const result = calculateRisk(pairs, population)
-  return persistRiskEvaluation(
-    payload,
-    { ...input, policy, result, undeterminedExposure: alerts, evaluatedAt: now },
-    req
-  )
+  return {
+    policy,
+    result,
+    undeterminedExposure: alerts,
+    evaluatedAt: now,
+    officeIds: activeOfficeIds,
+  }
+}
+
+/** Loads current evidence, runs the pure engine and appends one auditable evaluation. */
+export async function recalculateRisk(
+  payload: Payload,
+  input: { organizationId: string; officeId?: string; now?: Date },
+  req?: PayloadRequest
+) {
+  const calculated = await calculateRiskForScope(payload, input, req)
+  return persistRiskEvaluation(payload, { ...input, ...calculated }, req)
 }

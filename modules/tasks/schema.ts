@@ -44,7 +44,8 @@ const TaskBusinessFieldsSchema = z.object({
   title: z
     .string()
     .trim()
-    .min(3)
+    .min(1, 'Escribe un título.')
+    .min(3, 'Escribe al menos 3 caracteres.')
     .max(160)
     .regex(...TEXT_RULES.title),
   description: z
@@ -77,6 +78,11 @@ export const CreateTasksSchema = z
       global: z.boolean(),
       office_ids: z.array(z.string().min(1)).max(500),
       related_entity: TaskReferenceSchema.optional(),
+      /** Random key of one creation, repeated on its retries; the server creates it only once. */
+      operation_id: z
+        .string()
+        .regex(/^[A-Za-z0-9_-]{16,64}$/)
+        .optional(),
     }),
     TaskAssignmentSchema
   )

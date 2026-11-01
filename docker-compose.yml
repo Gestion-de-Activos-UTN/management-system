@@ -8,8 +8,11 @@ services:
       POSTGRES_DB: payloadcms
     ports:
       - '127.0.0.1:5433:5432'
+    # Volúmenes anónimos en todo el stack: `docker compose down` + `docker system prune --volumes`
+    # borra todo. Los datos sobreviven a `stop`/`start` y a recrear el contenedor con `up`; el
+    # `command` de `app` vuelve a sembrar la demo en cada arranque.
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - /var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U payload -d payloadcms']
       interval: 10s
@@ -34,7 +37,6 @@ services:
       - PAYLOAD_SECRET=your-secret-key-change-this
       - NODE_ENV=development
       - RBAC_SOURCE=db
-      - LOCAL_STORAGE_PATH=/tmp/uploads
       # `next dev` lee PORT y escucha ahí directo — sin esto escuchaba en 3000 adentro del
       # contenedor mientras el host solo tenía mapeado 3001, y el log de Next ("Local:
       # http://localhost:3000") no coincidía con la URL real a la que había que entrar.
@@ -49,7 +51,6 @@ services:
       - .:/app
       - /app/node_modules
       - /app/.next
-      - uploads_data:/app/uploads
       - ../scanner-prototype:/scanner-prototype:ro
     # Sin migraciones: el deploy de este proyecto recrea la imagen/DB desde cero cada vez, no
     # las necesita. Payload sincroniza el schema solo con NODE_ENV=development (pushDevSchema).
@@ -57,11 +58,4 @@ services:
     # `seed:navigation` crea los 4 Roles base + la única organización demo (Org/Office/Settings/
     # Subscription) + un admin/org_admin/org_viewer/office_manager de demo con credenciales fijas;
     # El agente solo se vincula desde Administration > Offices > Install scanner.
-    # `pnpm warmup` corre en segundo plano y pide cada sección apenas `next dev` responde, para que
-    # la compilación de cada ruta ocurra durante el arranque y no en la primera visita del usuario
-    # (ver scripts/warmup-routes.mjs). El log muestra "[warmup] listo" cuando terminó.
-    command: sh -c "pnpm seed:navigation && pnpm seed:demo && (pnpm warmup &) && pnpm run dev"
-
-volumes:
-  postgres_data:
-  uploads_data:
+    command: sh -c "pnpm seed:navigation && pnpm seed:demo && pnpm run dev"

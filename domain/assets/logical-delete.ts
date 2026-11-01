@@ -8,6 +8,7 @@ import { getTenantContext } from '@/access/tenant/resolveTenantContext'
 import { canDo, hasOrgWideScope } from '@/access/rbac/permissions'
 import { relationId } from '@/lib/relationId'
 import { withTransaction, lockAssetRow } from '@/domain/with-transaction'
+import { organizationWriteError } from '@/domain/organizations/admin-actions'
 
 export const rejectPhysicalAssetDelete: CollectionBeforeDeleteHook = () => {
   throw new APIError('Los activos se eliminan lógicamente para conservar su historial.', 409)
@@ -44,6 +45,8 @@ export function logicalDeleteEndpoint(collection: 'assets' | 'non-network-assets
           (!hasOrgWideScope(ctx.role) && !ctx.officeIds.includes(relationId(asset.office)))
         )
           return Response.json({ error: 'not_found' }, { status: 404 })
+        const denied = await organizationWriteError(request, relationId(asset.organization))
+        if (denied) return denied
         if (asset.deleted_at)
           return Response.json({
             doc: asset,
@@ -56,6 +59,8 @@ export function logicalDeleteEndpoint(collection: 'assets' | 'non-network-assets
           id,
           req: request,
           overrideAccess: true,
+          // Misma forma que la rama "ya eliminado" (findByID con depth 0).
+          depth: 0,
           data: { status: 'retired', deleted_at: new Date().toISOString() },
         })
         return Response.json({

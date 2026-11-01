@@ -1,11 +1,13 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   Alert,
   Badge,
+  Box,
   Button,
   Card,
   Divider,
@@ -24,6 +26,7 @@ import {
   Tooltip,
 } from '@mantine/core'
 import { InventoryIncidentsPanel } from './InventoryIncidentsPanel'
+import { BackButton } from '@/components/ui/BackButton'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { TechnicalText } from '@/components/ui/TechnicalText'
 import { useOrgMembers } from '@/modules/users/hooks/use-org-members'
@@ -54,7 +57,10 @@ import {
   inferDeviceCategory,
 } from '../inferDeviceCategory'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { AssessmentExclusionFields } from '@/modules/assessments/components/AssessmentExclusionFields'
+import {
+  AssessmentExclusionFields,
+  AssessmentScopeHint,
+} from '@/modules/assessments/components/AssessmentExclusionFields'
 
 // Tentativa siempre, nunca se escribe a ningún campo — solo orienta al usuario en qué mirar para
 // confirmar el tipo real de dispositivo. IP-only/IP+vendor es el caso común de un scan real (doc
@@ -381,9 +387,11 @@ const ASSET_TABS = ['datos', 'red'] as const
 export function AssetDetailView({
   asset,
   asOrganization,
+  backHref,
 }: {
   asset: Asset
   asOrganization?: string
+  backHref: string
 }) {
   const { data: members } = useOrgMembers(asOrganization)
   const assetOfficeId =
@@ -548,10 +556,12 @@ export function AssetDetailView({
           .join(' · ')}
         rightSection={
           <Group gap="sm" wrap="wrap">
-            <CreateRelatedTaskButton
-              reference={{ relationTo: 'assets', value: String(asset.id) }}
-              asOrganization={asOrganization}
-            />
+            {asset.status !== 'retired' && !asset.deleted_at && (
+              <CreateRelatedTaskButton
+                reference={{ relationTo: 'assets', value: String(asset.id) }}
+                asOrganization={asOrganization}
+              />
+            )}
             {asset.identification_status !== 'confirmed' ? (
               <Button
                 variant="filled"
@@ -590,30 +600,34 @@ export function AssetDetailView({
         title="Quitar identificación"
         centered
       >
-        <Stack gap="md">
+        <ModalLayout
+          gap="md"
+          footer={
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setUnidentifyConfirmOpen(false)}>
+                Cancelar
+              </Button>
+              <Button
+                color="red"
+                loading={unidentifyAsset.isPending}
+                onClick={() =>
+                  unidentifyAsset.mutate(
+                    { id: asset.id },
+                    { onSuccess: () => setUnidentifyConfirmOpen(false) }
+                  )
+                }
+              >
+                Quitar identificación
+              </Button>
+            </Group>
+          }
+        >
           <Text size="sm">
             Este activo volverá a estar &quot;no identificado&quot;. El responsable, la criticidad,
             el alias y la ubicación quedarán guardados para completar el formulario si vuelves a
             identificarlo, pero dejarán de contar en los cálculos de riesgo hasta entonces.
           </Text>
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setUnidentifyConfirmOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              color="red"
-              loading={unidentifyAsset.isPending}
-              onClick={() =>
-                unidentifyAsset.mutate(
-                  { id: asset.id },
-                  { onSuccess: () => setUnidentifyConfirmOpen(false) }
-                )
-              }
-            >
-              Quitar identificación
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </Modal>
 
       <Tabs value={tab} onChange={changeTab}>
@@ -622,7 +636,7 @@ export function AssetDetailView({
             Datos y revisión
           </Tabs.Tab>
           <Tabs.Tab value="red" leftSection={<Network size={16} strokeWidth={1.5} />}>
-            Red y puertos ({asset.services?.length ?? 0})
+            Red y puertos
           </Tabs.Tab>
         </Tabs.List>
 
@@ -778,11 +792,7 @@ export function AssetDetailView({
                   />
                 </SimpleGrid>
                 <Divider label="Alcance de la evaluación de seguridad" labelPosition="left" />
-                <Text size="sm" c="dimmed">
-                  Los activos excluidos permanecen visibles y continúan escaneándose, pero no
-                  afectan las revisiones ni el puntaje de riesgo.
-                </Text>
-                <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
+                <Box w={{ base: '100%', sm: '50%' }}>
                   <Controller
                     name="assessment_scope"
                     control={control}
@@ -794,6 +804,7 @@ export function AssetDetailView({
                           { value: 'excluded', label: 'Excluido' },
                         ]}
                         value={field.value}
+                        error={errors.assessment_scope?.message}
                         onChange={value => {
                           if (value === 'excluded' && authorizationStatus === 'unauthorized') {
                             warnedUnauthorizedExclusion.current = true
@@ -805,17 +816,27 @@ export function AssetDetailView({
                       />
                     )}
                   />
-                </SimpleGrid>
+                </Box>
+                <AssessmentScopeHint />
                 <AssessmentExclusionFields
                   control={control}
                   errors={errors}
                   excluded={assessmentScope === 'excluded'}
                   noteRequired={exclusionReason === 'other'}
                 />
-                <Group justify="flex-end">
+                <Group justify="space-between" align="center" gap="sm" wrap="wrap">
+                  <BackButton
+                    href={backHref}
+                    label="Volver al inventario"
+                    variant="subtle"
+                    color="gray"
+                    fullWidth={false}
+                  />
                   <Button
                     type="submit"
                     loading={updateAsset.isPending}
+                    // Validar al enviar muestra también los errores de campos no tocados.
+                    // isValid bloqueaba el botón sin explicar qué impedía guardar.
                     disabled={!isDirty}
                     w={{ base: '100%', sm: 'auto' }}
                   >
@@ -951,34 +972,37 @@ export function AssetDetailView({
         title="¿Excluir un dispositivo no autorizado?"
         centered
       >
-        <Stack>
+        <ModalLayout
+          footer={
+            <Group justify="flex-end">
+              <Button
+                variant="default"
+                onClick={() => {
+                  setValue('assessment_scope', 'included', { shouldDirty: true })
+                  setConfirmUnauthorizedExclusion(false)
+                }}
+              >
+                Mantener incluido
+              </Button>
+              <Button
+                color="orange"
+                onClick={() => {
+                  warnedUnauthorizedExclusion.current = true
+                  setValue('assessment_scope', 'excluded', { shouldDirty: true })
+                  setConfirmUnauthorizedExclusion(false)
+                }}
+              >
+                Excluir de todos modos
+              </Button>
+            </Group>
+          }
+        >
           <Alert color="orange">
             SIAM recomienda mantener dentro del alcance los dispositivos no autorizados porque
             representan un hallazgo de seguridad. Aun así, puedes excluir este dispositivo si esa es
             la decisión de tu organización.
           </Alert>
-          <Group justify="flex-end">
-            <Button
-              variant="default"
-              onClick={() => {
-                setValue('assessment_scope', 'included', { shouldDirty: true })
-                setConfirmUnauthorizedExclusion(false)
-              }}
-            >
-              Mantener incluido
-            </Button>
-            <Button
-              color="orange"
-              onClick={() => {
-                warnedUnauthorizedExclusion.current = true
-                setValue('assessment_scope', 'excluded', { shouldDirty: true })
-                setConfirmUnauthorizedExclusion(false)
-              }}
-            >
-              Excluir de todos modos
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </Modal>
     </Stack>
   )

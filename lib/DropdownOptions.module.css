@@ -1,0 +1,44 @@
+.separatedOption {
+  --option-divider: var(--mantine-color-bone-3);
+
+  position: relative;
+  padding-block: 0.5rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+:global([data-mantine-color-scheme='dark']) .separatedOption {
+  --option-divider: var(--mantine-color-dark-4);
+}
+
+/* Remove the previous full-width border as well as drawing the new separator. */
+:global([data-mantine-color-scheme]) .separatedOption + .separatedOption {
+  border-block-start: 0;
+}
+
+.separatedOption + .separatedOption::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  left: 50%;
+  inline-size: min(24%, 3rem);
+  transform: translateX(-50%);
+  block-size: 1px;
+  background-color: var(--option-divider);
+  pointer-events: none;
+}
+
+/* Bone surfaces need a warmer, more visible highlight than Mantine's near-white default. */
+:global([data-mantine-color-scheme='light'])
+  .separatedOption:where(:hover, :focus-visible, [data-combobox-selected]):not(
+    :disabled,
+    [data-disabled],
+    [data-combobox-disabled]
+  ) {
+  background-color: var(--mantine-color-bone-2);
+}
+
+:global([data-mantine-color-scheme='light'])
+  .separatedOption:where([data-combobox-selected]):not([data-combobox-disabled]) {
+  color: var(--mantine-color-text);
+}

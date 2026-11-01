@@ -8,6 +8,7 @@ import {
 } from '../collections/NonNetworkAssets/invariants'
 import { assertOrganizationMatches } from '../access/tenant/assertOrganizationMatches'
 import { relationId } from '../lib/relationId'
+import { organizationWriteError } from '@/domain/organizations/admin-actions'
 
 function json(body: unknown, status = 200) {
   return Response.json(body, { status })
@@ -38,6 +39,8 @@ export const nonNetworkAssetReviewEndpoint: Endpoint = {
     // Defensa en profundidad (ver access/tenant/assertOrganizationMatches.ts): no confiar solo
     // en officeIds — verificar la organización real del documento antes de mutarlo.
     assertOrganizationMatches(relationId(existing.organization), ctx.organizationId, unrestricted)
+    const denied = await organizationWriteError(req, relationId(existing.organization))
+    if (denied) return denied
 
     const interval = (existing.review_interval ?? 'never') as ReviewInterval
     // Backend como autoridad (SYSTEM_PROMPT #7): no confiar en que la UI deshabilite el botón

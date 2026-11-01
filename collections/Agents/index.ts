@@ -16,11 +16,22 @@ const API_KEY_PREFIX_LENGTH = 8
 
 const generateApiKey = () => crypto.randomBytes(32).toString('hex')
 
-// TODO(rbac-feature): reemplazar por access real cuando exista TenantContext/RBAC (documentation/02-core-interfaces.md §4)
+// Acceso REST cerrado: los agentes se leen y escriben solo desde endpoints dedicados
+// (aprovisionamiento, revocación, resumen, canal del escáner) con overrideAccess y sus propios
+// controles de rol y alcance. Así el hash de la credencial nunca sale por la API genérica.
 export const Agents: CollectionConfig = {
   slug: 'agents',
   admin: {
     useAsTitle: 'id',
+  },
+  // Al expandirse desde otra colección (Assets, ScanReports, InventoryIncidents) solo viajan
+  // datos públicos: el estado de bloqueo y el prefijo de la credencial quedan para las lecturas
+  // directas del agente (panel de administración y endpoints propios).
+  defaultPopulate: {
+    office: true,
+    organization: true,
+    lifecycle_status: true,
+    last_heartbeat_at: true,
   },
   access: {
     create: () => false,
@@ -129,7 +140,7 @@ export const Agents: CollectionConfig = {
       admin: {
         readOnly: true,
         description:
-          'Motivo de la revocación: manual (acción humana), auto_lockout_abuse u office_deactivated (se desactivó su oficina).',
+          'Motivo de la revocación: manual (acción humana), auto_lockout_abuse, office_deactivated (se desactivó su oficina) u organization_deactivated (se desactivó su organización).',
       },
     },
     {
@@ -164,11 +175,10 @@ export const Agents: CollectionConfig = {
       },
     },
     {
+      // Fuera de toda respuesta, también expandido: solo resolveAgentAuth lo lee, con showHiddenFields.
       name: 'apiKeyHash',
       type: 'text',
-      admin: {
-        hidden: true,
-      },
+      hidden: true,
     },
     {
       // Solo poblado por attachPlainApiKeyOnce en la respuesta de creación — nunca se persiste ni se rehidrata en lecturas.
@@ -238,8 +248,17 @@ export const Agents: CollectionConfig = {
     afterChange: [
       async ({ doc, previousDoc, req }) => {
         const online = getAgentLifecycleStatus(doc) !== 'revoked' && isAgentOnline(doc)
-        const wasOnline = previousDoc && getAgentLifecycleStatus(previousDoc) !== 'revoked' && isAgentOnline(previousDoc)
-        if (online !== Boolean(wasOnline) && doc.organization) await enqueueRiskRecalculation(req.payload, relationId(doc.organization), [relationId(doc.office)], req)
+        const wasOnline =
+          previousDoc &&
+          getAgentLifecycleStatus(previousDoc) !== 'revoked' &&
+          isAgentOnline(previousDoc)
+        if (online !== Boolean(wasOnline) && doc.organization)
+          await enqueueRiskRecalculation(
+            req.payload,
+            relationId(doc.organization),
+            [relationId(doc.office)],
+            req
+          )
         return doc
       },
       ({ doc, operation, req }) => {

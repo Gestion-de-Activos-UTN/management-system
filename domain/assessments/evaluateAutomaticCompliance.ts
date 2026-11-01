@@ -10,6 +10,7 @@ import { isAssetExcludedFromAssessments } from './asset-assessment-scope'
 import { findAll } from '@/lib/find-all'
 import type { ComplianceResult } from '@/app/types/payload-types'
 import { portWasCovered } from '@/domain/inventories/port-coverage'
+import { normalizeFeatures } from '@/domain/subscriptions/features'
 
 type AutomaticCheck = CheckEvaluation & {
   control_key: string
@@ -268,11 +269,8 @@ export async function reevaluateComplianceAfterScan(
     }),
   ])
   const settings = settingsResult.docs[0]
-  const featureValue = subscriptionResult.docs[0]?.features
-  const features =
-    featureValue && typeof featureValue === 'object' && !Array.isArray(featureValue)
-      ? featureValue
-      : null
+  const subscription = subscriptionResult.docs[0]
+  const features = subscription ? normalizeFeatures(subscription.features) : null
   if (!settings || features?.security_assessments !== true) return
   const targets = await payload.find({
     collection: 'assessment-instances',

@@ -1,5 +1,6 @@
 import type { CollectionBeforeChangeHook } from 'payload'
 import { relationId } from '@/lib/relationId'
+import { isManualCategoryAssessable } from '@/domain/risk/risk-asset-type'
 
 const optionalRelationId = (value: unknown): string | null => (value ? relationId(value) : null)
 
@@ -8,11 +9,14 @@ export const validateComplianceResult: CollectionBeforeChangeHook = async ({ dat
   const officeId = optionalRelationId(data?.office)
   const assetId = optionalRelationId(data?.asset)
   const manualAssetId = optionalRelationId(data?.manual_asset)
-  if (!organizationId) throw new Error('Compliance result organization is required')
-  if (assetId && manualAssetId) throw new Error('A compliance result cannot target two assets')
+  if (!organizationId)
+    throw new Error('El resultado de cumplimiento debe pertenecer a una organización.')
+  if (assetId && manualAssetId)
+    throw new Error('Un resultado de cumplimiento no puede corresponder a dos activos.')
   if ((assetId || manualAssetId) && !officeId)
-    throw new Error('Asset compliance results require an office')
-  if (data?.service_key && !assetId) throw new Error('Service compliance results require an asset')
+    throw new Error('Los resultados de cumplimiento de activos requieren una oficina.')
+  if (data?.service_key && !assetId)
+    throw new Error('Los resultados de servicios requieren un activo.')
 
   if (officeId) {
     const office = await req.payload.findByID({
@@ -23,7 +27,7 @@ export const validateComplianceResult: CollectionBeforeChangeHook = async ({ dat
       depth: 0,
     })
     if (relationId(office.organization) !== organizationId)
-      throw new Error('Compliance result office belongs to another organization')
+      throw new Error('La oficina del resultado de cumplimiento pertenece a otra organización.')
   }
   if (assetId) {
     const asset = await req.payload.findByID({
@@ -37,7 +41,9 @@ export const validateComplianceResult: CollectionBeforeChangeHook = async ({ dat
       relationId(asset.organization) !== organizationId ||
       relationId(asset.office) !== officeId
     ) {
-      throw new Error('Compliance result asset does not belong to its organization and office')
+      throw new Error(
+        'El activo del resultado de cumplimiento no pertenece a su organización y oficina.'
+      )
     }
   }
   if (manualAssetId) {
@@ -52,10 +58,10 @@ export const validateComplianceResult: CollectionBeforeChangeHook = async ({ dat
       relationId(asset.organization) !== organizationId ||
       relationId(asset.office) !== officeId
     ) {
-      throw new Error('Manual compliance asset does not belong to its organization and office')
+      throw new Error('El activo manual de cumplimiento no pertenece a su organización y oficina.')
     }
-    if (asset.asset_category !== 'computer')
-      throw new Error('Only manually entered computers can receive assessment results')
+    if (!isManualCategoryAssessable(asset.asset_category))
+      throw new Error('La categoría de este activo manual no admite revisiones de seguridad.')
   }
   if (data?.supersedes) {
     const previous = await req.payload.findByID({
@@ -66,7 +72,7 @@ export const validateComplianceResult: CollectionBeforeChangeHook = async ({ dat
       depth: 0,
     })
     if (relationId(previous.organization) !== organizationId)
-      throw new Error('A compliance result cannot supersede another organization')
+      throw new Error('Un resultado de cumplimiento no puede reemplazar el de otra organización.')
   }
   return data
 }

@@ -7,12 +7,12 @@ import {
   listOffices,
   revokeAgent,
   saveOffice,
-  setOfficeActive,
+  setOfficeStatus,
 } from '../service'
-import type { OfficeInput } from '../schema'
+import type { OfficeInput, OfficeStatusInput } from '../schema'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Office } from '@/app/types/payload-types'
-import { notifications } from '@mantine/notifications'
+import { notify } from '@/lib/notify'
 import type { HttpError } from '@/lib/http-client'
 import { showApiError } from '@/lib/notify-error'
 import type { AgentPlatform } from '@/domain/agents/buildAgentPackage'
@@ -38,7 +38,7 @@ export function useProvisionAgent() {
   return useMutation<Blob, HttpError, { officeId: string; platform: AgentPlatform }>({
     mutationFn: ({ officeId, platform }) => provisionAgent(officeId, platform),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['office-agent-summary'] }),
-    onError: error => showApiError(error, 'No se pudo instalar el escáner'),
+    onError: error => showApiError(error, 'No se pudo descargar el instalador del escáner'),
   })
 }
 
@@ -54,19 +54,29 @@ export function useRevokeAgent() {
     mutationFn: revokeAgent,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['office-agent-summary'] })
-      notifications.show({ color: 'green', message: 'Acceso del escáner revocado' })
+      notify({ color: 'green', title: 'Acceso del escáner revocado' })
     },
-    onError: error => showApiError(error, 'No se pudo revocar el escáner'),
+    onError: error => showApiError(error, 'No se pudo revocar el acceso del escáner'),
   })
 }
 
 // Una oficina nueva o (des)activada cambia el selector de oficinas, el tenant context (oficinas
-// de cada persona), los escáneres y la lista de miembros (desactivados en cascada).
+// de cada persona), los escáneres, la lista de miembros (desactivados en cascada) y, al
+// desactivarla, activos (movidos o dados de baja), tareas (canceladas), revisiones y riesgo.
 function invalidateOfficeScope(queryClient: ReturnType<typeof useQueryClient>) {
   return Promise.all(
-    ['offices', 'office-agent-summary', 'tenant-context', 'org-members'].map(key =>
-      queryClient.invalidateQueries({ queryKey: [key] })
-    )
+    [
+      'offices',
+      'office-agent-summary',
+      'tenant-context',
+      'org-members',
+      'assets',
+      'non-network-assets',
+      'tasks',
+      'assessments',
+      'risk',
+      'dashboard-metrics',
+    ].map(key => queryClient.invalidateQueries({ queryKey: [key] }))
   )
 }
 
@@ -75,9 +85,9 @@ export function useSaveOffice(asOrganization?: string) {
   return useMutation<Office, HttpError, { input: OfficeInput; id?: string }>({
     mutationFn: ({ input, id }) => saveOffice(input, id, asOrganization),
     onSuccess: (_, { id }) => {
-      notifications.show({
+      notify({
         color: 'green',
-        message: id ? 'Oficina actualizada.' : 'Oficina creada.',
+        title: id ? 'Oficina actualizada.' : 'Oficina creada.',
       })
       return invalidateOfficeScope(queryClient)
     },
@@ -94,22 +104,21 @@ export function useOfficeDeactivationImpact(officeId: string | null, asOrganizat
   })
 }
 
-export function useSetOfficeActive(asOrganization?: string) {
+export function useSetOfficeStatus(asOrganization?: string) {
   const queryClient = useQueryClient()
-  return useMutation<
-    unknown,
-    HttpError,
-    { id: string; isActive: boolean; confirmMemberDeactivation?: boolean }
-  >({
-    mutationFn: ({ id, isActive, confirmMemberDeactivation = false }) =>
-      setOfficeActive(id, isActive, confirmMemberDeactivation, asOrganization),
-    onSuccess: (_, { isActive }) => {
-      notifications.show({
+  return useMutation<unknown, HttpError, { id: string; input: OfficeStatusInput }>({
+    mutationFn: ({ id, input }) => setOfficeStatus(id, input, asOrganization),
+    onSuccess: (_, { input }) => {
+      notify({
         color: 'green',
-        message: isActive ? 'Oficina reactivada.' : 'Oficina desactivada.',
+        title: input.is_active ? 'Oficina reactivada.' : 'Oficina desactivada.',
       })
       return invalidateOfficeScope(queryClient)
     },
-    onError: error => showApiError(error, 'No se pudo cambiar el estado de la oficina'),
+    onError: (error, { input }) =>
+      showApiError(
+        error,
+        input.is_active ? 'No se pudo reactivar la oficina' : 'No se pudo desactivar la oficina'
+      ),
   })
 }

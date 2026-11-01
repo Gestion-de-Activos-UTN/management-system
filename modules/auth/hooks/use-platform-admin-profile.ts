@@ -1,7 +1,7 @@
 'use client'
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { notifications } from '@mantine/notifications'
+import { notify } from '@/lib/notify'
 import type { HttpError } from '@/lib/http-client'
 import { showApiError } from '@/lib/notify-error'
 import { useSession } from '@/lib/use-session'
@@ -30,7 +30,7 @@ export function useUpdatePlatformAdminProfile() {
         queryClient.invalidateQueries({ queryKey: ['platform-admin-profile'] }),
         queryClient.invalidateQueries({ queryKey: ['tasks'] }),
       ])
-      notifications.show({ color: 'green', message: 'Nombre actualizado' })
+      notify({ color: 'green', title: 'Nombre actualizado' })
     },
     onError: error => showApiError(error, 'No se pudo actualizar el nombre'),
   })

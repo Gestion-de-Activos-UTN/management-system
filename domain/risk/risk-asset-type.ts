@@ -27,14 +27,27 @@ const MANUAL: Record<ManualAssetCategory, RiskAssetType | null> = {
   removable_media: null,
   other_equipment: null,
   antivirus_edr: null,
-  software_license: null,
-  cloud_asset: null,
+  software_license: 'software_license',
+  cloud_asset: 'cloud_asset',
   provider_service: null,
   backup: null,
-  information_repository: null,
+  information_repository: 'information_repository',
   physical_record: null,
   other: null,
 }
+
+// Categories that receive assessment cycles. Narrower than MANUAL on purpose: mobile_device, server
+// and network_device are in the risk population but have no manual assessments yet.
+// ponytail: second source next to MANUAL; merge both into one Record if categories keep growing.
+export const ASSESSABLE_MANUAL = [
+  'computer',
+  'software_license',
+  'cloud_asset',
+  'information_repository',
+] as const satisfies readonly ManualAssetCategory[]
+
+export const isManualCategoryAssessable = (category: ManualAssetCategory): boolean =>
+  (ASSESSABLE_MANUAL as readonly ManualAssetCategory[]).includes(category)
 
 export const riskAssetTypeForScanned = (type: ScannedAssetType): RiskAssetType | null =>
   SCANNED[type]

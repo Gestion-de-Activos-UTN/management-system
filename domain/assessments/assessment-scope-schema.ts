@@ -42,9 +42,9 @@ export function validateAssessmentScope(
   if (!value.assessment_exclusion_reason)
     issue('assessment_exclusion_reason', 'Selecciona un motivo de exclusión.')
   if (value.assessment_exclusion_reason === 'other' && !value.assessment_exclusion_note?.trim())
-    issue('assessment_exclusion_note', 'Agrega una breve explicación.')
+    issue('assessment_exclusion_note', 'Escribe una breve explicación.')
   if (!value.assessment_excluded_until) {
-    issue('assessment_excluded_until', 'La exclusión requiere una fecha de vencimiento.')
+    issue('assessment_excluded_until', 'Selecciona una fecha de vencimiento.')
     return
   }
   const until = Date.parse(value.assessment_excluded_until)

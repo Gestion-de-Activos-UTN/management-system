@@ -1,7 +1,23 @@
-import type { PayloadRequest } from 'payload'
+import type { PayloadRequest, Where } from 'payload'
 import { relationId } from '@/lib/relationId'
-import { buildRevocationData, getAgentLifecycleStatus } from '@/domain/agents/agent-state'
-import { AdminDomainError, subscriptionLimits } from '@/domain/organizations/admin-actions'
+import { withSystemContext } from '@/lib/system-context'
+import {
+  buildRevocationData,
+  getAgentLifecycleStatus,
+  type AgentRevocationReason,
+} from '@/domain/agents/agent-state'
+import {
+  AdminDomainError,
+  assertOrganizationActive,
+  subscriptionLimits,
+} from '@/domain/organizations/admin-actions'
+import { reconcileAssessmentInstance } from '@/domain/assessments/reconcileAssessmentInstance'
+import { enqueueRiskRecalculation } from '@/domain/risk/enqueueRiskRecalculation'
+import { cancelOpenTasks } from '@/domain/tasks/task-actions'
+import { lockAssetRow } from '@/domain/with-transaction'
+import { findActiveOffices } from '@/domain/offices/active-offices'
+import { withDeferredTaskReleases } from '@/domain/organizations/member-responsibilities'
+import { RETIRE_MANUAL_ASSET, type OfficeDeactivationInput } from '@/modules/offices/schema'
 
 export type OfficeLocation = { province_id?: string | null; department_id?: string | null }
 type OfficeDoc = {
@@ -12,23 +28,41 @@ type OfficeDoc = {
 }
 
 export type AffectedMember = { user_id: string; name: string; email: string; role: string }
+export type ImpactedManualAsset = {
+  id: string
+  name: string
+  category: string
+  owner_name: string | null
+  /** Tareas abiertas del activo: se mueven con él, o se cancelan si se da de baja. */
+  open_tasks: number
+}
 export type OfficeDeactivationImpact = {
   /** Agentes no revocados de la oficina: se revocan al desactivarla. */
   agents: number
-  /** Personas cuya única oficina activa es esta: se desactivan si se confirma. */
+  /** Personas cuya única oficina activa es esta: se desactivan. */
   members_without_office: AffectedMember[]
+  /** Personas que tienen otras oficinas activas: sólo pierden esta. */
+  members_losing_office: AffectedMember[]
+  /** Activos de red vigentes: se dan de baja (status 'retired'). */
+  network_assets: number
+  /**
+   * Activos manuales vigentes: cada uno se mueve a la oficina que se elija (sin responsable ni
+   * ubicación) o se da de baja.
+   */
+  manual_assets: ImpactedManualAsset[]
+  /** Tareas abiertas de la oficina que se cancelan, sin contar las de sus activos manuales. */
+  open_tasks: number
+  /** La oficina tiene un assessment abierto: se cierra. */
+  open_assessment: boolean
+  /** Oficinas activas a las que se pueden mover los activos manuales. */
+  destination_offices: { id: string; name: string }[]
 }
 
+const activeOffices = (req: PayloadRequest, organizationId: string) =>
+  findActiveOffices(req.payload, organizationId, req)
+
 async function activeOfficeIds(req: PayloadRequest, organizationId: string) {
-  const found = await req.payload.find({
-    collection: 'offices',
-    where: { and: [{ organization: { equals: organizationId } }, { is_active: { equals: true } }] },
-    overrideAccess: true,
-    req,
-    depth: 0,
-    pagination: false,
-  })
-  return found.docs.map(office => String(office.id))
+  return (await activeOffices(req, organizationId)).map(office => String(office.id))
 }
 
 async function assertOfficeQuota(req: PayloadRequest, organizationId: string) {
@@ -62,17 +96,31 @@ export async function createOffice(
   organizationId: string,
   input: { name: string } & OfficeLocation
 ) {
+  // RF-23a: una organización inactiva no suma oficinas.
+  await assertOrganizationActive(req, organizationId)
   await assertOfficeQuota(req, organizationId)
   // AUDIT: this action must emit an AuditLogs entry (office.create, chain_hash over {office, name, location}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   // El hook afterChange de Offices (syncOrgAdminMemberships) la asigna a todos los org_admin.
-  return req.payload.create({
+  const office = await req.payload.create({
     collection: 'offices',
     data: { organization: organizationId, is_active: true, ...input },
     overrideAccess: true,
     req,
     depth: 0,
   })
+  await reconcileAssessmentInstance(
+    req.payload,
+    {
+      scope: 'office',
+      id: String(office.id),
+      organizationId,
+      is_active: true,
+    },
+    'initial',
+    req
+  )
+  return office
 }
 
 export async function updateOfficeDetails(
@@ -80,6 +128,7 @@ export async function updateOfficeDetails(
   office: OfficeDoc,
   input: { name: string } & OfficeLocation
 ) {
+  await assertOrganizationActive(req, relationId(office.organization))
   // AUDIT: this action must emit an AuditLogs entry (office.update, chain_hash over {office, name, location}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   return req.payload.update({
@@ -131,6 +180,172 @@ async function officeAgents(req: PayloadRequest, officeId: string) {
   return found.docs.filter(agent => getAgentLifecycleStatus(agent) !== 'revoked')
 }
 
+// Vigente = no retirado ni borrado: lo único que una desactivación tiene que resolver.
+const liveIn = (officeId: string): Where => ({
+  and: [
+    { office: { equals: officeId } },
+    { status: { not_equals: 'retired' } },
+    { deleted_at: { exists: false } },
+  ],
+})
+
+async function liveNetworkAssets(req: PayloadRequest, officeId: string) {
+  const found = await req.payload.find({
+    collection: 'assets',
+    where: liveIn(officeId),
+    overrideAccess: true,
+    req,
+    depth: 0,
+    pagination: false,
+  })
+  return found.docs
+}
+
+async function liveManualAssets(req: PayloadRequest, officeId: string) {
+  const found = await req.payload.find({
+    collection: 'non-network-assets',
+    where: liveIn(officeId),
+    overrideAccess: true,
+    req,
+    depth: 0,
+    pagination: false,
+  })
+  return found.docs
+}
+
+/** Revoca los escáneres de la oficina. Usado al desactivar la oficina o la organización. */
+export async function revokeOfficeAgents(
+  req: PayloadRequest,
+  officeId: string,
+  reason: Extract<AgentRevocationReason, 'office_deactivated' | 'organization_deactivated'>
+) {
+  for (const agent of await officeAgents(req, officeId)) {
+    // AUDIT: this action must emit an AuditLogs entry (agent.revoke, reason {office_deactivated|organization_deactivated}, chain_hash over {agent, office, revoked_at}, previous hash for this organization_id)
+    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+    await req.payload.update({
+      collection: 'agents',
+      id: agent.id,
+      data: buildRevocationData(reason),
+      overrideAccess: true,
+      req,
+    })
+  }
+}
+
+/**
+ * Da de baja (status 'retired', sin deleted_at: RF-37 permite reactivarlos) los activos vigentes
+ * de la oficina. Sólo se escribe `status`: un activo de red no identificado rechaza cualquier
+ * campo de negocio. Los hooks de cada activo cancelan sus tareas, cierran sus assessments y
+ * encolan el riesgo.
+ */
+export async function retireOfficeAssets(
+  req: PayloadRequest,
+  officeId: string,
+  { includeManual }: { includeManual: boolean }
+) {
+  await retireAssets(req, [
+    ...(await liveNetworkAssets(req, officeId)).map(doc => ({
+      collection: 'assets' as const,
+      id: String(doc.id),
+    })),
+    ...(includeManual ? await liveManualAssets(req, officeId) : []).map(doc => ({
+      collection: 'non-network-assets' as const,
+      id: String(doc.id),
+    })),
+  ])
+}
+
+async function retireAssets(
+  req: PayloadRequest,
+  targets: { collection: 'assets' | 'non-network-assets'; id: string }[]
+) {
+  // ponytail: uno por uno para que corran los hooks de cada activo; por lotes si llega a medirse lento.
+  for (const { collection, id } of targets) {
+    await lockAssetRow(req, collection, id)
+    // AUDIT: this action must emit an AuditLogs entry (asset.retire, cascaded from office/organization deactivation, chain_hash over {asset, status}, previous hash for this organization_id)
+    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+    await req.payload.update({
+      collection,
+      id,
+      data: { status: 'retired' },
+      overrideAccess: true,
+      req,
+    })
+  }
+}
+
+/**
+ * Mueve activos manuales a otra oficina activa. Llegan sin responsable ni ubicación (eran de la
+ * oficina anterior); el resto de sus valores se conserva. Los hooks cierran su assessment, abren
+ * uno en el destino y mueven sus tareas con requires_reassignment.
+ */
+async function moveManualAssets(
+  req: PayloadRequest,
+  moves: { asset_id: string; office_id: string }[]
+) {
+  await withSystemContext(req, 'systemOwnerRelease', async () => {
+    for (const move of moves) {
+      await lockAssetRow(req, 'non-network-assets', move.asset_id)
+      // AUDIT: this action must emit an AuditLogs entry (asset.move, cascaded from office.deactivate, chain_hash over {asset, previous office, office, owner: null, location: null}, previous hash for this organization_id)
+      // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+      // NOTIFY: this event should trigger a Notification Bell entry for {org_admins and office_managers of the destination office: asset needs an owner}
+      // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
+      await req.payload.update({
+        collection: 'non-network-assets',
+        id: move.asset_id,
+        data: { office: move.office_id, owner: null, location: null },
+        overrideAccess: true,
+        req,
+      })
+    }
+  })
+}
+
+/**
+ * Tareas abiertas de la oficina, separadas: las de cada activo manual (o de su assessment), que
+ * siguen la decisión sobre ese activo, y el resto, que se cancela con la oficina.
+ */
+async function openTaskCounts(req: PayloadRequest, officeId: string, manualIds: string[]) {
+  const [tasks, manualAssessments] = await Promise.all([
+    req.payload.find({
+      collection: 'tasks',
+      where: {
+        and: [{ office: { equals: officeId } }, { status: { in: ['pending', 'in_progress'] } }],
+      },
+      overrideAccess: true,
+      req,
+      depth: 0,
+      pagination: false,
+      select: { related_entity: true },
+    }),
+    manualIds.length
+      ? req.payload.find({
+          collection: 'assessment-instances',
+          where: { manual_asset: { in: manualIds } },
+          overrideAccess: true,
+          req,
+          depth: 0,
+          pagination: false,
+          select: { manual_asset: true },
+        })
+      : { docs: [] },
+  ])
+  // Entidad relacionada (activo o assessment) → activo manual al que pertenece.
+  const assetOf = new Map(manualIds.map(id => [id, id]))
+  for (const assessment of manualAssessments.docs)
+    assetOf.set(String(assessment.id), relationId(assessment.manual_asset))
+  const byManualAsset = new Map<string, number>()
+  let office = 0
+  for (const task of tasks.docs) {
+    const asset = task.related_entity
+      ? assetOf.get(relationId(task.related_entity.value))
+      : undefined
+    if (asset) byManualAsset.set(asset, (byManualAsset.get(asset) ?? 0) + 1)
+    else office += 1
+  }
+  return { office, byManualAsset }
+}
+
 /**
  * Qué pasa si se desactiva la oficina. Los org_admin cubren siempre todas las oficinas, así que
  * nunca quedan sin oficina; el resto queda sin ninguna si esta era su única oficina activa.
@@ -141,38 +356,98 @@ export async function officeDeactivationImpact(
   office: OfficeDoc
 ): Promise<OfficeDeactivationImpact> {
   const officeId = String(office.id)
-  const [agents, memberships, activeIds] = await Promise.all([
-    officeAgents(req, officeId),
-    officeMemberships(req, organizationId, officeId),
-    activeOfficeIds(req, organizationId),
-  ])
-  const remainingActive = new Set(activeIds.filter(id => id !== officeId))
-  return {
-    agents: agents.length,
-    members_without_office: memberships
-      .filter(m => m.role !== 'org_admin' && !m.offices.some(id => remainingActive.has(id)))
-      .map(m => ({
+  const [agents, memberships, offices, networkAssets, manualAssets, openAssessment] =
+    await Promise.all([
+      officeAgents(req, officeId),
+      officeMemberships(req, organizationId, officeId),
+      activeOffices(req, organizationId),
+      liveNetworkAssets(req, officeId),
+      liveManualAssets(req, officeId),
+      req.payload.count({
+        collection: 'assessment-instances',
+        where: {
+          and: [
+            { scope: { equals: 'office' } },
+            { office: { equals: officeId } },
+            { status: { in: ['pending', 'in_progress'] } },
+          ],
+        },
+        overrideAccess: true,
+        req,
+      }),
+    ])
+  const destinations = offices.filter(candidate => String(candidate.id) !== officeId)
+  const remainingActive = new Set(destinations.map(candidate => String(candidate.id)))
+  const affected = memberships
+    .filter(m => m.role !== 'org_admin')
+    .map(m => ({
+      member: {
         user_id: relationId(m.user),
         name: m.user.name,
         email: m.user.email,
         role: m.role,
-      })),
+      },
+      keepsAnOffice: m.offices.some(id => remainingActive.has(id)),
+    }))
+  const ownerIds = [
+    ...new Set(manualAssets.flatMap(asset => (asset.owner ? [relationId(asset.owner)] : []))),
+  ]
+  const owners = ownerIds.length
+    ? await req.payload.find({
+        collection: 'users',
+        where: { id: { in: ownerIds } },
+        overrideAccess: true,
+        req,
+        depth: 0,
+        pagination: false,
+        select: { name: true },
+      })
+    : { docs: [] }
+  const ownerName = new Map(owners.docs.map(user => [String(user.id), user.name]))
+  const taskCounts = await openTaskCounts(
+    req,
+    officeId,
+    manualAssets.map(asset => String(asset.id))
+  )
+  return {
+    agents: agents.length,
+    members_without_office: affected.filter(a => !a.keepsAnOffice).map(a => a.member),
+    members_losing_office: affected.filter(a => a.keepsAnOffice).map(a => a.member),
+    network_assets: networkAssets.length,
+    manual_assets: manualAssets.map(asset => ({
+      id: String(asset.id),
+      name: asset.alias,
+      category: asset.asset_category,
+      owner_name: asset.owner ? (ownerName.get(relationId(asset.owner)) ?? null) : null,
+      open_tasks: taskCounts.byManualAsset.get(String(asset.id)) ?? 0,
+    })),
+    open_tasks: taskCounts.office,
+    open_assessment: openAssessment.totalDocs > 0,
+    destination_offices: destinations.map(candidate => ({
+      id: String(candidate.id),
+      name: candidate.name,
+    })),
   }
 }
 
 /**
- * Desactiva la oficina: revoca sus agentes, la quita de las personas que la tenían asignada y
- * desactiva a quienes se quedan sin ninguna oficina activa (requiere `confirmMemberDeactivation`).
- * No se borra nada: activos, escaneos, tareas e historial de riesgo siguen apuntando a ella.
+ * Desactiva la oficina en un solo paso (la transacción la abre el endpoint): mueve o da de baja
+ * cada activo manual según se eligió, da de baja los de red, revoca los escáneres, saca la oficina a las personas (y
+ * desactiva a quienes se quedan sin ninguna), cancela las tareas que quedan y cierra su
+ * assessment. Reactivar no restaura nada de esto.
+ *
+ * Orden: todas las escrituras de activos antes que las de tareas, igual que la ingesta y el PATCH
+ * de un activo (fila del activo, después lock de la tarea), para no cruzar locks.
  */
 export async function deactivateOffice(
   req: PayloadRequest,
   organizationId: string,
-  office: OfficeDoc,
-  { confirmMemberDeactivation = false } = {}
+  officeId: string,
+  input: Omit<OfficeDeactivationInput, 'is_active'>
 ) {
+  // Se relee dentro de la transacción: lo que se cargó antes de abrirla puede estar viejo.
+  const office = await loadOrganizationOffice(req, organizationId, officeId)
   if (office.is_active === false) return
-  const officeId = String(office.id)
   const activeIds = await activeOfficeIds(req, organizationId)
   if (activeIds.length <= 1 && activeIds.includes(officeId)) {
     throw new AdminDomainError(
@@ -181,58 +456,90 @@ export async function deactivateOffice(
       'La organización debe conservar al menos una oficina activa.'
     )
   }
-  const impact = await officeDeactivationImpact(req, organizationId, office)
-  if (impact.members_without_office.length && !confirmMemberDeactivation) {
+  if (input.confirm_name.trim() !== office.name.trim()) {
     throw new AdminDomainError(
-      'members_would_be_deactivated',
-      409,
-      'Hay personas que quedarían sin ninguna oficina asignada.',
-      impact
+      'confirmation_mismatch',
+      400,
+      'El nombre escrito no coincide con el de la oficina.'
     )
   }
 
-  for (const agent of await officeAgents(req, officeId)) {
-    // AUDIT: this action must emit an AuditLogs entry (agent.revoke, reason office_deactivated, chain_hash over {agent, office, revoked_at}, previous hash for this organization_id)
-    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
-    await req.payload.update({
-      collection: 'agents',
-      id: agent.id,
-      data: buildRevocationData('office_deactivated'),
-      overrideAccess: true,
-      req,
-    })
+  // Cada activo manual vigente necesita exactamente una decisión: moverse a otra oficina activa
+  // o darse de baja. Nunca queda sin definir en una oficina inactiva.
+  const manualIds = new Set((await liveManualAssets(req, officeId)).map(doc => String(doc.id)))
+  const decidedIds = input.manual_asset_decisions.map(decision => decision.asset_id)
+  if (
+    decidedIds.length !== manualIds.size ||
+    new Set(decidedIds).size !== decidedIds.length ||
+    decidedIds.some(id => !manualIds.has(id))
+  ) {
+    throw new AdminDomainError(
+      'impact_changed',
+      409,
+      'Los activos de la oficina cambiaron. Revisa el impacto otra vez antes de confirmar.'
+    )
+  }
+  const destinations = new Set(activeIds.filter(id => id !== officeId))
+  const moves = input.manual_asset_decisions.flatMap(decision =>
+    decision.destination === RETIRE_MANUAL_ASSET
+      ? []
+      : [{ asset_id: decision.asset_id, office_id: decision.destination }]
+  )
+  const retired = input.manual_asset_decisions.flatMap(decision =>
+    decision.destination === RETIRE_MANUAL_ASSET
+      ? [{ collection: 'non-network-assets' as const, id: decision.asset_id }]
+      : []
+  )
+  if (moves.some(move => !destinations.has(move.office_id))) {
+    throw new AdminDomainError(
+      'invalid_destination',
+      400,
+      'Cada activo tiene que ir a otra oficina activa de la organización.'
+    )
   }
 
-  const withoutOffice = new Set(impact.members_without_office.map(member => member.user_id))
-  for (const membership of await officeMemberships(req, organizationId, officeId)) {
-    if (membership.role === 'org_admin') continue // cubren todas las oficinas, activas o no
-    if (withoutOffice.has(relationId(membership.user))) {
-      // AUDIT: this action must emit an AuditLogs entry (membership.deactivate, cascaded from office.deactivate, chain_hash over {membership, office}, previous hash for this organization_id)
-      // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
-      // NOTIFY: this event should trigger a Notification Bell entry for {the deactivated user, org_admins of this organization}
-      // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
-      // La cascada de OrganizationMemberships pasa el usuario a inactive y cierra sus sesiones.
-      await req.payload.update({
-        collection: 'organization-memberships',
-        id: membership.id,
-        data: { is_active: false },
-        overrideAccess: true,
-        req,
-      })
-    } else {
-      // AUDIT: this action must emit an AuditLogs entry (membership.offices, cascaded from office.deactivate, chain_hash over {membership, offices}, previous hash for this organization_id)
-      // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
-      await req.payload.update({
-        collection: 'organization-memberships',
-        id: membership.id,
-        data: { offices: membership.offices.filter(id => id !== officeId) },
-        overrideAccess: true,
-        req,
-      })
+  await moveManualAssets(req, moves)
+  await retireAssets(req, retired)
+  await retireOfficeAssets(req, officeId, { includeManual: false })
+  await revokeOfficeAgents(req, officeId, 'office_deactivated')
+
+  const remainingActive = new Set(destinations)
+  // Las tareas se liberan después de todas las escrituras de activos (orden activo→tarea).
+  await withDeferredTaskReleases(req, async () => {
+    for (const membership of await officeMemberships(req, organizationId, officeId)) {
+      if (membership.role === 'org_admin') continue // cubren todas las oficinas, activas o no
+      if (!membership.offices.some(id => remainingActive.has(id))) {
+        // AUDIT: this action must emit an AuditLogs entry (membership.deactivate, cascaded from office.deactivate, chain_hash over {membership, office}, previous hash for this organization_id)
+        // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+        // NOTIFY: this event should trigger a Notification Bell entry for {the deactivated user, org_admins of this organization}
+        // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
+        // Las cascadas de OrganizationMemberships pasan el usuario a inactive, cierran sus sesiones,
+        // liberan sus tareas en curso y dejan sus activos sin responsable.
+        await req.payload.update({
+          collection: 'organization-memberships',
+          id: membership.id,
+          data: { is_active: false },
+          overrideAccess: true,
+          req,
+        })
+      } else {
+        // AUDIT: this action must emit an AuditLogs entry (membership.offices, cascaded from office.deactivate, chain_hash over {membership, offices}, previous hash for this organization_id)
+        // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+        await req.payload.update({
+          collection: 'organization-memberships',
+          id: membership.id,
+          data: { offices: membership.offices.filter(id => id !== officeId) },
+          overrideAccess: true,
+          req,
+        })
+      }
     }
-  }
+  })
 
-  // AUDIT: this action must emit an AuditLogs entry (office.deactivate, chain_hash over {office, revoked agents, deactivated members}, previous hash for this organization_id)
+  // Las tareas de los activos movidos ya cambiaron de oficina: quedan sólo las de esta.
+  await cancelOpenTasks(req, { organizationId, officeId }, 'Oficina desactivada.')
+
+  // AUDIT: this action must emit an AuditLogs entry (office.deactivate, chain_hash over {office, moved assets, retired assets, revoked agents, deactivated members, cancelled tasks}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   // NOTIFY: this event should trigger a Notification Bell entry for {org_admins of this organization}
   // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
@@ -243,18 +550,33 @@ export async function deactivateOffice(
     overrideAccess: true,
     req,
   })
+  await reconcileAssessmentInstance(
+    req.payload,
+    { scope: 'office', id: officeId, organizationId, is_active: false },
+    'manual_review',
+    req
+  )
+  // La organización deja de contar esta oficina (domain/risk/recalculateRisk.ts).
+  await enqueueRiskRecalculation(req.payload, organizationId, [], req)
 }
 
-/** Reactiva la oficina. No reactiva en cascada agentes ni personas: eso es una decisión aparte. */
+/**
+ * Reactiva la oficina y abre su assessment (lo ven los org_admin, que la cubren siempre). No
+ * restaura escáneres, personas ni activos movidos o dados de baja: eso es una decisión aparte.
+ */
 export async function reactivateOffice(
   req: PayloadRequest,
   organizationId: string,
-  office: OfficeDoc
+  officeId: string
 ) {
+  const office = await loadOrganizationOffice(req, organizationId, officeId)
   if (office.is_active !== false) return
+  await assertOrganizationActive(req, organizationId)
   await assertOfficeQuota(req, organizationId)
   // AUDIT: this action must emit an AuditLogs entry (office.reactivate, chain_hash over {office}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+  // NOTIFY: this event should trigger a Notification Bell entry for {org_admins of this organization}
+  // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
   await req.payload.update({
     collection: 'offices',
     id: office.id,
@@ -262,4 +584,11 @@ export async function reactivateOffice(
     overrideAccess: true,
     req,
   })
+  await reconcileAssessmentInstance(
+    req.payload,
+    { scope: 'office', id: officeId, organizationId, is_active: true },
+    'office_reactivated',
+    req
+  )
+  await enqueueRiskRecalculation(req.payload, organizationId, [officeId], req)
 }

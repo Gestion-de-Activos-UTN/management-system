@@ -1,5 +1,6 @@
 'use client'
 
+import './zod-config'
 import { useEffect, useState } from 'react'
 import { MantineProvider } from '@mantine/core'
 import { Notifications } from '@mantine/notifications'

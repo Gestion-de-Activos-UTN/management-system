@@ -1,9 +1,15 @@
 import {
+  Autocomplete,
+  Combobox,
+  Menu,
+  MultiSelect,
   Card,
   Collapse,
   Modal,
+  InputWrapper,
   Select,
   Switch,
+  Tooltip,
   createTheme,
   defaultVariantColorsResolver,
   parseThemeColor,
@@ -11,6 +17,9 @@ import {
   type MantineColorsTuple,
   type VariantColorsResolver,
 } from '@mantine/core'
+import dropdownStyles from './DropdownOptions.module.css'
+import modalStyles from '@/components/ui/ModalLayout.module.css'
+import { searchOptionsFilter } from './search-options-filter'
 
 /**
  * SIAM palette — warm neutral "bone" base + muted slate-teal "pine" accent.
@@ -76,7 +85,7 @@ const variantColorResolver: VariantColorsResolver = input => {
 export const theme = createTheme({
   colors: { bone, pine },
   primaryColor: 'pine',
-  primaryShade: { light: 6, dark: 4 },
+  primaryShade: { light: 6, dark: 6 },
   breakpoints: {
     xs: '30em',
     sm: '48em',
@@ -107,6 +116,19 @@ export const theme = createTheme({
   white: bone[0],
   black: bone[9],
   components: {
+    // One tooltip pattern for truncated labels, row actions and contextual help.
+    Tooltip: Tooltip.extend({
+      defaultProps: {
+        withArrow: false,
+        radius: 6,
+        position: 'top',
+        openDelay: 300,
+        closeDelay: 0,
+        multiline: true,
+        maw: 400,
+        events: { hover: true, focus: true, touch: false },
+      },
+    }),
     // Same absolute radius as everything else still reads as "more rounded" on a
     // ~22px-tall badge than on a ~36px button — the corner curve is a much
     // bigger proportion of a short element's height. Sized down to 'sm' so the
@@ -117,7 +139,17 @@ export const theme = createTheme({
     // Soft elevation by default — cards/modals/papers read as "raised" surfaces
     // instead of flat outlined boxes (hover lift, only for link cards, lives in globals.css).
     Card: Card.extend({ defaultProps: { shadow: 'sm' } }),
-    Modal: Modal.extend({ defaultProps: { shadow: 'lg' } }),
+    Modal: Modal.extend({
+      defaultProps: { shadow: 'lg' },
+      classNames: {
+        content: modalStyles.content,
+        body: modalStyles.body,
+        header: modalStyles.header,
+      },
+    }),
+    InputWrapper: InputWrapper.extend({
+      defaultProps: { inputWrapperOrder: ['label', 'input', 'description', 'error'] },
+    }),
     // Un solo ritmo para todo bloque que se muestra u oculta (submenús, campos que dependen de
     // una elección, avisos): corto para no frenar la carga de datos, con fundido.
     Collapse: Collapse.extend({
@@ -130,7 +162,20 @@ export const theme = createTheme({
     // Mantine deselecciona al volver a clickear la opción elegida: un campo obligatorio quedaba
     // vacío sin aviso (p. ej. la oficina preseleccionada de una tarea de inventario). Para
     // vaciar un campo opcional está `clearable`; los filtros tienen su opción "Todas/Todos".
-    Select: Select.extend({ defaultProps: { allowDeselect: false } }),
+    Select: Select.extend({
+      defaultProps: { allowDeselect: false, filter: searchOptionsFilter },
+      classNames: { option: dropdownStyles.separatedOption },
+    }),
+    MultiSelect: MultiSelect.extend({
+      defaultProps: { filter: searchOptionsFilter },
+      classNames: { option: dropdownStyles.separatedOption },
+    }),
+    Autocomplete: Autocomplete.extend({
+      defaultProps: { filter: searchOptionsFilter },
+      classNames: { option: dropdownStyles.separatedOption },
+    }),
+    Combobox: Combobox.extend({ classNames: { option: dropdownStyles.separatedOption } }),
+    Menu: Menu.extend({ classNames: { item: dropdownStyles.separatedOption } }),
     // Toggle "bloque": pista y pulgar cuadrados (mismo radio que los badges) y un
     // deslizamiento lineal y corto. Sólo para encender/apagar una cosa; dos opciones con
     // nombre propio van con SegmentedControl (SYSTEM_PROMPT §3).

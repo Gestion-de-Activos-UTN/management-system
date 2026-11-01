@@ -1,5 +1,9 @@
 import { reconcileAssetTasks } from '@/domain/tasks/reconcile-asset-tasks'
-import { logicalDeleteEndpoint, rejectPhysicalAssetDelete, preserveDeletedAsset } from '@/domain/assets/logical-delete'
+import {
+  logicalDeleteEndpoint,
+  rejectPhysicalAssetDelete,
+  preserveDeletedAsset,
+} from '@/domain/assets/logical-delete'
 import type { CollectionConfig } from 'payload'
 import { readTechnicalEvidence } from '../../access/rbac/technical-evidence'
 import { orgScopedAccess } from '../../access/rbac/orgScopedAccess'
@@ -8,6 +12,8 @@ import { rejectManualOfflineStatus } from './hooks/rejectManualOfflineStatus'
 import { rejectBusinessEditsBeforeIdentified } from './hooks/rejectBusinessEditsBeforeIdentified'
 import { enforceAuthorizationInvariant } from './hooks/enforceAuthorizationInvariant'
 import { reconcileAssessmentApplicability } from './hooks/reconcileAssessmentApplicability'
+import { rejectRevivalInInactiveOffice } from './hooks/rejectRevivalInInactiveOffice'
+import { rejectWritesInInactiveOrganization } from '../../domain/organizations/admin-actions'
 import { SCANNED_ASSET_TYPE_OPTIONS } from '../../domain/assets/asset-types'
 import { assessmentScopeFields } from '../../domain/assessments/asset-assessment-scope'
 import { validateAssetAssessmentScope } from '../../domain/assessments/validateAssetAssessmentScope'
@@ -34,18 +40,31 @@ export const Assets: CollectionConfig = {
   endpoints: [logicalDeleteEndpoint('assets')],
   hooks: {
     beforeDelete: [rejectPhysicalAssetDelete],
-    beforeChange: [preserveDeletedAsset,
+    beforeChange: [
+      rejectWritesInInactiveOrganization,
+      preserveDeletedAsset,
       validateOwnerTenant,
       rejectManualOfflineStatus,
       rejectBusinessEditsBeforeIdentified,
       enforceAuthorizationInvariant,
       validateAssetAssessmentScope,
+      rejectRevivalInInactiveOffice,
     ],
     afterChange: [reconcileAssessmentApplicability, reconcileAssetTasks],
   },
   fields: [
-    { name: 'location_pending', type: 'checkbox', defaultValue: false, access: technicalFieldAccess },
-    { name: 'deleted_at', type: 'date', index: true, access: { create: () => false, update: () => false } },
+    {
+      name: 'location_pending',
+      type: 'checkbox',
+      defaultValue: false,
+      access: technicalFieldAccess,
+    },
+    {
+      name: 'deleted_at',
+      type: 'date',
+      index: true,
+      access: { create: () => false, update: () => false },
+    },
     { name: 'port_scan_coverage', type: 'json', access: technicalFieldAccess },
     { name: 'scanner_asset_id', type: 'text', index: true, access: technicalFieldAccess },
     { name: 'identity_key', type: 'text', unique: true, index: true, access: technicalFieldAccess },
@@ -334,6 +353,9 @@ export const Assets: CollectionConfig = {
       name: 'identified',
       type: 'checkbox',
       defaultValue: false,
+      // Sólo cambia por assetIdentify/assetUnidentify (overrideAccess), que validan el tipo y
+      // registran quién confirmó; un PATCH genérico de /api/assets no puede saltarlos.
+      access: { update: () => false },
       admin: { hidden: true },
     },
     {
@@ -341,6 +363,7 @@ export const Assets: CollectionConfig = {
       type: 'select',
       options: ['pending', 'confirmed', 'needs_review'],
       defaultValue: 'pending',
+      access: { update: () => false },
       admin: { readOnly: true },
     },
     {

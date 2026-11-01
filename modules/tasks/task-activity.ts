@@ -1,6 +1,6 @@
 import type { StatusTone } from '@/components/ui/StatusBadge'
 import type { TaskDTO } from './service'
-import { TASK_STATUS_TONES } from './task-labels'
+import { CLAIM_RELEASE_REASON_LABEL, TASK_STATUS_TONES } from './task-labels'
 
 export type ActivityEvent = {
   label: string
@@ -26,12 +26,47 @@ export function taskActivity(
   >
 ): ActivityEvent[] {
   const labels = task.actor_labels
+  const claimEvents = labels?.claim_events ?? []
+  const reassignmentPairs = new Set<number>()
+  claimEvents.forEach((event, index) => {
+    const previous = claimEvents[index - 1]
+    if (
+      event.action === 'reassigned' &&
+      previous?.action === 'released' &&
+      previous.reason === 'task_reassigned' &&
+      previous.at === event.at &&
+      previous.actor === event.actor
+    )
+      reassignmentPairs.add(index)
+  })
   const events: Array<ActivityEvent | null> = [
     { label: 'Creada', at: task.createdAt, actor: labels?.created_by },
-    ...(labels?.claim_events ?? []).map(event => ({
-      label: event.action === 'claimed' ? 'Reclamada' : 'Liberada',
+    ...claimEvents.map((event, index) =>
+      reassignmentPairs.has(index + 1)
+        ? null
+        : {
+            label:
+              event.action === 'reassigned'
+                ? 'Reasignada'
+                : event.action === 'claimed'
+                  ? 'Reclamada'
+                  : event.reason === 'task_reassigned'
+                    ? 'Liberada por reasignación'
+                    : 'Liberada',
+            at: event.at,
+            actor: event.actor,
+            note: reassignmentPairs.has(index)
+              ? 'Se liberó el reclamo anterior.'
+              : event.reason
+                ? CLAIM_RELEASE_REASON_LABEL[event.reason]
+                : null,
+          }
+    ),
+    ...(labels?.edit_events ?? []).map(event => ({
+      label: 'Modificada',
       at: event.at,
       actor: event.actor,
+      note: event.replanned ? 'Volvió a pendiente: se liberó el reclamo.' : null,
     })),
     task.completed_at
       ? {
@@ -69,5 +104,10 @@ export function taskActivity(
   ]
   return events
     .filter((event): event is ActivityEvent => event !== null)
-    .sort((left, right) => Date.parse(right.at) - Date.parse(left.at))
+    .map((event, order) => ({ event, order }))
+    .sort(
+      (left, right) =>
+        Date.parse(right.event.at) - Date.parse(left.event.at) || right.order - left.order
+    )
+    .map(({ event }) => event)
 }

@@ -33,7 +33,9 @@ export function getAssetsColumns(
     {
       id: 'device',
       header: 'Equipo',
-      size: 260,
+      // Fijas + "Responsable" (~150 por su encabezado) ≤ ~936 px: sin scroll horizontal con una
+      // ventana de 1280 px. El nombre largo se trunca y muestra el completo en el tooltip.
+      size: 240,
       // Alias, IP y hostname en una sola celda: se leen como una unidad y liberan dos columnas.
       // Ordena por el mismo texto que muestra la primera línea.
       accessorFn: asset => deviceName(asset) ?? '',
@@ -78,7 +80,7 @@ export function getAssetsColumns(
                   </span>
                 </Tooltip>
               )}
-              <Tooltip label={name} disabled={!name} openDelay={400}>
+              <Tooltip label={name} disabled={!name}>
                 <Text
                   size="sm"
                   fw={600}
@@ -115,7 +117,7 @@ export function getAssetsColumns(
     {
       accessorKey: 'criticality',
       header: 'Criticidad',
-      size: 140,
+      size: 110,
       cell: ({ row }) =>
         row.original.identification_status === 'confirmed' && row.original.criticality
           ? CRITICALITY_LABEL[row.original.criticality]
@@ -125,18 +127,22 @@ export function getAssetsColumns(
       ? {
           accessorKey: 'office',
           header: 'Oficina',
-          size: 180,
+          size: 170,
           cell: ({ row }) => {
             const office = row.original.office
             return (
-              <OneLineText>{typeof office === 'object' && office ? office.name : null}</OneLineText>
+              <OneLineText>
+                {typeof office === 'object' && office
+                  ? `${office.name}${office.is_active === false ? ' (inactiva)' : ''}`
+                  : null}
+              </OneLineText>
             )
           },
         }
       : {
           accessorKey: 'location',
           header: 'Ubicación',
-          size: 180,
+          size: 170,
           cell: ({ row }) => (
             <OneLineText>
               {row.original.identification_status === 'confirmed' ? row.original.location : null}

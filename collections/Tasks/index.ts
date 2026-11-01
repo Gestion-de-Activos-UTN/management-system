@@ -33,8 +33,10 @@ export const Tasks: CollectionConfig = {
   fields: [
     { name: 'requires_reassignment', type: 'checkbox', defaultValue: false, access: serverOnly },
     { name: 'lifecycle_history', type: 'json', access: serverOnly },
-    // Cada reclamo y liberación ({ action, at, by }): claimed_by/claimed_at sólo guardan el vigente.
+    // Reclamos, liberaciones y reasignaciones ({ action, at, by }): claimed_by/claimed_at guardan el vigente.
     { name: 'claim_history', type: 'json', access: serverOnly },
+    // Ediciones ({ at, by, replanned? }): sólo quién y cuándo; el detalle de campos va al AuditLog.
+    { name: 'edit_history', type: 'json', access: serverOnly },
     { name: 'seed_key', type: 'text', unique: true, admin: { hidden: true }, access: serverOnly },
     { name: 'title', type: 'text', required: true, minLength: 3, maxLength: 160 },
     { name: 'description', type: 'textarea', maxLength: 5000 },
@@ -143,6 +145,9 @@ export const Tasks: CollectionConfig = {
       admin: { readOnly: true },
     },
     { name: 'creation_batch_id', type: 'text', index: true, access: serverOnly },
+    // Idempotency of a creation retried after a lost response (domain/tasks/task-actions.ts).
+    { name: 'operation_id', type: 'text', index: true, hidden: true, access: serverOnly },
+    { name: 'operation_fingerprint', type: 'text', hidden: true, access: serverOnly },
   ],
 }
 

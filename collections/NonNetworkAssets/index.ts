@@ -1,13 +1,20 @@
 import { reconcileAssetTasks } from '@/domain/tasks/reconcile-asset-tasks'
-import { logicalDeleteEndpoint, rejectPhysicalAssetDelete, preserveDeletedAsset } from '@/domain/assets/logical-delete'
+import {
+  logicalDeleteEndpoint,
+  rejectPhysicalAssetDelete,
+  preserveDeletedAsset,
+} from '@/domain/assets/logical-delete'
 import type { CollectionConfig } from 'payload'
 import { orgScopedAccess, canDoAccess } from '@/access/rbac/orgScopedAccess'
 import { resolveTenantAndReview } from './hooks/resolveTenant'
+import { rejectWritesInInactiveOrganization } from '@/domain/organizations/admin-actions'
 import { computeReviewStatus, canReviewNow, type ReviewInterval } from './invariants'
 import { MANUAL_ASSET_CATEGORY_OPTIONS } from '../../domain/assets/asset-types'
 import { reconcileAssessmentApplicability } from './hooks/reconcileAssessmentApplicability'
 import { assessmentScopeFields } from '../../domain/assessments/asset-assessment-scope'
 import { validateAssetAssessmentScope } from '../../domain/assessments/validateAssetAssessmentScope'
+import { categoryGroupOf, CLOUD_KIND_OPTIONS, REPOSITORY_KIND_OPTIONS } from './categoryGroups'
+import { validateCategoryGroups } from './hooks/validateCategoryGroups'
 
 const resolvedFieldAccess = {
   create: () => false,
@@ -33,12 +40,29 @@ export const NonNetworkAssets: CollectionConfig = {
   endpoints: [logicalDeleteEndpoint('non-network-assets')],
   hooks: {
     beforeDelete: [rejectPhysicalAssetDelete],
-    beforeChange: [preserveDeletedAsset,resolveTenantAndReview, validateAssetAssessmentScope],
+    beforeChange: [
+      rejectWritesInInactiveOrganization,
+      preserveDeletedAsset,
+      resolveTenantAndReview,
+      validateAssetAssessmentScope,
+      validateCategoryGroups,
+    ],
     afterChange: [reconcileAssessmentApplicability, reconcileAssetTasks],
   },
   fields: [
-    { name: 'deleted_at', type: 'date', index: true, access: { create: () => false, update: () => false } },
-    { name: 'seed_key', type: 'text', unique: true, admin: { hidden: true }, access: resolvedFieldAccess },
+    {
+      name: 'deleted_at',
+      type: 'date',
+      index: true,
+      access: { create: () => false, update: () => false },
+    },
+    {
+      name: 'seed_key',
+      type: 'text',
+      unique: true,
+      admin: { hidden: true },
+      access: resolvedFieldAccess,
+    },
     {
       name: 'alias',
       type: 'text',
@@ -46,13 +70,65 @@ export const NonNetworkAssets: CollectionConfig = {
       maxLength: 120,
     },
     {
-      // Enum fijo en código (no catálogo en DB): la matriz RBAC ya es estática por la misma razón
-      // (documentation/01-erd-core.md nota 9) y esto da un union literal en payload-types.ts,
+      // Enum fijo en código (no catálogo en DB), por la misma razón que la matriz RBAC estática:
+      // no hay necesidad de configurarlo por organización. Además da un union literal en payload-types.ts,
       // con el que el risk score puede hacer switch exhaustivo. Cambiar la lista = deploy.
       name: 'asset_category',
       type: 'select',
       required: true,
       options: [...MANUAL_ASSET_CATEGORY_OPTIONS],
+    },
+    // Identificación declarada por el usuario, no verificada: misma confianza que cualquier otro
+    // dato manual del inventario. Sin validación contra el diccionario CPE del NVD — fuera de
+    // alcance. Topes alineados con contracts/asset.schema.ts. Visible solo en las categorías cuyo
+    // grupo es 'product_details' (collections/NonNetworkAssets/categoryGroups.ts).
+    {
+      name: 'product_details',
+      type: 'group',
+      admin: { condition: data => categoryGroupOf(data?.asset_category) === 'product_details' },
+      fields: [
+        { name: 'software_vendor', type: 'text', maxLength: 120, index: true },
+        { name: 'software_product', type: 'text', maxLength: 240, index: true },
+        { name: 'software_version', type: 'text', maxLength: 120 },
+      ],
+    },
+    {
+      name: 'cloud_details',
+      type: 'group',
+      admin: { condition: data => categoryGroupOf(data?.asset_category) === 'cloud_details' },
+      fields: [
+        { name: 'kind', type: 'select', options: [...CLOUD_KIND_OPTIONS] },
+        { name: 'vendor', type: 'text', maxLength: 120 },
+      ],
+    },
+    {
+      name: 'repository_details',
+      type: 'group',
+      admin: {
+        condition: data => categoryGroupOf(data?.asset_category) === 'repository_details',
+      },
+      fields: [{ name: 'kind', type: 'select', options: [...REPOSITORY_KIND_OPTIONS] }],
+    },
+    { name: 'notes', type: 'textarea', maxLength: 1000 },
+    {
+      // Oculto: hoy siempre 'a'. Existe para que el identificador derivado sea compatible con CPE
+      // el día que entren categorías de equipo, que son las que pueden valer 'o'.
+      name: 'software_part',
+      type: 'select',
+      options: ['a', 'o'],
+      defaultValue: 'a',
+      admin: { hidden: true },
+    },
+    {
+      // Derivado en beforeChange desde product_details (software_vendor, software_product, software_version) y
+      // software_part — nunca un input manual, mismo patrón que next_review_at. El nombre dice
+      // 'candidate' a propósito: es un identificador sin verificar contra ningún diccionario.
+      name: 'cpe_candidate',
+      type: 'text',
+      maxLength: 500,
+      index: true,
+      admin: { readOnly: true },
+      access: resolvedFieldAccess,
     },
     {
       name: 'criticality',
@@ -64,7 +140,8 @@ export const NonNetworkAssets: CollectionConfig = {
       name: 'owner',
       type: 'relationship',
       relationTo: 'users',
-      required: true, // RF-51a
+      // RF-51a: obligatorio al crear, validado en hooks/resolveTenant.ts. Sólo el sistema lo deja
+      // en null (persona desactivada, activo movido de una oficina desactivada).
     },
     { name: 'location', type: 'text', maxLength: 200 },
     ...assessmentScopeFields(),

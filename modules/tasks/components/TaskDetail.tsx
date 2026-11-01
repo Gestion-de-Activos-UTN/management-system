@@ -1,5 +1,6 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { textRuleError } from '@/lib/text-rules'
 import { useState, type CSSProperties } from 'react'
 import {
@@ -8,19 +9,30 @@ import {
   Card,
   Divider,
   Group,
+  Menu,
   Modal,
   ScrollArea,
   SimpleGrid,
   Stack,
   Text,
-  Textarea,
   Timeline,
 } from '@mantine/core'
-import { Archive, Check, Hand, Pencil, RotateCcw, ShieldAlert, Trash2, XCircle } from 'lucide-react'
+import { CharacterCountTextarea } from '@/components/ui/CharacterCountTextarea'
+import {
+  Archive,
+  Check,
+  ChevronDown,
+  Hand,
+  Pencil,
+  RotateCcw,
+  ShieldAlert,
+  Trash2,
+  XCircle,
+} from 'lucide-react'
 import { STATUS_TONE_COLOR, StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDate, formatDateTime } from '@/lib/format-date'
 import { relationId } from '@/lib/relationId'
-import type { ReassignTaskInput } from '../schema'
+import { ReassignTaskSchema } from '../schema'
 import type { TaskAction, TaskDTO } from '../service'
 import { TASK_PRIORITY_LABELS, TASK_STATUS_LABELS, TASK_STATUS_TONES } from '../task-labels'
 import { getTaskReferenceHref, getTaskCurrentReferenceHref } from '../task-reference-link'
@@ -30,9 +42,14 @@ import { TaskEditForm } from './TaskEditForm'
 import { TaskAssignmentFields, type TaskAssignmentKind } from './TaskAssignmentFields'
 import { TaskReferenceSummary } from './TaskReferenceSummary'
 import { taskActivity } from '../task-activity'
+import { TaskDeleteModal } from './TaskDeleteModal'
+import { useRouter } from 'next/navigation'
+import { portalHref } from '@/lib/portal-href'
 
 export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganization?: string }) {
   const command = useTaskCommand(task.id)
+  const router = useRouter()
+  const [deleteOpened, setDeleteOpened] = useState(false)
   const [editOpened, setEditOpened] = useState(false)
   const [reassignOpened, setReassignOpened] = useState(false)
   const [cancelOpened, setCancelOpened] = useState(false)
@@ -41,6 +58,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
   const [forceCompleteReason, setForceCompleteReason] = useState('')
   const [assignmentKind, setAssignmentKind] = useState<TaskAssignmentKind>('open_pool')
   const [assignmentTarget, setAssignmentTarget] = useState<string | null>(null)
+  const [assignmentError, setAssignmentError] = useState<string>()
   const reference = task.related_entity_info
     ? { relationTo: task.related_entity_info.relationTo, value: task.related_entity_info.value }
     : undefined
@@ -56,15 +74,35 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
   const has = (action: TaskAction) => task.available_actions.includes(action)
   const run = (action: TaskAction, payload?: unknown) => command.mutate({ action, payload })
 
+  const openReassign = () => {
+    setAssignmentKind(task.assignment_kind)
+    const target =
+      task.assignment_kind === 'role'
+        ? task.assigned_role
+        : task.assignment_kind === 'user'
+          ? task.assigned_user
+          : null
+    setAssignmentTarget(target ? relationId(target) : null)
+    setAssignmentError(undefined)
+    setReassignOpened(true)
+  }
+
   const reassign = () => {
-    const payload: ReassignTaskInput =
+    const payload =
       assignmentKind === 'role'
-        ? { assignment_kind: 'role', assigned_role: assignmentTarget! }
+        ? { assignment_kind: 'role', assigned_role: assignmentTarget ?? undefined }
         : assignmentKind === 'user'
-          ? { assignment_kind: 'user', assigned_user: assignmentTarget! }
+          ? { assignment_kind: 'user', assigned_user: assignmentTarget ?? undefined }
           : { assignment_kind: 'open_pool' }
-    run('reassign', payload)
-    setReassignOpened(false)
+    const parsed = ReassignTaskSchema.safeParse(payload)
+    if (!parsed.success) {
+      setAssignmentError(parsed.error.issues[0]?.message)
+      return
+    }
+    command.mutate(
+      { action: 'reassign', payload: parsed.data },
+      { onSuccess: () => setReassignOpened(false) }
+    )
   }
 
   const activity = taskActivity(task)
@@ -110,6 +148,41 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
         <Stack gap="md">
           <Text style={{ whiteSpace: 'pre-wrap' }}>{task.description || 'Sin descripción.'}</Text>
           <SimpleGrid cols={{ base: 1, xs: 3 }}>
+            <Fact label="Ámbito" value={task.office ? 'Oficina' : 'Organización'} />
+            {task.office && (
+              <Fact
+                label="Oficina"
+                value={task.assignment_info?.office_name ?? 'Oficina no disponible'}
+              />
+            )}
+            <Fact
+              label="Asignación"
+              value={
+                task.assignment_kind === 'role'
+                  ? 'Rol'
+                  : task.assignment_kind === 'user'
+                    ? 'Persona'
+                    : 'Pool abierto'
+              }
+            />
+            {task.assignment_kind === 'role' && (
+              <Fact
+                label="Rol asignado"
+                value={task.assignment_info?.role_name ?? 'Rol no disponible'}
+              />
+            )}
+            {task.assignment_kind === 'user' && (
+              <Fact
+                label="Persona asignada"
+                value={task.assignment_info?.user_name ?? 'Persona no disponible'}
+              />
+            )}
+            {task.claimed_by && (
+              <Fact
+                label="Reclamada por"
+                value={task.actor_labels?.claimed_by ?? 'Persona no disponible'}
+              />
+            )}
             <Fact label="Prioridad" value={TASK_PRIORITY_LABELS[task.priority]} />
             <Fact label="Inicio" value={formatDate(task.start_at)} />
             <Fact
@@ -175,6 +248,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
           <Button
             variant="default"
             leftSection={<Pencil size={16} strokeWidth={1.5} />}
+            disabled={command.isPending}
             onClick={() => setEditOpened(true)}
           >
             Editar
@@ -202,7 +276,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
           </Button>
         )}
         {has('reassign') && (
-          <Button variant="light" onClick={() => setReassignOpened(true)}>
+          <Button variant="light" onClick={openReassign} disabled={command.isPending}>
             Reasignar
           </Button>
         )}
@@ -229,16 +303,56 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             Completar como administrador
           </Button>
         )}
-        {has('cancel') && (
-          <Button
-            color="red"
-            variant="light"
-            leftSection={<XCircle size={16} strokeWidth={1.5} />}
-            onClick={() => setCancelOpened(true)}
-          >
-            Cancelar tarea
-          </Button>
-        )}
+        {/* Una pendiente sin reclamar admite cancelar y eliminar: un solo botón dividido.
+            Cancelar (conserva la tarea y el motivo) queda a la vista; eliminar, tras la flecha. */}
+        {has('cancel') &&
+          (has('delete') ? (
+            <Button.Group>
+              <Button
+                color="red"
+                variant="light"
+                leftSection={<XCircle size={16} strokeWidth={1.5} />}
+                disabled={command.isPending}
+                onClick={() => setCancelOpened(true)}
+              >
+                Cancelar
+              </Button>
+              <Menu position="top-end" offset={4} withinPortal>
+                <Menu.Target>
+                  <Button
+                    color="red"
+                    variant="light"
+                    px="xs"
+                    aria-label="Más opciones de cancelación"
+                    // Button.Group sólo dibuja separador en variantes con borde; light lo necesita.
+                    style={{ borderLeft: '1px solid var(--mantine-color-red-light-hover)' }}
+                    disabled={command.isPending}
+                  >
+                    <ChevronDown size={16} strokeWidth={1.5} />
+                  </Button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Item
+                    color="red"
+                    leftSection={<Trash2 size={14} strokeWidth={1.5} />}
+                    onClick={() => setDeleteOpened(true)}
+                  >
+                    Eliminar tarea
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+            </Button.Group>
+          ) : (
+            <Button
+              color="red"
+              variant="light"
+              leftSection={<XCircle size={16} strokeWidth={1.5} />}
+              disabled={command.isPending}
+              onClick={() => setCancelOpened(true)}
+            >
+              Cancelar
+            </Button>
+          ))}
         {has('archive') && (
           <Button
             variant="light"
@@ -250,20 +364,39 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             Archivar
           </Button>
         )}
-        {has('delete') && (
+        {has('delete') && !has('cancel') && (
           <Button
             color="red"
             variant="subtle"
             leftSection={<Trash2 size={16} strokeWidth={1.5} />}
             loading={command.isPending && command.variables?.action === 'delete'}
             disabled={command.isPending}
-            onClick={() => window.confirm('¿Eliminar esta tarea pendiente?') && run('delete')}
+            onClick={() => setDeleteOpened(true)}
           >
             Eliminar
           </Button>
         )}
       </Group>
 
+      <TaskDeleteModal
+        opened={deleteOpened}
+        title={task.title}
+        isPending={command.isPending}
+        onClose={() => setDeleteOpened(false)}
+        onConfirm={() => {
+          // La invalidación puede desmontar el detalle antes de resolver la mutación.
+          // La promesa conserva la navegación aunque el componente ya no se muestre.
+          void command.mutateAsync({ action: 'delete' }).then(
+            () => {
+              setDeleteOpened(false)
+              router.push(portalHref('/portal/tasks', asOrganization))
+            },
+            () => {
+              // El hook muestra el error; el modal permite reintentar.
+            }
+          )
+        }}
+      />
       <Modal
         opened={editOpened}
         onClose={() => setEditOpened(false)}
@@ -275,31 +408,59 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
       </Modal>
       <Modal
         opened={reassignOpened}
-        onClose={() => setReassignOpened(false)}
+        onClose={() => {
+          if (!command.isPending) setReassignOpened(false)
+        }}
+        closeOnClickOutside={!command.isPending}
+        closeOnEscape={!command.isPending}
+        closeButtonProps={{ disabled: command.isPending }}
         title="Reasignar tarea"
         size="lg"
         centered
       >
-        <Stack>
+        <ModalLayout
+          footer={
+            <Group justify="flex-end">
+              <Button
+                onClick={reassign}
+                loading={command.isPending && command.variables?.action === 'reassign'}
+                disabled={
+                  command.isPending || assignmentOptions.isPending || assignmentOptions.isError
+                }
+              >
+                Reasignar
+              </Button>
+            </Group>
+          }
+        >
+          {assignmentOptions.isError && (
+            <Alert color="red" title="No se pudieron cargar los destinatarios">
+              <Button
+                variant="subtle"
+                size="compact-sm"
+                onClick={() => void assignmentOptions.refetch()}
+              >
+                Reintentar
+              </Button>
+            </Alert>
+          )}
           <TaskAssignmentFields
             kind={assignmentKind}
             target={assignmentTarget}
             options={assignmentOptions.data}
+            targetError={assignmentError}
+            disabled={command.isPending || assignmentOptions.isPending || assignmentOptions.isError}
             onKindChange={kind => {
               setAssignmentKind(kind)
               setAssignmentTarget(null)
+              setAssignmentError(undefined)
             }}
-            onTargetChange={setAssignmentTarget}
+            onTargetChange={value => {
+              setAssignmentTarget(value)
+              setAssignmentError(undefined)
+            }}
           />
-          <Group justify="flex-end">
-            <Button
-              onClick={reassign}
-              disabled={assignmentKind !== 'open_pool' && !assignmentTarget}
-            >
-              Reasignar
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </Modal>
       <Modal
         opened={forceCompleteOpened}
@@ -307,14 +468,38 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
         title="Completar tarea reclamada por otra persona"
         centered
       >
-        <Stack>
+        <ModalLayout
+          footer={
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setForceCompleteOpened(false)}>
+                Volver
+              </Button>
+              <Button
+                color="orange"
+                loading={command.isPending && command.variables?.action === 'force_complete'}
+                disabled={
+                  command.isPending ||
+                  forceCompleteReason.trim().length < 3 ||
+                  Boolean(textRuleError(forceCompleteReason, 'free'))
+                }
+                onClick={() => {
+                  run('force_complete', forceCompleteReason)
+                  setForceCompleteOpened(false)
+                  setForceCompleteReason('')
+                }}
+              >
+                Confirmar finalización
+              </Button>
+            </Group>
+          }
+        >
           <Alert color="orange" icon={<ShieldAlert size={18} strokeWidth={1.5} />}>
             La tarea está en progreso y fue reclamada por{' '}
             <strong>{task.actor_labels?.claimed_by ?? 'otra persona'}</strong>. Al continuar, la
             tarea quedará completada a tu nombre. La persona que la reclamó permanecerá registrada
             en la actividad.
           </Alert>
-          <Textarea
+          <CharacterCountTextarea
             label="Motivo de la finalización forzada"
             description="Este motivo quedará registrado en la actividad de la tarea."
             required
@@ -324,38 +509,30 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             error={textRuleError(forceCompleteReason, 'free')}
             onChange={event => setForceCompleteReason(event.currentTarget.value)}
           />
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setForceCompleteOpened(false)}>
-              Volver
-            </Button>
-            <Button
-              color="orange"
-              loading={command.isPending && command.variables?.action === 'force_complete'}
-              disabled={
-                command.isPending ||
-                forceCompleteReason.trim().length < 3 ||
-                Boolean(textRuleError(forceCompleteReason, 'free'))
-              }
-              onClick={() => {
-                run('force_complete', forceCompleteReason)
-                setForceCompleteOpened(false)
-                setForceCompleteReason('')
-              }}
-            >
-              Confirmar finalización
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </Modal>
-      <Modal
-        opened={cancelOpened}
-        onClose={() => setCancelOpened(false)}
-        title="Cancelar tarea"
-        centered
-      >
-        <Stack>
-          <Textarea
+      <Modal opened={cancelOpened} onClose={() => setCancelOpened(false)} title="Cancelar" centered>
+        <ModalLayout
+          footer={
+            <Group justify="flex-end">
+              <Button
+                color="red"
+                disabled={
+                  cancelReason.trim().length < 3 || Boolean(textRuleError(cancelReason, 'free'))
+                }
+                onClick={() => {
+                  run('cancel', cancelReason)
+                  setCancelOpened(false)
+                }}
+              >
+                Cancelar
+              </Button>
+            </Group>
+          }
+        >
+          <CharacterCountTextarea
             label="Motivo"
+            description="La tarea queda cancelada con este motivo y se conserva en la actividad."
             required
             minLength={3}
             maxLength={500}
@@ -363,21 +540,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             error={textRuleError(cancelReason, 'free')}
             onChange={event => setCancelReason(event.currentTarget.value)}
           />
-          <Group justify="flex-end">
-            <Button
-              color="red"
-              disabled={
-                cancelReason.trim().length < 3 || Boolean(textRuleError(cancelReason, 'free'))
-              }
-              onClick={() => {
-                run('cancel', cancelReason)
-                setCancelOpened(false)
-              }}
-            >
-              Cancelar tarea
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </Modal>
     </Stack>
   )

@@ -1,7 +1,10 @@
 import type { CollectionConfig } from 'payload'
 import { POLICY_KEYS } from '@/domain/assessments/catalog'
 import { MATURITY_BUDGET_VALUES, MATURITY_IT_OWNER_VALUES } from '@/domain/organizations/maturity'
-import { OFFLINE_AFTER_HOURS_VALUES, SNAPSHOT_INTERVAL_DAYS_VALUES } from '@/domain/organizations/settings-options'
+import {
+  OFFLINE_AFTER_HOURS_VALUES,
+  SNAPSHOT_INTERVAL_DAYS_VALUES,
+} from '@/domain/organizations/settings-options'
 
 // Sin lectura ni escritura externa esta fase — solo lo escribe
 // domain/organizations/createOrgWithAdmin.ts vía overrideAccess. Sin AppSettings
@@ -32,6 +35,11 @@ export const OrganizationSettings: CollectionConfig = {
       required: true,
     },
     {
+      name: 'industry_details',
+      type: 'textarea',
+      maxLength: 300,
+    },
+    {
       name: 'assessment_policy_key',
       type: 'select',
       options: [...POLICY_KEYS],
@@ -40,7 +48,11 @@ export const OrganizationSettings: CollectionConfig = {
     },
     { name: 'assessment_policy_version', type: 'number', required: true, defaultValue: 2 },
     { name: 'assessment_policy_selected_at', type: 'date', required: true },
-    { name: 'assessment_policy_selected_by', type: 'relationship', relationTo: ['users', 'admins'] },
+    {
+      name: 'assessment_policy_selected_by',
+      type: 'relationship',
+      relationTo: ['users', 'admins'],
+    },
     {
       // Perfil de madurez (Diccionario de Madurez): sólo prioriza recomendaciones, nunca entra en
       // el Risk Score. `null` = sin responder; el asistente debe preguntar, no asumir un nivel.
@@ -59,7 +71,13 @@ export const OrganizationSettings: CollectionConfig = {
       // para un default de plataforma editable.
       name: 'offline_after_hours',
       type: 'number',
-      validate: (value: unknown) => value == null || (typeof value === 'number' && OFFLINE_AFTER_HOURS_VALUES.includes(value as typeof OFFLINE_AFTER_HOURS_VALUES[number])) || 'Seleccione un umbral predefinido',
+      validate: (value: unknown) =>
+        value == null ||
+        (typeof value === 'number' &&
+          OFFLINE_AFTER_HOURS_VALUES.includes(
+            value as (typeof OFFLINE_AFTER_HOURS_VALUES)[number]
+          )) ||
+        'Seleccione un umbral predefinido',
     },
     {
       // Auto-snapshot en cada ingest (endpoints/reports.ts). Si true, ignora
@@ -74,7 +92,13 @@ export const OrganizationSettings: CollectionConfig = {
       // DEFAULT_SNAPSHOT_INTERVAL_DAYS.
       name: 'snapshot_interval_days',
       type: 'number',
-      validate: (value: unknown) => value == null || (typeof value === 'number' && SNAPSHOT_INTERVAL_DAYS_VALUES.includes(value as typeof SNAPSHOT_INTERVAL_DAYS_VALUES[number])) || 'Seleccione un intervalo predefinido',
+      validate: (value: unknown) =>
+        value == null ||
+        (typeof value === 'number' &&
+          SNAPSHOT_INTERVAL_DAYS_VALUES.includes(
+            value as (typeof SNAPSHOT_INTERVAL_DAYS_VALUES)[number]
+          )) ||
+        'Seleccione un intervalo predefinido',
       admin: {
         condition: data => !data?.snapshot_before_each_scan,
       },

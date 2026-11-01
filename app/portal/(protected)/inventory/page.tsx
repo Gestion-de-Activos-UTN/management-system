@@ -1,5 +1,7 @@
 'use client'
 
+import { matchesSearch } from '@/lib/search-text'
+
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -34,12 +36,6 @@ import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelate
 import { portalHref } from '@/lib/portal-href'
 
 const ALL = ''
-
-function matchesSearch(haystacks: Array<string | null | undefined>, query: string): boolean {
-  if (!query.trim()) return true
-  const needle = query.trim().toLowerCase()
-  return haystacks.some(h => h?.toLowerCase().includes(needle))
-}
 
 // Congela en qué "bucket" (activo / inactivo) cae cada fila la primera vez que la vemos, y la
 // mantiene ahí aunque su status real cambie por una edición (que sí invalida y refetchea la
@@ -97,12 +93,6 @@ export default function InventoryPage() {
     if (linkedOfficeId) setSelectedOfficeId(linkedOfficeId)
   }, [linkedOfficeId, setSelectedOfficeId])
 
-  useEffect(() => {
-    if (!linkedNonNetworkAssetId || !nonNetworkAssets) return
-    const linked = nonNetworkAssets.find(asset => String(asset.id) === linkedNonNetworkAssetId)
-    if (linked) setEditingAsset(linked)
-  }, [linkedNonNetworkAssetId, nonNetworkAssets])
-
   const [assetSearch, setAssetSearch] = useState('')
   const [assetCriticality, setAssetCriticality] = useState<string[]>([])
   const [assetStatus, setAssetStatus] = useState<string[]>([])
@@ -132,6 +122,18 @@ export default function InventoryPage() {
   const [nnaCategory, setNnaCategory] = useState<string[]>([])
   const [nnaCriticality, setNnaCriticality] = useState<string[]>([])
   const [nnaReviewStatus, setNnaReviewStatus] = useState<string>(ALL)
+
+  // ?nonNetworkAsset=<id> (Revisión de seguridad, Puntaje de riesgo, tareas): un activo manual no
+  // tiene página de detalle, así que se muestra su fila buscándolo por alias. Editarlo sigue siendo
+  // una acción explícita. Se aplica una sola vez: después la búsqueda es del usuario.
+  const appliedLink = useRef<string | null>(null)
+  useEffect(() => {
+    if (!linkedNonNetworkAssetId || !nonNetworkAssets) return
+    if (appliedLink.current === linkedNonNetworkAssetId) return
+    appliedLink.current = linkedNonNetworkAssetId
+    const linked = nonNetworkAssets.find(asset => String(asset.id) === linkedNonNetworkAssetId)
+    if (linked) setNnaSearch(linked.alias)
+  }, [linkedNonNetworkAssetId, nonNetworkAssets])
 
   const nnaBucket = useFrozenBucket(nonNetworkAssets, a => (a.status ?? 'active') === 'active')
 
@@ -188,8 +190,14 @@ export default function InventoryPage() {
 
       <InventoryIncidentsPanel asOrganization={asOrganization} />
 
-      {/* ?tab=non-network: los enlaces del panel general abren directo en activos manuales. */}
-      <Tabs defaultValue={searchParams.get('tab') === 'non-network' ? 'non-network' : 'network'}>
+      {/* ?tab=non-network (panel general) o ?nonNetworkAsset=: abren directo en activos manuales. */}
+      <Tabs
+        defaultValue={
+          searchParams.get('tab') === 'non-network' || linkedNonNetworkAssetId
+            ? 'non-network'
+            : 'network'
+        }
+      >
         <Tabs.List>
           <Tabs.Tab value="network" leftSection={<Server size={16} strokeWidth={1.5} />}>
             Red

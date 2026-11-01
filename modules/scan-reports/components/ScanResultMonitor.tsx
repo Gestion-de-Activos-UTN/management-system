@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { Button, Group, Stack, Text } from '@mantine/core'
 import { notifications } from '@mantine/notifications'
+import { notify } from '@/lib/notify'
 import { ScanLine } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useQueryClient } from '@tanstack/react-query'
@@ -40,13 +41,13 @@ export function ScanResultMonitor({
     })
 
     const office =
-      typeof result.office === 'object' && result.office ? result.office.name : 'your organization'
+      typeof result.office === 'object' && result.office ? result.office.name : 'tu organización'
     const href = portalHref('/portal/inventory', asOrganization)
 
     // Una sola notificación global: un resultado posterior reemplaza al anterior. autoClose=false
     // hace que permanezca visible hasta que el usuario la cierre o abra el inventario.
     notifications.hide(NOTIFICATION_ID)
-    notifications.show({
+    notify({
       id: NOTIFICATION_ID,
       color: 'pine',
       icon: <ScanLine size={18} strokeWidth={1.5} />,

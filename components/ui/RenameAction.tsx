@@ -1,7 +1,9 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { useState } from 'react'
-import { ActionIcon, Button, Group, Modal, Stack, TextInput, Tooltip } from '@mantine/core'
+import { useSingleSubmission } from './use-single-submission'
+import { ActionIcon, Button, Group, Modal, TextInput, Tooltip } from '@mantine/core'
 import { Pencil } from 'lucide-react'
 
 /**
@@ -25,23 +27,27 @@ export function RenameAction({
 }) {
   const [draft, setDraft] = useState<string | null>(null)
   const error = draft === null ? null : validate(draft)
-  const save = () => {
-    if (draft === null || error) return
-    onSave(draft).then(
-      () => setDraft(null),
-      () => undefined
-    )
+  const submission = useSingleSubmission()
+  const save = () =>
+    submission.run(async () => {
+      if (draft === null || error) return
+      try {
+        await onSave(draft)
+      } catch {
+        return
+      }
+      submission.succeed()
+      setDraft(null)
+    })
+  const open = () => {
+    submission.reset()
+    setDraft(value)
   }
 
   return (
     <>
       <Tooltip label="Cambiar nombre">
-        <ActionIcon
-          variant="light"
-          size="md"
-          aria-label="Cambiar nombre"
-          onClick={() => setDraft(value)}
-        >
+        <ActionIcon variant="light" size="md" aria-label="Cambiar nombre" onClick={open}>
           <Pencil size={16} strokeWidth={1.5} />
         </ActionIcon>
       </Tooltip>
@@ -52,7 +58,19 @@ export function RenameAction({
             save()
           }}
         >
-          <Stack gap="md">
+          <ModalLayout
+            gap="md"
+            footer={
+              <Group justify="flex-end" gap="sm">
+                <Button variant="default" onClick={() => setDraft(null)} disabled={saving}>
+                  Cancelar
+                </Button>
+                <Button type="submit" loading={saving}>
+                  Guardar
+                </Button>
+              </Group>
+            }
+          >
             <TextInput
               label="Nombre"
               placeholder={fallback}
@@ -65,15 +83,7 @@ export function RenameAction({
               error={error}
               disabled={saving}
             />
-            <Group justify="flex-end" gap="sm">
-              <Button variant="default" onClick={() => setDraft(null)} disabled={saving}>
-                Cancelar
-              </Button>
-              <Button type="submit" loading={saving} disabled={Boolean(error)}>
-                Guardar
-              </Button>
-            </Group>
-          </Stack>
+          </ModalLayout>
         </form>
       </Modal>
     </>

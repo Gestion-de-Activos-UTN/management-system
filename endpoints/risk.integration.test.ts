@@ -180,18 +180,37 @@ test('risk endpoint and REST: a hidden evaluation never exposes numbers', async 
   assert.equal(contributions.docs[0].residual_risk, undefined)
 })
 
-test('risk endpoint: office-scoped roles must name one of their offices', async () => {
+test('risk endpoint: a Viewer must name one of its offices', async () => {
   const payload = await getPayload({ config })
   const a = await seedRiskOrganization(payload)
   const organizationId = String(a.organization.id)
   const officeId = String(a.office.id)
   await recalculateRisk(payload, { organizationId })
-  for (const slug of ['office_manager', 'org_viewer'] as const) {
-    const scoped = await member(payload, organizationId, [officeId], slug)
-    const { status, body } = await call(payload, scoped)
-    assert.equal(status, 403)
-    assert.deepEqual(body, { error: 'office_required' })
-  }
+  const viewer = await member(payload, organizationId, [officeId], 'org_viewer')
+  const { status, body } = await call(payload, viewer)
+  assert.equal(status, 403)
+  assert.deepEqual(body, { error: 'office_required' })
   const admin = await member(payload, organizationId, [officeId], 'org_admin')
   assert.equal((await call(payload, admin)).status, 200)
+})
+
+test('risk endpoint: a Manager without an office reads its assigned consolidation, not persisted', async () => {
+  const payload = await getPayload({ config })
+  const a = await seedRiskOrganization(payload)
+  const organizationId = String(a.organization.id)
+  const officeId = String(a.office.id)
+  await recalculateRisk(payload, { organizationId })
+  const evaluations = () =>
+    payload.count({
+      collection: 'risk-evaluations',
+      overrideAccess: true,
+      where: { organization: { equals: organizationId } },
+    })
+  const before = (await evaluations()).totalDocs
+  const manager = await member(payload, organizationId, [officeId], 'office_manager')
+  const { status, body } = await call(payload, manager)
+  assert.equal(status, 200)
+  assert.equal(body.scope, 'assigned_offices')
+  assert.equal(body.evaluation?.id ?? null, null)
+  assert.equal((await evaluations()).totalDocs, before)
 })

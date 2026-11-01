@@ -9,7 +9,7 @@ describe('compliance result tenant hook', () => {
         data: { organization: 'org-1', service_key: 'tcp:23' },
         req: { payload: {} },
       } as never),
-      /require an asset/
+      /requieren un activo/
     )
   })
 
@@ -27,7 +27,7 @@ describe('compliance result tenant hook', () => {
         data: { organization: 'org-1', office: 'office-1', asset: 'asset-1' },
         req,
       } as never),
-      /does not belong/
+      /no pertenece a su organización y oficina/
     )
   })
 })

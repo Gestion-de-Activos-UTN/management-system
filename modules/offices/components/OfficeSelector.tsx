@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Select, Skeleton } from '@mantine/core'
+import { Box, Select, Skeleton, Tooltip } from '@mantine/core'
 import { useUiStore } from '@/lib/ui-store'
 import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
 import { useOfficesList } from '../hooks/use-offices'
@@ -25,6 +25,12 @@ export function OfficeSelector() {
   const selectedOfficeId = useUiStore(s => s.selectedOfficeId)
   const setSelectedOfficeId = useUiStore(s => s.setSelectedOfficeId)
   const officeIds = tenantContext?.officeIds ?? []
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [dropdownOpened, setDropdownOpened] = useState(false)
+  const [hovered, setHovered] = useState(false)
+  const [focused, setFocused] = useState(false)
+  const pointerFocus = useRef(false)
+  const [truncated, setTruncated] = useState(false)
 
   useEffect(() => {
     if (tenantContextPending) return // officeIds is [] while loading, not "this org has zero offices"
@@ -40,14 +46,6 @@ export function OfficeSelector() {
     }
   }, [tenantContextPending, selectedOfficeId, officeIds, setSelectedOfficeId])
 
-  // Fixed-size skeleton instead of `null` while the offices list is still in flight —
-  // the parent layout already blocks on tenant-context before mounting this at all, but
-  // this query is separate and would otherwise pop the selector in a beat late, shifting
-  // the whole TopBar's width.
-  if (officesPending) {
-    return <Skeleton height={34} width={200} radius="sm" />
-  }
-
   const options = [
     ...(officeIds.length > 1 ? [{ value: ALL_OFFICES, label: 'Todas las oficinas' }] : []),
     ...(offices ?? [])
@@ -55,16 +53,70 @@ export function OfficeSelector() {
       .map(office => ({ value: String(office.id), label: office.name })),
   ]
 
+  const selectedLabel =
+    options.find(option => option.value === (selectedOfficeId ?? ALL_OFFICES))?.label ??
+    options[0]?.label ??
+    ''
+
+  const measureLabel = useCallback(() => {
+    const input = inputRef.current
+    if (!input) return
+    const style = getComputedStyle(input)
+    const context = document.createElement('canvas').getContext('2d')
+    if (!context) return
+    context.font = style.font
+    const available =
+      input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight)
+    setTruncated(context.measureText(selectedLabel).width > available)
+  }, [selectedLabel])
+
+  useEffect(() => {
+    measureLabel()
+    const input = inputRef.current
+    if (!input) return
+    const observer = new ResizeObserver(measureLabel)
+    observer.observe(input)
+    return () => observer.disconnect()
+  }, [measureLabel, officesPending])
+
+  if (officesPending) return <Skeleton height={34} width={200} radius="sm" />
   if (options.length === 0) return null
 
   return (
-    <Select
-      placeholder="Oficina"
-      data={options}
-      value={selectedOfficeId ?? ALL_OFFICES}
-      onChange={value => setSelectedOfficeId(value === ALL_OFFICES ? null : value)}
-      w={{ base: 138, sm: 200 }}
-      size="sm"
-    />
+    <Tooltip label={selectedLabel} opened={!dropdownOpened && truncated && (hovered || focused)}>
+      <Box
+        onMouseEnter={() => {
+          measureLabel()
+          setHovered(true)
+        }}
+        onMouseLeave={() => setHovered(false)}
+        // A click keeps the input focused through the whole pick, so pointer focus must not reveal
+        // the full name; only keyboard focus does (inputs always match :focus-visible in Chrome).
+        onPointerDownCapture={() => {
+          pointerFocus.current = true
+        }}
+        onFocusCapture={() => {
+          measureLabel()
+          setFocused(!pointerFocus.current)
+        }}
+        onBlurCapture={() => {
+          pointerFocus.current = false
+          setFocused(false)
+        }}
+      >
+        <Select
+          ref={inputRef}
+          aria-label="Oficina"
+          placeholder="Oficina"
+          data={options}
+          value={selectedOfficeId ?? ALL_OFFICES}
+          onChange={value => setSelectedOfficeId(value === ALL_OFFICES ? null : value)}
+          onDropdownOpen={() => setDropdownOpened(true)}
+          onDropdownClose={() => setDropdownOpened(false)}
+          w={{ base: 138, sm: 200 }}
+          size="sm"
+        />
+      </Box>
+    </Tooltip>
   )
 }

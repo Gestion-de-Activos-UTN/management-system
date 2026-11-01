@@ -6,6 +6,7 @@ import {
   enqueueRiskRecalculation,
 } from './enqueueRiskRecalculation'
 
+/** officeIds: oficinas activas de la organización (las que encola un evento de organización). */
 function fakePayload(officeIds: string[] = []) {
   const queued: Array<{ organization_id: string; office_id?: string }> = []
   const payload = {
@@ -30,7 +31,7 @@ describe('enqueueRiskRecalculation', () => {
   })
 
   it('queues the organization view plus each distinct, non-empty office', async () => {
-    const { payload, queued, req } = fakePayload()
+    const { payload, queued, req } = fakePayload(['office-1', 'office-2'])
     await enqueueRiskRecalculation(
       payload,
       'org-1',

@@ -29,23 +29,39 @@ test('Miembros: desactivar, reactivar y cambiar de rol respetan las reglas de la
   const officeId = String(office.id)
   const adminId = await member(payload, orgId, [officeId], 'org_admin')
   const viewerId = await member(payload, orgId, [officeId], 'org_viewer')
+  // The fixture creates roles lazily. Role changes must not depend on another suite's data.
+  await member(payload, orgId, [officeId], 'office_manager')
+  const adminEmail = (
+    await payload.findByID({ collection: 'users', id: adminId, overrideAccess: true })
+  ).email
+  const viewerEmail = (
+    await payload.findByID({ collection: 'users', id: viewerId, overrideAccess: true })
+  ).email
   const patch = (actor: string, target: string, body: unknown) =>
     updateOrgMemberEndpoint.handler(request(payload, actor, { id: target, body }))
 
   assert.equal((await patch(viewerId, adminId, { is_active: false })).status, 403)
-  const self = await patch(adminId, adminId, { is_active: false })
+  const self = await patch(adminId, adminId, { is_active: false, confirm_email: adminEmail })
   assert.equal(self.status, 409)
   assert.equal(((await self.json()) as { error: string }).error, 'cannot_deactivate_self')
   const lastAdmin = await patch(adminId, adminId, { role: 'org_viewer', office_ids: [officeId] })
   assert.equal(lastAdmin.status, 409, 'el último org_admin no puede bajarse de rol')
 
+  const withoutOffices = await patch(adminId, viewerId, {
+    role: 'office_manager',
+    office_ids: [],
+  })
+  assert.equal(withoutOffices.status, 400, 'un rol que no es admin necesita al menos una oficina')
   assert.equal(
-    (await patch(adminId, viewerId, { role: 'office_manager', office_ids: [] })).status,
-    400,
-    'un rol que no es admin necesita al menos una oficina'
+    ((await withoutOffices.json()) as { error: string }).error,
+    'offices_required',
+    'el rechazo debe ser por oficinas faltantes, no por un rol ausente del fixture'
   )
 
-  assert.equal((await patch(adminId, viewerId, { is_active: false })).status, 200)
+  assert.equal(
+    (await patch(adminId, viewerId, { is_active: false, confirm_email: viewerEmail })).status,
+    200
+  )
   const listed = await orgMembersEndpoint.handler(
     request(payload, adminId, { url: 'http://localhost/x?include_inactive=1' })
   )
@@ -90,7 +106,7 @@ test('Miembros: desactivar, reactivar y cambiar de rol respetan las reglas de la
     (await patch(adminId, adminId, { role: 'office_manager', office_ids: [officeId] })).status,
     200
   )
-  // Ya como office_manager no tiene permiso de gestionar personas (ni de subirse otra vez).
+  // Puede gestionar observadores dentro de su alcance, pero no elevar su propio rol.
   assert.equal((await patch(adminId, adminId, { role: 'org_admin' })).status, 403)
 
   const [getProfile, patchProfile] = myProfileEndpoints

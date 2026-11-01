@@ -1,3 +1,6 @@
+import { organizationFeatures } from '@/domain/subscriptions/features'
+import { assignedOfficeRisk, type RiskEvaluationView } from '@/domain/risk/assigned-office-risk'
+import { canReadAssignedOfficeRisk } from '@/access/rbac/risk-scope'
 import { riskRecalculationStatus } from '@/domain/risk/recalculation-status'
 import { actorRelation } from '@/lib/actor-relation'
 import type { Endpoint, PayloadRequest, Where } from 'payload'
@@ -27,12 +30,14 @@ import { enqueueOrganizationRiskRecalculation } from '@/domain/risk/enqueueRiskR
 import { RISK_POLICY_KEYS } from '@/domain/risk/catalog-v2'
 import { bandVisible, scoreVisible } from '@/domain/risk/constants'
 import type { SecurityReviewSummary } from '@/modules/assessments/service'
-import type { RiskEvaluationDTO } from '@/modules/risk/service'
+import type { RiskEvaluationDTO, RiskScope } from '@/modules/risk/service'
+import type { RecalculationStatus } from '@/domain/risk/recalculation-status'
 import { resolveInheritedAssessmentEvidence } from '@/domain/assessments/resolveInheritedEvidence'
 import { hasOrgWideScope } from '@/access/rbac/permissions'
 import { officeQueryError } from '@/access/tenant/officeQueryError'
 import { withDerivedAssessmentStatus } from '@/domain/assessments/assessmentExpiration'
 import { isAssetExcludedFromAssessments } from '@/domain/assessments/asset-assessment-scope'
+import { organizationWriteError } from '@/domain/organizations/admin-actions'
 
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 
@@ -47,21 +52,7 @@ export async function featureEnabled(
   req: PayloadRequest,
   organizationId: string
 ): Promise<boolean> {
-  const result = await req.payload.find({
-    collection: 'subscriptions',
-    where: { organization: { equals: organizationId } },
-    overrideAccess: true,
-    req,
-    depth: 0,
-    limit: 1,
-  })
-  const value = result.docs[0]?.features
-  return Boolean(
-    value &&
-    typeof value === 'object' &&
-    !Array.isArray(value) &&
-    value.security_assessments === true
-  )
+  return (await organizationFeatures(req, organizationId)).security_assessments
 }
 
 async function loadAssessment(req: PayloadRequest, id: string) {
@@ -236,6 +227,27 @@ export const assessmentsListEndpoint: Endpoint = {
   },
 }
 
+function riskSummaryDTO(
+  evaluation: RiskEvaluationView,
+  scope: RiskScope,
+  recalculation: RecalculationStatus
+): SecurityReviewSummary {
+  const counts = evaluation.counts as RiskEvaluationDTO['counts']
+  return {
+    scope,
+    recalculation,
+    risk_score: scoreVisible(evaluation.confidence) ? (evaluation.score ?? null) : null,
+    evaluated_percentage: evaluation.coverage,
+    applicable_checks:
+      counts.compliant + counts.partially_effective + counts.non_compliant + counts.not_evaluable,
+    not_evaluable: counts.not_evaluable,
+    requires_attention: counts.non_compliant + counts.partially_effective,
+    excluded_assets: counts.excluded_assets,
+    risk_band: bandVisible(evaluation.confidence) ? (evaluation.final_band ?? null) : null,
+    unconfirmed_assets: counts.unconfirmed_assets,
+  }
+}
+
 export const securityReviewSummaryEndpoint: Endpoint = {
   path: '/v1/security-review/summary',
   method: 'get',
@@ -243,11 +255,21 @@ export const securityReviewSummaryEndpoint: Endpoint = {
     const ctx = await authenticated(req)
     if (ctx instanceof Response) return ctx
     if (!ctx.organizationId) return json({ error: 'organization_context_required' }, 400)
-    if (!(await featureEnabled(req, ctx.organizationId)))
-      return json({ error: 'feature_disabled' }, 403)
+    // One subscription read for both features this summary depends on.
+    const features = await organizationFeatures(req, ctx.organizationId)
+    if (!features.security_assessments) return json({ error: 'feature_disabled' }, 403)
     const officeId = new URL(req.url ?? 'http://localhost', 'http://localhost').searchParams.get(
       'office_id'
     )
+    if (!officeId && canReadAssignedOfficeRisk(ctx)) {
+      if (!features.risk_score) return json({ error: 'feature_disabled' }, 403)
+      const assigned = await assignedOfficeRisk(req, ctx).catch((error: unknown) => {
+        req.payload.logger.error({ err: error }, 'assigned office risk calculation failed')
+        return null
+      })
+      if (!assigned) return json({ error: 'risk_unavailable' }, 503)
+      return json(riskSummaryDTO(assigned.evaluation, 'assigned_offices', assigned.recalculation))
+    }
     const officeError = officeQueryError(ctx, officeId)
     if (officeError) return json({ error: officeError }, 403)
     const evaluations = await req.payload.find({
@@ -265,9 +287,15 @@ export const securityReviewSummaryEndpoint: Endpoint = {
       },
     })
     const evaluation = evaluations.docs[0]
-    const recalculation = await riskRecalculationStatus(req, ctx.organizationId, officeId ?? undefined, evaluation?.evaluated_at)
+    const recalculation = await riskRecalculationStatus(
+      req,
+      ctx.organizationId,
+      officeId ?? undefined,
+      evaluation?.evaluated_at
+    )
     if (!evaluation)
       return json({
+        scope: officeId ? 'office' : 'organization',
         risk_score: null,
         recalculation,
         evaluated_percentage: 0,
@@ -278,21 +306,7 @@ export const securityReviewSummaryEndpoint: Endpoint = {
         risk_band: null,
         unconfirmed_assets: 0,
       } satisfies SecurityReviewSummary)
-    // Counts are persisted with the evaluation; counting contribution rows here would truncate.
-    const counts = evaluation.counts as RiskEvaluationDTO['counts']
-    return json({
-      recalculation,
-      risk_score: scoreVisible(evaluation.confidence) ? (evaluation.score ?? null) : null,
-      evaluated_percentage: evaluation.coverage,
-      applicable_checks:
-        counts.compliant + counts.partially_effective + counts.non_compliant + counts.not_evaluable,
-      not_evaluable: counts.not_evaluable,
-      requires_attention: counts.non_compliant + counts.partially_effective,
-      excluded_assets: counts.excluded_assets,
-      // Same visibility rule as the risk endpoint: no band on a preliminary result.
-      risk_band: bandVisible(evaluation.confidence) ? (evaluation.final_band ?? null) : null,
-      unconfirmed_assets: counts.unconfirmed_assets,
-    } satisfies SecurityReviewSummary)
+    return json(riskSummaryDTO(evaluation, officeId ? 'office' : 'organization', recalculation))
   },
 }
 
@@ -402,8 +416,13 @@ export const assessmentDetailEndpoint: Endpoint = {
         includeOrganization: hasOrgWideScope(ctx.role),
       }
     )
+    const subjectAsset =
+      (await loadAsset(req, assessment.asset)) ??
+      (await loadManualAsset(req, assessment.manual_asset))
     return json({
       assessment: withDerivedAssessmentStatus(assessment),
+      // La UI lo muestra de solo lectura; draft/complete/reopen lo rechazan igual (writableAssessment).
+      inactive_subject: await inactiveSubject(req, assessment, subjectAsset),
       answers: answers.docs,
       previous_answers: previousAnswers,
       assessment_history: assessmentHistory.docs.map(item => withDerivedAssessmentStatus(item)),
@@ -437,7 +456,41 @@ async function writableAssessment(
     return { ok: false, response: json({ error: 'forbidden' }, 403) }
   if (!(await featureEnabled(req, relationId(assessment.organization))))
     return { ok: false, response: json({ error: 'feature_disabled' }, 403) }
+  const inactive = await inactiveSubject(req, assessment, asset ?? manualAsset)
+  if (inactive) return { ok: false, response: json({ error: inactive }, 409) }
   return { ok: true, assessment, asset, manualAsset }
+}
+
+// Una oficina u organización inactiva no cuenta: sus assessments quedan de solo lectura. Para un
+// activo vale su oficina actual, no la del assessment (un activo movido abre uno nuevo en destino).
+async function inactiveSubject(
+  req: PayloadRequest,
+  assessment: AssessmentInstance,
+  asset: Asset | NonNetworkAsset | null
+): Promise<'office_inactive' | 'organization_inactive' | null> {
+  // La organización primero: desactivarla no desactiva sus oficinas.
+  const organization = await req.payload.findByID({
+    collection: 'organizations',
+    id: relationId(assessment.organization),
+    overrideAccess: true,
+    req,
+    depth: 0,
+  })
+  if (organization.is_active === false) return 'organization_inactive'
+  const officeId = asset
+    ? relationId(asset.office)
+    : assessment.office
+      ? relationId(assessment.office)
+      : null
+  if (!officeId) return null
+  const office = await req.payload.findByID({
+    collection: 'offices',
+    id: officeId,
+    overrideAccess: true,
+    req,
+    depth: 0,
+  })
+  return office.is_active === false ? 'office_inactive' : null
 }
 
 export const assessmentDraftEndpoint: Endpoint = {
@@ -463,7 +516,7 @@ export const assessmentDraftEndpoint: Endpoint = {
       return json(
         {
           error: 'draft_rejected',
-          message: error instanceof Error ? error.message : 'Invalid draft',
+          message: error instanceof Error ? error.message : 'No se pudo guardar el borrador.',
         },
         400
       )
@@ -495,7 +548,7 @@ export const assessmentCompleteEndpoint: Endpoint = {
       return json(
         {
           error: 'completion_rejected',
-          message: error instanceof Error ? error.message : 'Invalid completion',
+          message: error instanceof Error ? error.message : 'No se pudo completar la revisión.',
         },
         400
       )
@@ -526,7 +579,9 @@ export const assessmentReopenEndpoint: Endpoint = {
               'manual_review',
               req
             )
-          : await reconcileAssessmentInstance(
+          : // is_active: true es real, no supuesto: writableAssessment ya rechazó (409) la
+            // oficina u organización inactiva.
+            await reconcileAssessmentInstance(
               req.payload,
               assessment.scope === 'organization'
                 ? {
@@ -591,6 +646,8 @@ export const assessmentPolicyEndpoint: Endpoint = {
     if (ctx.role !== 'org_admin' || !ctx.organizationId) return json({ error: 'forbidden' }, 403)
     if (!(await featureEnabled(req, ctx.organizationId)))
       return json({ error: 'feature_disabled' }, 403)
+    const denied = await organizationWriteError(req, ctx.organizationId)
+    if (denied) return denied
     const parsed = UpdateAssessmentPolicySchema.safeParse(await req.json!().catch(() => ({})))
     if (!parsed.success) return json({ error: 'invalid_policy', issues: parsed.error.issues }, 400)
     if (!RISK_POLICY_KEYS.includes(parsed.data.policy_key) || parsed.data.policy_version !== 2)
@@ -641,7 +698,8 @@ export const assessmentPolicyEndpoint: Endpoint = {
       return json(
         {
           error: 'policy_change_failed',
-          message: error instanceof Error ? error.message : 'Policy change failed',
+          message:
+            error instanceof Error ? error.message : 'No se pudo cambiar la política de revisión.',
         },
         400
       )

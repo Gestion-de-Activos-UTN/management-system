@@ -2,8 +2,9 @@ import { actorMatches } from '@/lib/actor-relation'
 import type { Endpoint, PayloadRequest, Where } from 'payload'
 import type { Task } from '@/app/types/payload-types'
 import { getTenantContext, type TenantContext } from '@/access/tenant/resolveTenantContext'
-import { canDo, hasOrgWideScope } from '@/access/rbac/permissions'
+import { canDo, hasOrgWideScope, seesMemberEmails } from '@/access/rbac/permissions'
 import { relationId } from '@/lib/relationId'
+import { roleSlugLabel } from '@/lib/role-labels'
 import {
   CancelTaskSchema,
   CreateTasksSchema,
@@ -33,11 +34,18 @@ import {
   taskWithDerivedState,
   taskRequiresReassignment,
   type ClaimEvent,
+  type EditEvent,
 } from '@/domain/tasks/task-actions'
 import { TaskDomainError, taskErrorResponse } from '@/domain/tasks/task-error'
 import { listEligibleTaskMembers } from '@/domain/tasks/task-eligibility'
-import { resolveTaskReference, tenantCanReadTaskReference } from '@/domain/tasks/task-reference'
-import { defaultFeatures } from '@/domain/subscriptions/features'
+import {
+  resolveTaskReference,
+  resolveTaskReferences,
+  tenantCanReadTaskReference,
+} from '@/domain/tasks/task-reference'
+import { organizationFeatures } from '@/domain/subscriptions/features'
+import { organizationWriteError } from '@/domain/organizations/admin-actions'
+import { accentInsensitiveLikePattern } from '@/lib/search-text'
 
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 
@@ -49,20 +57,7 @@ async function authenticated(req: PayloadRequest): Promise<TenantContext | Respo
 }
 
 async function featureEnabled(req: PayloadRequest, organizationId: string): Promise<boolean> {
-  const result = await req.payload.find({
-    collection: 'subscriptions',
-    where: { organization: { equals: organizationId } },
-    overrideAccess: true,
-    req,
-    depth: 0,
-    limit: 1,
-  })
-  const features = result.docs[0]?.features
-  const normalized = {
-    ...defaultFeatures(),
-    ...(features && typeof features === 'object' && !Array.isArray(features) ? features : {}),
-  }
-  return normalized.tasks === true
+  return (await organizationFeatures(req, organizationId)).tasks
 }
 
 async function withTaskErrors(fn: () => Promise<Response>): Promise<Response> {
@@ -73,12 +68,17 @@ async function withTaskErrors(fn: () => Promise<Response>): Promise<Response> {
   }
 }
 
-async function taskContext(req: PayloadRequest): Promise<TenantContext | Response> {
+async function taskContext(
+  req: PayloadRequest,
+  { write = false } = {}
+): Promise<TenantContext | Response> {
   const ctx = await authenticated(req)
   if (ctx instanceof Response) return ctx
   if (!(await featureEnabled(req, ctx.organizationId!))) {
     return json({ error: 'feature_disabled' }, 403)
   }
+  // Una organización inactiva conserva su historial de tareas, pero de solo lectura.
+  if (write) return (await organizationWriteError(req, ctx.organizationId!)) ?? ctx
   return ctx
 }
 
@@ -145,11 +145,13 @@ async function taskActorLabels(req: PayloadRequest, task: Task) {
   ) as Record<keyof typeof actorFields, ReturnType<typeof taskActorReference>>
   const claimHistory = (Array.isArray(task.claim_history) ? task.claim_history : []) as ClaimEvent[]
   const claimReferences = claimHistory.map(event => taskActorReference(event.by))
+  const editHistory = (Array.isArray(task.edit_history) ? task.edit_history : []) as EditEvent[]
+  const editReferences = editHistory.map(event => taskActorReference(event.by))
   const idsByCollection: Record<TaskActorCollection, Set<string>> = {
     users: new Set(),
     admins: new Set(),
   }
-  for (const reference of [...Object.values(references), ...claimReferences]) {
+  for (const reference of [...Object.values(references), ...claimReferences, ...editReferences]) {
     if (!reference) continue
     if (reference.collection) idsByCollection[reference.collection].add(reference.id)
     else {
@@ -209,6 +211,12 @@ async function taskActorLabels(req: PayloadRequest, task: Task) {
       action: event.action,
       at: event.at,
       actor: resolve(claimReferences[index]),
+      ...(event.reason ? { reason: event.reason } : {}),
+    })),
+    edit_events: editHistory.map((event, index) => ({
+      at: event.at,
+      actor: resolve(editReferences[index]),
+      ...(event.replanned ? { replanned: true } : {}),
     })),
   }
 }
@@ -239,7 +247,12 @@ const listTasksEndpoint: Endpoint = {
           or: [{ office: { in: ctx.officeIds } }, { office: { exists: false } }],
         })
       }
-      if (parsed.data.office_id) clauses.push({ office: { equals: parsed.data.office_id } })
+      // Las tareas organizacionales también corresponden a quienes trabajan en esta oficina;
+      // el permiso sobre la tarea y su referencia se verifica antes de incluir cada resultado.
+      if (parsed.data.office_id)
+        clauses.push({
+          or: [{ office: { equals: parsed.data.office_id } }, { office: { exists: false } }],
+        })
       if (parsed.data.priority) clauses.push({ priority: { in: parsed.data.priority } })
       if (!parsed.data.include_archived) clauses.push({ archived_at: { exists: false } })
       // "Planificada" no se guarda: es una pendiente con inicio futuro, así que en la base se
@@ -291,6 +304,47 @@ const listTasksEndpoint: Endpoint = {
     }),
 }
 
+/** Only called after the actor has been authorized to read the task. No raw user documents. */
+async function taskAssignmentInfo(req: PayloadRequest, task: Task) {
+  const [office, role, user] = await Promise.all([
+    task.office
+      ? req.payload.findByID({
+          collection: 'offices',
+          id: relationId(task.office),
+          overrideAccess: true,
+          req,
+          depth: 0,
+          select: { name: true },
+        })
+      : null,
+    task.assignment_kind === 'role' && task.assigned_role
+      ? req.payload.findByID({
+          collection: 'roles',
+          id: relationId(task.assigned_role),
+          overrideAccess: true,
+          req,
+          depth: 0,
+          select: { slug: true },
+        })
+      : null,
+    task.assignment_kind === 'user' && task.assigned_user
+      ? req.payload.findByID({
+          collection: 'users',
+          id: relationId(task.assigned_user),
+          overrideAccess: true,
+          req,
+          depth: 0,
+          select: { name: true },
+        })
+      : null,
+  ])
+  return {
+    office_name: office?.name ?? null,
+    role_name: role ? roleSlugLabel(role.slug) : null,
+    user_name: user?.name ?? null,
+  }
+}
+
 const taskDetailEndpoint: Endpoint = {
   path: '/v1/tasks/:id',
   method: 'get',
@@ -302,6 +356,7 @@ const taskDetailEndpoint: Endpoint = {
       const reference = await assertCanReadTask(req, ctx, task)
       return json({
         ...taskWithDerivedState(task),
+        assignment_info: await taskAssignmentInfo(req, task),
         actor_labels: await taskActorLabels(req, task),
         related_entity_info: taskReferenceInfo(task, reference),
         available_actions: await availableTaskActions(req, ctx, task, reference),
@@ -315,7 +370,7 @@ const createTasksEndpoint: Endpoint = {
   method: 'post',
   handler: req =>
     withTaskErrors(async () => {
-      const ctx = await taskContext(req)
+      const ctx = await taskContext(req, { write: true })
       if (ctx instanceof Response) return ctx
       const parsed = CreateTasksSchema.safeParse(await req.json!().catch(() => ({})))
       if (!parsed.success) return json({ error: 'invalid_task', issues: parsed.error.issues }, 400)
@@ -329,7 +384,7 @@ const editTaskEndpoint: Endpoint = {
   method: 'patch',
   handler: req =>
     withTaskErrors(async () => {
-      const ctx = await taskContext(req)
+      const ctx = await taskContext(req, { write: true })
       if (ctx instanceof Response) return ctx
       const parsed = EditTaskSchema.safeParse(await req.json!().catch(() => ({})))
       if (!parsed.success) return json({ error: 'invalid_task', issues: parsed.error.issues }, 400)
@@ -346,7 +401,7 @@ function commandEndpoint(
     method: 'post',
     handler: req =>
       withTaskErrors(async () => {
-        const ctx = await taskContext(req)
+        const ctx = await taskContext(req, { write: true })
         if (ctx instanceof Response) return ctx
         return json(taskWithDerivedState(await command(req, ctx, taskId(req))))
       }),
@@ -358,7 +413,7 @@ const reassignTaskEndpoint: Endpoint = {
   method: 'post',
   handler: req =>
     withTaskErrors(async () => {
-      const ctx = await taskContext(req)
+      const ctx = await taskContext(req, { write: true })
       if (ctx instanceof Response) return ctx
       const parsed = ReassignTaskSchema.safeParse(await req.json!().catch(() => ({})))
       if (!parsed.success)
@@ -372,7 +427,7 @@ const cancelTaskEndpoint: Endpoint = {
   method: 'post',
   handler: req =>
     withTaskErrors(async () => {
-      const ctx = await taskContext(req)
+      const ctx = await taskContext(req, { write: true })
       if (ctx instanceof Response) return ctx
       const parsed = CancelTaskSchema.safeParse(await req.json!().catch(() => ({})))
       if (!parsed.success)
@@ -386,7 +441,7 @@ const forceCompleteTaskEndpoint: Endpoint = {
   method: 'post',
   handler: req =>
     withTaskErrors(async () => {
-      const ctx = await taskContext(req)
+      const ctx = await taskContext(req, { write: true })
       if (ctx instanceof Response) return ctx
       const parsed = ForceCompleteTaskSchema.safeParse(await req.json!().catch(() => ({})))
       if (!parsed.success)
@@ -402,7 +457,7 @@ const deleteTaskEndpoint: Endpoint = {
   method: 'delete',
   handler: req =>
     withTaskErrors(async () => {
-      const ctx = await taskContext(req)
+      const ctx = await taskContext(req, { write: true })
       if (ctx instanceof Response) return ctx
       return json(await deletePendingTask(req, ctx, taskId(req)))
     }),
@@ -455,17 +510,54 @@ const assignmentOptionsEndpoint: Endpoint = {
       const roles = Array.from(firstRoles.values()).filter(role =>
         memberSets.every(set => set.some(member => member.roleId === role.id))
       )
+      const seesEmail = seesMemberEmails(ctx.role, ctx.organizationId)
+      const orgWide = hasOrgWideScope(ctx.role)
       return json({
         users: members.map(member => ({
           id: member.userId,
           name: member.name,
-          email: member.email,
+          ...(seesEmail ? { email: member.email } : {}),
+          office_names: member.offices
+            .filter(office => orgWide || ctx.officeIds.includes(office.id))
+            .map(office => office.name),
           role_id: member.roleId,
           role: member.role,
         })),
         roles,
       })
     }),
+}
+
+type ReferenceCollection = (typeof TASK_REFERENCE_COLLECTIONS)[number]
+
+const REFERENCE_OPTIONS_LIMIT = 20
+
+// Campos que la persona reconoce de cada tipo. Las evaluaciones de riesgo sólo se distinguen por
+// fecha: sin búsqueda, se ofrecen las más recientes.
+const REFERENCE_SEARCH_FIELDS: Partial<Record<ReferenceCollection, string[]>> = {
+  offices: ['name'],
+  assets: ['alias', 'hostname', 'ip'],
+  'non-network-assets': ['alias'],
+  'assessment-instances': ['asset.alias', 'asset.hostname', 'manual_asset.alias', 'office.name'],
+  'compliance-results': ['control_key', 'check_key'],
+  'inventory-snapshots': ['display_name'],
+  'scan-reports': ['display_name'],
+  agents: ['id'],
+}
+
+/**
+ * Sólo lo que admite una tarea nueva, filtrado en la consulta para que el límite cuente sobre
+ * opciones útiles: un activo retirado o eliminado, algo de una oficina inactiva (la tarea caería
+ * en ella) o un ciclo de revisión reemplazado (la tarea debe apuntar al vigente) no se ofrecen.
+ */
+function offerableReferences(collection: ReferenceCollection): Where[] {
+  const where: Where[] = []
+  if (collection === 'assets' || collection === 'non-network-assets')
+    where.push({ status: { not_equals: 'retired' } }, { deleted_at: { exists: false } })
+  if (collection === 'assessment-instances') where.push({ status: { not_equals: 'superseded' } })
+  if (collection !== 'offices')
+    where.push({ or: [{ office: { exists: false } }, { 'office.is_active': { equals: true } }] })
+  return where
 }
 
 const referenceOptionsEndpoint: Endpoint = {
@@ -482,11 +574,12 @@ const referenceOptionsEndpoint: Endpoint = {
       if (!TASK_REFERENCE_COLLECTIONS.includes(relationTo as never)) {
         return json({ error: 'invalid_reference_type' }, 400)
       }
-      const collection = relationTo as (typeof TASK_REFERENCE_COLLECTIONS)[number]
+      const collection = relationTo as ReferenceCollection
       const officeId = params.get('office_id')
+      // `id` recupera la entidad ya fijada aunque ya no se ofrezca, para mostrar su nombre.
       const selectedId = params.get('id')
+      const search = accentInsensitiveLikePattern((params.get('q') ?? '').slice(0, 100))
       const base: Where[] = []
-      if (selectedId) base.push({ id: { equals: selectedId } })
       if (collection === 'scan-reports') {
         base.push({ office: { in: officeId ? [officeId] : ctx.officeIds } })
       } else if (collection === 'offices') {
@@ -496,31 +589,42 @@ const referenceOptionsEndpoint: Endpoint = {
         if (officeId) base.push({ office: { equals: officeId } })
         else if (!hasOrgWideScope(ctx.role)) base.push({ office: { in: ctx.officeIds } })
       }
+      const searchFields = REFERENCE_SEARCH_FIELDS[collection]
+      const where: Where[] = selectedId
+        ? [...base, { id: { equals: selectedId } }]
+        : [
+            ...base,
+            ...offerableReferences(collection),
+            ...(search && searchFields
+              ? [{ or: searchFields.map(field => ({ [field]: { like: search } })) }]
+              : []),
+          ]
       const found = await req.payload.find({
         collection,
-        where: { and: base },
+        where: { and: where },
         overrideAccess: true,
         req,
         depth: 0,
-        limit: 100,
+        limit: REFERENCE_OPTIONS_LIMIT,
         sort: '-updatedAt',
       })
-      const options = []
-      for (const doc of found.docs) {
-        const reference = await resolveTaskReference(req, {
-          relationTo: collection,
-          value: String(doc.id),
-        })
-        if (tenantCanReadTaskReference(ctx, reference)) {
-          options.push({
+      const references = await resolveTaskReferences(
+        req,
+        collection,
+        found.docs as unknown as Parameters<typeof resolveTaskReferences>[2]
+      )
+      return json({
+        docs: references
+          .filter(reference => tenantCanReadTaskReference(ctx, reference))
+          .map(reference => ({
             relationTo: collection,
-            value: String(doc.id),
+            value: reference.value,
             label: reference.label,
             office_id: reference.officeId,
-          })
-        }
-      }
-      return json({ docs: options })
+          })),
+        // Hay más coincidencias que las mostradas: la UI invita a escribir para acotar.
+        has_more: found.hasNextPage,
+      })
     }),
 }
 

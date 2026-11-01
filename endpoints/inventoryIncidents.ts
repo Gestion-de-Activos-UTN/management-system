@@ -4,6 +4,7 @@ import { getTenantContext } from '@/access/tenant/resolveTenantContext'
 import { canDo, hasOrgWideScope } from '@/access/rbac/permissions'
 import { relationId } from '@/lib/relationId'
 import { actorRelation } from '@/lib/actor-relation'
+import { organizationWriteError } from '@/domain/organizations/admin-actions'
 import { lockAssetRow, transactionLock, withTransaction } from '@/domain/with-transaction'
 import {
   assertOwnerCoversOffice,
@@ -44,6 +45,8 @@ export const resolveInventoryIncidentEndpoint: Endpoint = {
             .some(id => !ctx.officeIds.includes(relationId(id))))
       )
         return Response.json({ error: 'not_found' }, { status: 404 })
+      const denied = await organizationWriteError(request, ctx.organizationId)
+      if (denied) return denied
       if (incident.status !== 'pending')
         return Response.json({ error: 'already_resolved' }, { status: 409 })
       if (
@@ -124,6 +127,7 @@ export const resolveInventoryIncidentEndpoint: Endpoint = {
         id: incident.id,
         req: request,
         overrideAccess: true,
+        depth: 0,
         data: {
           status:
             parsed.data.decision === 'move'

@@ -37,11 +37,22 @@ export const rejectBusinessEditsBeforeIdentified: CollectionBeforeChangeHook = (
   const touchedFields = GATED_FIELDS.filter(
     field => field in (data ?? {}) && data[field] !== originalDoc?.[field]
   )
-  if (touchedFields.length > 0) {
+  // Única excepción: el sistema libera el responsable de una persona desactivada (o que perdió la
+  // oficina). Un activo des-identificado conserva su owner a propósito (assetUnidentify.ts), así
+  // que sin esto la desactivación de esa persona fallaría entera.
+  const systemOwnerRelease =
+    req.context?.systemOwnerRelease === true &&
+    touchedFields.length === 1 &&
+    touchedFields[0] === 'owner' &&
+    data?.owner == null
+  if (touchedFields.length > 0 && !systemOwnerRelease) {
     throw new APIError(
       `Este activo todavía no fue identificado: alias, ubicación, criticidad y responsable no se ` +
         `pueden editar hasta confirmarlo. Campo(s) en conflicto: ${touchedFields
-          .map(field => `${field} (${JSON.stringify(originalDoc?.[field])} -> ${JSON.stringify(data?.[field])})`)
+          .map(
+            field =>
+              `${field} (${JSON.stringify(originalDoc?.[field])} -> ${JSON.stringify(data?.[field])})`
+          )
           .join(', ')}`,
       400
     )

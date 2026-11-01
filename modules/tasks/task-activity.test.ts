@@ -33,3 +33,133 @@ test('taskActivity junta eventos de la tarea, sus reclamos y liberaciones y los 
   assert.equal(events[0].tone, 'danger')
   assert.equal(events[1].tone, undefined)
 })
+
+test('taskActivity explica por qué el sistema liberó una tarea tomada', () => {
+  const events = taskActivity({
+    createdAt: '2026-10-10T16:00:00.000Z',
+    completed_at: null,
+    completion_reason: null,
+    cancelled_at: null,
+    cancellation_reason: null,
+    archived_at: null,
+    actor_labels: {
+      created_by: 'Marcos',
+      claimed_by: null,
+      completed_by: null,
+      cancelled_by: null,
+      archived_by: null,
+      claim_events: [
+        { action: 'claimed', at: '2026-10-11T09:00:00.000Z', actor: 'Ana' },
+        {
+          action: 'released',
+          at: '2026-10-12T09:00:00.000Z',
+          actor: 'Marcos',
+          reason: 'member_deactivated',
+        },
+        { action: 'claimed', at: '2026-10-13T09:00:00.000Z', actor: 'Lucía' },
+        {
+          action: 'released',
+          at: '2026-10-14T09:00:00.000Z',
+          actor: 'Marcos',
+          reason: 'office_access_removed',
+        },
+      ],
+    },
+    lifecycle_history: [],
+  })
+  assert.deepEqual(
+    events.map(event => [event.label, event.note ?? null]),
+    [
+      ['Liberada', 'Sin acceso a la oficina'],
+      ['Reclamada', null],
+      ['Liberada', 'Persona desactivada'],
+      ['Reclamada', null],
+      ['Creada', null],
+    ]
+  )
+})
+
+test('taskActivity agrupa la liberación y reasignación en un solo paso entre reclamos', () => {
+  const at = '2026-10-12T09:00:00.000Z'
+  const events = taskActivity({
+    createdAt: '2026-10-10T16:00:00.000Z',
+    actor_labels: {
+      created_by: 'Marcos',
+      claimed_by: 'Lucía',
+      completed_by: null,
+      cancelled_by: null,
+      archived_by: null,
+      claim_events: [
+        { action: 'claimed', at: '2026-10-11T09:00:00.000Z', actor: 'Ana' },
+        { action: 'released', at, actor: 'Marcos', reason: 'task_reassigned' },
+        { action: 'reassigned', at, actor: 'Marcos' },
+        { action: 'claimed', at, actor: 'Lucía' },
+      ],
+    },
+  })
+  assert.deepEqual(
+    events.map(event => event.label),
+    ['Reclamada', 'Reasignada', 'Reclamada', 'Creada']
+  )
+  assert.equal(events[1].actor, 'Marcos')
+  assert.equal(events[1].note, 'Se liberó el reclamo anterior.')
+  assert.equal(events[2].actor, 'Ana')
+})
+
+test('taskActivity conserva las liberaciones sin pareja y no atribuye liberación a una reasignación pendiente', () => {
+  const events = taskActivity({
+    createdAt: '2026-10-10T16:00:00.000Z',
+    actor_labels: {
+      created_by: 'Marcos',
+      claimed_by: null,
+      completed_by: null,
+      cancelled_by: null,
+      archived_by: null,
+      claim_events: [
+        {
+          action: 'released',
+          at: '2026-10-11T09:00:00.000Z',
+          actor: 'Ana',
+          reason: 'task_reassigned',
+        },
+        { action: 'reassigned', at: '2026-10-12T09:00:00.000Z', actor: 'Marcos' },
+      ],
+    },
+  })
+  assert.deepEqual(
+    events.map(event => event.label),
+    ['Reasignada', 'Liberada por reasignación', 'Creada']
+  )
+  assert.equal(events[0].note, null)
+})
+
+test('taskActivity muestra cada edición como "Modificada" y explica una replanificación', () => {
+  const events = taskActivity({
+    createdAt: '2026-10-10T16:00:00.000Z',
+    completed_at: null,
+    completion_reason: null,
+    cancelled_at: null,
+    cancellation_reason: null,
+    archived_at: null,
+    actor_labels: {
+      created_by: 'Marcos',
+      claimed_by: null,
+      completed_by: null,
+      cancelled_by: null,
+      archived_by: null,
+      claim_events: [{ action: 'claimed', at: '2026-10-11T09:00:00.000Z', actor: 'Ana' }],
+      edit_events: [
+        { at: '2026-10-11T08:00:00.000Z', actor: 'Marcos' },
+        { at: '2026-10-12T10:00:00.000Z', actor: 'Marcos', replanned: true },
+      ],
+    },
+    lifecycle_history: null,
+  })
+  assert.deepEqual(
+    events.map(event => event.label),
+    ['Modificada', 'Reclamada', 'Modificada', 'Creada']
+  )
+  assert.equal(events[0].note, 'Volvió a pendiente: se liberó el reclamo.')
+  assert.equal(events[2].actor, 'Marcos')
+  assert.equal(events[2].note, null)
+})

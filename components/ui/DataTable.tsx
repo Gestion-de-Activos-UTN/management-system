@@ -10,6 +10,7 @@ import {
 } from '@tanstack/react-table'
 import { useState } from 'react'
 import { Table, Group, Text, ActionIcon, Center, Loader } from '@mantine/core'
+import { OneLineText } from './OneLineText'
 import { ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react'
 
 /**
@@ -28,6 +29,7 @@ export function DataTable<T>({
   onSortingChange,
   minWidth = 640,
   maxHeight = 'calc(100vh - 320px)',
+  stickyHeader = false,
 }: {
   columns: ColumnDef<T, unknown>[]
   data: T[]
@@ -40,6 +42,8 @@ export function DataTable<T>({
   minWidth?: number
   /** Caps vertical overflow inside the table's own scroll container instead of the page body. */
   maxHeight?: number | string
+  /** Keeps the table headings visible while its scroll container moves. */
+  stickyHeader?: boolean
 }) {
   // Loader only for the first load. With rows already on screen (next page, new page size) the
   // table stays put and dims: swapping it for a Loader collapsed its height and jumped the page.
@@ -78,16 +82,16 @@ export function DataTable<T>({
 
   return (
     <Table.ScrollContainer
+      type="native"
       minWidth={minWidth}
       mah={maxHeight}
       aria-busy={refreshing}
       style={{
-        overflowY: 'auto',
         opacity: refreshing ? 0.55 : 1,
         transition: 'opacity 150ms ease',
       }}
     >
-      <Table highlightOnHover verticalSpacing="sm">
+      <Table highlightOnHover verticalSpacing="sm" stickyHeader={stickyHeader} layout="fixed">
         <Table.Thead>
           {table.getHeaderGroups().map(headerGroup => (
             <Table.Tr key={headerGroup.id}>
@@ -103,10 +107,8 @@ export function DataTable<T>({
                     onClick={canSort ? header.column.getToggleSortingHandler() : undefined}
                     style={{
                       ...(canSort ? { cursor: 'pointer' } : {}),
-                      // Opt-in only — a column with no explicit `size` in its
-                      // ColumnDef sizes to content instead of the library's
-                      // 150px default, so one flexible column (usually the
-                      // first) can absorb leftover width naturally.
+                      // Explicit sizes stay fixed; unsized columns share the remaining width.
+                      // Fixed layout prevents long labels from widening a column or wrapping.
                       ...(header.column.columnDef.size !== undefined
                         ? { width: header.getSize() }
                         : {}),
@@ -122,11 +124,22 @@ export function DataTable<T>({
                       justify={isCentered ? 'center' : 'flex-start'}
                       w="100%"
                     >
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(header.column.columnDef.header, header.getContext())}
+                      {header.isPlaceholder ? null : typeof header.column.columnDef.header ===
+                        'string' ? (
+                        <OneLineText size="inherit" style={{ flex: '0 1 auto' }}>
+                          {header.column.columnDef.header}
+                        </OneLineText>
+                      ) : (
+                        flexRender(header.column.columnDef.header, header.getContext())
+                      )}
                       {canSort && (
-                        <ActionIcon variant="transparent" size="xs" c="dimmed">
+                        <ActionIcon
+                          variant="transparent"
+                          size="xs"
+                          c="dimmed"
+                          aria-label="Ordenar columna"
+                          style={{ flexShrink: 0 }}
+                        >
                           {sortDir === 'asc' && <ChevronUp size={14} />}
                           {sortDir === 'desc' && <ChevronDown size={14} />}
                           {!sortDir && <ChevronsUpDown size={14} />}
@@ -151,9 +164,7 @@ export function DataTable<T>({
                     key={cell.id}
                     style={
                       cell.column.columnDef.size !== undefined
-                        ? // maxWidth + overflow: a sized <td> in an auto-layout <table> still grows
-                          // to fit nowrap/long content unless the cell itself clips — width alone
-                          // (as used for unsized columns) isn't enough for truncated cells.
+                        ? // Contain sized cells within their assigned column width.
                           {
                             width: cell.column.getSize(),
                             maxWidth: cell.column.getSize(),

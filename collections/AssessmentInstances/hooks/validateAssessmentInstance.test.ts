@@ -42,7 +42,7 @@ describe('assessment instance tenant hook', () => {
         operation: 'create',
         req: requestWithOffice('org-2'),
       } as never),
-      /another organization/
+      /pertenece a otra organización/
     )
   })
 
@@ -54,7 +54,7 @@ describe('assessment instance tenant hook', () => {
         operation: 'update',
         req: requestWithOffice('org-1'),
       } as never),
-      /immutable/
+      /no se puede modificar/
     )
   })
 

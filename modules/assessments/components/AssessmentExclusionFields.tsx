@@ -1,13 +1,25 @@
 'use client'
 
-import { Collapse, Select, SimpleGrid, Stack, TextInput, Textarea } from '@mantine/core'
+import { DateField } from '@/components/ui/DateField'
+
+import { Collapse, Select, SimpleGrid, Stack, Text } from '@mantine/core'
 import { Controller, type Control, type FieldErrors, type Path } from 'react-hook-form'
 import type { z } from 'zod'
 import type { AssessmentScopeFieldsSchema } from '@/domain/assessments/assessment-scope-schema'
 import { ASSESSMENT_EXCLUSION_REASON_OPTIONS } from '@/lib/enum-labels'
 import { formatDateInput, localDateEndToISOString } from '@/lib/format-date'
+import { CharacterCountTextarea } from '@/components/ui/CharacterCountTextarea'
 
 type ScopeFields = z.infer<typeof AssessmentScopeFieldsSchema>
+
+export function AssessmentScopeHint() {
+  return (
+    <Text size="sm" c="dimmed">
+      Los activos excluidos permanecen visibles y continúan escaneándose, pero no afectan las
+      revisiones ni el puntaje de riesgo.
+    </Text>
+  )
+}
 
 /**
  * Motivo, fecha límite y nota de una exclusión de la revisión de seguridad. Los usan el detalle
@@ -38,7 +50,10 @@ export function AssessmentExclusionFields<T extends ScopeFields>({
               <Select
                 label="Motivo de exclusión"
                 required
+                allowDeselect={false}
                 data={[...ASSESSMENT_EXCLUSION_REASON_OPTIONS]}
+                maxDropdownHeight={220}
+                comboboxProps={{ withinPortal: true, position: 'bottom-start' }}
                 value={(field.value as string | null) ?? null}
                 onChange={field.onChange}
                 error={fieldErrors.assessment_exclusion_reason?.message}
@@ -49,20 +64,14 @@ export function AssessmentExclusionFields<T extends ScopeFields>({
             name={'assessment_excluded_until' as Path<T>}
             control={control}
             render={({ field }) => (
-              <TextInput
-                type="date"
+              <DateField
                 label="Excluido hasta"
-                description="Fecha obligatoria, hasta 90 días desde hoy."
+                description="Fecha obligatoria; el máximo permitido es 90 días desde hoy."
+                inputWrapperOrder={['label', 'input', 'description', 'error']}
                 required
                 error={fieldErrors.assessment_excluded_until?.message}
                 value={field.value ? formatDateInput(field.value as string) : ''}
-                onChange={event =>
-                  field.onChange(
-                    event.currentTarget.value
-                      ? localDateEndToISOString(event.currentTarget.value)
-                      : null
-                  )
-                }
+                onChange={value => field.onChange(value ? localDateEndToISOString(value) : null)}
               />
             )}
           />
@@ -71,10 +80,11 @@ export function AssessmentExclusionFields<T extends ScopeFields>({
           name={'assessment_exclusion_note' as Path<T>}
           control={control}
           render={({ field }) => (
-            <Textarea
+            <CharacterCountTextarea
               label="Nota de exclusión"
               description="Agrega contexto para quienes revisen cuando sea útil."
               required={noteRequired}
+              maxLength={1000}
               value={(field.value as string | null) ?? ''}
               onChange={field.onChange}
               error={fieldErrors.assessment_exclusion_note?.message}

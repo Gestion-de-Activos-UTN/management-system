@@ -1,8 +1,21 @@
 'use client'
 
+import { matchesSearch } from '@/lib/search-text'
+import { userFacingErrorMessage } from '@/lib/user-facing-error'
+
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Button, Modal, Stack, SegmentedControl, Tabs, TextInput, Tooltip } from '@mantine/core'
+import {
+  Alert,
+  Button,
+  Modal,
+  Stack,
+  SegmentedControl,
+  Tabs,
+  Text,
+  TextInput,
+  Tooltip,
+} from '@mantine/core'
 import { Inbox, ListTodo, Plus, Search, UserRound } from 'lucide-react'
 import { DataTable } from '@/components/ui/DataTable'
 import { FilterBar } from '@/components/ui/FilterBar'
@@ -89,10 +102,10 @@ export default function TasksPage() {
     setIncludeArchived(false)
   }
   const visibleTasks = useMemo(() => {
-    const term = search.trim().toLowerCase()
+    const term = search.trim()
     if (!term) return tasks.data ?? []
     return (tasks.data ?? []).filter(task =>
-      [task.title, task.related_entity_info?.label].some(text => text?.toLowerCase().includes(term))
+      matchesSearch([task.title, task.related_entity_info?.label], term)
     )
   }, [tasks.data, search])
   const columns = useMemo(() => getTasksColumns(asOrganization), [asOrganization])
@@ -128,64 +141,85 @@ export default function TasksPage() {
           )}
         </Tabs.List>
       </Tabs>
-      <FilterBar>
-        <TextInput
-          placeholder="Buscar tarea o entidad..."
-          aria-label="Buscar"
-          leftSection={<Search size={16} strokeWidth={1.5} />}
-          value={search}
-          onChange={event => setSearch(event.currentTarget.value)}
-          w="100%"
-        />
-        {view !== 'pool' && (
+      <Stack key={view} gap="md" className="tab-panel-enter">
+        <FilterBar>
+          <TextInput
+            placeholder="Buscar tarea o entidad..."
+            aria-label="Buscar"
+            leftSection={<Search size={16} strokeWidth={1.5} />}
+            value={search}
+            onChange={event => setSearch(event.currentTarget.value)}
+            w="100%"
+          />
+          {view !== 'pool' && (
+            <MultiFilterSelect
+              ariaLabel="Estado"
+              allLabel="Todos los estados"
+              data={ALL_STATUSES}
+              value={status}
+              onChange={setStatus}
+            />
+          )}
           <MultiFilterSelect
-            ariaLabel="Estado"
-            allLabel="Todos los estados"
-            data={ALL_STATUSES}
-            value={status}
-            onChange={setStatus}
+            ariaLabel="Prioridad"
+            allLabel="Todas las prioridades"
+            data={PRIORITY_OPTIONS}
+            value={priority}
+            onChange={setPriority}
+          />
+          {view === 'pool' && (
+            <Tooltip label="Disponibilidad">
+              <SegmentedControl
+                aria-label="Disponibilidad"
+                fullWidth
+                data={POOL_STATUS_OPTIONS}
+                value={status[0] ?? 'all'}
+                onChange={value => setStatus(value === 'all' ? [] : [value])}
+              />
+            </Tooltip>
+          )}
+          {showArchivedToggle && (
+            <Tooltip label="Las tareas completadas o canceladas se archivan para despejar la lista">
+              <SegmentedControl
+                aria-label="Tareas archivadas"
+                fullWidth
+                data={[
+                  { value: 'hide', label: 'Sin archivar' },
+                  { value: 'include', label: 'Todas' },
+                ]}
+                value={includeArchived ? 'include' : 'hide'}
+                onChange={value => setIncludeArchived(value === 'include')}
+              />
+            </Tooltip>
+          )}
+        </FilterBar>
+        {officeId && (
+          <Text size="xs" c="dimmed">
+            Incluye tareas de la oficina seleccionada y de toda la organización.
+          </Text>
+        )}
+        {tasks.isError && (
+          <Alert color="red" title="No se pudieron cargar las tareas">
+            <Stack gap="xs" align="flex-start">
+              <Text size="sm">
+                {userFacingErrorMessage(tasks.error, 'Intenta cargar la lista nuevamente.')}
+              </Text>
+              <Button variant="light" size="xs" onClick={() => void tasks.refetch()}>
+                Reintentar
+              </Button>
+            </Stack>
+          </Alert>
+        )}
+        {!tasks.isError && (
+          <DataTable
+            columns={columns}
+            data={visibleTasks}
+            isLoading={tasks.isPending}
+            emptyLabel={EMPTY_LABELS[view]}
+            minWidth={850}
           />
         )}
-        <MultiFilterSelect
-          ariaLabel="Prioridad"
-          allLabel="Todas las prioridades"
-          data={PRIORITY_OPTIONS}
-          value={priority}
-          onChange={setPriority}
-        />
-        {view === 'pool' && (
-          <Tooltip label="Disponibilidad">
-            <SegmentedControl
-              aria-label="Disponibilidad"
-              fullWidth
-              data={POOL_STATUS_OPTIONS}
-              value={status[0] ?? 'all'}
-              onChange={value => setStatus(value === 'all' ? [] : [value])}
-            />
-          </Tooltip>
-        )}
-        {showArchivedToggle && (
-          <Tooltip label="Las tareas completadas o canceladas se archivan para despejar la lista">
-            <SegmentedControl
-              aria-label="Tareas archivadas"
-              fullWidth
-              data={[
-                { value: 'hide', label: 'Sin archivar' },
-                { value: 'include', label: 'Todas' },
-              ]}
-              value={includeArchived ? 'include' : 'hide'}
-              onChange={value => setIncludeArchived(value === 'include')}
-            />
-          </Tooltip>
-        )}
-      </FilterBar>
-      <DataTable
-        columns={columns}
-        data={visibleTasks}
-        isLoading={tasks.isPending}
-        emptyLabel={EMPTY_LABELS[view]}
-        minWidth={850}
-      />
+      </Stack>
       <Modal
         opened={opened}
         onClose={() => setOpened(false)}

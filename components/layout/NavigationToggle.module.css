@@ -1,0 +1,32 @@
+.icon {
+  position: absolute;
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.menu {
+  opacity: 1;
+  transform: rotate(0deg);
+}
+
+.close {
+  opacity: 0;
+  transform: rotate(-90deg);
+}
+
+.opened .menu {
+  opacity: 0;
+  transform: rotate(90deg);
+}
+
+.opened .close {
+  opacity: 1;
+  transform: rotate(0deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icon {
+    transition: none;
+  }
+}

@@ -73,7 +73,7 @@ async function request<T>(
   if (!res.ok) {
     const error: HttpError = {
       status: res.status,
-      code: data?.errors?.[0]?.name ?? 'request_failed',
+      code: data?.errors?.[0]?.name ?? data?.error ?? 'request_failed',
       message: data?.errors?.[0]?.message ?? data?.message ?? data?.error ?? res.statusText,
     }
     throw error

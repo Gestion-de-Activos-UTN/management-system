@@ -1,7 +1,7 @@
 import { Select, type SelectProps } from '@mantine/core'
 import { orgMemberOptionLabel, type OrgMember } from '../service'
 
-type MemberOption = Pick<OrgMember, 'id' | 'name' | 'email'> & { role: string }
+type MemberOption = Pick<OrgMember, 'id' | 'name' | 'email' | 'office_names'> & { role: string }
 
 /**
  * Selector único de personas (responsable, usuario asignado, etc.). Quien lo usa decide qué
@@ -14,7 +14,8 @@ export function MemberSelect({
   ...props
 }: Omit<SelectProps, 'data'> & {
   members: MemberOption[]
-  emptyOption?: { value: string; label: string }
+  /** `disabled`: se muestra para explicar el valor actual, pero la persona no puede elegirla. */
+  emptyOption?: { value: string; label: string; disabled?: boolean }
 }) {
   return (
     <Select

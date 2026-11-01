@@ -1,5 +1,8 @@
 import { createLocalReq, type Payload, type PayloadRequest, type Where } from 'payload'
 import { getTenantContext } from '@/access/tenant/resolveTenantContext'
+import { AssetBusinessUpdateSchema } from '@/modules/assets/schema'
+import { NonNetworkAssetFieldsSchema } from '@/modules/non-network-assets/schema'
+import { CreateTasksSchema } from '@/modules/tasks/schema'
 import type {
   Agent,
   Asset,
@@ -27,12 +30,25 @@ import {
 import { relationId } from '@/lib/relationId'
 import { createHash } from 'node:crypto'
 import { withTransaction } from '@/domain/with-transaction'
-import { DEMO_OFFICES, isDemoOffice } from './demo-offices'
+import {
+  DEMO_OFFICES,
+  LIFECYCLE_DEMO_MANAGER,
+  LIFECYCLE_DEMO_OFFICE,
+  isDemoOffice,
+} from './demo-offices'
+import { deactivateOffice } from '@/domain/offices/office-lifecycle'
+import { updateMember } from '@/domain/organizations/member-admin'
+import { organizationAdminLock } from '@/domain/organizations/admin-actions'
 
 const seedKey = (organization: string, kind: string, label: string) =>
   createHash('sha256')
     .update(JSON.stringify([organization, kind, label]))
     .digest('hex')
+
+// Only fixture presentation text is normalized. Original labels remain seed-key inputs so
+// retries still find existing scenarios, including records renamed by a user.
+const demoText = (value: unknown) =>
+  typeof value === 'string' ? value.replace(/[·—–]/g, '-') : value
 
 const DAY = 24 * 60 * 60 * 1000
 const DEMO_ORGANIZATION = 'Demo Organization'
@@ -56,6 +72,8 @@ export interface SeedDemoDataSummary {
   assessmentsCompleted: number
   tasksCreated: number
   snapshotsCreated: number
+  /** Se cerró Córdoba y se desactivó a Lucía con el flujo real (sólo la primera vez). */
+  lifecycleScenarioApplied: boolean
 }
 
 const at = (now: Date, offsetMs: number) => new Date(now.getTime() + offsetMs).toISOString()
@@ -507,6 +525,11 @@ async function enrichAsset(
   assetId: string,
   data: Record<string, unknown>
 ): Promise<boolean> {
+  // Los fixtures deben respetar las mismas reglas de texto que el formulario de edición.
+  const business = AssetBusinessUpdateSchema.pick({ alias: true, location: true }).parse({
+    alias: demoText(data.alias),
+    location: demoText(data.location),
+  })
   const current = await findAsset(payload, assetId)
   if (current.identified) return false
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {asset identification and business fields}, previous hash for this organization_id)
@@ -520,6 +543,7 @@ async function enrichAsset(
       identification_status: 'confirmed',
       type_confirmed_at: new Date().toISOString(),
       ...data,
+      ...business,
     },
   })
   return true
@@ -530,15 +554,7 @@ async function ensureManualAsset(
   req: PayloadRequest,
   input: {
     alias: string
-    category:
-      | 'computer'
-      | 'software_license'
-      | 'cloud_asset'
-      | 'provider_service'
-      | 'backup'
-      | 'information_repository'
-      | 'physical_record'
-      | 'removable_media'
+    category: NonNetworkAsset['asset_category']
     criticality: 'low' | 'medium' | 'high' | 'critical'
     ownerId: string
     officeId: string
@@ -546,8 +562,12 @@ async function ensureManualAsset(
     location: string
     reviewInterval: 'never' | '1d' | '1w' | '1m' | '6m' | '1y'
     status?: 'active' | 'retired'
-  }
+  } & Pick<NonNetworkAsset, 'product_details' | 'cloud_details' | 'repository_details'>
 ) {
+  const business = NonNetworkAssetFieldsSchema.pick({ alias: true, location: true }).parse({
+    alias: demoText(input.alias),
+    location: demoText(input.location),
+  })
   const existing = await findOne<NonNetworkAsset>(payload, 'non-network-assets', {
     seed_key: { equals: seedKey(input.organizationId, 'manual', input.alias) },
   })
@@ -560,15 +580,18 @@ async function ensureManualAsset(
     req,
     data: {
       seed_key: seedKey(input.organizationId, 'manual', input.alias),
-      alias: input.alias,
+      alias: business.alias,
       asset_category: input.category,
       criticality: input.criticality,
       owner: input.ownerId,
       office: input.officeId,
       organization: input.organizationId,
-      location: input.location,
+      location: business.location,
       review_interval: input.reviewInterval,
       status: input.status ?? 'active',
+      product_details: input.product_details,
+      cloud_details: input.cloud_details,
+      repository_details: input.repository_details,
     },
   })
   return { doc: doc as NonNetworkAsset, created: true }
@@ -641,6 +664,103 @@ async function seedAssessment(
   return complete
 }
 
+/**
+ * Cierre de una oficina con el flujo real de la app, para que la demo muestre lo que deja:
+ * Córdoba (de Lucía) se desactiva moviendo un activo a Rosario y dando otro de baja, y después
+ * se desactiva a Lucía. Quedan activos "Sin responsable", tareas liberadas y canceladas, y
+ * revisiones de una oficina inactiva. Sólo corre mientras Córdoba sigue activa (idempotente).
+ */
+async function seedLifecycleScenario(
+  payload: Payload,
+  core: Awaited<ReturnType<typeof requiredCore>>,
+  summary: SeedDemoDataSummary
+): Promise<boolean> {
+  const organizationId = core.organizationId
+  const [office, manager] = await Promise.all([
+    findOne<Office>(payload, 'offices', {
+      and: [
+        { organization: { equals: organizationId } },
+        { name: { equals: LIFECYCLE_DEMO_OFFICE.name } },
+      ],
+    }),
+    findOne<User>(payload, 'users', { email: { equals: LIFECYCLE_DEMO_MANAGER.email } }),
+  ])
+  if (!office || office.is_active === false || !manager) return false
+  const officeId = String(office.id)
+  const managerId = String(manager.id)
+  const secondaryOfficeId = String(core.secondaryOffice.id)
+  const adminId = String(core.users.admin.id)
+  const ctx = tenantContext(adminId, organizationId, [
+    String(core.mainOffice.id),
+    secondaryOfficeId,
+    officeId,
+  ])
+  const manual = async (
+    alias: string,
+    officeIdFor: string,
+    category: 'computer' | 'printer' | 'mobile_device'
+  ) => {
+    const result = await ensureManualAsset(payload, humanRequest(payload, adminId), {
+      organizationId,
+      officeId: officeIdFor,
+      ownerId: managerId,
+      alias,
+      category,
+      criticality: 'medium',
+      location: 'Mostrador',
+      reviewInterval: '1m',
+    })
+    if (result.created) summary.manualAssetsCreated += 1
+    return result
+  }
+  const notebook = await manual('Córdoba · Notebook del mostrador', officeId, 'computer')
+  const printer = await manual('Córdoba · Impresora del depósito', officeId, 'printer')
+  await manual('Depósito · Tablet de inventario', secondaryOfficeId, 'mobile_device')
+  const startAt = new Date(Date.now() - 2 * DAY).toISOString()
+  for (const task of [
+    { title: 'Córdoba · Inventariar el mostrador', officeId },
+    { title: 'Depósito · Etiquetar las tablets', officeId: secondaryOfficeId },
+  ])
+    summary.tasksCreated += Number(
+      await ensureTask(payload, ctx, {
+        ...task,
+        description: 'Tarea tomada por quien administraba la sucursal de Córdoba.',
+        priority: 'normal',
+        startAt,
+        finalState: 'in_progress',
+        assignedUserId: managerId,
+      })
+    )
+
+  const req = humanRequest(payload, adminId)
+  const lock = { lockKey: organizationAdminLock(organizationId) }
+  await withTransaction(
+    payload,
+    req,
+    () =>
+      deactivateOffice(req, organizationId, officeId, {
+        confirm_name: office.name,
+        manual_asset_decisions: [
+          { asset_id: String(notebook.doc.id), destination: secondaryOfficeId },
+          { asset_id: String(printer.doc.id), destination: 'retire' },
+        ],
+      }),
+    lock
+  )
+  const memberReq = humanRequest(payload, adminId)
+  await withTransaction(
+    payload,
+    memberReq,
+    () =>
+      updateMember(memberReq, { ...ctx, organizationId }, managerId, {
+        is_active: false,
+        confirm_email: LIFECYCLE_DEMO_MANAGER.email,
+      }),
+    lock
+  )
+  return true
+}
+
 function tenantContext(userId: string, organizationId: string, officeIds: string[]): TenantContext {
   return {
     userId,
@@ -683,8 +803,8 @@ async function ensureTask(
       seed_key: { equals: seedKey(ctx.organizationId!, 'task', input.title) },
     })
     if (existing) return false
-    const created = await createTasks(req, ctx, {
-      title: input.title,
+    const values = CreateTasksSchema.parse({
+      title: demoText(input.title),
       description: input.description,
       priority: input.priority,
       global: false,
@@ -696,6 +816,7 @@ async function ensureTask(
       due_at: input.dueAt,
       related_entity: input.reference,
     })
+    const created = await createTasks(req, ctx, values)
     const task = created[0]
     // AUDIT: persist the immutable scenario identifier alongside task creation.
     // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
@@ -891,6 +1012,7 @@ export async function seedDemoData(
     assessmentsCompleted: 0,
     tasksCreated: 0,
     snapshotsCreated: 0,
+    lifecycleScenarioApplied: false,
   }
 
   const settings = await findOne<OrganizationSetting>(payload, 'organization-settings', {
@@ -974,7 +1096,7 @@ export async function seedDemoData(
       alias: 'Servidor de archivos principal',
       criticality: 'critical',
       owner: adminId,
-      location: 'Sala técnica — planta baja',
+      location: 'Sala técnica - planta baja',
       type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
@@ -984,7 +1106,7 @@ export async function seedDemoData(
       alias: 'Equipo de Finanzas 04',
       criticality: 'high',
       owner: core.users.mainManager.id,
-      location: 'Finanzas — puesto 4',
+      location: 'Finanzas - puesto 4',
       type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
@@ -1023,7 +1145,7 @@ export async function seedDemoData(
       alias: 'Access Point depósito',
       criticality: 'medium',
       owner: core.users.secondaryManager.id,
-      location: 'Depósito — techo norte',
+      location: 'Depósito - techo norte',
       type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
@@ -1033,7 +1155,7 @@ export async function seedDemoData(
       alias: 'Equipo de Logística 02',
       criticality: 'medium',
       owner: core.users.secondaryManager.id,
-      location: 'Logística — puesto 2',
+      location: 'Logística - puesto 2',
       type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   sourceChanged =
@@ -1043,7 +1165,7 @@ export async function seedDemoData(
       alias: 'Cámara del depósito',
       criticality: 'high',
       owner: core.users.secondaryManager.id,
-      location: 'Depósito — acceso',
+      location: 'Depósito - acceso',
       type_confirmed_by: { relationTo: 'users' as const, value: adminId },
     })) || sourceChanged
   if (secondaryCamera.status !== 'offline') {
@@ -1077,6 +1199,10 @@ export async function seedDemoData(
       officeId: mainOfficeId,
       location: 'Tenant corporativo',
       reviewInterval: '6m' as const,
+      product_details: {
+        software_vendor: 'Microsoft',
+        software_product: 'Microsoft 365 Business Premium',
+      },
     },
     {
       alias: 'Repositorio documental corporativo',
@@ -1086,6 +1212,7 @@ export async function seedDemoData(
       officeId: mainOfficeId,
       location: 'SharePoint Online',
       reviewInterval: '1m' as const,
+      repository_details: { kind: 'other_digital' as const },
     },
     {
       alias: 'Backup diario de sistemas críticos',
@@ -1115,6 +1242,7 @@ export async function seedDemoData(
       officeId: mainOfficeId,
       location: 'SaaS',
       reviewInterval: '1m' as const,
+      cloud_details: { kind: 'productivity_identity' as const },
     },
     {
       alias: 'Servicio de Internet secundario',
@@ -1152,6 +1280,11 @@ export async function seedDemoData(
       location: 'Histórico de licencias',
       reviewInterval: 'never' as const,
       status: 'retired' as const,
+      product_details: {
+        software_vendor: 'ESET',
+        software_product: 'Endpoint Security',
+        software_version: '9',
+      },
     },
   ]
   const manualDocs: NonNetworkAsset[] = []
@@ -1265,6 +1398,14 @@ export async function seedDemoData(
             location: `Sector ${(index % 6) + 1}`,
             reviewInterval: (['1d', '1w', '1m', '6m', '1y', 'never'] as const)[index % 6],
             status: index % 13 === 0 ? 'retired' : 'active',
+            ...[
+              {},
+              {
+                product_details: { software_vendor: 'Adobe', software_product: 'Creative Cloud' },
+              },
+              { cloud_details: { kind: 'infrastructure' as const } },
+              {},
+            ][index],
           }
         )
         if (result.created) {
@@ -1589,5 +1730,6 @@ export async function seedDemoData(
     }
   }
   await ensureDemoPortalMessages(payload, core, now)
+  summary.lifecycleScenarioApplied = await seedLifecycleScenario(payload, core, summary)
   return summary
 }

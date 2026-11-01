@@ -1,6 +1,7 @@
 'use client'
 import { Alert, Button, Group, Stack, Text } from '@mantine/core'
 import { formatDateTime } from '@/lib/format-date'
+import { userFacingErrorMessage } from '@/lib/user-facing-error'
 import { relationId } from '@/lib/relationId'
 import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
 import { useInventoryIncidents } from '../hooks/use-inventory-incidents'
@@ -57,7 +58,12 @@ export function InventoryIncidentsPanel({
                     <>
                       <Button
                         size="xs"
-                        loading={resolution.isPending}
+                        loading={
+                          resolution.isPending &&
+                          resolution.variables?.id === incident.id &&
+                          resolution.variables.decision === 'move'
+                        }
+                        disabled={resolution.isPending}
                         onClick={() => resolution.mutate({ id: incident.id, decision: 'move' })}
                       >
                         Confirmar traslado
@@ -65,6 +71,11 @@ export function InventoryIncidentsPanel({
                       <Button
                         size="xs"
                         variant="light"
+                        loading={
+                          resolution.isPending &&
+                          resolution.variables?.id === incident.id &&
+                          resolution.variables.decision === 'keep'
+                        }
                         disabled={resolution.isPending}
                         onClick={() => resolution.mutate({ id: incident.id, decision: 'keep' })}
                       >
@@ -75,7 +86,12 @@ export function InventoryIncidentsPanel({
                     <Button
                       size="xs"
                       variant="light"
-                      loading={resolution.isPending}
+                      loading={
+                        resolution.isPending &&
+                        resolution.variables?.id === incident.id &&
+                        resolution.variables.decision === 'reviewed'
+                      }
+                      disabled={resolution.isPending}
                       onClick={() => resolution.mutate({ id: incident.id, decision: 'reviewed' })}
                     >
                       Marcar como revisado
@@ -87,10 +103,12 @@ export function InventoryIncidentsPanel({
                   Un responsable con acceso a las oficinas involucradas debe resolver esta revisión.
                 </Text>
               )}
-              {resolution.isError && (
+              {resolution.isError && resolution.variables?.id === incident.id && (
                 <Text size="sm" c="red">
-                  {(resolution.error as { message?: string }).message ??
-                    'No se pudo guardar la decisión. Actualiza la vista e inténtalo nuevamente.'}
+                  {userFacingErrorMessage(
+                    resolution.error,
+                    'No se pudo guardar la decisión. Actualiza la vista e inténtalo nuevamente.'
+                  )}
                 </Text>
               )}
             </Stack>

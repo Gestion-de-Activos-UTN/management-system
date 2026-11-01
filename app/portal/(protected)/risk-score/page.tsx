@@ -8,22 +8,26 @@ import {
   Alert,
   Anchor,
   Card,
+  Flex,
   Group,
   Pagination,
   Progress,
   RingProgress,
   Select,
+  SimpleGrid,
   Skeleton,
   Stack,
   Text,
 } from '@mantine/core'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { DataTable } from '@/components/ui/DataTable'
+import { OfficeRiskSelectionNotice } from '@/modules/offices/components/OfficeRiskSelectionNotice'
 import { useConcreteOfficeId } from '@/modules/offices/hooks/use-concrete-office-id'
 import { formatDateTime } from '@/lib/format-date'
 import { RISK_CONFIDENCE_LABEL } from '@/lib/enum-labels'
 import { useLatestRisk } from '@/modules/risk/hooks/use-latest-risk'
 import { riskContributionsColumns } from '@/modules/risk/risk.columns'
+import { RiskScopeExplanation } from '@/modules/risk/components/RiskScopeExplanation'
 import { RiskAlerts } from '@/modules/risk/components/RiskAlerts'
 import { TopRiskAssets } from '@/modules/risk/components/TopRiskAssets'
 import { RiskBandBadge } from '@/modules/risk/components/RiskBandBadge'
@@ -38,12 +42,15 @@ import {
 import { portalHref } from '@/lib/portal-href'
 import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 import { StatusBadge } from '@/components/ui/StatusBadge'
+import { getRiskCalculationMessage } from '@/modules/risk/risk-calculation-message'
+import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
 
 export default function RiskScorePage() {
   const searchParams = useSearchParams()
   const asOrganization = searchParams.get('asOrganization') ?? undefined
   const evaluationId = searchParams.get('evaluation') ?? undefined
-  const { officeId, ready } = useConcreteOfficeId(asOrganization)
+  const tenant = useTenantContext(asOrganization)
+  const { officeId, ready, requiresOfficeSelection } = useConcreteOfficeId(asOrganization)
   const [page, setPage] = useState(1)
   // Al cambiar de página la lista vuelve a su encabezado, no se queda en el pie de la anterior.
   const tableRef = useRef<HTMLDivElement>(null)
@@ -72,8 +79,20 @@ export default function RiskScorePage() {
     enabled: ready,
   })
   const data = query.data?.evaluation
+  const calculationMessage =
+    !evaluationId && !query.isPending && !query.isError
+      ? getRiskCalculationMessage(query.data?.recalculation, Boolean(data))
+      : null
   const pagination = query.data?.pagination
   const inventoryHref = portalHref('/portal/inventory', asOrganization)
+
+  if (requiresOfficeSelection)
+    return (
+      <Stack gap="xl">
+        <PageHeader title="Puntaje de riesgo" />
+        <OfficeRiskSelectionNotice />
+      </Stack>
+    )
 
   return (
     <Stack gap="xl">
@@ -86,7 +105,7 @@ export default function RiskScorePage() {
         title="Puntaje de riesgo"
         description="Una vista simple de los problemas de seguridad detectados y de la información que todavía falta revisar."
         rightSection={
-          data ? (
+          data?.id ? (
             <CreateRelatedTaskButton
               reference={{ relationTo: 'risk-evaluations', value: String(data.id) }}
               asOrganization={asOrganization}
@@ -94,34 +113,34 @@ export default function RiskScorePage() {
           ) : undefined
         }
       />
+      <RiskScopeExplanation scope={query.data?.scope} />
+      {query.data?.scope === 'assigned_offices' &&
+        !data?.id &&
+        !query.isPending &&
+        !query.isError &&
+        tenant.data?.permissions.tasks.includes('create') && (
+          <Text size="sm" c="dimmed">
+            Selecciona una oficina para crear una tarea relacionada con su evaluación.
+          </Text>
+        )}
       {query.isError && <Alert color="red">No se pudo cargar la última evaluación.</Alert>}
-      {(query.data?.recalculation === 'pending' ||
-        query.data?.recalculation === 'processing' ||
-        query.data?.recalculation === 'outdated') && (
-        <Alert color="blue" title="Actualización pendiente">
-          Los cambios están guardados. El puntaje mostrado corresponde al cálculo anterior y se
-          actualizará cuando termine el recálculo.
-        </Alert>
-      )}
-      {query.data?.recalculation === 'failed' && (
-        <Alert color="orange" title="Actualización pendiente de recuperación">
-          El recálculo no pudo completarse. Los cambios están guardados, pero el puntaje puede estar
-          desactualizado.
+      {calculationMessage && (
+        <Alert color={calculationMessage.color} title={calculationMessage.title}>
+          {calculationMessage.message}
         </Alert>
       )}
       {query.isPending ? (
         <Skeleton height={260} />
       ) : !data ? (
-        <Alert color="blue">
-          Todavía no existe una evaluación. El cálculo se ejecutará después del próxima revisión o
-          ingreso de evidencia.
-        </Alert>
+        evaluationId && !query.isError ? (
+          <Alert color="gray">No se encontró esta evaluación histórica.</Alert>
+        ) : null
       ) : (
         <>
           {!scoreVisible(data.confidence) && (
             <Alert color="orange" title="Datos insuficientes">
-              Complete las revisiones pendientes, identifique dispositivos y mantenga activo el
-              agente para poder mostrar el puntaje.
+              Completa las revisiones pendientes, identifica dispositivos y mantén activo el agente
+              para poder mostrar el puntaje.
             </Alert>
           )}
           {scoreVisible(data.confidence) && !bandVisible(data.confidence) && (
@@ -130,47 +149,54 @@ export default function RiskScorePage() {
             </Alert>
           )}
           <Card withBorder radius="lg" p="xl">
-            <Group justify="space-between" align="center" wrap="wrap">
-              <Group>
-                <RingProgress
-                  size={144}
-                  thickness={14}
-                  // Without a band (preliminary result) the ring stays neutral instead of alarming.
-                  sections={[
-                    {
-                      value: data.score ?? 0,
-                      color: data.final_band ? RISK_BAND_COLOR[data.final_band] : 'gray',
-                    },
-                  ]}
-                  label={
-                    <Text ta="center" fw={800} fz={30}>
-                      {data.score === null ? '—' : `${Math.round(data.score)} %`}
+            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">
+              <Stack gap="md" style={{ minWidth: 0 }}>
+                <Text fw={700}>Riesgo actual</Text>
+                <Flex
+                  direction={{ base: 'column', sm: 'row' }}
+                  gap="lg"
+                  align={{ base: 'center', sm: 'flex-start' }}
+                >
+                  <RingProgress
+                    size={120}
+                    thickness={12}
+                    style={{ flexShrink: 0 }}
+                    // Without a band (preliminary result) the ring stays neutral instead of alarming.
+                    sections={[
+                      {
+                        value: data.score ?? 0,
+                        color: data.final_band ? RISK_BAND_COLOR[data.final_band] : 'gray',
+                      },
+                    ]}
+                    label={
+                      <Text ta="center" fw={800} fz={30}>
+                        {data.score === null ? '—' : `${Math.round(data.score)} %`}
+                      </Text>
+                    }
+                  />
+                  <Stack gap="xs" w="100%" style={{ flex: 1, minWidth: 0 }}>
+                    {data.final_band && <RiskBandBadge band={data.final_band} />}
+                    {data.final_band && data.base_band !== data.final_band && (
+                      <Text size="xs" c="dimmed">
+                        El nivel subió porque varios problemas importantes se concentran en pocos
+                        controles.
+                      </Text>
+                    )}
+                    {data.score !== null && !data.final_band && (
+                      <StatusBadge tone="neutral" label="Preliminar" />
+                    )}
+                    <Text size="sm">
+                      {data.score === null
+                        ? 'Todavía no hay información suficiente para calcularlo.'
+                        : `El ${Math.round(data.score)} % ${RISK_SCORE_MEANING}.`}
                     </Text>
-                  }
-                />
-                <Stack gap={4}>
-                  <Text fw={750}>Riesgo actual</Text>
-                  {data.final_band && <RiskBandBadge band={data.final_band} />}
-                  {data.final_band && data.base_band !== data.final_band && (
                     <Text size="xs" c="dimmed">
-                      El nivel subió porque varios problemas importantes se concentran en pocos
-                      controles.
+                      {RISK_SCORE_SCALE}. Cuanto más alto, mayor es la prioridad de mejora.
                     </Text>
-                  )}
-                  {data.score !== null && !data.final_band && (
-                    <StatusBadge tone="neutral" label="Preliminar" />
-                  )}
-                  <Text size="sm">
-                    {data.score === null
-                      ? 'Todavía no hay información suficiente para calcularlo.'
-                      : `El ${Math.round(data.score)} % ${RISK_SCORE_MEANING}.`}
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    {RISK_SCORE_SCALE}. Cuanto más alto, mayor es la prioridad de mejora.
-                  </Text>
-                </Stack>
-              </Group>
-              <Stack miw={280}>
+                  </Stack>
+                </Flex>
+              </Stack>
+              <Stack gap="md" style={{ minWidth: 0 }}>
                 <Group justify="space-between">
                   <Text fw={700}>Cobertura</Text>
                   <Text>{Math.round(data.coverage)}%</Text>
@@ -194,7 +220,7 @@ export default function RiskScorePage() {
                     ` · ${data.counts.excluded_assets} dispositivos fuera de la revisión`}
                 </Text>
               </Stack>
-            </Group>
+            </SimpleGrid>
           </Card>
           <RiskAlerts alerts={data.alerts} inventoryHref={inventoryHref} />
           <TopRiskAssets assets={data.top_assets} />

@@ -2,16 +2,21 @@ import { httpClient } from '@/lib/http-client'
 import type { RoleSlug } from '@/access/rbac/permissions'
 import { roleSlugLabel } from '@/lib/role-labels'
 import type { MyProfile } from '@/endpoints/myProfile'
-import type { MemberUpdate } from './schema'
+import type { MemberCreate, MemberUpdate, UserCredentials } from './schema'
 
 export type OrgMember = {
   id: string
   name: string
-  email: string
+  /** Only for people who manage members (access/rbac/permissions.ts::seesMemberEmails). */
+  email?: string
   role: RoleSlug
   office_ids: string[]
+  /** Names of the member's offices that the viewer can see. */
+  office_names?: string[]
   status: 'onboarding' | 'active'
   is_active: boolean
+  can_change_status?: boolean
+  can_edit_offices?: boolean
 }
 
 export function memberCoversOffice(member: OrgMember, officeId: string): boolean {
@@ -22,11 +27,21 @@ export function memberCoversOffice(member: OrgMember, officeId: string): boolean
   )
 }
 
-// Formato único para identificar a una persona en cualquier selector: nombre · rol · email.
+// Formato único para identificar a una persona en cualquier selector: nombre · rol · email, o
+// nombre · rol · oficina cuando el servidor no envía el email (ver seesMemberEmails).
 export function orgMemberOptionLabel(
-  member: Pick<OrgMember, 'name' | 'email'> & { role: string }
+  member: Pick<OrgMember, 'name' | 'email' | 'office_names'> & { role: string }
 ): string {
-  return `${member.name || member.email} · ${roleSlugLabel(member.role)}${member.name ? ` · ${member.email}` : ''}`
+  const [office, ...otherOffices] = member.office_names ?? []
+  const officeSummary =
+    office && (otherOffices.length ? `${office} +${otherOffices.length}` : office)
+  return [
+    member.name || member.email,
+    roleSlugLabel(member.role),
+    member.email ? member.name && member.email : officeSummary,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 }
 
 // Deliberadamente NO usa /api/users (Users.read es () => false hoy, ver el ponytail: en
@@ -48,6 +63,42 @@ export function updateOrgMember(userId: string, input: MemberUpdate, asOrganizat
   return httpClient.patch<{ ok: boolean }>(`/api/v1/org-members/${userId}`, input, {
     asOrganization,
   })
+}
+
+export function createOrgMember(input: MemberCreate, asOrganization?: string) {
+  return httpClient.post<{ id: string; name: string; email: string; role: RoleSlug }>(
+    '/api/v1/org-members',
+    input,
+    { asOrganization }
+  )
+}
+
+export function createPlatformOrgAdmin(organizationId: string, input: UserCredentials) {
+  return httpClient.post<{ id: string; name: string; email: string; role: 'org_admin' }>(
+    `/api/v1/platform-admin/organizations/${organizationId}/org-admins`,
+    input
+  )
+}
+
+/** Lo que pasa al desactivar a una persona (endpoints/orgMembers.ts). */
+export type MemberDeactivationImpact = {
+  owned_assets: Array<{
+    id: string
+    collection: 'assets' | 'non-network-assets'
+    name: string
+    office_id: string
+    office_name: string
+    office_active: boolean
+  }>
+  in_progress_tasks: number
+  assigned_tasks: number
+}
+
+export function getMemberDeactivationImpact(userId: string, asOrganization?: string) {
+  return httpClient.get<MemberDeactivationImpact>(
+    `/api/v1/org-members/${userId}/deactivation-impact`,
+    { asOrganization }
+  )
 }
 
 export function getMyProfile() {

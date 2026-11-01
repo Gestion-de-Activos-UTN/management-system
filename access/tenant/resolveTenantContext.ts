@@ -8,6 +8,8 @@ export class TenantResolutionError extends Error {}
 export interface TenantContext {
   userId: string
   role: RoleSlug | null
+  /** Role rank from the membership (1 = highest authority); absent for platform administrators. */
+  roleRank?: number | null
   organizationId: string | null
   officeIds: string[]
   selectedOfficeId: string | null
@@ -72,13 +74,14 @@ export async function resolveTenantContext(
 
   // Re-derivado en cada llamada, nunca cacheado entre requests: si la membership se
   // desactivó, esta query ya no la encuentra — el JWT sigue siendo válido pero deja de
-  // resolver contexto (doc 04 regla 5, ciclo de vida de membership desactivada).
+  // resolver contexto (doc 03, ciclo de vida de membership desactivada).
   const membership = await deps.findActiveMembershipByUserId(identity.externalId)
   if (!membership) return null
 
   return {
     userId: identity.externalId,
     role: membership.role.slug,
+    roleRank: membership.role.rank,
     organizationId: membership.organization,
     officeIds: membership.offices,
     selectedOfficeId: membership.offices[0] ?? null,

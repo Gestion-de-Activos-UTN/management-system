@@ -1,0 +1,5 @@
+tr:hover .deviceLink,
+.deviceLink:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

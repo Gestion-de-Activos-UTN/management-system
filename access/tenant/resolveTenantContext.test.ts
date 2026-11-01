@@ -92,6 +92,7 @@ test('user con membership activa -> contexto completo', async () => {
   assert.deepEqual(ctx, {
     userId: 'u1',
     role: 'org_viewer',
+    roleRank: 10,
     organizationId: 'org-1',
     officeIds: ['office-1', 'office-2'],
     selectedOfficeId: 'office-1',

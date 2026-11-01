@@ -1,7 +1,8 @@
 import { actorRelation, actorMatches } from '@/lib/actor-relation'
 import { withTaskLock } from './with-task-lock'
-import { withTransaction, lockAssetRow } from '@/domain/with-transaction'
-import crypto from 'crypto'
+import { withTransaction, lockAssetRow, transactionLock } from '@/domain/with-transaction'
+import crypto, { createHash } from 'crypto'
+import { canonicalJson } from '@/lib/canonical-json'
 import type { PayloadRequest } from 'payload'
 import type { Task } from '@/app/types/payload-types'
 import type { TenantContext } from '@/access/tenant/resolveTenantContext'
@@ -213,10 +214,14 @@ export async function assignmentOptionsScope(
   return { offices: offices.length ? offices : [null], reference }
 }
 
+// Una creación y su reintento idempotente responden con la misma forma: relaciones como IDs.
+const CREATED_TASK_DEPTH = 0
+
 async function createTasksInTransaction(
   req: PayloadRequest,
   ctx: TenantContext,
-  input: CreateTasksInput
+  input: CreateTasksInput,
+  operation?: { id: string; fingerprint: string }
 ): Promise<Task[]> {
   assertAction(ctx, 'create')
   const organizationId = ctx.organizationId!
@@ -270,6 +275,7 @@ async function createTasksInTransaction(
           collection: 'tasks',
           overrideAccess: true,
           req,
+          depth: CREATED_TASK_DEPTH,
           data: {
             title: input.title,
             description: input.description,
@@ -286,6 +292,8 @@ async function createTasksInTransaction(
             office: officeId,
             created_by: actorRelation(req, ctx.userId),
             creation_batch_id: batchId,
+            operation_id: operation?.id,
+            operation_fingerprint: operation?.fingerprint,
           },
         })
       )
@@ -306,13 +314,57 @@ export async function createTasks(
   input: CreateTasksInput
 ): Promise<Task[]> {
   return withTransaction(req.payload, req, async request => {
-    const reference = input.related_entity
+    const { operation_id: operationId, ...values } = input
+    let operation: { id: string; fingerprint: string } | undefined
+    if (operationId) {
+      assertAction(ctx, 'create')
+      // A retry waits for the attempt holding its key and returns what that attempt created.
+      // The key never deduplicates by content: a new form sends a new key.
+      await transactionLock(request, `task-create:${ctx.organizationId}:${operationId}`)
+      operation = {
+        id: operationId,
+        fingerprint: createHash('sha256').update(canonicalJson(values)).digest('hex'),
+      }
+      const previous = await request.payload.find({
+        collection: 'tasks',
+        where: {
+          and: [
+            { organization: { equals: ctx.organizationId } },
+            { operation_id: { equals: operationId } },
+          ],
+        },
+        overrideAccess: true,
+        showHiddenFields: true,
+        req: request,
+        depth: CREATED_TASK_DEPTH,
+        pagination: false,
+        sort: 'createdAt',
+      })
+      if (previous.docs.length) {
+        if (
+          previous.docs.some(
+            task =>
+              task.operation_fingerprint !== operation!.fingerprint ||
+              !actorMatches(task.created_by, ctx)
+          )
+        )
+          throw new TaskDomainError(
+            'task_operation_conflict',
+            409,
+            'Esta creación ya se guardó con otros datos.'
+          )
+        return previous.docs.map(
+          ({ operation_id: _id, operation_fingerprint: _fingerprint, ...task }) => task as Task
+        )
+      }
+    }
+    const reference = values.related_entity
     if (
       reference &&
       (reference.relationTo === 'assets' || reference.relationTo === 'non-network-assets')
     )
       await lockAssetRow(request, reference.relationTo, reference.value)
-    return createTasksInTransaction(request, ctx, input)
+    return createTasksInTransaction(request, ctx, values, operation)
   })
 }
 
@@ -335,6 +387,14 @@ async function editTaskLocked(
     throw new TaskDomainError('invalid_dates', 400, 'El vencimiento precede al inicio.')
   }
   const replanned = task.status === 'in_progress' && Date.parse(startAt) > Date.now()
+  // El formulario envía todos los campos: sólo un cambio real deja el evento "Modificada".
+  const changed = Object.entries(input).some(([field, next]) => {
+    if (next === undefined) return false
+    const saved = task[field as keyof EditTaskInput]
+    return field === 'start_at' || field === 'due_at'
+      ? (next ? Date.parse(next as string) : null) !== (saved ? Date.parse(saved as string) : null)
+      : (next ?? '') !== (saved ?? '')
+  })
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {task edit, dates, priority}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   // NOTIFY: this event should trigger a Notification Bell entry for {current claimant when task details change}
@@ -347,25 +407,164 @@ async function editTaskLocked(
     data: {
       ...input,
       ...(replanned ? { status: 'pending' as const, claimed_by: null, claimed_at: null } : {}),
+      // Sólo quién y cuándo: el detalle de los campos queda para el AuditLog.
+      ...(changed || replanned
+        ? {
+            edit_history: [
+              ...(Array.isArray(task.edit_history) ? (task.edit_history as EditEvent[]) : []),
+              {
+                at: new Date().toISOString(),
+                by: actorRelation(req, ctx.userId),
+                ...(replanned ? { replanned: true as const } : {}),
+              },
+            ],
+          }
+        : {}),
     },
   })
 }
 
-export type ClaimEvent = {
-  action: 'claimed' | 'released'
+/** Una edición guardada; `replanned`: la tarea en curso volvió a pendiente y perdió su reclamo. */
+export type EditEvent = {
   at: string
   by: ReturnType<typeof actorRelation>
+  replanned?: true
+}
+
+/** Por qué el sistema liberó una tarea que nadie soltó a mano. */
+export type ClaimReleaseReason = 'member_deactivated' | 'office_access_removed' | 'task_reassigned'
+
+export type ClaimEvent = {
+  action: 'claimed' | 'released' | 'reassigned'
+  at: string
+  by: ReturnType<typeof actorRelation> | null
+  reason?: ClaimReleaseReason
 }
 
 const withClaimEvent = (
   task: Task,
   action: ClaimEvent['action'],
   by: ClaimEvent['by'],
-  at: string
+  at: string,
+  reason?: ClaimReleaseReason
 ): ClaimEvent[] => [
   ...(Array.isArray(task.claim_history) ? (task.claim_history as ClaimEvent[]) : []),
-  { action, at, by },
+  { action, at, by, ...(reason ? { reason } : {}) },
 ]
+
+const systemActor = (req: PayloadRequest) =>
+  req.user ? actorRelation(req, String(req.user.id)) : null
+
+/**
+ * Devuelve a pendientes las tareas en curso que tomó una persona que ya no puede completarlas
+ * (desactivada, o sin acceso a la oficina de la tarea). Sólo quien reclamó puede liberar a mano
+ * (releaseTaskLocked); sin esto la tarea quedaría trabada en curso.
+ */
+export async function releaseClaimedTasks(
+  req: PayloadRequest,
+  organizationId: string,
+  userId: string,
+  offices: 'all' | string[],
+  reason: ClaimReleaseReason
+): Promise<void> {
+  if (Array.isArray(offices) && !offices.length) return
+  const claimed = await req.payload.find({
+    collection: 'tasks',
+    overrideAccess: true,
+    req,
+    depth: 0,
+    pagination: false,
+    where: {
+      and: [
+        { organization: { equals: organizationId } },
+        { status: { equals: 'in_progress' } },
+        { 'claimed_by.relationTo': { equals: 'users' } },
+        { 'claimed_by.value': { equals: userId } },
+        ...(offices === 'all' ? [] : [{ office: { in: offices } }]),
+      ],
+    },
+  })
+  for (const candidate of claimed.docs.sort((a, b) => String(a.id).localeCompare(String(b.id)))) {
+    await withTaskLock(req, String(candidate.id), async () => {
+      const task = await loadTask(req, String(candidate.id))
+      if (task.status !== 'in_progress' || relationId(task.claimed_by) !== userId) return
+      // AUDIT: this action must emit an AuditLogs entry (task release by system, reason {member_deactivated|office_access_removed}, chain_hash over {task, previous claimant, reason}, previous hash for this organization_id)
+      // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+      // NOTIFY: this event should trigger a Notification Bell entry for {task managers and eligible audience}
+      // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
+      await req.payload.update({
+        collection: 'tasks',
+        id: task.id,
+        overrideAccess: true,
+        req,
+        data: {
+          status: 'pending',
+          claimed_by: null,
+          claimed_at: null,
+          claim_history: withClaimEvent(
+            task,
+            'released',
+            systemActor(req),
+            new Date().toISOString(),
+            reason
+          ),
+        },
+      })
+    })
+  }
+}
+
+/**
+ * Cancela en bloque las tareas abiertas (pendientes o en curso) que dejaron de tener sentido
+ * porque su oficina u organización se desactivó. Mismo patrón que reconcileAssetTasks: escritura
+ * directa bajo withTaskLock; cancelTaskLocked sólo cancela en curso y exige RBAC del actor.
+ */
+export async function cancelOpenTasks(
+  req: PayloadRequest,
+  scope: { organizationId: string; officeId?: string },
+  reason: string
+): Promise<number> {
+  const open = await req.payload.find({
+    collection: 'tasks',
+    overrideAccess: true,
+    req,
+    depth: 0,
+    pagination: false,
+    where: {
+      and: [
+        { organization: { equals: scope.organizationId } },
+        { status: { in: ['pending', 'in_progress'] } },
+        ...(scope.officeId ? [{ office: { equals: scope.officeId } }] : []),
+      ],
+    },
+  })
+  let cancelled = 0
+  for (const candidate of open.docs.sort((a, b) => String(a.id).localeCompare(String(b.id)))) {
+    await withTaskLock(req, String(candidate.id), async () => {
+      const task = await loadTask(req, String(candidate.id))
+      if (task.status === 'completed' || task.status === 'cancelled') return
+      // AUDIT: this action must emit an AuditLogs entry (task.cancel by system, chain_hash over {task, cancellation_reason}, previous hash for this organization_id)
+      // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+      // NOTIFY: this event should trigger a Notification Bell entry for {claimant and assigned audience of the task}
+      // TODO(notification-feature): no persistent notification entity exists yet — do not build one speculatively, just mark the trigger point
+      await req.payload.update({
+        collection: 'tasks',
+        id: task.id,
+        overrideAccess: true,
+        req,
+        data: {
+          status: 'cancelled',
+          cancelled_at: new Date().toISOString(),
+          cancelled_by: systemActor(req),
+          cancellation_reason: reason,
+          requires_reassignment: false,
+        },
+      })
+      cancelled += 1
+    })
+  }
+  return cancelled
+}
 
 async function claimTaskLocked(req: PayloadRequest, ctx: TenantContext, id: string): Promise<Task> {
   assertAction(ctx, 'claim')
@@ -412,7 +611,8 @@ async function releaseTaskLocked(
   assertAction(ctx, 'release')
   const task = await loadTask(req, id)
   assertTaskScope(ctx, task)
-  if (task.status !== 'in_progress' || !actorMatches(task.claimed_by, ctx)) {
+  assertTaskInProgress(task)
+  if (!actorMatches(task.claimed_by, ctx)) {
     throw new TaskDomainError('not_claimant', 403, 'Sólo quien reclamó la tarea puede liberarla.')
   }
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {task release, claimant}, previous hash for this organization_id)
@@ -459,6 +659,12 @@ async function reassignTaskLocked(
     assignment,
     reference
   )
+  const now = new Date().toISOString()
+  const actor = actorRelation(req, ctx.userId)
+  const releasedTask =
+    task.status === 'in_progress' && task.claimed_by
+      ? { ...task, claim_history: withClaimEvent(task, 'released', actor, now, 'task_reassigned') }
+      : task
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {task reassignment}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   // NOTIFY: this event should trigger a Notification Bell entry for {previous claimant and new eligible audience}
@@ -476,8 +682,27 @@ async function reassignTaskLocked(
       status: 'pending',
       claimed_by: null,
       claimed_at: null,
+      claim_history: withClaimEvent(releasedTask, 'reassigned', actor, now),
     },
   })
+}
+
+function assertTaskInProgress(task: Task): void {
+  if (task.status === 'completed') {
+    throw new TaskDomainError(
+      task.completion_reason ? 'task_completed_by_admin' : 'task_already_completed',
+      409,
+      task.completion_reason
+        ? 'La tarea ya fue completada por un administrador.'
+        : 'La tarea ya fue completada.'
+    )
+  }
+  if (task.status === 'cancelled') {
+    throw new TaskDomainError('task_cancelled', 409, 'La tarea fue cancelada.')
+  }
+  if (task.status !== 'in_progress') {
+    throw new TaskDomainError('task_state_changed', 409, 'La tarea ya no está en curso.')
+  }
 }
 
 async function completeTaskLocked(
@@ -489,7 +714,8 @@ async function completeTaskLocked(
   const task = await loadTask(req, id)
   assertTaskScope(ctx, task)
   await assertReferenceReadable(req, ctx, task)
-  if (task.status !== 'in_progress' || !actorMatches(task.claimed_by, ctx)) {
+  assertTaskInProgress(task)
+  if (!actorMatches(task.claimed_by, ctx)) {
     throw new TaskDomainError(
       'not_claimant',
       403,
@@ -523,7 +749,8 @@ async function forceCompleteTaskLocked(
   const task = await loadTask(req, id)
   assertTaskScope(ctx, task)
   await assertReferenceReadable(req, ctx, task)
-  if (task.status !== 'in_progress' || !task.claimed_by || actorMatches(task.claimed_by, ctx)) {
+  assertTaskInProgress(task)
+  if (!task.claimed_by || actorMatches(task.claimed_by, ctx)) {
     throw new TaskDomainError(
       'task_not_force_completable',
       409,
@@ -559,8 +786,10 @@ async function cancelTaskLocked(
   const task = await loadTask(req, id)
   assertTaskScope(ctx, task)
   await assertReferenceReadable(req, ctx, task)
-  if (task.status !== 'in_progress') {
-    throw new TaskDomainError('task_not_in_progress', 409, 'Sólo se cancelan tareas en progreso.')
+  // Pendiente o en curso: cancelar conserva la tarea y su motivo. Eliminar (sin rastro) queda
+  // para corregir una tarea pendiente cargada por error.
+  if (task.status !== 'pending' && task.status !== 'in_progress') {
+    throw new TaskDomainError('task_terminal', 409, 'La tarea es terminal y no puede modificarse.')
   }
   const now = new Date().toISOString()
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {task cancel, reason}, previous hash for this organization_id)
@@ -630,7 +859,7 @@ async function deletePendingTaskLocked(
  * `actor_labels.claim_events`.
  */
 export function taskWithDerivedState(task: Task) {
-  const { claim_history: _claimHistory, ...publicTask } = task
+  const { claim_history: _claimHistory, edit_history: _editHistory, ...publicTask } = task
   return { ...publicTask, effective_status: effectiveTaskStatus(task) }
 }
 
@@ -669,7 +898,7 @@ export async function availableTaskActions(
   ) {
     actions.push('force_complete')
   }
-  if (task.status === 'in_progress' && managerCan('cancel')) actions.push('cancel')
+  if (!terminal && managerCan('cancel')) actions.push('cancel')
   if (terminal && !task.archived_at && managerCan('archive')) actions.push('archive')
   if (task.status === 'pending' && !task.claimed_at && managerCan('delete')) actions.push('delete')
   return actions

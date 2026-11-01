@@ -1,15 +1,30 @@
 'use client'
 
 import { useState } from 'react'
-import { Alert, Button, Modal, Stack, Switch, Text } from '@mantine/core'
+import {
+  Alert,
+  Box,
+  Button,
+  Group,
+  Modal,
+  Paper,
+  Select,
+  Skeleton,
+  Stack,
+  Switch,
+  Text,
+  TextInput,
+  UnstyledButton,
+} from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
-import { Plus } from 'lucide-react'
-import type { ColumnDef } from '@tanstack/react-table'
-import { DataTable } from '@/components/ui/DataTable'
-import { DateTimeCell } from '@/components/ui/DateTimeCell'
+import { Plus, Search } from 'lucide-react'
+import { FilterBar } from '@/components/ui/FilterBar'
+import { MultiFilterSelect } from '@/components/ui/MultiFilterSelect'
+import { matchesSearch } from '@/lib/search-text'
+import { OneLineText } from '@/components/ui/OneLineText'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import { formatDate } from '@/lib/format-date'
+import { formatDate, formatDateTime } from '@/lib/format-date'
 import { roleSlugLabel } from '@/lib/role-labels'
 import { useAdminPortalMessages, useSetPortalMessageActive } from '../hooks/use-portal-messages'
 import type { PortalMessageInput } from '../schema'
@@ -25,6 +40,7 @@ import {
 import { PortalMessageForm } from './PortalMessageForm'
 import { RowActions } from './RowActions'
 import { PortalMessageDialog } from './PortalMessageDialog'
+import classes from './PortalMessagesList.module.css'
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
 
@@ -74,6 +90,36 @@ export function PortalMessagesAdminPage() {
   const [previewing, setPreviewing] = useState<PortalMessageRecord | null>(null)
   const query = useAdminPortalMessages([])
   const setActive = useSetPortalMessageActive()
+  const [order, setOrder] = useState('recent')
+  const [search, setSearch] = useState('')
+  const [types, setTypes] = useState<string[]>([])
+  const [statuses, setStatuses] = useState<string[]>([])
+  const allMessages = query.data?.docs ?? []
+  const filtersActive = Boolean(search.trim() || types.length || statuses.length)
+  const clearFilters = () => {
+    setSearch('')
+    setTypes([])
+    setStatuses([])
+  }
+  const messages = allMessages
+    .filter(
+      message =>
+        matchesSearch([message.title, message.description], search) &&
+        (!types.length || types.includes(message.message_type)) &&
+        (!statuses.length || statuses.includes(portalMessageStatus(message)))
+    )
+    .sort((left, right) => {
+      if (order === 'title')
+        return left.title.localeCompare(right.title, 'es', { sensitivity: 'base' })
+      if (order === 'expires')
+        return (
+          (left.expires_at ? Date.parse(left.expires_at) : Infinity) -
+          (right.expires_at ? Date.parse(right.expires_at) : Infinity)
+        )
+      const difference =
+        (Date.parse(left.createdAt ?? '') || 0) - (Date.parse(right.createdAt ?? '') || 0)
+      return order === 'oldest' ? difference : -difference
+    })
   const organizations = new Map(
     (query.data?.organizations ?? []).map(organization => [organization.id, organization.name])
   )
@@ -91,101 +137,6 @@ export function PortalMessagesAdminPage() {
     setActive.mutate({ input, id: message.id })
   }
 
-  const columns: ColumnDef<PortalMessageRecord, unknown>[] = [
-    {
-      accessorKey: 'title',
-      header: 'Título',
-      cell: ({ row }) => (
-        <Stack gap={2}>
-          <Text fw={600} size="sm" lineClamp={1}>
-            {row.original.title}
-          </Text>
-          <Text c="dimmed" size="xs" lineClamp={1}>
-            {row.original.description}
-          </Text>
-        </Stack>
-      ),
-    },
-    {
-      accessorKey: 'message_type',
-      header: 'Tipo',
-      cell: ({ row }) => (
-        <StatusBadge
-          tone={PORTAL_MESSAGE_TYPE_TONES[row.original.message_type]}
-          label={PORTAL_MESSAGE_TYPE_LABELS[row.original.message_type]}
-        />
-      ),
-    },
-    {
-      id: 'audience',
-      header: 'Audiencia',
-      cell: ({ row }) => {
-        const summary = audienceSummary(row.original.audience, id => organizations.get(id))
-        return (
-          <Stack gap={0}>
-            <Text size="sm" lineClamp={1}>
-              {summary.primary}
-            </Text>
-            <Text size="xs" c="dimmed" lineClamp={1}>
-              {summary.secondary}
-            </Text>
-          </Stack>
-        )
-      },
-    },
-    {
-      id: 'status',
-      header: 'Estado',
-      cell: ({ row }) => {
-        const status = portalMessageStatus(row.original)
-        return (
-          <StatusBadge
-            tone={PORTAL_MESSAGE_STATUS_TONES[status]}
-            label={PORTAL_MESSAGE_STATUS_LABELS[status]}
-          />
-        )
-      },
-    },
-    {
-      accessorKey: 'is_active',
-      header: 'Activo',
-      cell: ({ row }) => (
-        <Switch
-          aria-label={`${row.original.is_active ? 'Desactivar' : 'Activar'} ${row.original.title}`}
-          checked={row.original.is_active}
-          disabled={setActive.isPending && setActive.variables?.id === row.original.id}
-          onChange={() => toggleActive(row.original)}
-        />
-      ),
-    },
-    {
-      accessorKey: 'expires_at',
-      header: 'Expira',
-      cell: ({ getValue }) => {
-        const value = getValue<string | null | undefined>()
-        return (
-          <Text size="sm" c={value ? undefined : 'dimmed'}>
-            {value ? formatDate(value) : 'Sin fecha'}
-          </Text>
-        )
-      },
-    },
-    {
-      accessorKey: 'createdAt',
-      header: 'Creado',
-      cell: ({ getValue }) => <DateTimeCell value={getValue<string | undefined>()} />,
-    },
-    {
-      id: 'actions',
-      header: 'Acciones',
-      enableSorting: false,
-      meta: { align: 'center' },
-      cell: ({ row }) => (
-        <RowActions message={row.original} onPreview={setPreviewing} onEdit={startEdit} />
-      ),
-    },
-  ]
-
   const closePreview = () => setPreviewing(null)
 
   return (
@@ -199,14 +150,158 @@ export function PortalMessagesAdminPage() {
           </Button>
         }
       />
+      <FilterBar>
+        <TextInput
+          placeholder="Buscar mensaje…"
+          aria-label="Buscar por título o descripción"
+          leftSection={<Search size={16} strokeWidth={1.5} />}
+          value={search}
+          onChange={event => setSearch(event.currentTarget.value)}
+        />
+        <MultiFilterSelect
+          ariaLabel="Tipo de mensaje"
+          allLabel="Todos los tipos"
+          data={Object.entries(PORTAL_MESSAGE_TYPE_LABELS).map(([value, label]) => ({
+            value,
+            label,
+          }))}
+          value={types}
+          onChange={setTypes}
+        />
+        <MultiFilterSelect
+          ariaLabel="Estado del mensaje"
+          allLabel="Todos los estados"
+          data={Object.entries(PORTAL_MESSAGE_STATUS_LABELS).map(([value, label]) => ({
+            value,
+            label,
+          }))}
+          value={statuses}
+          onChange={setStatuses}
+        />
+        <Select
+          aria-label="Ordenar mensajes"
+          data={[
+            { value: 'recent', label: 'Más recientes' },
+            { value: 'oldest', label: 'Más antiguos' },
+            { value: 'title', label: 'Título: A–Z' },
+            { value: 'expires', label: 'Próximos a vencer' },
+          ]}
+          value={order}
+          onChange={value => setOrder(value ?? 'recent')}
+          allowDeselect={false}
+        />
+      </FilterBar>
       {query.isError && <Alert color="red">No se pudieron cargar los mensajes.</Alert>}
-      <DataTable
-        columns={columns}
-        data={query.data?.docs ?? []}
-        isLoading={query.isPending}
-        emptyLabel="Todavía no hay mensajes."
-        minWidth={1000}
-      />
+      {query.isPending ? (
+        <Stack gap="md" aria-label="Cargando mensajes">
+          {[0, 1, 2].map(key => (
+            <Skeleton key={key} height={120} radius="lg" />
+          ))}
+        </Stack>
+      ) : !query.isError && !messages.length ? (
+        <Paper withBorder radius="lg" p="xl">
+          <Stack gap="sm" align="flex-start">
+            <Text c="dimmed">
+              {allMessages.length
+                ? 'Ningún mensaje coincide con la búsqueda y los filtros.'
+                : 'Todavía no hay mensajes.'}
+            </Text>
+            {filtersActive && (
+              <Button variant="subtle" onClick={clearFilters}>
+                Limpiar filtros
+              </Button>
+            )}
+          </Stack>
+        </Paper>
+      ) : messages.length > 0 ? (
+        <Stack gap="sm">
+          <Group justify="space-between" gap="sm">
+            <Text size="sm" c="dimmed">
+              {filtersActive
+                ? `${messages.length} de ${plural(allMessages.length, 'mensaje', 'mensajes')}`
+                : plural(messages.length, 'mensaje', 'mensajes')}
+            </Text>
+            {filtersActive && (
+              <Button variant="subtle" size="compact-sm" onClick={clearFilters}>
+                Limpiar filtros
+              </Button>
+            )}
+          </Group>
+          <Paper
+            component="ul"
+            withBorder
+            radius="lg"
+            className={classes.adminList}
+            aria-label="Mensajes del portal"
+          >
+            {messages.map(message => {
+              const summary = audienceSummary(message.audience, id => organizations.get(id))
+              const status = portalMessageStatus(message)
+              return (
+                <Box component="li" key={message.id} className={classes.adminItem}>
+                  <Stack gap="xs" className={classes.content}>
+                    <Group gap={6}>
+                      <StatusBadge
+                        size="xs"
+                        tone={PORTAL_MESSAGE_TYPE_TONES[message.message_type]}
+                        label={PORTAL_MESSAGE_TYPE_LABELS[message.message_type]}
+                      />
+                      <StatusBadge
+                        size="xs"
+                        tone={PORTAL_MESSAGE_STATUS_TONES[status]}
+                        label={PORTAL_MESSAGE_STATUS_LABELS[status]}
+                      />
+                    </Group>
+                    <UnstyledButton
+                      className={classes.previewTitle}
+                      onClick={() => setPreviewing(message)}
+                      aria-label={`Vista previa de ${message.title}`}
+                    >
+                      <Text fw={600} size="sm">
+                        {message.title}
+                      </Text>
+                    </UnstyledButton>
+                    <OneLineText c="dimmed" size="sm">
+                      {message.description}
+                    </OneLineText>
+                    {message.createdAt && (
+                      <Text size="xs" c="dimmed">
+                        Creado {formatDateTime(message.createdAt)}
+                      </Text>
+                    )}
+                  </Stack>
+                  <Stack gap={2} className={classes.audience}>
+                    <Text size="xs" c="dimmed">
+                      Destinatarios
+                    </Text>
+                    <Text size="sm">{summary.primary}</Text>
+                    <Text size="xs" c="dimmed">
+                      {summary.secondary}
+                    </Text>
+                  </Stack>
+                  <Stack gap="sm" className={classes.delivery}>
+                    <Text size="xs" c="dimmed">
+                      {message.expires_at
+                        ? `Vence ${formatDate(message.expires_at)}`
+                        : 'Sin vencimiento'}
+                    </Text>
+                    <Switch
+                      label="Activo"
+                      aria-label={`${message.is_active ? 'Desactivar' : 'Activar'} ${message.title}`}
+                      checked={message.is_active}
+                      disabled={setActive.isPending && setActive.variables?.id === message.id}
+                      onChange={() => toggleActive(message)}
+                    />
+                  </Stack>
+                  <Box className={classes.actions}>
+                    <RowActions message={message} onPreview={setPreviewing} onEdit={startEdit} />
+                  </Box>
+                </Box>
+              )
+            })}
+          </Paper>
+        </Stack>
+      ) : null}
       <Modal
         opened={opened}
         onClose={close}

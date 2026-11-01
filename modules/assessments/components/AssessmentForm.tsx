@@ -1,21 +1,11 @@
 'use client'
 
+import { ModalLayout } from '@/components/ui/ModalLayout'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Controller, useForm } from 'react-hook-form'
-import {
-  Alert,
-  Box,
-  Button,
-  Card,
-  Divider,
-  Group,
-  Modal,
-  Radio,
-  Stack,
-  Text,
-  Textarea,
-} from '@mantine/core'
+import { Alert, Box, Button, Card, Divider, Group, Modal, Radio, Stack, Text } from '@mantine/core'
+import { CharacterCountTextarea } from '@/components/ui/CharacterCountTextarea'
 import { ArrowLeft, Save } from 'lucide-react'
 import type { AssessmentAnswer, AssessmentInstance } from '@/app/types/payload-types'
 import { RISK_QUESTIONS_V2, type RiskQuestionV2 } from '@/domain/risk/catalog-v2'
@@ -187,7 +177,7 @@ export function AssessmentForm(props: {
                     }
                     control={control}
                     render={({ field, fieldState }) => (
-                      <Textarea
+                      <CharacterCountTextarea
                         {...field}
                         value={field.value ?? ''}
                         label="¿Por qué no aplica?"
@@ -263,7 +253,26 @@ export function AssessmentForm(props: {
         title={props.confirmationTitle ?? '¿Completar esta revisión?'}
         centered
       >
-        <Stack gap="md">
+        <ModalLayout
+          gap="md"
+          footer={
+            <Group justify="flex-end">
+              <Button variant="default" onClick={() => setCompletionCommand(null)}>
+                Seguir revisando
+              </Button>
+              <Button
+                color="pine"
+                loading={props.completing}
+                disabled={Boolean(completionCounts?.unanswered)}
+                onClick={() => {
+                  if (completionCommand) props.onComplete(completionCommand)
+                }}
+              >
+                Completar revisión
+              </Button>
+            </Group>
+          }
+        >
           <Group gap="xs">
             <StatusBadge
               tone={completionCounts?.unanswered ? 'warning' : 'success'}
@@ -282,22 +291,7 @@ export function AssessmentForm(props: {
               ? ' Responde todas las preguntas antes de completar la revisión.'
               : ''}
           </Text>
-          <Group justify="flex-end">
-            <Button variant="default" onClick={() => setCompletionCommand(null)}>
-              Seguir revisando
-            </Button>
-            <Button
-              color="pine"
-              loading={props.completing}
-              disabled={Boolean(completionCounts?.unanswered)}
-              onClick={() => {
-                if (completionCommand) props.onComplete(completionCommand)
-              }}
-            >
-              Completar revisión
-            </Button>
-          </Group>
-        </Stack>
+        </ModalLayout>
       </Modal>
     </Stack>
   )

@@ -11,6 +11,8 @@ export function assertAssessmentTarget(
   assetId: string | null,
   manualAssetId: string | null = null
 ): void {
+  const scopeLabel =
+    scope === 'organization' ? 'organización' : scope === 'office' ? 'oficina' : 'activo'
   const valid =
     (scope === 'organization' && !officeId && !assetId && !manualAssetId) ||
     (scope === 'office' && Boolean(officeId) && !assetId && !manualAssetId) ||
@@ -18,7 +20,7 @@ export function assertAssessmentTarget(
 
   if (!valid) {
     throw new APIError(
-      `Assessment target is incompatible with scope ${scope}`,
+      `El alcance de la revisión no es compatible con el destino «${scopeLabel}».`,
       400,
       undefined,
       true
@@ -28,7 +30,9 @@ export function assertAssessmentTarget(
 
 export function assertAssessmentMutable(status: AssessmentStatus): void {
   if (CLOSED_ASSESSMENT_STATUSES.includes(status as never)) {
-    throw new APIError(`Assessment in status ${status} is immutable`, 409, undefined, true)
+    const statusLabel =
+      status === 'completed' ? 'completada' : status === 'expired' ? 'vencida' : 'reemplazada'
+    throw new APIError(`La revisión ${statusLabel} no se puede modificar.`, 409, undefined, true)
   }
 }
 

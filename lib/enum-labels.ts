@@ -1,8 +1,7 @@
 import { MANUAL_ASSET_CATEGORY_OPTIONS } from '@/domain/assets/asset-types'
 
-// Los valores persistidos en el backend ya están en inglés (mismo contrato que
-// documentation/05-inventory-architecture.md, traducido en su totalidad — ver
-// collections/Assets, collections/NonNetworkAssets). Estos mapas value->label existen igual
+// Los valores persistidos en el backend están en inglés (ver collections/Assets,
+// collections/NonNetworkAssets). Estos mapas value->label existen igual
 // para no hardcodear la lista de opciones de cada <Select> en cuatro lugares distintos
 // (SYSTEM_PROMPT.md #3, DRY), y para poder mostrar un label con mayúscula/formato propio
 // (ej. "Antivirus / EDR") sin acoplar la UI al valor crudo del enum.
@@ -17,6 +16,9 @@ export const CRITICALITY_OPTIONS = Object.entries(CRITICALITY_LABEL).map(([value
   value,
   label,
 }))
+
+/** Activo manual sin responsable: sólo lo deja así el sistema (persona desactivada, oficina desactivada). */
+export const NO_OWNER_LABEL = 'Sin responsable'
 
 export const ASSET_STATUS_LABEL: Record<string, string> = {
   active: 'Activo',
@@ -48,6 +50,20 @@ export const ASSET_CATEGORY_OPTIONS = Object.entries(ASSET_CATEGORY_LABEL).map(
     label,
   })
 )
+
+export const CLOUD_ASSET_KIND_OPTIONS = [
+  { value: 'productivity_identity', label: 'Productividad e identidad' },
+  { value: 'infrastructure', label: 'Infraestructura' },
+  { value: 'domain_dns', label: 'Dominio y DNS' },
+] as const
+
+export const REPOSITORY_KIND_OPTIONS = [
+  { value: 'source_code', label: 'Código fuente' },
+  { value: 'secrets_vault', label: 'Bóveda de secretos' },
+  { value: 'corporate_email', label: 'Correo corporativo' },
+  { value: 'database', label: 'Base de datos' },
+  { value: 'other_digital', label: 'Otro repositorio digital' },
+] as const
 
 export const REVIEW_INTERVAL_LABEL: Record<string, string> = {
   never: 'Nunca vence',

@@ -203,6 +203,7 @@ export interface Organization {
   id: string;
   name: string;
   is_active?: boolean | null;
+  deactivated_at?: string | null;
   settings?: (string | null) | OrganizationSetting;
   subscription?: (string | null) | Subscription;
   updatedAt: string;
@@ -216,6 +217,7 @@ export interface OrganizationSetting {
   id: string;
   organization: string | Organization;
   industry: string;
+  industry_details?: string | null;
   assessment_policy_key: 'essential' | 'reinforced';
   assessment_policy_version: number;
   assessment_policy_selected_at: string;
@@ -286,6 +288,7 @@ export interface OrganizationMembership {
   role: string | Role;
   status?: ('onboarding' | 'active') | null;
   is_active?: boolean | null;
+  deactivated_at?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -408,9 +411,9 @@ export interface Agent {
   is_active?: boolean | null;
   revoked_at?: string | null;
   /**
-   * Motivo de la revocación: manual (acción humana), auto_lockout_abuse u office_deactivated (se desactivó su oficina).
+   * Motivo de la revocación: manual (acción humana), auto_lockout_abuse, office_deactivated (se desactivó su oficina) u organization_deactivated (se desactivó su organización).
    */
-  revocation_reason?: ('manual' | 'auto_lockout_abuse' | 'office_deactivated') | null;
+  revocation_reason?: ('manual' | 'auto_lockout_abuse' | 'office_deactivated' | 'organization_deactivated') | null;
   failedAttempts?: number | null;
   lockedUntil?: string | null;
   lockoutCount?: number | null;
@@ -648,8 +651,23 @@ export interface NonNetworkAsset {
     | 'information_repository'
     | 'physical_record'
     | 'other';
+  product_details?: {
+    software_vendor?: string | null;
+    software_product?: string | null;
+    software_version?: string | null;
+  };
+  cloud_details?: {
+    kind?: ('productivity_identity' | 'infrastructure' | 'domain_dns') | null;
+    vendor?: string | null;
+  };
+  repository_details?: {
+    kind?: ('source_code' | 'secrets_vault' | 'corporate_email' | 'database' | 'other_digital') | null;
+  };
+  notes?: string | null;
+  software_part?: ('a' | 'o') | null;
+  cpe_candidate?: string | null;
   criticality: 'low' | 'medium' | 'high' | 'critical';
-  owner: string | User;
+  owner?: (string | null) | User;
   location?: string | null;
   assessment_scope?: ('included' | 'excluded') | null;
   assessment_exclusion_reason?:
@@ -895,7 +913,9 @@ export interface AssessmentInstance {
     | 'office_changed'
     | 'policy_changed'
     | 'answer_expired'
-    | 'manual_review';
+    | 'manual_review'
+    | 'office_reactivated'
+    | 'organization_reactivated';
   opened_at: string;
   due_at: string;
   completed_at?: string | null;
@@ -1058,6 +1078,15 @@ export interface Task {
     | number
     | boolean
     | null;
+  edit_history?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   seed_key?: string | null;
   title: string;
   description?: string | null;
@@ -1162,6 +1191,8 @@ export interface Task {
         value: string | Admin;
       };
   creation_batch_id?: string | null;
+  operation_id?: string | null;
+  operation_fingerprint?: string | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -1586,6 +1617,7 @@ export interface PayloadMigration {
 export interface OrganizationsSelect<T extends boolean = true> {
   name?: T;
   is_active?: T;
+  deactivated_at?: T;
   settings?: T;
   subscription?: T;
   updatedAt?: T;
@@ -1790,6 +1822,27 @@ export interface NonNetworkAssetsSelect<T extends boolean = true> {
   seed_key?: T;
   alias?: T;
   asset_category?: T;
+  product_details?:
+    | T
+    | {
+        software_vendor?: T;
+        software_product?: T;
+        software_version?: T;
+      };
+  cloud_details?:
+    | T
+    | {
+        kind?: T;
+        vendor?: T;
+      };
+  repository_details?:
+    | T
+    | {
+        kind?: T;
+      };
+  notes?: T;
+  software_part?: T;
+  cpe_candidate?: T;
   criticality?: T;
   owner?: T;
   location?: T;
@@ -1860,6 +1913,7 @@ export interface RolesSelect<T extends boolean = true> {
 export interface OrganizationSettingsSelect<T extends boolean = true> {
   organization?: T;
   industry?: T;
+  industry_details?: T;
   assessment_policy_key?: T;
   assessment_policy_version?: T;
   assessment_policy_selected_at?: T;
@@ -1948,6 +2002,7 @@ export interface OrganizationMembershipsSelect<T extends boolean = true> {
   role?: T;
   status?: T;
   is_active?: T;
+  deactivated_at?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -2125,6 +2180,7 @@ export interface TasksSelect<T extends boolean = true> {
   requires_reassignment?: T;
   lifecycle_history?: T;
   claim_history?: T;
+  edit_history?: T;
   seed_key?: T;
   title?: T;
   description?: T;
@@ -2153,6 +2209,8 @@ export interface TasksSelect<T extends boolean = true> {
   office?: T;
   created_by?: T;
   creation_batch_id?: T;
+  operation_id?: T;
+  operation_fingerprint?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -2337,7 +2395,7 @@ export interface TaskRecalculateRisk {
     office_id?: string | null;
   };
   output: {
-    evaluation_id: string;
+    evaluation_id?: string | null;
   };
 }
 /**

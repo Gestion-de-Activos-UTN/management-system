@@ -13,6 +13,7 @@ import type {
 } from '@/domain/assessments/bulkAssessmentLifecycle'
 
 export type SecurityReviewSummary = {
+  scope?: import('@/modules/risk/service').RiskScope
   recalculation?: import('@/domain/risk/recalculation-status').RecalculationStatus
   risk_score: number | null
   evaluated_percentage: number
@@ -30,6 +31,8 @@ export type AssessmentDetailResponse = {
   answers: AssessmentAnswer[]
   previous_answers?: AssessmentAnswer[]
   assessment_history?: AssessmentInstance[]
+  /** Oficina u organización inactiva: la revisión queda de solo lectura. */
+  inactive_subject: 'office_inactive' | 'organization_inactive' | null
   effective_evidence: Record<string, EffectiveAnswer>
 }
 

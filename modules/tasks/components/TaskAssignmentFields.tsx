@@ -5,6 +5,12 @@ import type { TaskAssignmentOptions } from '../service'
 
 export type TaskAssignmentKind = 'open_pool' | 'role' | 'user'
 
+const ROLE_DISPLAY_ORDER: Record<string, number> = {
+  org_admin: 0,
+  office_manager: 1,
+  org_viewer: 2,
+}
+
 const KIND_DESCRIPTIONS: Record<TaskAssignmentKind, string> = {
   open_pool: 'Cualquier persona elegible puede reclamarla',
   role: 'Sólo quienes tengan el rol elegido pueden reclamarla',
@@ -17,6 +23,9 @@ export function TaskAssignmentFields({
   target,
   options,
   targetError,
+  disabled = false,
+  loading = false,
+  scopeReady = true,
   onKindChange,
   onTargetChange,
 }: {
@@ -24,6 +33,9 @@ export function TaskAssignmentFields({
   target: string | null
   options?: TaskAssignmentOptions
   targetError?: string
+  disabled?: boolean
+  loading?: boolean
+  scopeReady?: boolean
   onKindChange: (kind: TaskAssignmentKind) => void
   onTargetChange: (target: string | null) => void
 }) {
@@ -31,6 +43,9 @@ export function TaskAssignmentFields({
     <SimpleGrid cols={{ base: 1, sm: 2 }}>
       <Select
         label="Asignación"
+        withAsterisk
+        inputWrapperOrder={['label', 'input', 'description', 'error']}
+        disabled={disabled}
         description={KIND_DESCRIPTIONS[kind]}
         data={[
           { value: 'open_pool', label: 'Pool abierto' },
@@ -43,12 +58,29 @@ export function TaskAssignmentFields({
       {kind === 'role' && (
         <Select
           label="Rol asignado"
-          description="Roles con acceso a la oficina y a la entidad"
+          inputWrapperOrder={['label', 'input', 'description', 'error']}
+          disabled={disabled || loading || !scopeReady || !options?.roles.length}
+          placeholder="Selecciona un rol"
+          description={
+            !scopeReady
+              ? 'Selecciona primero las oficinas o la entidad relacionada.'
+              : loading
+                ? 'Cargando roles elegibles…'
+                : options && !options.roles.length
+                  ? 'No hay roles con personas elegibles para este alcance y entidad. Revisa la selección.'
+                  : 'Roles con personas elegibles en cada oficina seleccionada.'
+          }
           required
-          data={(options?.roles ?? []).map(role => ({
-            value: role.id,
-            label: roleSlugLabel(role.slug),
-          }))}
+          data={[...(options?.roles ?? [])]
+            .sort(
+              (left, right) =>
+                (ROLE_DISPLAY_ORDER[left.slug] ?? Infinity) -
+                (ROLE_DISPLAY_ORDER[right.slug] ?? Infinity)
+            )
+            .map(role => ({
+              value: role.id,
+              label: roleSlugLabel(role.slug),
+            }))}
           value={target}
           onChange={onTargetChange}
           error={targetError}
@@ -57,7 +89,18 @@ export function TaskAssignmentFields({
       {kind === 'user' && (
         <MemberSelect
           label="Persona asignada"
-          description="Personas con acceso a la oficina y a la entidad"
+          inputWrapperOrder={['label', 'input', 'description', 'error']}
+          disabled={disabled || loading || !scopeReady || !options?.users.length}
+          placeholder="Selecciona una persona"
+          description={
+            !scopeReady
+              ? 'Selecciona primero las oficinas o la entidad relacionada.'
+              : loading
+                ? 'Cargando personas elegibles…'
+                : options && !options.users.length
+                  ? 'No hay personas elegibles para este alcance y entidad. Revisa la selección.'
+                  : 'Personas con acceso a todas las oficinas y a la entidad.'
+          }
           required
           members={options?.users ?? []}
           value={target}

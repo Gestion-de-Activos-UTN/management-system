@@ -1,5 +1,7 @@
 'use client'
 
+import { matchesSearch } from '@/lib/search-text'
+
 import { useState } from 'react'
 import { Box, Checkbox, Combobox, Group, InputBase, Text, useCombobox } from '@mantine/core'
 import { Search } from 'lucide-react'
@@ -85,8 +87,8 @@ export function MultiFilterSelect({
     onChange(next.length === options.length ? [] : next)
   }
 
-  const term = search.trim().toLocaleLowerCase('es')
-  const matches = (option: Option) => !term || option.label.toLocaleLowerCase('es').includes(term)
+  const term = search.trim()
+  const matches = (option: Option) => matchesSearch([option.label], term)
   const renderOption = (option: Option, checked: boolean) => (
     <Combobox.Option value={option.value} key={option.value} active={checked}>
       <Group gap="sm" wrap="nowrap">
@@ -97,6 +99,9 @@ export function MultiFilterSelect({
           tabIndex={-1}
           size="xs"
           style={{ pointerEvents: 'none' }}
+          // Siempre visible (indica que se puede marcar más de una, también en táctil), pero el
+          // vacío más tenue para que resalten las marcadas.
+          styles={checked ? undefined : { input: { borderColor: 'var(--mantine-color-gray-3)' } }}
         />
         <span>{option.label}</span>
       </Group>
