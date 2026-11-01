@@ -114,6 +114,32 @@ it('retains entered values after a network failure and allows one corrected retr
   expect(retry).toBe(first)
 })
 
+it('a key conflict after a lost response refreshes the list and closes without another request', async () => {
+  const f = await form()
+  const invalidate = vi.spyOn(f.client, 'invalidateQueries')
+  f.post.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+  submitMany(f.form)
+  await waitFor(() => expect(f.toast).toHaveBeenCalledTimes(1))
+  // The user edits the form before retrying: the server already saved the first attempt.
+  await f.user.type(f.title, ' corregida')
+  f.post.mockRejectedValueOnce({
+    status: 409,
+    code: 'task_operation_conflict',
+    message: 'Esta creación ya se guardó con otros datos.',
+  })
+  submitMany(f.form)
+  await waitFor(() => expect(f.saved).toHaveBeenCalledTimes(1))
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tasks'] })
+  expect(f.toast).toHaveBeenLastCalledWith(
+    expect.objectContaining({ title: 'La tarea ya estaba creada' })
+  )
+  const [first, retry] = f.post.mock.calls.map(([, body]) => (body as any).operation_id)
+  expect(retry).toBe(first)
+  submitMany(f.form)
+  await act(async () => {})
+  expect(f.post).toHaveBeenCalledTimes(2)
+})
+
 it('each opened form sends its own operation key', async () => {
   const keys: string[] = []
   for (let i = 0; i < 2; i++) {
@@ -196,4 +222,41 @@ it('closing and reopening a related-task modal resets the title and uses the cur
       title: 'Tarea nueva',
     })
   )
+})
+
+it('an entity that became unavailable is reported under its field, without a toast', async () => {
+  const f = await form()
+  f.post.mockRejectedValueOnce({
+    status: 409,
+    code: 'asset_unavailable',
+    message: 'No se pueden crear tareas para un activo retirado o eliminado.',
+  })
+  submitMany(f.form)
+  // The entity is fixed by the caller here: there is nothing else to select.
+  expect(
+    await screen.findByText('Este activo está retirado o eliminado y ya no admite tareas nuevas.')
+  ).toBeTruthy()
+  expect(f.toast).not.toHaveBeenCalled()
+  expect(f.saved).not.toHaveBeenCalled()
+})
+
+it('searches related entities on the server and shows the chosen one by id', async () => {
+  const f = componentFixture()
+  const user = userEvent.setup()
+  render(<TaskForm initialReference={{ relationTo: 'assets' }} referenceEditable />, {
+    wrapper: f.Wrapper,
+  })
+  const searches = () =>
+    f.get.mock.calls
+      .filter(([path]) => path === '/api/v1/tasks/reference-options')
+      .map(([, params]) => (params as { q?: string; id?: string }) ?? {})
+  const input = await screen.findByPlaceholderText('Selecciona una entidad')
+  await user.type(input, 'servidor')
+  await waitFor(() => expect(searches().some(params => params.q === 'servidor')).toBe(true))
+  await user.click(await screen.findByRole('option', { name: 'Servidor contable', hidden: true }))
+  // The chosen entity is requested by id; its label copied into the input is not a new search.
+  await waitFor(() => expect(searches().some(params => params.id === referenceId)).toBe(true))
+  await new Promise(resolve => setTimeout(resolve, 400))
+  expect(searches().some(params => params.q === 'Servidor contable')).toBe(false)
+  expect((input as HTMLInputElement).value).toBe('Servidor contable')
 })

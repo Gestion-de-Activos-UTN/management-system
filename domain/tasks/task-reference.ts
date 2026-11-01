@@ -16,6 +16,8 @@ export type ResolvedTaskReference = TaskReferenceInput & {
   officeId: string | null
   label: string
   unavailable?: boolean
+  /** Su oficina está inactiva: una tarea nueva caería en ella y la creación la rechaza. */
+  officeInactive?: boolean
 }
 
 const REFERENCE_COLLECTION_PERMISSIONS: Record<TaskReferenceInput['relationTo'], CollectionSlug> = {
@@ -34,71 +36,64 @@ function text(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value : fallback
 }
 
-async function assessmentTargetLabel(
-  req: PayloadRequest,
-  doc: Record<string, unknown>
-): Promise<string> {
-  if (doc.scope === 'organization') {
-    const organization = await req.payload.findByID({
-      collection: 'organizations',
-      id: relationId(doc.organization),
-      overrideAccess: true,
-      req,
-      depth: 0,
-    })
-    return organization.name
+type Doc = Record<string, unknown> & { id: string | number }
+type RelatedCollection = 'offices' | 'assets' | 'non-network-assets' | 'organizations'
+type Related = Record<RelatedCollection, Map<string, Doc>>
+type Fetch = (collection: RelatedCollection, ids: string[]) => Promise<Doc[]>
+
+/** Ids de lo que hace falta leer para nombrar las entidades: su oficina y el destino de un ciclo. */
+function relatedIds(relationTo: TaskReferenceInput['relationTo'], docs: Doc[]) {
+  const ids: Record<RelatedCollection, Set<string>> = {
+    offices: new Set(),
+    assets: new Set(),
+    'non-network-assets': new Set(),
+    organizations: new Set(),
   }
-  if (doc.scope === 'office' && doc.office) {
-    const office = await req.payload.findByID({
-      collection: 'offices',
-      id: relationId(doc.office),
-      overrideAccess: true,
-      req,
-      depth: 0,
-    })
-    return office.name
+  for (const doc of docs) {
+    if (relationTo !== 'offices' && doc.office) ids.offices.add(relationId(doc.office))
+    if (relationTo !== 'assessment-instances') continue
+    if (doc.scope === 'organization') ids.organizations.add(relationId(doc.organization))
+    else if (doc.manual_asset) ids['non-network-assets'].add(relationId(doc.manual_asset))
+    else if (doc.asset) ids.assets.add(relationId(doc.asset))
   }
-  if (doc.manual_asset) {
-    const asset = await req.payload.findByID({
-      collection: 'non-network-assets',
-      id: relationId(doc.manual_asset),
-      overrideAccess: true,
-      req,
-      depth: 0,
+  return ids
+}
+
+async function loadRelated(
+  ids: Record<RelatedCollection, Set<string>>,
+  fetch: Fetch
+): Promise<Related> {
+  const entries = await Promise.all(
+    (Object.keys(ids) as RelatedCollection[]).map(async collection => {
+      const docs = ids[collection].size ? await fetch(collection, [...ids[collection]]) : []
+      return [collection, new Map(docs.map(doc => [String(doc.id), doc]))] as const
     })
-    return asset.alias
-  }
+  )
+  return Object.fromEntries(entries) as Related
+}
+
+function assessmentTargetLabel(doc: Doc, related: Related): string {
+  const get = (collection: RelatedCollection, value: unknown) =>
+    related[collection].get(relationId(value))
+  if (doc.scope === 'organization')
+    return text(get('organizations', doc.organization)?.name, 'Organización')
+  if (doc.scope === 'office' && doc.office) return text(get('offices', doc.office)?.name, 'Oficina')
+  if (doc.manual_asset) return text(get('non-network-assets', doc.manual_asset)?.alias, 'Activo')
   if (doc.asset) {
-    const asset = await req.payload.findByID({
-      collection: 'assets',
-      id: relationId(doc.asset),
-      overrideAccess: true,
-      req,
-      depth: 0,
-    })
-    return asset.alias || asset.hostname || asset.ip || `Activo ${asset.id}`
+    const asset = get('assets', doc.asset)
+    return text(
+      asset?.alias,
+      text(asset?.hostname, text(asset?.ip, `Activo ${relationId(doc.asset)}`))
+    )
   }
   return 'alcance sin nombre'
 }
 
-export async function resolveTaskReference(
-  req: PayloadRequest,
-  reference: TaskReferenceInput
-): Promise<ResolvedTaskReference> {
-  const loaded = await req.payload
-    .findByID({
-      collection: reference.relationTo,
-      id: reference.value,
-      overrideAccess: true,
-      req,
-      depth: 0,
-    })
-    .catch(() => null)
-  if (!loaded) throw new TaskDomainError('related_entity_not_found', 404, 'La entidad no existe.')
-  // Payload no discrimina el tipo de retorno cuando `collection` es una unión dinámica. La
-  // whitelist del schema y el switch exhaustivo de abajo son los que fijan la forma concreta.
-  const doc = loaded as unknown as Record<string, unknown> & { id: string | number }
-
+function describeReference(
+  reference: TaskReferenceInput,
+  doc: Doc,
+  related: Related
+): ResolvedTaskReference {
   let organizationId = 'organization' in doc && doc.organization ? relationId(doc.organization) : ''
   let officeId = 'office' in doc && doc.office ? relationId(doc.office) : null
   let label = reference.value
@@ -116,7 +111,7 @@ export async function resolveTaskReference(
       label = text(doc.alias, `Activo ${doc.id}`)
       break
     case 'assessment-instances': {
-      const target = await assessmentTargetLabel(req, doc)
+      const target = assessmentTargetLabel(doc, related)
       const opened = doc.opened_at ? formatDate(String(doc.opened_at)) : String(doc.id)
       label = `${target} · ciclo del ${opened} · ${text(doc.policy_key, 'política')} v${String(doc.policy_version ?? '—')}`
       break
@@ -147,20 +142,14 @@ export async function resolveTaskReference(
       break
   }
 
-  if (
-    officeId &&
-    reference.relationTo !== 'offices' &&
-    reference.relationTo !== 'assessment-instances'
-  ) {
-    const office = await req.payload.findByID({
-      collection: 'offices',
-      id: officeId,
-      overrideAccess: true,
-      req,
-      depth: 0,
-    })
-    if (!organizationId) organizationId = relationId(office.organization)
-    label = `${label} · ${office.name}`
+  let officeInactive = reference.relationTo === 'offices' && doc.is_active === false
+  if (officeId && reference.relationTo !== 'offices') {
+    const office = related.offices.get(officeId)
+    if (!organizationId && office) organizationId = relationId(office.organization)
+    officeInactive = office?.is_active === false
+    // El ciclo ya nombra su oficina o activo en el label.
+    if (reference.relationTo !== 'assessment-instances' && office)
+      label = `${label} · ${text(office.name, 'Oficina')}`
   }
 
   if (!organizationId) {
@@ -175,10 +164,65 @@ export async function resolveTaskReference(
     organizationId,
     officeId,
     label,
+    ...(officeInactive ? { officeInactive } : {}),
     ...(['assets', 'non-network-assets'].includes(reference.relationTo)
       ? { unavailable: doc.status === 'retired' || Boolean(doc.deleted_at) }
       : {}),
   }
+}
+
+export async function resolveTaskReference(
+  req: PayloadRequest,
+  reference: TaskReferenceInput
+): Promise<ResolvedTaskReference> {
+  const loaded = await req.payload
+    .findByID({
+      collection: reference.relationTo,
+      id: reference.value,
+      overrideAccess: true,
+      req,
+      depth: 0,
+    })
+    .catch(() => null)
+  if (!loaded) throw new TaskDomainError('related_entity_not_found', 404, 'La entidad no existe.')
+  // Payload no discrimina el tipo de retorno cuando `collection` es una unión dinámica. La
+  // whitelist del schema y el switch exhaustivo de describeReference fijan la forma concreta.
+  const doc = loaded as unknown as Doc
+  const related = await loadRelated(relatedIds(reference.relationTo, [doc]), (collection, ids) =>
+    Promise.all(
+      ids.map(
+        id =>
+          req.payload.findByID({
+            collection,
+            id,
+            overrideAccess: true,
+            req,
+            depth: 0,
+          }) as unknown as Promise<Doc>
+      )
+    )
+  )
+  return describeReference(reference, doc, related)
+}
+
+/** Lo mismo para una lista ya leída: una consulta por colección relacionada, no una por entidad. */
+export async function resolveTaskReferences(
+  req: PayloadRequest,
+  relationTo: TaskReferenceInput['relationTo'],
+  docs: Doc[]
+): Promise<ResolvedTaskReference[]> {
+  const related = await loadRelated(relatedIds(relationTo, docs), async (collection, ids) => {
+    const found = await req.payload.find({
+      collection,
+      where: { id: { in: ids } },
+      overrideAccess: true,
+      req,
+      depth: 0,
+      pagination: false,
+    })
+    return found.docs as unknown as Doc[]
+  })
+  return docs.map(doc => describeReference({ relationTo, value: String(doc.id) }, doc, related))
 }
 
 export function roleCanReadTaskReference(

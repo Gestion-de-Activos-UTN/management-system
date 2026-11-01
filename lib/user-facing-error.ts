@@ -18,7 +18,6 @@ const MESSAGES_BY_CODE: Record<string, string> = {
   task_cancelled: 'La tarea fue cancelada y ya no se puede completar ni liberar.',
   task_state_changed: 'La tarea ya no está en curso. Revisa su estado actualizado.',
   task_not_force_completable: 'La tarea debe estar en curso y reclamada por otra persona.',
-  task_not_in_progress: 'Solo puedes cancelar tareas en curso.',
   task_not_terminal: 'Solo puedes archivar tareas completadas o canceladas.',
   task_cannot_be_deleted: 'Solo puedes eliminar tareas pendientes que nunca fueron reclamadas.',
   no_eligible_assignees: 'No hay personas con acceso para realizar esta tarea.',

@@ -49,7 +49,8 @@ export function TaskDeleteModal({
           ¿Quieres eliminar la tarea <strong>{title}</strong>?
         </Text>
         <Text size="sm" c="dimmed">
-          Esta acción no se puede deshacer.
+          No se puede deshacer ni queda registro. Úsalo solo para una tarea creada por error; si ya
+          no hace falta, cancélala: queda registrada con su motivo.
         </Text>
       </ModalLayout>
     </Modal>

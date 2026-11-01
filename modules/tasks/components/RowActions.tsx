@@ -21,7 +21,8 @@ import { TaskDeleteModal } from './TaskDeleteModal'
 import { TaskEditForm } from './TaskEditForm'
 
 // Componente aparte (no una cell inline) porque necesita su propio hook de mutación.
-// Editar abre el mismo formulario del detalle; reasignar y cancelar permanecen allí.
+// Editar abre el mismo formulario del detalle; reasignar y cancelar piden contexto y viven allí
+// (SYSTEM_PROMPT.md §3, Row actions).
 export function RowActions({ task, asOrganization }: { task: TaskDTO; asOrganization?: string }) {
   const command = useTaskCommand(task.id)
   const [deleteOpened, setDeleteOpened] = useState(false)
@@ -151,7 +152,7 @@ export function RowActions({ task, asOrganization }: { task: TaskDTO; asOrganiza
         size="lg"
         centered
       >
-        {editOpened && <TaskEditForm task={task} onSaved={() => setEditOpened(false)} />}
+        <TaskEditForm task={task} onSaved={() => setEditOpened(false)} />
       </Modal>
       <TaskDeleteModal
         opened={deleteOpened}

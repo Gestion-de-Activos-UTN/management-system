@@ -182,7 +182,7 @@ Semántica:
 - Una persona inactiva solo se devuelve a quien no tiene alcance organizacional si `canChangeMemberStatus` da `true` para ella. Es decir, un Responsable ve inactivos solo si son Observadores completamente dentro de sus oficinas.
 - Un rol no poblado (solo id) da `slug` y `rank` `null`, y todas las comprobaciones por rango niegan.
 
-Cada elemento de `docs`: `{ id, name, email?, role, office_ids, status, is_active, can_change_status, can_edit_offices }`. `email` solo está presente para quien gestiona personas (§3); `orgMemberOptionLabel` lo omite si falta, y `MemberStatusModal` no permite confirmar una baja sin él. `id` es el id del **usuario**. `can_change_status` y `can_edit_offices` los calcula el servidor con las mismas funciones que usa `updateMember`; la UI las usa solo para mostrar u ocultar acciones.
+Cada elemento de `docs`: `{ id, name, email?, role, office_ids, office_names, status, is_active, can_change_status, can_edit_offices }`. `email` solo está presente para quien gestiona personas (`seesMemberEmails`, `access/rbac/permissions.ts`; la misma regla aplica `GET /v1/tasks/assignment-options`). `office_names` lista las oficinas de la persona que quien consulta puede ver. `orgMemberOptionLabel` muestra «nombre · rol · email» o, sin email, «nombre · rol · oficina» (la primera, con «+N» si hay más), y `MemberStatusModal` no permite confirmar una baja sin él. `id` es el id del **usuario**. `can_change_status` y `can_edit_offices` los calcula el servidor con las mismas funciones que usa `updateMember`; la UI las usa solo para mostrar u ocultar acciones.
 
 ### 4.3 `POST /v1/org-members`
 

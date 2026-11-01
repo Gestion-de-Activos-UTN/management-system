@@ -13,6 +13,7 @@ import { rejectBusinessEditsBeforeIdentified } from './hooks/rejectBusinessEdits
 import { enforceAuthorizationInvariant } from './hooks/enforceAuthorizationInvariant'
 import { reconcileAssessmentApplicability } from './hooks/reconcileAssessmentApplicability'
 import { rejectRevivalInInactiveOffice } from './hooks/rejectRevivalInInactiveOffice'
+import { rejectWritesInInactiveOrganization } from '../../domain/organizations/admin-actions'
 import { SCANNED_ASSET_TYPE_OPTIONS } from '../../domain/assets/asset-types'
 import { assessmentScopeFields } from '../../domain/assessments/asset-assessment-scope'
 import { validateAssetAssessmentScope } from '../../domain/assessments/validateAssetAssessmentScope'
@@ -40,6 +41,7 @@ export const Assets: CollectionConfig = {
   hooks: {
     beforeDelete: [rejectPhysicalAssetDelete],
     beforeChange: [
+      rejectWritesInInactiveOrganization,
       preserveDeletedAsset,
       validateOwnerTenant,
       rejectManualOfflineStatus,

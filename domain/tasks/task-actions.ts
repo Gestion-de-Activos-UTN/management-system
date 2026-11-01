@@ -214,6 +214,9 @@ export async function assignmentOptionsScope(
   return { offices: offices.length ? offices : [null], reference }
 }
 
+// Una creación y su reintento idempotente responden con la misma forma: relaciones como IDs.
+const CREATED_TASK_DEPTH = 0
+
 async function createTasksInTransaction(
   req: PayloadRequest,
   ctx: TenantContext,
@@ -272,6 +275,7 @@ async function createTasksInTransaction(
           collection: 'tasks',
           overrideAccess: true,
           req,
+          depth: CREATED_TASK_DEPTH,
           data: {
             title: input.title,
             description: input.description,
@@ -332,6 +336,7 @@ export async function createTasks(
         overrideAccess: true,
         showHiddenFields: true,
         req: request,
+        depth: CREATED_TASK_DEPTH,
         pagination: false,
         sort: 'createdAt',
       })
@@ -382,6 +387,14 @@ async function editTaskLocked(
     throw new TaskDomainError('invalid_dates', 400, 'El vencimiento precede al inicio.')
   }
   const replanned = task.status === 'in_progress' && Date.parse(startAt) > Date.now()
+  // El formulario envía todos los campos: sólo un cambio real deja el evento "Modificada".
+  const changed = Object.entries(input).some(([field, next]) => {
+    if (next === undefined) return false
+    const saved = task[field as keyof EditTaskInput]
+    return field === 'start_at' || field === 'due_at'
+      ? (next ? Date.parse(next as string) : null) !== (saved ? Date.parse(saved as string) : null)
+      : (next ?? '') !== (saved ?? '')
+  })
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {task edit, dates, priority}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
   // NOTIFY: this event should trigger a Notification Bell entry for {current claimant when task details change}
@@ -394,8 +407,28 @@ async function editTaskLocked(
     data: {
       ...input,
       ...(replanned ? { status: 'pending' as const, claimed_by: null, claimed_at: null } : {}),
+      // Sólo quién y cuándo: el detalle de los campos queda para el AuditLog.
+      ...(changed || replanned
+        ? {
+            edit_history: [
+              ...(Array.isArray(task.edit_history) ? (task.edit_history as EditEvent[]) : []),
+              {
+                at: new Date().toISOString(),
+                by: actorRelation(req, ctx.userId),
+                ...(replanned ? { replanned: true as const } : {}),
+              },
+            ],
+          }
+        : {}),
     },
   })
+}
+
+/** Una edición guardada; `replanned`: la tarea en curso volvió a pendiente y perdió su reclamo. */
+export type EditEvent = {
+  at: string
+  by: ReturnType<typeof actorRelation>
+  replanned?: true
 }
 
 /** Por qué el sistema liberó una tarea que nadie soltó a mano. */
@@ -753,8 +786,10 @@ async function cancelTaskLocked(
   const task = await loadTask(req, id)
   assertTaskScope(ctx, task)
   await assertReferenceReadable(req, ctx, task)
-  if (task.status !== 'in_progress') {
-    throw new TaskDomainError('task_not_in_progress', 409, 'Sólo se cancelan tareas en progreso.')
+  // Pendiente o en curso: cancelar conserva la tarea y su motivo. Eliminar (sin rastro) queda
+  // para corregir una tarea pendiente cargada por error.
+  if (task.status !== 'pending' && task.status !== 'in_progress') {
+    throw new TaskDomainError('task_terminal', 409, 'La tarea es terminal y no puede modificarse.')
   }
   const now = new Date().toISOString()
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {task cancel, reason}, previous hash for this organization_id)
@@ -824,7 +859,7 @@ async function deletePendingTaskLocked(
  * `actor_labels.claim_events`.
  */
 export function taskWithDerivedState(task: Task) {
-  const { claim_history: _claimHistory, ...publicTask } = task
+  const { claim_history: _claimHistory, edit_history: _editHistory, ...publicTask } = task
   return { ...publicTask, effective_status: effectiveTaskStatus(task) }
 }
 
@@ -863,7 +898,7 @@ export async function availableTaskActions(
   ) {
     actions.push('force_complete')
   }
-  if (task.status === 'in_progress' && managerCan('cancel')) actions.push('cancel')
+  if (!terminal && managerCan('cancel')) actions.push('cancel')
   if (terminal && !task.archived_at && managerCan('archive')) actions.push('archive')
   if (task.status === 'pending' && !task.claimed_at && managerCan('delete')) actions.push('delete')
   return actions

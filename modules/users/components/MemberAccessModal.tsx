@@ -118,7 +118,7 @@ function MemberAccessForm({
     >
       <Text size="sm" c="dimmed">
         {member.name || member.email}
-        {member.name && ` · ${member.email}`}
+        {member.name && member.email && ` · ${member.email}`}
       </Text>
       {!member.is_active && (
         <Alert color="gray" title="La cuenta seguirá inactiva">

@@ -29,9 +29,12 @@ La app queda en `http://localhost:3001`, Postgres en `localhost:5433` (user/pass
 3. Bajar el stack cuando termines:
 
    ```bash
-   docker compose down          # conserva los datos
-   docker compose down -v       # borra también los volúmenes (reset total)
+   docker compose stop          # conserva los datos (retomar con `docker compose start`)
+   docker compose down -v       # reset total: borra contenedores y volúmenes
    ```
+
+   Todos los volúmenes del stack son anónimos, así que `docker system prune --volumes` borra
+   cualquier resto. Un `docker compose down` sin `-v` también reinicia la base en el próximo `up`.
 
 Ver [COMMANDS.md](./COMMANDS.md) para el resto de los comandos (tests, lint, seed, contratos, etc.) y si corren en el host o dentro del contenedor.
 

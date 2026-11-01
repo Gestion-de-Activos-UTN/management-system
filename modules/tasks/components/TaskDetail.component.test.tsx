@@ -167,3 +167,25 @@ it('a successful edit must stay locked until the parent finishes closing its mod
   expect(f.toast).toHaveBeenCalledTimes(1)
   expect(saved).toHaveBeenCalledTimes(1)
 })
+
+it('a pending task offers cancel as the main action and delete behind the split arrow', async () => {
+  const f = componentFixture()
+  const user = userEvent.setup()
+  render(
+    <TaskDetail
+      task={task({
+        status: 'pending',
+        effective_status: 'pending',
+        available_actions: ['cancel', 'delete'],
+      })}
+    />,
+    { wrapper: f.Wrapper }
+  )
+  expect(screen.getByRole('button', { name: 'Cancelar' })).toBeTruthy()
+  expect(screen.queryByRole('button', { name: 'Eliminar' })).toBeNull()
+  await user.click(screen.getByRole('button', { name: 'Más opciones de cancelación' }))
+  // Mantine marks the dropdown hidden while its open transition runs.
+  await user.click(await screen.findByRole('menuitem', { name: /Eliminar/, hidden: true }))
+  expect(await screen.findByRole('button', { name: 'Eliminar tarea' })).toBeTruthy()
+  expect(f.remove).not.toHaveBeenCalled()
+})

@@ -66,8 +66,10 @@ Acceso: `create`, `read`, `update` y `delete` son `() => false`. Todo acceso pas
 | `revoked_at`, `revocation_reason` | date, select | Motivos: `manual`, `auto_lockout_abuse`, `office_deactivated`, `organization_deactivated`. |
 | `failedAttempts`, `lockedUntil`, `lockoutCount` | number, date, number | Estado del lockout (§3.2). |
 | `apiKeyPrefix` | text, único, indexado | Primeros 8 caracteres del token. Se usa para ubicar al agente. |
-| `apiKeyHash` | text | `bcrypt` (costo 10) del token completo. |
+| `apiKeyHash` | text, `hidden` | `bcrypt` (costo 10) del token completo. `hidden` lo quita de toda respuesta (REST, Local, GraphQL), también cuando el agente llega expandido; solo `resolveAgentAuth` lo lee, con `showHiddenFields: true`. |
 | `apiKey` | virtual | Se rellena en el `afterChange` de la creación a partir de `req.context.plainApiKey`; ningún endpoint lo devuelve. |
+
+Cuando un agente se expande desde otra colección (`assets`, `scan-reports`, `inventory-incidents`), `defaultPopulate` limita sus campos a `office`, `organization`, `lifecycle_status` y `last_heartbeat_at`. El estado de bloqueo y `apiKeyPrefix` solo aparecen en las lecturas directas del agente (panel de administración y endpoints propios).
 
 Hooks relevantes:
 - `beforeChange` (1): calcula el siguiente estado con `getAgentLifecycleStatus`, aplica `assertAgentTransition` en updates y fuerza `lifecycle_status` e `is_active` coherentes.
@@ -291,7 +293,7 @@ El `.env` no incluye `VENDOR_URL`; el agente lo deriva de `PLATFORM_URL` (`confi
 
 Sin cuerpo. Orden: sesión, permiso `agents.update`, carga del agente (404 `not_found`), `assertOrganizationMatches` y `assertOfficeInScope` (403). Si el agente ya está revocado, devuelve el documento sin escribir (idempotente). Si no, `update` con `buildRevocationData('manual')`: `lifecycle_status: 'revoked'`, `is_active: false`, `revoked_at`, `revocation_reason: 'manual'`.
 
-La respuesta es el documento del agente sin `apiKeyHash` (`withoutCredential`), tanto si se revoca ahora como si ya estaba revocado. Conserva `apiKeyPrefix` y los contadores de bloqueo. `apiKeyHash` declara solo `admin.hidden`, que no lo quita de la API; por eso se excluye en el endpoint.
+La respuesta es el documento del agente, tanto si se revoca ahora como si ya estaba revocado. No incluye `apiKeyHash` (campo `hidden`); conserva `apiKeyPrefix` y los contadores de bloqueo.
 
 ### 4.7 `GET /v1/offices/agent-summary`
 
@@ -346,7 +348,7 @@ El agente consulta `GET /v1/vendor` desde `oui_lookup.py::_lookup_vendor_remote`
 
 ### 6.1 Idempotencia y conflicto de `report_id`
 
-`processScanReport` calcula `content_fingerprint` = SHA-256 de una serialización canónica del reporte ya validado (`canonical`: claves ordenadas, recursiva). Busca un `scan-reports` con ese `id`:
+`processScanReport` calcula `content_fingerprint` = SHA-256 de una serialización canónica del reporte ya validado (`canonicalJson`, `lib/canonical-json.ts`: claves ordenadas por unidad de código UTF-16, recursiva; no depende del locale ni del ICU del runtime). `scripts/check-canonical-fingerprints.ts` (solo lectura) recalcula la huella de los reportes que aún conservan `raw_payload` para confirmar que un cambio en la serialización no invalida reintentos. Busca un `scan-reports` con ese `id`:
 - Existe con otro agente **o** con otra huella: `APIError` 409 `report_id already belongs to a different agent or payload`. No se escribe nada.
 - Existe con `status` distinto de `received`: devuelve el resultado como ya procesado (`alreadyProcessed: true`, `processedAssetIds: []`, `rejectedAssets: []`, `status` `failed` o `processed` según el guardado). No toca inventario, instantáneas ni cumplimiento.
 - Existe en `received`: retoma el procesamiento sin recrear el registro (rama defensiva; §6.4).
@@ -560,6 +562,8 @@ Estado de cobertura automática; sin pruebas de extremo a extremo por ahora. Las
 | `contracts/scan-scope.audit.test.ts` | Alcance de red, ventana de tiempo, reportes futuros o invertidos, límites del heartbeat. |
 | `contracts/network.audit.test.ts` | Subredes de interfaz legítimas sin ampliar el alcance de escaneo. |
 | `access/middleware/resolveAgentAuth.test.ts` | Token válido, prefijo desconocido, hash inválido, 429 por lockout, umbral, escalada y revocación automática, agente revocado, `X-Agent-ID`. |
+| `lib/canonical-json.test.ts` | Orden por unidad de código; equivalencia con el orden anterior (`localeCompare`) para todas las claves fijas del contrato y para los ids de scripts NSE, de modo que los `content_fingerprint` guardados siguen valiendo. |
+| `endpoints/agent-exposure.audit.integration.test.ts` | Un agente expandido solo trae campos públicos; la lectura directa conserva el bloqueo y oculta el hash salvo con `showHiddenFields`; baja lógica y tareas sin datos privados del agente. |
 | `domain/agents/agent-state.test.ts` | Estados, transiciones, cupo y timestamps inválidos o futuros. |
 | `domain/agents/buildAgentPackage.test.ts` | Contenido del paquete por plataforma, `.env`, CRLF/LF, launchers. |
 | `domain/subscriptions/agent-quota.test.ts` | `calculateAgentLimit` por plan. |
@@ -587,7 +591,7 @@ Sin prueba directa en este repositorio: `endpoints/heartbeat.ts` (solo se cubre 
 
 Verificados en el código; no son necesariamente defectos, pero conviene conocerlos antes de tocar el feature.
 
-1. **Respuesta del `revoke`.** Excluye `apiKeyHash`, pero conserva `apiKeyPrefix`, `failedAttempts`, `lockedUntil` y `lockoutCount`.
+1. **Respuesta del `revoke`.** No incluye `apiKeyHash` (campo `hidden`), pero conserva `apiKeyPrefix`, `failedAttempts`, `lockedUntil` y `lockoutCount`: es una lectura directa del agente.
 2. **Heartbeat de un agente revocado durante el request.** Responde 200 y guarda `last_heartbeat_at`, aunque el agente queda `revoked`. Se detiene en el siguiente heartbeat.
 3. **Reporte repetido.** La respuesta de un reintento ya procesado es `processed: 0` y `rejected: []`; no reproduce el resultado original. El agente no usa el cuerpo de la respuesta.
 4. **Rechazos 4xx son definitivos para el agente.** 400, 401, 403, 409 y 413 sobre `/v1/reports` descartan el reporte de la cola local (`sender.py`). Un 401 `agent revoked` en reportes no detiene al agente; solo lo hace el heartbeat.

@@ -2,8 +2,10 @@
 
 import { ModalLayout } from '@/components/ui/ModalLayout'
 import { DateField } from '@/components/ui/DateField'
+import { useSingleSubmission } from '@/components/ui/use-single-submission'
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { useDebouncedValue } from '@mantine/hooks'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
@@ -17,9 +19,11 @@ import {
   SimpleGrid,
   Stack,
   Text,
+  Input,
   TextInput,
 } from '@mantine/core'
 import { CharacterCountTextarea } from '@/components/ui/CharacterCountTextarea'
+import type { HttpError } from '@/lib/http-client'
 import { SettingRow } from '@/components/ui/SettingRow'
 import { useOfficesList } from '@/modules/offices/hooks/use-offices'
 import { useTenantContext } from '@/modules/auth/hooks/use-tenant-context'
@@ -59,8 +63,7 @@ export function TaskForm({
   onSaved?: () => void
 }) {
   const create = useCreateTasks()
-  const submissionLock = useRef(false)
-  const submissionSucceeded = useRef(false)
+  const submission = useSingleSubmission()
   // One key per opened form, repeated on every retry: if a response is lost after saving, the
   // retry returns the tasks already created instead of creating them again.
   const [operationId] = useState(() =>
@@ -68,7 +71,6 @@ export function TaskForm({
       byte.toString(16).padStart(2, '0')
     ).join('')
   )
-  const [submitted, setSubmitted] = useState(false)
   const { data: tenant } = useTenantContext(asOrganization)
   const { data: offices } = useOfficesList(asOrganization)
   const [referenceType, setReferenceType] = useState<TaskReferenceInput['relationTo'] | null>(
@@ -106,12 +108,32 @@ export function TaskForm({
   const assignedUser = watch('assigned_user')
   const reference = watch('related_entity')
   const referenceLocked = Boolean(initialReference?.value) && !referenceEditable
-  const referenceOptions = useTaskReferenceOptions(
-    referenceType,
-    null,
+  // Lo elegido se pide por id: así se muestra aunque no esté entre los resultados de la búsqueda.
+  const selectedReferenceQuery = useTaskReferenceOptions(referenceType, {
     asOrganization,
-    referenceLocked ? initialReference?.value : undefined
+    selectedId: reference?.value,
+    enabled: Boolean(reference?.value),
+  })
+  const selectedReference = selectedReferenceQuery.data?.docs.find(
+    option => option.value === reference?.value
   )
+  const [referenceSearch, setReferenceSearch] = useState('')
+  // Al elegir, Mantine copia el nombre al buscador: eso no es una búsqueda.
+  const [debouncedSearch] = useDebouncedValue(
+    referenceSearch === selectedReference?.label ? '' : referenceSearch.trim(),
+    300
+  )
+  const referenceOptions = useTaskReferenceOptions(referenceType, {
+    asOrganization,
+    search: debouncedSearch,
+    enabled: !referenceLocked,
+  })
+  const referenceData = [
+    ...(selectedReference ? [selectedReference] : []),
+    ...(referenceOptions.data?.docs ?? []).filter(
+      option => option.value !== selectedReference?.value
+    ),
+  ]
   const assignmentScopeReady = Boolean(
     tenant?.permissions.tasks.includes('create') &&
     (reference || (!referenceType && (officeIds.length || (tenant.orgWide && global))))
@@ -122,11 +144,6 @@ export function TaskForm({
   useEffect(() => {
     if (tenant && !tenant.orgWide && global) setValue('global', false)
   }, [tenant, global, setValue])
-
-  const selectedReference = useMemo(
-    () => referenceOptions.data?.find(option => option.value === reference?.value),
-    [referenceOptions.data, reference]
-  )
 
   useEffect(() => {
     if (!selectedReference) return
@@ -189,19 +206,27 @@ export function TaskForm({
               : 'Entidad relacionada'
           }
           description={
-            initialReference ? TASK_REFERENCE_HELP[initialReference.relationTo] : undefined
+            [
+              initialReference ? TASK_REFERENCE_HELP[initialReference.relationTo] : null,
+              referenceOptions.data?.has_more && !debouncedSearch
+                ? 'Se muestran las más recientes: escribe para buscar.'
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' ') || undefined
           }
           required={Boolean(referenceType)}
           placeholder={referenceType ? 'Selecciona una entidad' : 'Sin relación'}
           disabled={!referenceType}
           searchable
+          searchValue={referenceSearch}
+          onSearchChange={setReferenceSearch}
+          // El servidor ya filtró (sin tildes ni mayúsculas): no volver a filtrar en el cliente.
+          filter={({ options }) => options}
           clearable={!initialReference}
-          nothingFoundMessage="Sin resultados"
+          nothingFoundMessage={referenceOptions.isFetching ? 'Buscando…' : 'Sin resultados'}
           error={errors.related_entity?.message}
-          data={(referenceOptions.data ?? []).map(option => ({
-            value: option.value,
-            label: option.label,
-          }))}
+          data={referenceData.map(option => ({ value: option.value, label: option.label }))}
           value={field.value?.value ?? null}
           onChange={value => {
             field.onChange(
@@ -223,25 +248,26 @@ export function TaskForm({
     }
     try {
       await create.mutateAsync({ ...values, operation_id: operationId })
-      // The modal remains mounted during its exit animation. Never reopen this submission.
-      submissionSucceeded.current = true
-      setSubmitted(true)
-      onSaved?.()
-    } catch {
-      // The mutation hook reports the error. Keep the form available for a corrected retry.
+    } catch (error) {
+      // The mutation hook reports the error. Keep the form available for a corrected retry,
+      // except on a key conflict: its tasks already exist and every retry would conflict again.
+      // The key is never regenerated here, or a lost response would create the tasks twice.
+      const code = (error as Partial<HttpError>)?.code
+      if (code === 'asset_unavailable')
+        setError('related_entity', {
+          message: referenceLocked
+            ? 'Este activo está retirado o eliminado y ya no admite tareas nuevas.'
+            : 'Selecciona otra entidad: este activo está retirado o eliminado.',
+        })
+      if (code !== 'task_operation_conflict') return
     }
+    submission.succeed()
+    onSaved?.()
   })
 
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
+  const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    // Lock before async validation: the mutation's pending state alone leaves a click race.
-    if (submissionLock.current) return
-    submissionLock.current = true
-    try {
-      await validateAndSubmit(event)
-    } finally {
-      if (!submissionSucceeded.current) submissionLock.current = false
-    }
+    return submission.run(() => validateAndSubmit(event))
   }
 
   return (
@@ -250,17 +276,28 @@ export function TaskForm({
         gap="md"
         footer={
           <Group justify="flex-end">
-            <Button type="submit" loading={isSubmitting || create.isPending} disabled={submitted}>
+            <Button
+              type="submit"
+              loading={isSubmitting || create.isPending}
+              disabled={submission.submitted}
+            >
               {officeIds.length > 1 ? `Crear ${officeIds.length} tareas` : 'Crear tarea'}
             </Button>
           </Group>
         }
       >
         {referenceLocked && initialReference && (
-          <TaskReferenceSummary
-            relationTo={initialReference.relationTo}
-            label={selectedReference?.label ?? (referenceOptions.isPending ? 'Cargando…' : null)}
-          />
+          <Stack gap={4}>
+            <TaskReferenceSummary
+              relationTo={initialReference.relationTo}
+              label={
+                selectedReference?.label ?? (selectedReferenceQuery.isPending ? 'Cargando…' : null)
+              }
+            />
+            {errors.related_entity?.message && (
+              <Input.Error>{errors.related_entity.message}</Input.Error>
+            )}
+          </Stack>
         )}
         {initialReference && !referenceLocked && referenceSelect}
         <Controller
@@ -362,6 +399,7 @@ export function TaskForm({
                 onChange={value => {
                   setReferenceType(value as TaskReferenceInput['relationTo'] | null)
                   setValue('related_entity', undefined)
+                  setReferenceSearch('')
                   clearErrors('related_entity')
                 }}
               />

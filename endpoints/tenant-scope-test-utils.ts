@@ -26,6 +26,8 @@ export async function scopeFixture(
     | 'receipts'
     | 'operations'
     | 'findings'
+    | 'agents'
+    | 'inactive'
 ) {
   if (
     !new RegExp(

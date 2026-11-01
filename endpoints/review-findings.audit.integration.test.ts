@@ -29,7 +29,13 @@ async function heartbeat(scanner: { id: string; apiKey: string }) {
   return { status: response.status, body: await response.text() }
 }
 const saved = (id: string) =>
-  f.payload.findByID({ collection: 'agents', id, overrideAccess: true, depth: 0 })
+  f.payload.findByID({
+    collection: 'agents',
+    id,
+    overrideAccess: true,
+    showHiddenFields: true,
+    depth: 0,
+  })
 /** Lets one agents update fail with `error` before reaching the database. */
 function failNextAgentUpdate(error: () => Promise<never>) {
   const original = f.payload.update.bind(f.payload)
@@ -163,6 +169,48 @@ it('members: names reach every member, emails only people who manage members', a
     for (const row of result.data.docs) {
       expect(row.name, actor).toBeTruthy()
       expect('email' in row, actor).toBe(seesEmail)
+      expect(Array.isArray(row.office_names), actor).toBe(true)
     }
   }
+})
+
+it('members: office names only include offices the viewer can see', async () => {
+  const result = await f.api('/v1/org-members', f.own.viewerCookie)
+  expect(result.status).toBe(200)
+  const offices = await f.payload.find({
+    collection: 'offices',
+    overrideAccess: true,
+    depth: 0,
+    where: { id: { in: [f.own.office, f.own.second] } },
+  })
+  const name = (id: string) => offices.docs.find(office => String(office.id) === id)!.name
+  // The admin works in both offices; the viewer only in the first one.
+  const admin = result.data.docs.find((row: { id: string }) => row.id === f.own.admin)
+  expect(admin.office_names).toEqual([name(f.own.office)])
+  expect(admin.office_names).not.toContain(name(f.own.second))
+})
+
+it('task assignment options apply the same email rule and name visible offices', async () => {
+  for (const [actor, cookie] of [
+    ['manager', f.own.managerCookie],
+    ['admin', f.own.adminCookie],
+    ['visiting platform', `${f.platform}`],
+  ] as const) {
+    const suffix = actor === 'visiting platform' ? `&asOrganization=${f.own.org}` : ''
+    const result = await f.api(
+      `/v1/tasks/assignment-options?office_id=${f.own.office}${suffix}`,
+      cookie
+    )
+    expect(result.status, actor).toBe(200)
+    expect(result.data.users.length, actor).toBeGreaterThan(0)
+    for (const row of result.data.users) {
+      expect('email' in row, actor).toBe(true)
+      expect(Array.isArray(row.office_names), actor).toBe(true)
+    }
+  }
+  const viewer = await f.api(
+    `/v1/tasks/assignment-options?office_id=${f.own.office}`,
+    f.own.viewerCookie
+  )
+  expect(viewer.status).toBe(403)
 })

@@ -1,7 +1,8 @@
 'use client'
 
 import { ModalLayout } from '@/components/ui/ModalLayout'
-import { useRef, useState } from 'react'
+import { useState } from 'react'
+import { useSingleSubmission } from '@/components/ui/use-single-submission'
 import {
   Alert,
   Button,
@@ -102,34 +103,30 @@ function MemberStatusForm({
   const [attempted, setAttempted] = useState(false)
   const officesError =
     attempted && needsOffices && !officeIds.length ? 'Selecciona al menos una oficina.' : undefined
-  // Lock before sending: the pending state alone leaves a double-click race, and a success keeps
-  // it locked through the close animation.
-  const submissionLock = useRef(false)
+  const submission = useSingleSubmission()
 
-  const confirm = () => {
-    if (submissionLock.current) return
-    setAttempted(true)
-    if (needsOffices && !officeIds.length) return
-    submissionLock.current = true
-    update.mutate(
-      {
-        userId: member.id,
-        input: {
-          is_active: !deactivating,
-          ...(deactivating ? { confirm_email: confirmationEmail.trim() } : {}),
-          ...(needsOffices ? { office_ids: officeIds } : {}),
-          ...(deactivating && replacementId ? { replacement_owner_id: replacementId } : {}),
-        },
-        message: deactivating ? `${name} quedó desactivada.` : `${name} quedó reactivada.`,
-      },
-      {
-        onSuccess: onDone,
-        onError: () => {
-          submissionLock.current = false
-        },
+  const confirm = () =>
+    submission.run(async () => {
+      setAttempted(true)
+      if (needsOffices && !officeIds.length) return
+      try {
+        await update.mutateAsync({
+          userId: member.id,
+          input: {
+            is_active: !deactivating,
+            ...(deactivating ? { confirm_email: confirmationEmail.trim() } : {}),
+            ...(needsOffices ? { office_ids: officeIds } : {}),
+            ...(deactivating && replacementId ? { replacement_owner_id: replacementId } : {}),
+          },
+          message: deactivating ? `${name} quedó desactivada.` : `${name} quedó reactivada.`,
+        })
+      } catch {
+        // The mutation hook reports the error; the modal stays open for a retry.
+        return
       }
-    )
-  }
+      submission.succeed()
+      onDone()
+    })
 
   return (
     <ModalLayout

@@ -10,11 +10,6 @@ function json(body: unknown, status = 200) {
   return Response.json(body, { status })
 }
 
-// The credential hash never leaves the server, not even for an already revoked agent.
-function withoutCredential<T extends { apiKeyHash?: unknown }>({ apiKeyHash: _hash, ...agent }: T) {
-  return agent
-}
-
 export const agentRevokeEndpoint: Endpoint = {
   path: '/v1/agents/:id/revoke',
   method: 'post',
@@ -35,7 +30,7 @@ export const agentRevokeEndpoint: Endpoint = {
     assertOrganizationMatches(relationId(agent.organization), ctx.organizationId, unrestricted)
     assertOfficeInScope(relationId(agent.office), ctx.officeIds, unrestricted)
 
-    if (getAgentLifecycleStatus(agent) === 'revoked') return json(withoutCredential(agent))
+    if (getAgentLifecycleStatus(agent) === 'revoked') return json(agent)
 
     // AUDIT: this action must emit an AuditLogs entry (chain_hash over {agent, organization, office, revoked_at}, previous hash for this organization_id)
     // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
@@ -48,6 +43,6 @@ export const agentRevokeEndpoint: Endpoint = {
       req,
       data: buildRevocationData('manual'),
     })
-    return json(withoutCredential(updated))
+    return json(updated)
   },
 }

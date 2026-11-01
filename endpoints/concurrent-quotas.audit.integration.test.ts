@@ -596,6 +596,7 @@ async function agents(f: Fixture) {
     await payload.find({
       collection: 'agents',
       overrideAccess: true,
+      showHiddenFields: true,
       where: { organization: { equals: f.org } },
       depth: 0,
       pagination: false,

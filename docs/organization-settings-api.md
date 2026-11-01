@@ -98,13 +98,14 @@ Mismo guardián para los tres endpoints de `endpoints/organizationSettings.ts`:
 
 1. `getTenantContext` sin contexto activo → 401 `unauthenticated`.
 2. `ctx.role !== 'org_admin'` o sin `organizationId` → 403 `forbidden`. Un PlatformAdmin con `?asOrganization=` tiene `role = 'org_admin'` en el contexto, así que pasa. Sin `asOrganization` no tiene organización y recibe 403.
-3. No hay documento de configuración para la organización → 404 `not_found`.
+3. Solo en las escrituras (`loadSettings(req, true)`: inventario y madurez): organización inactiva → 409 `organization_inactive` (`organizationWriteError`). El `GET` no lo comprueba, para que el historial siga legible.
+4. No hay documento de configuración para la organización → 404 `not_found`.
 
-No comprueba la matriz de permisos (`canDo`) ni el rol por `hasOrgWideScope`: es una comparación literal con `org_admin`. No comprueba que la organización esté activa ni ningún feature flag de suscripción. Un Responsable de oficina o un Observador reciben 403 incluso para la lectura.
+No comprueba la matriz de permisos (`canDo`) ni el rol por `hasOrgWideScope`: es una comparación literal con `org_admin`. No comprueba ningún feature flag de suscripción. Un Responsable de oficina o un Observador reciben 403 incluso para la lectura.
 
 ### 4.2 Política de revisión (`assessmentPolicyEndpoint`)
 
-`authenticated` (401 sin contexto activo; 403 si no es PlatformAdmin y no tiene organización), luego `ctx.role !== 'org_admin'` o sin `organizationId` → 403 `forbidden`, y feature `security_assessments` apagado para la organización → 403 `feature_disabled`. A diferencia de los otros, **depende del feature de suscripción**. Tampoco comprueba que la organización esté activa.
+`authenticated` (401 sin contexto activo; 403 si no es PlatformAdmin y no tiene organización), luego `ctx.role !== 'org_admin'` o sin `organizationId` → 403 `forbidden`, y feature `security_assessments` apagado para la organización → 403 `feature_disabled`. A diferencia de los otros, **depende del feature de suscripción**. Después, organización inactiva → 409 `organization_inactive` (`organizationWriteError`), antes de leer el cuerpo.
 
 ## 5. Contrato HTTP
 
@@ -117,7 +118,7 @@ Prefijo `/api`. Cuerpos JSON. Un cuerpo ausente o inválido se parsea como `{}`.
 | `PATCH /v1/organization-settings/maturity` | `org_admin` | `OrganizationMaturitySchema` | 200 documento actualizado |
 | `PATCH /v1/organization/assessment-policy` | `org_admin` + feature `security_assessments` | `UpdateAssessmentPolicySchema` | 200 documento (actualizado o el vigente) |
 
-Ninguno usa `adminErrorResponse` ni `organizationAdminLock`.
+Ninguno toma `organizationAdminLock`. `adminErrorResponse` solo interviene a través de `organizationWriteError`, para el 409 de organización inactiva.
 
 ### 5.1 `PATCH /v1/organization-settings`
 
@@ -136,7 +137,7 @@ Los campos desconocidos se descartan sin error (el schema no es estricto). Un va
 
 `UpdateAssessmentPolicySchema`: `policy_key` (`essential` \| `reinforced`), `policy_version` (entero positivo). Orden de verificaciones:
 
-1. Permisos y feature (§4.2).
+1. Permisos, feature y organización activa (§4.2).
 2. Schema → 400 `invalid_policy` con `issues`.
 3. `policy_key` debe estar en `RISK_POLICY_KEYS` y `policy_version` debe ser exactamente 2 → 400 `policy_version_unavailable`. La página envía `RISK_CATALOG_V2.version`.
 4. Documento de configuración inexistente → 404 `settings_not_found`.
@@ -196,6 +197,7 @@ Cuerpo de error: `{ error: <código> }` en la mayoría; los de validación agreg
 | `unauthenticated` | 401 | todos | Sin contexto activo |
 | `forbidden` | 403 | todos | No es `org_admin` o no hay organización |
 | `feature_disabled` | 403 | política | Feature `security_assessments` apagado |
+| `organization_inactive` | 409 | inventario, madurez, política | La organización está inactiva; solo un administrador de plataforma la reactiva. Solo en escrituras |
 | `not_found` | 404 | inventario, madurez | La organización no tiene documento de configuración |
 | `settings_not_found` | 404 | política | Ídem, en el endpoint de política |
 | `invalid_settings` | 400 | inventario | Valor fuera de las listas (`issues`). Sin texto en `user-facing-error.ts` |
@@ -250,7 +252,7 @@ Verificados en el código; no son necesariamente defectos.
 1. **Tres endpoints para una colección.** Inventario y madurez en `organizationSettings.ts`, política en `assessments.ts`, rubro en `platformOrganizations.ts`. Un comentario del encabezado de `organizationSettings.ts` dice que los endpoints están "acotados a los campos de config de Inventario" y que la política "tendrá su endpoint dedicado"; hoy el archivo también contiene el de madurez y el de política ya existe, en otro archivo.
 2. **El OrgAdmin no edita el rubro.** Solo el administrador de plataforma, desde el modal de organizaciones.
 3. **Guardián literal.** `loadSettings` compara `role !== 'org_admin'` en lugar de usar la matriz; no hay entrada de `organization-settings` en `permissions.ts`.
-4. **Sin comprobación de organización activa** en inventario, madurez ni política. La edición del rubro sí la exige (`organization_inactive`).
+4. **Organización inactiva: solo lectura.** Inventario, madurez, política y rubro responden 409 `organization_inactive` al escribir; el `GET` sigue respondiendo. Es la misma regla que aplican activos, tareas y assessments (ver `docs/assets-api.md` y `docs/task-api.md`).
 5. **Esquema completo en inventario.** `PATCH /v1/organization-settings` exige los tres campos (con `null` permitido); no admite actualizaciones parciales.
 6. **Intervalo guardado pero inactivo.** Con `snapshot_before_each_scan = true`, el intervalo guardado se ignora y permanece en el documento.
 7. **Política repetida.** Elegir la política vigente responde 200 sin cambios (la UI ya deshabilita el botón de la política actual).

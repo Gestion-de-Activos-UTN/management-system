@@ -14,7 +14,7 @@ it('edits from the table with one save and toast, then closes and invalidates ta
     wrapper: f.Wrapper,
   })
   expect(screen.queryByRole('button', { name: 'Reasignar' })).toBeNull()
-  expect(screen.queryByRole('button', { name: 'Cancelar tarea' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Cancelar' })).toBeNull()
   await user.click(screen.getByRole('button', { name: 'Editar tarea' }))
   const dialog = await screen.findByRole('dialog')
   const title = within(dialog).getByRole('textbox', { name: /Título/ })

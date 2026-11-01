@@ -24,6 +24,15 @@ export const Agents: CollectionConfig = {
   admin: {
     useAsTitle: 'id',
   },
+  // Al expandirse desde otra colección (Assets, ScanReports, InventoryIncidents) solo viajan
+  // datos públicos: el estado de bloqueo y el prefijo de la credencial quedan para las lecturas
+  // directas del agente (panel de administración y endpoints propios).
+  defaultPopulate: {
+    office: true,
+    organization: true,
+    lifecycle_status: true,
+    last_heartbeat_at: true,
+  },
   access: {
     create: () => false,
     read: () => false,
@@ -166,11 +175,10 @@ export const Agents: CollectionConfig = {
       },
     },
     {
+      // Fuera de toda respuesta, también expandido: solo resolveAgentAuth lo lee, con showHiddenFields.
       name: 'apiKeyHash',
       type: 'text',
-      admin: {
-        hidden: true,
-      },
+      hidden: true,
     },
     {
       // Solo poblado por attachPlainApiKeyOnce en la respuesta de creación — nunca se persiste ni se rehidrata en lecturas.

@@ -1,7 +1,7 @@
 import type { Endpoint } from 'payload'
 import { getTenantContext, type TenantContext } from '../access/tenant/resolveTenantContext'
 import { relationId } from '../lib/relationId'
-import { canDo, hasOrgWideScope, type RoleSlug } from '../access/rbac/permissions'
+import { canDo, hasOrgWideScope, seesMemberEmails, type RoleSlug } from '../access/rbac/permissions'
 import { canChangeMemberStatus, canEditMemberOffices } from '../access/rbac/member-status'
 import { adminErrorResponse, organizationAdminLock } from '../domain/organizations/admin-actions'
 import { withTransaction } from '../domain/with-transaction'
@@ -58,10 +58,7 @@ export const orgMembersEndpoint: Endpoint = {
 
     const orgWide = hasOrgWideScope(ctx.role)
     const roleSlug = (m: (typeof memberships.docs)[number]) => memberRole(m).slug
-    // Names and roles serve every person picker; emails only reach people who manage members.
-    const seesEmail = (['read', 'create', 'change_status'] as const).some(action =>
-      canDo(ctx.role, 'organization-memberships', action, ctx.organizationId)
-    )
+    const seesEmail = seesMemberEmails(ctx.role, ctx.organizationId)
     // Office-scoped roles only see people who share one of their offices, plus org-wide members
     // (who cover every office); the rest of the directory belongs to other offices.
     const visible = orgWide
@@ -90,6 +87,12 @@ export const orgMembersEndpoint: Endpoint = {
           ...(seesEmail ? { email: user.email } : {}),
           role: roleSlug(m),
           office_ids: (m.offices ?? []).map(relationId),
+          // Sin email, la oficina distingue a dos personas con el mismo nombre y rol.
+          office_names: (m.offices ?? []).flatMap(office =>
+            typeof office === 'object' && (orgWide || ctx.officeIds.includes(office.id))
+              ? [office.name]
+              : []
+          ),
           status: m.status,
           is_active: Boolean(m.is_active),
           can_change_status: mayChangeStatus(m),

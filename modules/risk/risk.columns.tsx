@@ -7,20 +7,18 @@ import { RISK_PAIR_STATUS_LABEL } from '@/lib/enum-labels'
 import { riskReasonLabel } from './risk-labels'
 import type { RiskContributionDTO } from './service'
 import { usePortalHref } from '@/lib/use-portal-href'
+import { riskAssetPath } from '@/modules/assets/asset-path'
 
 // La clave del par ya dice de dónde viene el activo: `asset:` lo detectó el escáner,
 // `manual:` lo cargó una persona (ver domain/risk/build-pairs.ts).
 function AssetCell({ assetKey, label }: { assetKey: string; label: string }) {
   const href = usePortalHref()
   const scanned = assetKey.startsWith('asset:')
+  const path = riskAssetPath(assetKey)
   return (
     <Stack gap={0}>
-      {scanned ? (
-        <Anchor
-          component={Link}
-          href={href(`/portal/inventory/${assetKey.slice('asset:'.length)}`)}
-          size="sm"
-        >
+      {path ? (
+        <Anchor component={Link} href={href(path)} size="sm">
           {label}
         </Anchor>
       ) : (
@@ -75,7 +73,9 @@ export const riskContributionsColumns: ColumnDef<RiskContributionDTO, unknown>[]
     id: 'asset',
     accessorKey: 'asset_label',
     header: 'Activo',
-    cell: ({ row }) => <AssetCell assetKey={row.original.asset_key} label={row.original.asset_label} />,
+    cell: ({ row }) => (
+      <AssetCell assetKey={row.original.asset_key} label={row.original.asset_label} />
+    ),
   },
   {
     id: 'status',

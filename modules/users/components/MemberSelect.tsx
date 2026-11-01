@@ -1,7 +1,7 @@
 import { Select, type SelectProps } from '@mantine/core'
 import { orgMemberOptionLabel, type OrgMember } from '../service'
 
-type MemberOption = Pick<OrgMember, 'id' | 'name' | 'email'> & { role: string }
+type MemberOption = Pick<OrgMember, 'id' | 'name' | 'email' | 'office_names'> & { role: string }
 
 /**
  * Selector único de personas (responsable, usuario asignado, etc.). Quien lo usa decide qué

@@ -20,7 +20,9 @@ export function getNonNetworkAssetsColumns(
     {
       accessorKey: 'alias',
       header: 'Activo',
-      size: 260,
+      // Fijas + Oficina y Responsable (~150 cada una) ≤ ~936 px: sin scroll horizontal con una
+      // ventana de 1280 px (mismo criterio que la tabla de red, assets.columns.tsx).
+      size: 236,
       // Alias + categoría en una celda (mismo criterio que "Equipo" en assets.columns.tsx).
       cell: ({ row }) => {
         const asset = row.original

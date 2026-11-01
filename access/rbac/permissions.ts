@@ -163,3 +163,11 @@ export function canDo(
 export function hasOrgWideScope(roleSlug: RoleSlug | null | undefined): boolean {
   return roleSlug === 'platform_admin' || roleSlug === 'org_admin'
 }
+
+// Los emails del directorio sólo llegan a quien gestiona miembros; el resto identifica a una
+// persona por nombre, rol y oficina. Único lugar con esta regla (orgMembers, assignment-options).
+export function seesMemberEmails(roleSlug: RoleSlug | null, organizationId: string | null) {
+  return (['read', 'create', 'change_status'] as const).some(action =>
+    canDo(roleSlug, 'organization-memberships', action, organizationId)
+  )
+}

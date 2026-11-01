@@ -1078,6 +1078,15 @@ export interface Task {
     | number
     | boolean
     | null;
+  edit_history?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   seed_key?: string | null;
   title: string;
   description?: string | null;
@@ -2171,6 +2180,7 @@ export interface TasksSelect<T extends boolean = true> {
   requires_reassignment?: T;
   lifecycle_history?: T;
   claim_history?: T;
+  edit_history?: T;
   seed_key?: T;
   title?: T;
   description?: T;

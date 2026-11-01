@@ -1,7 +1,8 @@
 'use client'
 
 import { ModalLayout } from '@/components/ui/ModalLayout'
-import { useRef, useState } from 'react'
+import { useState } from 'react'
+import { useSingleSubmission } from './use-single-submission'
 import { ActionIcon, Button, Group, Modal, TextInput, Tooltip } from '@mantine/core'
 import { Pencil } from 'lucide-react'
 
@@ -26,32 +27,27 @@ export function RenameAction({
 }) {
   const [draft, setDraft] = useState<string | null>(null)
   const error = draft === null ? null : validate(draft)
-  // Lock before calling onSave: `saving` arrives one render later and Enter can repeat meanwhile.
-  const submissionLock = useRef(false)
-  const save = () => {
-    if (draft === null || error || submissionLock.current) return
-    submissionLock.current = true
-    onSave(draft).then(
-      () => setDraft(null),
-      () => {
-        submissionLock.current = false
+  const submission = useSingleSubmission()
+  const save = () =>
+    submission.run(async () => {
+      if (draft === null || error) return
+      try {
+        await onSave(draft)
+      } catch {
+        return
       }
-    )
-  }
+      submission.succeed()
+      setDraft(null)
+    })
   const open = () => {
-    submissionLock.current = false
+    submission.reset()
     setDraft(value)
   }
 
   return (
     <>
       <Tooltip label="Cambiar nombre">
-        <ActionIcon
-          variant="light"
-          size="md"
-          aria-label="Cambiar nombre"
-          onClick={open}
-        >
+        <ActionIcon variant="light" size="md" aria-label="Cambiar nombre" onClick={open}>
           <Pencil size={16} strokeWidth={1.5} />
         </ActionIcon>
       </Tooltip>

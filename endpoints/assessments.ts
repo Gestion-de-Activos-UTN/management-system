@@ -37,6 +37,7 @@ import { hasOrgWideScope } from '@/access/rbac/permissions'
 import { officeQueryError } from '@/access/tenant/officeQueryError'
 import { withDerivedAssessmentStatus } from '@/domain/assessments/assessmentExpiration'
 import { isAssetExcludedFromAssessments } from '@/domain/assessments/asset-assessment-scope'
+import { organizationWriteError } from '@/domain/organizations/admin-actions'
 
 const json = (body: unknown, status = 200) => Response.json(body, { status })
 
@@ -467,21 +468,7 @@ async function inactiveSubject(
   assessment: AssessmentInstance,
   asset: Asset | NonNetworkAsset | null
 ): Promise<'office_inactive' | 'organization_inactive' | null> {
-  const officeId = asset
-    ? relationId(asset.office)
-    : assessment.office
-      ? relationId(assessment.office)
-      : null
-  if (officeId) {
-    const office = await req.payload.findByID({
-      collection: 'offices',
-      id: officeId,
-      overrideAccess: true,
-      req,
-      depth: 0,
-    })
-    return office.is_active === false ? 'office_inactive' : null
-  }
+  // La organización primero: desactivarla no desactiva sus oficinas.
   const organization = await req.payload.findByID({
     collection: 'organizations',
     id: relationId(assessment.organization),
@@ -489,7 +476,21 @@ async function inactiveSubject(
     req,
     depth: 0,
   })
-  return organization.is_active === false ? 'organization_inactive' : null
+  if (organization.is_active === false) return 'organization_inactive'
+  const officeId = asset
+    ? relationId(asset.office)
+    : assessment.office
+      ? relationId(assessment.office)
+      : null
+  if (!officeId) return null
+  const office = await req.payload.findByID({
+    collection: 'offices',
+    id: officeId,
+    overrideAccess: true,
+    req,
+    depth: 0,
+  })
+  return office.is_active === false ? 'office_inactive' : null
 }
 
 export const assessmentDraftEndpoint: Endpoint = {
@@ -645,6 +646,8 @@ export const assessmentPolicyEndpoint: Endpoint = {
     if (ctx.role !== 'org_admin' || !ctx.organizationId) return json({ error: 'forbidden' }, 403)
     if (!(await featureEnabled(req, ctx.organizationId)))
       return json({ error: 'feature_disabled' }, 403)
+    const denied = await organizationWriteError(req, ctx.organizationId)
+    if (denied) return denied
     const parsed = UpdateAssessmentPolicySchema.safeParse(await req.json!().catch(() => ({})))
     if (!parsed.success) return json({ error: 'invalid_policy', issues: parsed.error.issues }, 400)
     if (!RISK_POLICY_KEYS.includes(parsed.data.policy_key) || parsed.data.policy_version !== 2)

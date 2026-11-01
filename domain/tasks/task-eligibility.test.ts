@@ -3,7 +3,15 @@ import assert from 'node:assert/strict'
 import { assignmentEligibleMembers, type EligibleMember } from './task-eligibility'
 
 const members: EligibleMember[] = [
-  { userId: 'u1', name: 'One', email: 'one@test', roleId: 'r1', role: 'org_admin', officeIds: [] },
+  {
+    userId: 'u1',
+    name: 'One',
+    email: 'one@test',
+    roleId: 'r1',
+    role: 'org_admin',
+    officeIds: [],
+    offices: [],
+  },
   {
     userId: 'u2',
     name: 'Two',
@@ -11,6 +19,7 @@ const members: EligibleMember[] = [
     roleId: 'r2',
     role: 'office_manager',
     officeIds: ['o1'],
+    offices: [{ id: 'o1', name: 'Oficina uno' }],
   },
 ]
 

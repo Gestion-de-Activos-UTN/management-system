@@ -9,6 +9,7 @@ import {
   Card,
   Divider,
   Group,
+  Menu,
   Modal,
   ScrollArea,
   SimpleGrid,
@@ -17,7 +18,17 @@ import {
   Timeline,
 } from '@mantine/core'
 import { CharacterCountTextarea } from '@/components/ui/CharacterCountTextarea'
-import { Archive, Check, Hand, Pencil, RotateCcw, ShieldAlert, Trash2, XCircle } from 'lucide-react'
+import {
+  Archive,
+  Check,
+  ChevronDown,
+  Hand,
+  Pencil,
+  RotateCcw,
+  ShieldAlert,
+  Trash2,
+  XCircle,
+} from 'lucide-react'
 import { STATUS_TONE_COLOR, StatusBadge } from '@/components/ui/StatusBadge'
 import { formatDate, formatDateTime } from '@/lib/format-date'
 import { relationId } from '@/lib/relationId'
@@ -292,17 +303,56 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             Completar como administrador
           </Button>
         )}
-        {has('cancel') && (
-          <Button
-            color="red"
-            variant="light"
-            leftSection={<XCircle size={16} strokeWidth={1.5} />}
-            disabled={command.isPending}
-            onClick={() => setCancelOpened(true)}
-          >
-            Cancelar tarea
-          </Button>
-        )}
+        {/* Una pendiente sin reclamar admite cancelar y eliminar: un solo botón dividido.
+            Cancelar (conserva la tarea y el motivo) queda a la vista; eliminar, tras la flecha. */}
+        {has('cancel') &&
+          (has('delete') ? (
+            <Button.Group>
+              <Button
+                color="red"
+                variant="light"
+                leftSection={<XCircle size={16} strokeWidth={1.5} />}
+                disabled={command.isPending}
+                onClick={() => setCancelOpened(true)}
+              >
+                Cancelar
+              </Button>
+              <Menu position="top-end" offset={4} withinPortal>
+                <Menu.Target>
+                  <Button
+                    color="red"
+                    variant="light"
+                    px="xs"
+                    aria-label="Más opciones de cancelación"
+                    // Button.Group sólo dibuja separador en variantes con borde; light lo necesita.
+                    style={{ borderLeft: '1px solid var(--mantine-color-red-light-hover)' }}
+                    disabled={command.isPending}
+                  >
+                    <ChevronDown size={16} strokeWidth={1.5} />
+                  </Button>
+                </Menu.Target>
+                <Menu.Dropdown>
+                  <Menu.Item
+                    color="red"
+                    leftSection={<Trash2 size={14} strokeWidth={1.5} />}
+                    onClick={() => setDeleteOpened(true)}
+                  >
+                    Eliminar tarea
+                  </Menu.Item>
+                </Menu.Dropdown>
+              </Menu>
+            </Button.Group>
+          ) : (
+            <Button
+              color="red"
+              variant="light"
+              leftSection={<XCircle size={16} strokeWidth={1.5} />}
+              disabled={command.isPending}
+              onClick={() => setCancelOpened(true)}
+            >
+              Cancelar
+            </Button>
+          ))}
         {has('archive') && (
           <Button
             variant="light"
@@ -314,7 +364,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
             Archivar
           </Button>
         )}
-        {has('delete') && (
+        {has('delete') && !has('cancel') && (
           <Button
             color="red"
             variant="subtle"
@@ -461,12 +511,7 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
           />
         </ModalLayout>
       </Modal>
-      <Modal
-        opened={cancelOpened}
-        onClose={() => setCancelOpened(false)}
-        title="Cancelar tarea"
-        centered
-      >
+      <Modal opened={cancelOpened} onClose={() => setCancelOpened(false)} title="Cancelar" centered>
         <ModalLayout
           footer={
             <Group justify="flex-end">
@@ -480,13 +525,14 @@ export function TaskDetail({ task, asOrganization }: { task: TaskDTO; asOrganiza
                   setCancelOpened(false)
                 }}
               >
-                Cancelar tarea
+                Cancelar
               </Button>
             </Group>
           }
         >
           <CharacterCountTextarea
             label="Motivo"
+            description="La tarea queda cancelada con este motivo y se conserva en la actividad."
             required
             minLength={3}
             maxLength={500}

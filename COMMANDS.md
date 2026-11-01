@@ -19,8 +19,10 @@ Se corren siempre en el **host**, desde la raíz del proyecto.
 | ---------------------------- | --------------------------------------------------------------------------------- |
 | `docker compose up`          | Levanta Postgres + app (logs en foreground)                                       |
 | `docker compose up -d`       | Igual, en background                                                              |
-| `docker compose down`        | Baja los contenedores, conserva los volúmenes (datos de Postgres, uploads)        |
-| `docker compose down -v`     | Baja los contenedores **y borra los volúmenes** — reset total de la base de datos |
+| `docker compose stop` / `start` | Pausa y retoma el stack **conservando** los datos de Postgres                  |
+| `docker compose down`        | Baja los contenedores; el próximo `up` arranca con una base nueva (semilla demo)  |
+| `docker compose down -v`     | Igual, y borra en el acto los volúmenes del stack                                 |
+| `docker system prune --volumes` | Tras un `down`, borra los volúmenes anónimos que quedaron: no deja nada del stack |
 | `docker compose logs -f app` | Sigue los logs de la app                                                          |
 | `docker compose exec app sh` | Shell dentro del contenedor de la app                                             |
 

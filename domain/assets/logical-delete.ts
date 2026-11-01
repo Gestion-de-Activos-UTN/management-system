@@ -59,6 +59,8 @@ export function logicalDeleteEndpoint(collection: 'assets' | 'non-network-assets
           id,
           req: request,
           overrideAccess: true,
+          // Misma forma que la rama "ya eliminado" (findByID con depth 0).
+          depth: 0,
           data: { status: 'retired', deleted_at: new Date().toISOString() },
         })
         return Response.json({

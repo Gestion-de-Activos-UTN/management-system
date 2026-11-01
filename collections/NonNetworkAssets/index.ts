@@ -7,6 +7,7 @@ import {
 import type { CollectionConfig } from 'payload'
 import { orgScopedAccess, canDoAccess } from '@/access/rbac/orgScopedAccess'
 import { resolveTenantAndReview } from './hooks/resolveTenant'
+import { rejectWritesInInactiveOrganization } from '@/domain/organizations/admin-actions'
 import { computeReviewStatus, canReviewNow, type ReviewInterval } from './invariants'
 import { MANUAL_ASSET_CATEGORY_OPTIONS } from '../../domain/assets/asset-types'
 import { reconcileAssessmentApplicability } from './hooks/reconcileAssessmentApplicability'
@@ -39,7 +40,13 @@ export const NonNetworkAssets: CollectionConfig = {
   endpoints: [logicalDeleteEndpoint('non-network-assets')],
   hooks: {
     beforeDelete: [rejectPhysicalAssetDelete],
-    beforeChange: [preserveDeletedAsset,resolveTenantAndReview, validateAssetAssessmentScope, validateCategoryGroups],
+    beforeChange: [
+      rejectWritesInInactiveOrganization,
+      preserveDeletedAsset,
+      resolveTenantAndReview,
+      validateAssetAssessmentScope,
+      validateCategoryGroups,
+    ],
     afterChange: [reconcileAssessmentApplicability, reconcileAssetTasks],
   },
   fields: [
@@ -75,10 +82,10 @@ export const NonNetworkAssets: CollectionConfig = {
     // dato manual del inventario. Sin validación contra el diccionario CPE del NVD — fuera de
     // alcance. Topes alineados con contracts/asset.schema.ts. Visible solo en las categorías cuyo
     // grupo es 'product_details' (collections/NonNetworkAssets/categoryGroups.ts).
-    { 
+    {
       name: 'product_details',
       type: 'group',
-      admin: { condition: (data) => categoryGroupOf(data?.asset_category) === 'product_details' },
+      admin: { condition: data => categoryGroupOf(data?.asset_category) === 'product_details' },
       fields: [
         { name: 'software_vendor', type: 'text', maxLength: 120, index: true },
         { name: 'software_product', type: 'text', maxLength: 240, index: true },
@@ -88,7 +95,7 @@ export const NonNetworkAssets: CollectionConfig = {
     {
       name: 'cloud_details',
       type: 'group',
-      admin: { condition: (data) => categoryGroupOf(data?.asset_category) === 'cloud_details' },
+      admin: { condition: data => categoryGroupOf(data?.asset_category) === 'cloud_details' },
       fields: [
         { name: 'kind', type: 'select', options: [...CLOUD_KIND_OPTIONS] },
         { name: 'vendor', type: 'text', maxLength: 120 },
@@ -98,7 +105,7 @@ export const NonNetworkAssets: CollectionConfig = {
       name: 'repository_details',
       type: 'group',
       admin: {
-        condition: (data) => categoryGroupOf(data?.asset_category) === 'repository_details',
+        condition: data => categoryGroupOf(data?.asset_category) === 'repository_details',
       },
       fields: [{ name: 'kind', type: 'select', options: [...REPOSITORY_KIND_OPTIONS] }],
     },

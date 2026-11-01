@@ -18,6 +18,7 @@ export type EligibleMember = {
   roleId: string
   role: RoleSlug
   officeIds: string[]
+  offices: Array<{ id: string; name: string }>
 }
 
 export async function listEligibleTaskMembers(
@@ -69,6 +70,9 @@ export async function listEligibleTaskMembers(
         roleId: String(roleDoc.id),
         role: roleDoc.slug,
         officeIds,
+        offices: (membership.offices ?? []).flatMap(office =>
+          typeof office === 'object' ? [{ id: String(office.id), name: office.name }] : []
+        ),
       },
     ]
   })

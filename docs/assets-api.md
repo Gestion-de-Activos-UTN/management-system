@@ -203,6 +203,8 @@ Los endpoints `business`, `identify`, `unidentify` y `review` aplican, en este o
 
 `software-suggestions` es el único que se acota solo por organización, nunca por oficina (dos sedes comparten proveedores; ver §4.6).
 
+**Organización inactiva: solo lectura.** Toda escritura de un usuario sobre activos de una organización inactiva (en la práctica, un PlatformAdmin que la visita con `?asOrganization=`) responde 409 `organization_inactive`. Se aplica en dos capas: los endpoints propios (`business`, `identify`, `unidentify`, `review`, `resolve`, baja lógica) llaman a `organizationWriteError` y responden `{ error: 'organization_inactive' }`; el hook `rejectWritesInInactiveOrganization` (§5.1) cubre además el REST genérico y cualquier escritura futura, y responde `{ errors: [{ message, data: { code: 'organization_inactive' } }] }`. No aplica sin usuario (ingesta del escáner, jobs) ni sin organización visitada (cascadas del StaffPortal, que retiran activos al desactivar). Las lecturas siguen respondiendo.
+
 ### 3.3 Feature flags
 
 El catálogo de features (`domain/subscriptions/features.ts`) incluye `asset_inventory`, pero **ningún endpoint ni pantalla del inventario lo verifica**. Los endpoints de este documento no devuelven `feature_disabled`. Otros features sí inciden en efectos sobre activos: `security_assessments` (si está apagado, `reconcileAssetAssessmentInstance` no crea ni modifica revisiones) y `tasks`.
@@ -237,7 +239,7 @@ Prefijo `/api`. Cuerpos JSON. El cliente agrega `?asOrganization=` automáticame
 | `GET /inventory-incidents` | `read` sobre `assets` | query estándar | Respuesta de Payload |
 | `POST /v1/inventory-incidents/:id/resolve` | `update` sobre `assets` | `{ decision }` | 200 documento `inventory-incidents` |
 
-Los endpoints `business`, `identify`, `unidentify` y `review` devuelven el resultado crudo de `payload.update` (el documento), sin envoltorio. `DELETE` devuelve `{ doc, message }`. Las rutas genéricas devuelven lo que corresponde a la API REST de Payload.
+Los endpoints `business`, `identify`, `unidentify` y `review` devuelven el resultado crudo de `payload.update` (el documento), sin envoltorio. `DELETE` devuelve `{ doc, message }`. Estas respuestas usan `depth: 0` (relaciones como ids). Si un agente llega expandido en cualquier otra lectura, solo trae `office`, `organization`, `lifecycle_status` y `last_heartbeat_at` (`defaultPopulate` de `agents`); `apiKeyHash` es un campo `hidden` y nunca sale en una respuesta. Las rutas genéricas devuelven lo que corresponde a la API REST de Payload.
 
 Formato de error: los handlers propios responden `{ error: <código> }` (más `issues` o `message` según el caso). Los `APIError` lanzados por hooks, por `assertOfficeInScope`, `assertOrganizationMatches` y `assertOwnerCoversOffice` los serializa Payload como `{ errors: [{ message, ... }] }`. `lib/http-client.ts` toma `code` de `errors[0].name` o `error`, y `message` de `errors[0].message`, `message` o `error`.
 
@@ -318,7 +320,7 @@ Además de los endpoints propios, `modules/assets/service.ts` escribe en `PATCH 
 
 ### 4.9 Baja lógica (`DELETE /api/assets/:id`, `DELETE /api/non-network-assets/:id`)
 
-Endpoint de colección (`logicalDeleteEndpoint(collection)`, path `/:id`). Requiere organización resuelta y permiso `delete` (solo `org_admin`; 403 `forbidden`). En `withTransaction`: `lockAssetRow`, carga el activo; inexistente, de otra organización o, para quien no tiene alcance organizacional, de una oficina fuera de `ctx.officeIds`: 404 `not_found`. Si ya tiene `deleted_at`: 200 con el documento y el mismo mensaje, sin escribir (idempotente). En otro caso escribe `status = 'retired'` y `deleted_at = now`, y responde `{ doc, message: 'Activo eliminado del inventario; historial conservado.' }`.
+Endpoint de colección (`logicalDeleteEndpoint(collection)`, path `/:id`). Requiere organización resuelta y permiso `delete` (solo `org_admin`; 403 `forbidden`). En `withTransaction`: `lockAssetRow`, carga el activo; inexistente, de otra organización o, para quien no tiene alcance organizacional, de una oficina fuera de `ctx.officeIds`: 404 `not_found`. Organización inactiva: 409 `organization_inactive`, también para un activo ya eliminado. Si ya tiene `deleted_at`: 200 con el documento y el mismo mensaje, sin escribir (idempotente). En otro caso escribe `status = 'retired'` y `deleted_at = now`, y responde `{ doc, message: 'Activo eliminado del inventario; historial conservado.' }`. En las dos ramas `doc` sale con `depth: 0`.
 
 Una eliminación física (`payload.delete` o `DELETE` por `where`) falla en `rejectPhysicalAssetDelete` con 409 ("Los activos se eliminan lógicamente para conservar su historial."), además de que `access.delete` es `() => false`.
 
@@ -326,10 +328,11 @@ Una eliminación física (`payload.delete` o `DELETE` por `where`) falla en `rej
 
 ### 5.1 Hooks de `assets`
 
-`beforeChange`, en este orden: `preserveDeletedAsset`, `validateOwnerTenant`, `rejectManualOfflineStatus`, `rejectBusinessEditsBeforeIdentified`, `enforceAuthorizationInvariant`, `validateAssetAssessmentScope`, `rejectRevivalInInactiveOffice`. `afterChange`: `reconcileAssessmentApplicability`, `reconcileAssetTasks`. Corren en toda escritura (endpoint propio, REST, ingesta, jobs, cascadas); los que distinguen al sistema usan `req.context`.
+`beforeChange`, en este orden: `rejectWritesInInactiveOrganization`, `preserveDeletedAsset`, `validateOwnerTenant`, `rejectManualOfflineStatus`, `rejectBusinessEditsBeforeIdentified`, `enforceAuthorizationInvariant`, `validateAssetAssessmentScope`, `rejectRevivalInInactiveOffice`. `afterChange`: `reconcileAssessmentApplicability`, `reconcileAssetTasks`. Corren en toda escritura (endpoint propio, REST, ingesta, jobs, cascadas); los que distinguen al sistema usan `req.context`.
 
 | Hook | Regla | Error |
 |---|---|---|
+| `rejectWritesInInactiveOrganization` | Con usuario y organización en el contexto (`ctx.organizationId`), la organización debe estar activa. Compartido con `non-network-assets`; vive en `domain/organizations/admin-actions.ts`. | 409 "La organización está inactiva. ..." (`data.code = 'organization_inactive'`) |
 | `preserveDeletedAsset` | Con `deleted_at` en el original: no se acepta `status` distinto de `retired` ni cambiar `deleted_at`. | 409 "Un activo eliminado conserva su baja y su historial." |
 | `validateOwnerTenant` | Si `data.owner` viene: `assertOwnerCoversOffice` con la organización y oficina del documento original. | 400 (§2.5) |
 | `rejectManualOfflineStatus` | `status` pasa a `offline` sin `context.systemJob`. | 400 "El estado «sin conexión» solo puede establecerlo un proceso automático, no una edición manual." |
@@ -366,7 +369,7 @@ Marcador `NOTIFY:` en la colección: un aviso por revisión vencida está marcad
 
 ### 5.5 Oficina, responsable y baja (activo manual)
 
-`resolveTenantAndReview` se ejecuta en cada escritura, en este orden:
+Antes corren `rejectWritesInInactiveOrganization` (organización inactiva, §5.1) y `preserveDeletedAsset`. `resolveTenantAndReview` se ejecuta en cada escritura, en este orden:
 1. Sin contexto de tenant (`getTenantContext` nulo), devuelve `data` sin más (escrituras internas).
 2. Oficina efectiva = la del cuerpo o la del original. `assertOfficeInScope` contra `ctx.officeIds` (400 `MissingOfficeError` si falta, 403 si está fuera de alcance).
 3. Se carga la oficina; `organization` del activo = organización de la oficina (el usuario no la elige).
@@ -398,6 +401,7 @@ Los códigos `error` de endpoints propios:
 | `unauthenticated` | 401 | Sin contexto de tenant o `isActive` falso (todos los endpoints y la baja lógica) |
 | `forbidden` | 403 | Sin permiso; `resolve`, baja lógica y `software-suggestions` (con organización) sin organización o sin permiso |
 | `not_found` | 404 | Activo o incidente inexistente. En `resolve` y baja lógica, también organización u oficina ajenas |
+| `organization_inactive` | 409 | Escritura sobre una organización inactiva (§3.2). En el REST genérico llega como `errors[0].data.code` |
 | `invalid_business_data` | 400 | Cuerpo de `business` inválido, con campos no permitidos o vacío (`issues`) |
 | `invalid_identification` | 400 | Cuerpo de `identify` inválido (`issues`) |
 | `asset_not_identified` | 409 | `business` con campos fuera de la exclusión sobre un activo no confirmado |

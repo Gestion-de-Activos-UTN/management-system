@@ -556,10 +556,12 @@ export function AssetDetailView({
           .join(' · ')}
         rightSection={
           <Group gap="sm" wrap="wrap">
-            <CreateRelatedTaskButton
-              reference={{ relationTo: 'assets', value: String(asset.id) }}
-              asOrganization={asOrganization}
-            />
+            {asset.status !== 'retired' && !asset.deleted_at && (
+              <CreateRelatedTaskButton
+                reference={{ relationTo: 'assets', value: String(asset.id) }}
+                asOrganization={asOrganization}
+              />
+            )}
             {asset.identification_status !== 'confirmed' ? (
               <Button
                 variant="filled"

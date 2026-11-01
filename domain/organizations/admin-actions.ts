@@ -1,4 +1,5 @@
-import { APIError, type PayloadRequest } from 'payload'
+import { APIError, type CollectionBeforeChangeHook, type PayloadRequest } from 'payload'
+import { getTenantContext } from '@/access/tenant/resolveTenantContext'
 import { planLimits } from '@/domain/subscriptions/plan-limits'
 import type { OrganizationRoleSlug } from '@/modules/users/schema'
 import {
@@ -63,6 +64,28 @@ export async function organizationWriteError(req: PayloadRequest, organizationId
   } catch (error) {
     return adminErrorResponse(error)
   }
+}
+
+/**
+ * beforeChange compartido por Assets y NonNetworkAssets: ninguna escritura de un usuario (ni de
+ * un PlatformAdmin que visita) toca una organización inactiva, llegue por REST o por un endpoint
+ * propio. No aplica sin usuario (ingesta del escáner, jobs) ni sin organización visitada
+ * (cascadas del StaffPortal, que tienen que poder retirar activos al desactivar).
+ */
+export const rejectWritesInInactiveOrganization: CollectionBeforeChangeHook = async ({
+  data,
+  req,
+}) => {
+  const ctx = await getTenantContext(req)
+  if (!ctx?.organizationId) return data
+  try {
+    await assertOrganizationActive(req, ctx.organizationId)
+  } catch (error) {
+    if (error instanceof AdminDomainError)
+      throw new APIError(error.message, error.status, { code: error.code }, true)
+    throw error
+  }
+  return data
 }
 
 /**

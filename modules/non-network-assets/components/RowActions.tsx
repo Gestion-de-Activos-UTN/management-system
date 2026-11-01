@@ -26,11 +26,13 @@ export function RowActions({
           <Pencil size={16} strokeWidth={1.5} />
         </ActionIcon>
       </Tooltip>
-      <CreateRelatedTaskButton
-        compact
-        reference={{ relationTo: 'non-network-assets', value: String(asset.id) }}
-        asOrganization={asOrganization}
-      />
+      {asset.status !== 'retired' && !asset.deleted_at && (
+        <CreateRelatedTaskButton
+          compact
+          reference={{ relationTo: 'non-network-assets', value: String(asset.id) }}
+          asOrganization={asOrganization}
+        />
+      )}
       <Tooltip
         label={
           asset.can_review

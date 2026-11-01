@@ -7,10 +7,12 @@ import type { MemberCreate, MemberUpdate, UserCredentials } from './schema'
 export type OrgMember = {
   id: string
   name: string
-  /** Only for people who manage members (endpoints/orgMembers.ts). */
+  /** Only for people who manage members (access/rbac/permissions.ts::seesMemberEmails). */
   email?: string
   role: RoleSlug
   office_ids: string[]
+  /** Names of the member's offices that the viewer can see. */
+  office_names?: string[]
   status: 'onboarding' | 'active'
   is_active: boolean
   can_change_status?: boolean
@@ -25,12 +27,19 @@ export function memberCoversOffice(member: OrgMember, officeId: string): boolean
   )
 }
 
-// Formato único para identificar a una persona en cualquier selector: nombre · rol · email
-// (el email sólo cuando el servidor lo envía).
+// Formato único para identificar a una persona en cualquier selector: nombre · rol · email, o
+// nombre · rol · oficina cuando el servidor no envía el email (ver seesMemberEmails).
 export function orgMemberOptionLabel(
-  member: Pick<OrgMember, 'name' | 'email'> & { role: string }
+  member: Pick<OrgMember, 'name' | 'email' | 'office_names'> & { role: string }
 ): string {
-  return [member.name || member.email, roleSlugLabel(member.role), member.name && member.email]
+  const [office, ...otherOffices] = member.office_names ?? []
+  const officeSummary =
+    office && (otherOffices.length ? `${office} +${otherOffices.length}` : office)
+  return [
+    member.name || member.email,
+    roleSlugLabel(member.role),
+    member.email ? member.name && member.email : officeSummary,
+  ]
     .filter(Boolean)
     .join(' · ')
 }

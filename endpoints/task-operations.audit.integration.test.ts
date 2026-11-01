@@ -177,3 +177,133 @@ it('repeated task commands are rejected with 409 and never repeat their effects'
   }
   expect(await saved()).toEqual(before)
 })
+
+const detail = async (id: string) => (await f.api(`/v1/tasks/${id}`, f.own.adminCookie)).data
+const edit = (id: string, input: Record<string, unknown>) =>
+  f.api(`/v1/tasks/${id}`, f.own.adminCookie, 'PATCH', input)
+
+it('an edit leaves one "modified" event with who and when; saving unchanged values adds none', async () => {
+  const created = await create(body())
+  expect(created.status).toBe(201)
+  const id = String(created.data.docs[0].id)
+  expect((await edit(id, { title: 'Revisar respaldo semanal' })).status).toBe(200)
+  const first = await detail(id)
+  expect(first.actor_labels.edit_events).toEqual([
+    { at: expect.any(String), actor: expect.any(String) },
+  ])
+  expect(first).not.toHaveProperty('edit_history')
+  // The form always sends every field: the same values are not a modification.
+  const unchanged = await edit(id, {
+    title: first.title,
+    description: first.description,
+    priority: first.priority,
+    start_at: first.start_at,
+  })
+  expect(unchanged.status).toBe(200)
+  expect((await detail(id)).actor_labels.edit_events).toHaveLength(1)
+})
+
+it('replanning a claimed task records that the claim was released', async () => {
+  const created = await create(body())
+  const id = String(created.data.docs[0].id)
+  expect((await f.api(`/v1/tasks/${id}/claim`, f.own.viewerCookie, 'POST')).status).toBe(200)
+  const later = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString()
+  expect((await edit(id, { start_at: later })).status).toBe(200)
+  const replanned = await detail(id)
+  expect(replanned.status).toBe('pending')
+  expect(replanned.claimed_by ?? null).toBeNull()
+  expect(replanned.actor_labels.edit_events).toEqual([
+    { at: expect.any(String), actor: expect.any(String), replanned: true },
+  ])
+})
+
+it('a pending task can be cancelled with its reason and kept; a terminal one cannot', async () => {
+  const created = await create(body())
+  const id = String(created.data.docs[0].id)
+  const cancel = () =>
+    f.api(`/v1/tasks/${id}/cancel`, f.own.adminCookie, 'POST', { reason: 'Ya no hace falta.' })
+  const cancelled = await cancel()
+  expect(cancelled.status, JSON.stringify(cancelled.data)).toBe(200)
+  const kept = await detail(id)
+  expect(kept.status).toBe('cancelled')
+  expect(kept.cancellation_reason).toBe('Ya no hace falta.')
+  expect(kept.available_actions).not.toContain('cancel')
+  const again = await cancel()
+  expect(again.status).toBe(409)
+  expect(again.data.error).toBe('task_terminal')
+})
+
+it('reference options leave out a retired asset unless it is the one already fixed', async () => {
+  const asset = await f.createManual()
+  await f.payload.update({
+    collection: 'non-network-assets',
+    id: asset.id,
+    overrideAccess: true,
+    context: { systemJob: true },
+    data: { status: 'retired' },
+  })
+  const ids = async (query = '') =>
+    (
+      await f.api(`/v1/tasks/reference-options?type=non-network-assets${query}`, f.own.adminCookie)
+    ).data.docs.map((option: { value: string }) => option.value)
+  expect(await ids()).not.toContain(asset.id)
+  expect(await ids(`&id=${asset.id}`)).toEqual([asset.id])
+})
+
+it('reference options leave out entities of an inactive office and replaced review cycles', async () => {
+  const options = async (type: string, query = '') =>
+    (
+      await f.api(`/v1/tasks/reference-options?type=${type}${query}`, f.own.adminCookie)
+    ).data.docs.map((option: { value: string }) => option.value)
+  const asset = await f.createManual(f.own, { office: f.own.second, owner: f.own.outside })
+  expect(await options('non-network-assets')).toContain(asset.id)
+  await f.payload.update({
+    collection: 'offices',
+    id: f.own.second,
+    overrideAccess: true,
+    data: { is_active: false },
+  })
+  try {
+    expect(await options('non-network-assets')).not.toContain(asset.id)
+    expect(await options('non-network-assets', `&id=${asset.id}`)).toEqual([asset.id])
+  } finally {
+    await f.payload.update({
+      collection: 'offices',
+      id: f.own.second,
+      overrideAccess: true,
+      data: { is_active: true },
+    })
+  }
+  const cycle = (
+    await f.payload.find({
+      collection: 'assessment-instances',
+      overrideAccess: true,
+      depth: 0,
+      where: { organization: { equals: f.own.org } },
+      limit: 1,
+    })
+  ).docs[0]
+  await f.payload.update({
+    collection: 'assessment-instances',
+    id: cycle.id,
+    overrideAccess: true,
+    data: { status: 'superseded' },
+  })
+  expect(await options('assessment-instances')).not.toContain(String(cycle.id))
+})
+
+it('reference options search on the server ignoring case and accents', async () => {
+  const asset = await f.createManual(f.own, {
+    alias: `Impresión del depósito ${randomBytes(3).toString('hex')}`,
+  })
+  const search = async (q: string) =>
+    (
+      await f.api(
+        `/v1/tasks/reference-options?type=non-network-assets&q=${encodeURIComponent(q)}`,
+        f.own.adminCookie
+      )
+    ).data.docs.map((option: { value: string }) => option.value)
+  expect(await search('IMPRESION deposito')).toContain(asset.id)
+  expect(await search('deposito impresion')).toContain(asset.id)
+  expect(await search('no existe ningun activo asi')).toEqual([])
+})

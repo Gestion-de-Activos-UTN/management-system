@@ -218,7 +218,7 @@ Orden común (`writableAssessment`) antes de leer el cuerpo:
 3. Activo del ciclo excluido de las revisiones: 409 `asset_excluded_from_assessments`.
 4. `canAnswerAssessment` falso: 403 `forbidden`.
 5. Feature apagado: 403 `feature_disabled`.
-6. Oficina (la **actual** del activo, o la del ciclo) u organización inactiva: 409 `office_inactive` / `organization_inactive`.
+6. Organización inactiva: 409 `organization_inactive`; se comprueba primero, porque desactivar una organización no desactiva sus oficinas. Después, oficina (la **actual** del activo, o la del ciclo) inactiva: 409 `office_inactive`.
 Luego el cuerpo se valida con su schema.
 
 Cuerpo de borrador y cierre (`SaveAssessmentDraftSchema`, `CompleteAssessmentSchema`): `{ answers: AssessmentAnswerDraft[] }`, hasta 100. Cada respuesta: `question_key` (1–160), `question_version` (entero positivo), `option_key` (1–160), `justification?` (≤ 2000, `TEXT_RULES.free`), `evidence_note?` (≤ 4000, `TEXT_RULES.free`). Con `option_key = not_applicable` la `justification` es obligatoria.
@@ -234,7 +234,7 @@ Respuesta (`AssessmentDetailResponse`):
 | Campo | Contenido |
 |---|---|
 | `assessment` | El ciclo (`depth: 0`) con estado derivado. |
-| `inactive_subject` | `office_inactive`, `organization_inactive` o `null`. La UI lo muestra de solo lectura. |
+| `inactive_subject` | `organization_inactive` (tiene prioridad), `office_inactive` o `null`. La UI lo muestra de solo lectura. |
 | `answers` | Respuestas del ciclo (hasta 100). |
 | `previous_answers` | Solo para ciclos abiertos: respuestas del ciclo cerrado más reciente (`completed` o `superseded`) del mismo destino, política y versión. Vacío en ciclos cerrados. |
 | `assessment_history` | Hasta 100 ciclos del mismo destino, `-createdAt`, con estado derivado. |
@@ -248,7 +248,7 @@ Errores: 404 `not_found`; 403 `forbidden` (sin lectura, incluido un ciclo de otr
 
 Cuerpo (`UpdateAssessmentPolicySchema`): `{ policy_key: 'essential' | 'reinforced', policy_version: entero positivo }`.
 
-Orden: sesión; rol distinto de `org_admin` o sin organización: 403 `forbidden` (un PlatformAdmin necesita `asOrganization`); feature: 403 `feature_disabled`; cuerpo: 400 `invalid_policy` (`issues`); `policy_version` distinta de 2 o clave fuera del catálogo: 400 `policy_version_unavailable`; `organization-settings` inexistente: 404 `settings_not_found`. Si la política ya es la vigente, responde 200 con los ajustes sin escribir ni encolar.
+Orden: sesión; rol distinto de `org_admin` o sin organización: 403 `forbidden` (un PlatformAdmin necesita `asOrganization`); feature: 403 `feature_disabled`; organización inactiva: 409 `organization_inactive`; cuerpo: 400 `invalid_policy` (`issues`); `policy_version` distinta de 2 o clave fuera del catálogo: 400 `policy_version_unavailable`; `organization-settings` inexistente: 404 `settings_not_found`. Si la política ya es la vigente, responde 200 con los ajustes sin escribir ni encolar.
 
 Si cambia: transacción única que actualiza `assessment_policy_key`, `assessment_policy_version`, `assessment_policy_selected_at` y `assessment_policy_selected_by`, ejecuta `reconcileOrganizationAssessments(..., 'policy_changed')` y `enqueueOrganizationRiskRecalculation`. Cualquier error revierte todo y responde 400 `policy_change_failed` con `message` (texto de la excepción). Respuesta: el documento de ajustes actualizado.
 
@@ -345,7 +345,7 @@ Cuerpo: `{ error: <código> }`, más `issues` (de Zod) en los de validación o `
 | `office_forbidden` | 403 | `office_id` fuera del alcance (listado) |
 | `not_found` | 404 | Ciclo inexistente |
 | `asset_excluded_from_assessments` | 409 | Activo del ciclo excluido |
-| `office_inactive` / `organization_inactive` | 409 | El destino (oficina actual del activo, oficina del ciclo u organización) está inactivo |
+| `office_inactive` / `organization_inactive` | 409 | El destino (oficina actual del activo, oficina del ciclo u organización) está inactivo. `organization_inactive` también al cambiar la política |
 | `invalid_draft` / `invalid_completion` / `invalid_reopen` / `invalid_policy` | 400 | Cuerpo inválido (`issues`) |
 | `draft_rejected` | 400 | Cualquier excepción al guardar el borrador (`message`) |
 | `completion_rejected` | 400 | Cualquier excepción al completar (`message`) |

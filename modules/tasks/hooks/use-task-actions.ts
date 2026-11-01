@@ -26,7 +26,20 @@ export function useCreateTasks() {
       await queryClient.invalidateQueries({ queryKey: ['tasks'] })
       notify({ color: 'green', title: 'Tarea creada' })
     },
-    onError: error => showApiError(error, 'No se pudo crear la tarea'),
+    onError: async error => {
+      // La entidad dejó de estar disponible: TaskForm lo muestra debajo de su campo.
+      if (error.code === 'asset_unavailable') return
+      if (error.code !== 'task_operation_conflict')
+        return showApiError(error, 'No se pudo crear la tarea')
+      // Un intento anterior de este formulario ya se guardó (p. ej. se perdió su respuesta).
+      await queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      notify({
+        color: 'yellow',
+        title: 'La tarea ya estaba creada',
+        message:
+          'Se guardó con los datos del primer intento. Edítala desde la lista si hace falta.',
+      })
+    },
   })
 }
 
