@@ -33,7 +33,7 @@ Los documentos por feature (`task-api.md`, `members-api.md`, `offices-api.md`, `
 
 ## 2. Modo de autenticación
 
-El código usa la **autenticación nativa de Payload** en todos los entornos, y es una solución **temporal**: Auth0 no se usará (la dependencia `@auth0/nextjs-auth0` está instalada pero ningún archivo la importa). No hay rama que distinga producción de desarrollo en la resolución de identidad. `SYSTEM_PROMPT.md` §7 y varios comentarios del código describen un esquema con Auth0 y un fallback solo para desarrollo que no corresponde a lo implementado ni a lo previsto. `identityProvider.ts` aísla el mecanismo: cuando se defina el reemplazo, `payloadNativeIdentityProvider` es la única pieza que se sustituye.
+El código usa la **autenticación nativa de Payload** en todos los entornos, y es una solución **temporal**: Auth0 no se usará (la dependencia `@auth0/nextjs-auth0` está instalada pero ningún archivo la importa). No hay rama que distinga producción de desarrollo en la resolución de identidad. `SYSTEM_PROMPT.md` §7 y varios comentarios del código describen un esquema con Auth0 y un fallback solo para desarrollo que no corresponde a lo implementado ni a lo previsto. El reemplazo previsto es **Descope** ([plan](../../documentation/planes/autenticacion-descope/README.md)). `identityProvider.ts` aísla el mecanismo: `payloadNativeIdentityProvider` es la única pieza que se sustituye.
 
 Lo único que depende de `NODE_ENV` es:
 - `auth.cookies.secure` en `Users` y `Admins`: `true` solo si `NODE_ENV === 'production'`.
@@ -407,7 +407,7 @@ Los códigos específicos de cada feature están en el catálogo de su documento
 
 Verificados en el código; no son necesariamente defectos.
 
-1. **Referencias a Auth0 desactualizadas.** Auth0 no se usará. `SYSTEM_PROMPT.md` §7 y varios comentarios del código (`identityProvider.ts`, layouts, `resolveAgentAuth.ts`) mencionan Auth0 o un fallback solo para desarrollo. El único mecanismo es la autenticación nativa de Payload, igual en todos los entornos y de carácter temporal.
+1. **Referencias a Auth0 desactualizadas.** Auth0 no se usará. `SYSTEM_PROMPT.md` §7 y varios comentarios del código (`identityProvider.ts`, layouts, `resolveAgentAuth.ts`) mencionan Auth0 o un fallback solo para desarrollo. El único mecanismo es la autenticación nativa de Payload, igual en todos los entornos y de carácter temporal. El proveedor previsto es Descope.
 2. **`asOrganization` inexistente lanza excepción.** `resolveTenantContext` lanza `TenantResolutionError` en lugar de devolver `null`; `getTenantContext` no la captura, y en los endpoints propios se traduce según cómo cada uno maneja excepciones (sin código ni forma uniforme garantizada). Una organización existente pero inactiva sí se acepta.
 3. **El administrador visitante tiene `role = 'org_admin'`.** El servidor, la matriz y `GET /v1/session` lo tratan como `org_admin` con `isPlatformAdmin = true`. El comentario de `isEffectiveOrgAdmin` dice que el rol sigue siendo `platform_admin`.
 4. **Un administrador inactivo devuelve contexto, no `null`.** `findActiveAdminById` devuelve el administrador con `isActive: false`; las comprobaciones `!ctx.isActive` de cada punto de entrada son las que lo bloquean. Un endpoint nuevo que solo compruebe `!ctx` dejaría pasar a un administrador inactivo con sesión válida; en la práctica `revokeInactiveSessions` vacía sus sesiones al desactivarlo.
