@@ -58,5 +58,6 @@ Esta carpeta es la documentación oficial del sistema.
 
 ## Pendiente
 
+- **Planes y propuestas** (índice de deficiencias, AuditLog, etc.): viven en [`documentation/`](../../documentation/README.md), en la raíz del proyecto. Esta carpeta solo documenta lo implementado.
 - **Pruebas de extremo a extremo:** no existen aún. Cuando se implemente Playwright, sus specs partirán de `flujos.md` y cada documento de feature incorporará su sección.
 - **AuditLog y Notification Bell:** no están implementados. Los puntos de enganche están marcados en el código con comentarios `// AUDIT:` y `// NOTIFY:`.

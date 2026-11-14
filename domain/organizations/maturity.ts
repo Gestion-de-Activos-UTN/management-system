@@ -1,4 +1,4 @@
-// Organization maturity profile (grounding-md/Diccionario-Recomendaciones-Nivel-Madurez.md).
+// Organization maturity profile (documentation/grounding-md/Diccionario-Recomendaciones-Nivel-Madurez.md).
 // It only prioritizes remediation advice; it never enters the Risk Score.
 
 export const MATURITY_IT_OWNER_VALUES = ['yes', 'no'] as const
