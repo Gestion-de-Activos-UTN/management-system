@@ -15,8 +15,9 @@ type ScopeFields = z.infer<typeof AssessmentScopeFieldsSchema>
 export function AssessmentScopeHint() {
   return (
     <Text size="sm" c="dimmed">
-      Los activos excluidos permanecen visibles y continúan escaneándose, pero no afectan las
-      revisiones ni el índice de deficiencias.
+      Los activos excluidos permanecen visibles y continúan escaneándose, pero quedan fuera de las
+      revisiones de seguridad. En los activos de red, la autorización y los servicios expuestos
+      siguen contando en el índice de deficiencias.
     </Text>
   )
 }

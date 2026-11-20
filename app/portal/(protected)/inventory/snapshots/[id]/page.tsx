@@ -215,10 +215,10 @@ export default function SnapshotDetailPage() {
       <Tabs defaultValue="network">
         <Tabs.List>
           <Tabs.Tab value="network" leftSection={<Server size={16} strokeWidth={1.5} />}>
-            Red ({networkAssets.length})
+            Detectados en la red ({networkAssets.length})
           </Tabs.Tab>
           <Tabs.Tab value="non-network" leftSection={<Package size={16} strokeWidth={1.5} />}>
-            Activos manuales ({nonNetworkAssets.length})
+            Registrados manualmente ({nonNetworkAssets.length})
           </Tabs.Tab>
         </Tabs.List>
 

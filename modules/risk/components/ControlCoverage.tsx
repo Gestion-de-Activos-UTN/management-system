@@ -13,7 +13,7 @@ export function ControlCoverage({ controls }: { controls: RiskEvaluationDTO['con
         Cuánto incumple cada control en lo evaluado y cuánta información hay para evaluarlo. Los
         equipos más importantes para el negocio pesan más.
       </Text>
-      <DataTable columns={controlColumns} data={controls} minWidth={640} maxHeight="none" />
+      <DataTable columns={controlColumns} data={controls} minWidth={560} maxHeight="none" />
     </Card>
   )
 }

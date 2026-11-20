@@ -559,7 +559,7 @@ El plan se elige en el alta de la organización y no se puede cambiar después d
 **Precondiciones:** una oficina activa concreta seleccionada en la barra superior.
 
 1. El actor va a **Inventario → Instantáneas** y pulsa **Generar instantánea**.
-2. Abre la fila nueva y revisa fecha, oficina, cantidades, pestañas **Red / Activos manuales** e índice de deficiencias / información disponible de ese momento.
+2. Abre la fila nueva y revisa fecha, oficina, cantidades, pestañas **Detectados en la red / Registrados manualmente** e índice de deficiencias / información disponible de ese momento.
 3. Desde el lápiz del título escribe `Inventario antes de la revisión` y guarda.
 4. Abre el lápiz, escribe otro nombre y cancela con **X** o **Escape**. Escribe un carácter inválido (`<`) y lo corrige. Deja el nombre vacío y guarda.
 5. Cambia el alias de un activo en el inventario actual y vuelve a abrir la misma instantánea.

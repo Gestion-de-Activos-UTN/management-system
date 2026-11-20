@@ -492,7 +492,7 @@ Las operaciones sensibles llevan comentarios `// AUDIT:` y `// NOTIFY:` en cada 
 
 ### 8.1 Cadena
 
-- Página `app/portal/(protected)/inventory/page.tsx` (pestañas Red y Activos manuales, panel de incidentes). Usa `modules/assets/components/` (`RowActions`, `InventoryIncidentsPanel`, `IdentificationBadge`) y `modules/non-network-assets/components/` (`NonNetworkAssetForm`, `RowActions`), con los hooks y el `service.ts` de cada módulo sobre `lib/http-client.ts`, contra `/api/...`.
+- Página `app/portal/(protected)/inventory/page.tsx` (pestañas «Detectados en la red» y «Registrados manualmente», panel de incidentes). Usa `modules/assets/components/` (`RowActions`, `InventoryIncidentsPanel`, `IdentificationBadge`) y `modules/non-network-assets/components/` (`NonNetworkAssetForm`, `RowActions`), con los hooks y el `service.ts` de cada módulo sobre `lib/http-client.ts`, contra `/api/...`.
 - Página `app/portal/(protected)/inventory/[id]/page.tsx` (detalle de un activo de red). Usa `modules/assets/components/` (`AssetDetailView`, `AssetIdentificationModal`, `InventoryIncidentsPanel`) y `modules/assets/hooks/*` sobre `modules/assets/service.ts`.
 
 `inventory/page.tsx` lee `asOrganization`, `officeId`, `tab` y `nonNetworkAsset` de la URL. `?tab=non-network` abre la pestaña de activos manuales; `?officeId=` fija la oficina seleccionada; `?nonNetworkAsset=<id>` abre el formulario de edición de ese activo una vez cargada la lista. La oficina seleccionada vive en `useUiStore` (`selectedOfficeId`) y entra a las claves de consulta.
@@ -534,7 +534,7 @@ Ninguna consulta de este feature tiene `refetchInterval`.
 
 **Listado (`inventory/page.tsx`).**
 - `InventoryIncidentsPanel` arriba, sin ocultarse por pestaña; no renderiza nada si no hay incidentes pendientes.
-- Pestaña "Red": filtros locales por texto (alias confirmado, hostname, IP), criticidad (solo cuenta si el activo está confirmado), estado e identificación (`identified`). Dos tablas: vigentes y "Retirados y sin conexión". La partición usa `useFrozenBucket`: cada fila queda en el grupo que le tocó la primera vez que se vio hasta recargar la página, de modo que un activo retirado desde la edición no salta de tabla solo.
+- Pestaña «Detectados en la red»: filtros locales por texto (alias confirmado, hostname, IP), criticidad (solo cuenta si el activo está confirmado), estado e identificación (`identified`). Dos tablas: vigentes y "Retirados y sin conexión". La partición usa `useFrozenBucket`: cada fila queda en el grupo que le tocó la primera vez que se vio hasta recargar la página, de modo que un activo retirado desde la edición no salta de tabla solo.
 - Pestaña "Activos manuales": filtros locales por alias, categoría, criticidad y estado de revisión (`review_status`); misma partición congelada; botón "Nuevo activo" que abre `NonNetworkAssetForm` en un modal.
 - Los datos de oficina e inventario ya vienen acotados por la API; el filtro por oficina del selector se aplica en la consulta.
 

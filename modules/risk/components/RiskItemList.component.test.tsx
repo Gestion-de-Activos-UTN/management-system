@@ -100,6 +100,8 @@ describe('RiskItemList', () => {
     expect(screen.getAllByRole('button')).toHaveLength(1)
     await userEvent.click(control)
     expect(screen.getByText('Baja')).toBeTruthy()
+    // The high reason of a high item does not repeat the row badge.
+    expect(screen.getAllByText('Alta')).toHaveLength(1)
     expect(screen.getByText(/^Consecuencia de: /)).toBeTruthy()
     expect(screen.getByText('Además falta información')).toBeTruthy()
     expect(screen.getByText('También figura en Pendientes.')).toBeTruthy()
@@ -125,7 +127,19 @@ describe('RiskItemList', () => {
     // Headings sit outside the accordions, never between their items.
     for (const accordion of accordions)
       expect(within(accordion as HTMLElement).queryByRole('heading')).toBeNull()
-    expect(within(accordions[0] as HTMLElement).getAllByRole('button')).toHaveLength(2)
+    // A single reason without detail has nothing to expand: a plain row, no button.
+    expect(within(accordions[0] as HTMLElement).queryAllByRole('button')).toHaveLength(0)
+    expect(screen.getByText('Equipo a')).toBeTruthy()
+  })
+
+  it('keeps an item expandable when it has more than one reason', () => {
+    const item = pending('a', 'survey', 'A.5.12')
+    item.reasons = [
+      ...item.reasons,
+      { ...item.reasons[0], key: 'a|r2', reason_code: 'inventory_completeness' },
+    ]
+    render(<RiskItemList list="pending" items={[item]} />, { wrapper: Wrapper })
+    expect(screen.getByRole('button', { name: /2 datos por completar/ })).toBeTruthy()
   })
 
   it('never claims everything is protected when there are no deficiencies', () => {

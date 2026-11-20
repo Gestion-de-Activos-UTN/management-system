@@ -1,8 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import Link from 'next/link'
-import { Accordion, Anchor, Center, Group, List, Loader, Stack, Text, Title } from '@mantine/core'
+import {
+  Accordion,
+  Anchor,
+  Box,
+  Center,
+  Grid,
+  Group,
+  List,
+  Loader,
+  Stack,
+  Text,
+  Title,
+} from '@mantine/core'
 import { RISK_PAIR_STATUS_LABEL } from '@/lib/enum-labels'
 import { portalHref } from '@/lib/portal-href'
 import { PRIORITY_RANK } from '@/domain/risk/priority'
@@ -70,9 +82,11 @@ function ReasonText({ reason }: { reason: ReasonDTO }) {
 function DeficiencyReason({
   reason,
   subordinates,
+  itemPriority,
 }: {
   reason: ReasonDTO
   subordinates: ReasonDTO[]
+  itemPriority: ReasonDTO['priority']
 }) {
   return (
     <List.Item>
@@ -83,7 +97,10 @@ function DeficiencyReason({
           </Text>
         ) : (
           <Group gap={6} wrap="wrap">
-            {reason.priority && <PriorityBadge priority={reason.priority} size="xs" />}
+            {/* The row already shows the item priority: repeat it only when it differs. */}
+            {reason.priority && reason.priority !== itemPriority && (
+              <PriorityBadge priority={reason.priority} size="xs" />
+            )}
             <Text size="xs" c="dimmed">
               {REASON_CLASS_LABEL[reason.class]}
             </Text>
@@ -98,7 +115,12 @@ function DeficiencyReason({
         {subordinates.length > 0 && (
           <List spacing={4} listStyleType="none" withPadding>
             {subordinates.map(sub => (
-              <DeficiencyReason key={sub.key} reason={sub} subordinates={[]} />
+              <DeficiencyReason
+                key={sub.key}
+                reason={sub}
+                subordinates={[]}
+                itemPriority={itemPriority}
+              />
             ))}
           </List>
         )}
@@ -123,6 +145,7 @@ function DeficiencyDetail({ item }: { item: DeficiencyItemDTO }) {
             key={reason.key}
             reason={reason}
             subordinates={deficiency.filter(sub => sub.subordinate_to === reason.key)}
+            itemPriority={item.priority}
           />
         ))}
       </List>
@@ -147,6 +170,10 @@ function DeficiencyDetail({ item }: { item: DeficiencyItemDTO }) {
   )
 }
 
+/** A single pending reason without detail is already the row summary: nothing to expand. */
+const expandable = (item: Item) =>
+  'priority' in item || item.reasons.length > 1 || Boolean(reasonLabel(item.reasons[0]).detail)
+
 function PendingDetail({ item }: { item: PendingItemDTO }) {
   return (
     <List spacing={4} size="sm">
@@ -159,13 +186,21 @@ function PendingDetail({ item }: { item: PendingItemDTO }) {
   )
 }
 
-function ItemLinks({ item, asOrganization }: { item: Item; asOrganization?: string }) {
+function ItemLinks({
+  item,
+  asOrganization,
+  mt = 'sm',
+}: {
+  item: Item
+  asOrganization?: string
+  mt?: string | number
+}) {
   const action = itemAction(item, asOrganization)
   const assetPath = item.subject.kind === 'asset' ? riskAssetPath(item.subject.asset_key) : null
   const assetHref = assetPath ? portalHref(assetPath, asOrganization) : null
   if (!action && !assetHref) return null
   return (
-    <Group gap="md" mt="sm">
+    <Group gap="md" mt={mt}>
       {action && (
         <Anchor component={Link} href={action.href} size="sm" fw={600}>
           {action.label}
@@ -180,7 +215,7 @@ function ItemLinks({ item, asOrganization }: { item: Item; asOrganization?: stri
   )
 }
 
-function ItemSummary({ item }: { item: Item }) {
+function ItemSummary({ item, links }: { item: Item; links?: ReactNode }) {
   const deficiency = 'priority' in item ? item : null
   const status = deficiency
     ? `${RISK_PAIR_STATUS_LABEL[deficiency.status]}${
@@ -189,22 +224,35 @@ function ItemSummary({ item }: { item: Item }) {
           : ''
       }`
     : pendingSummary(item.reasons)
-  // Plain text only: an Accordion.Control is a button and must not contain links.
+  // Plain text only: an Accordion.Control is a button and must not contain links or tooltips.
+  // Table-like row: the badge slot only exists in Deficiencias (every item there has one), so
+  // Pendientes starts flush left. Columns from md, left-aligned; below md it stacks.
   return (
-    <Group gap="sm" wrap="nowrap" align="flex-start">
-      {deficiency && <PriorityBadge priority={deficiency.priority} style={{ flexShrink: 0 }} />}
-      <Stack gap={0} style={{ minWidth: 0 }}>
-        <Text size="sm" fw={600}>
-          {controlTitle(item.control_key)}{' '}
-          <Text span size="xs" c="dimmed" fw={400}>
-            {item.control_key}
+    <Group gap="md" wrap="nowrap" align="center" style={{ flex: 1 }}>
+      {deficiency && (
+        <Box w={88} style={{ flexShrink: 0 }}>
+          <PriorityBadge priority={deficiency.priority} fullWidth />
+        </Box>
+      )}
+      <Grid gutter={{ base: 2, md: 'lg' }} style={{ flex: 1, minWidth: 0 }} align="center">
+        <Grid.Col span={{ base: 12, md: 4 }}>
+          <Text size="sm" fw={600}>
+            {controlTitle(item.control_key)}{' '}
+            <Text span size="xs" c="dimmed" fw={400}>
+              {item.control_key}
+            </Text>
           </Text>
-        </Text>
-        <Text size="sm">{subjectText(item.subject)}</Text>
-        <Text size="xs" c="dimmed">
-          {status}
-        </Text>
-      </Stack>
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 3 }}>
+          <Text size="sm">{subjectText(item.subject)}</Text>
+        </Grid.Col>
+        <Grid.Col span={{ base: 12, md: 5 }}>
+          <Text size="sm" c="dimmed">
+            {status}
+          </Text>
+          {links}
+        </Grid.Col>
+      </Grid>
     </Group>
   )
 }
@@ -264,21 +312,41 @@ export function RiskItemList({
             </Title>
           )}
           <Accordion multiple variant="separated" value={opened} onChange={setOpened}>
-            {section.items.map(item => (
-              <Accordion.Item key={item.key} value={item.key}>
-                <Accordion.Control>
-                  <ItemSummary item={item} />
-                </Accordion.Control>
-                <Accordion.Panel>
-                  {'priority' in item ? (
-                    <DeficiencyDetail item={item} />
-                  ) : (
-                    <PendingDetail item={item} />
-                  )}
-                  <ItemLinks item={item} asOrganization={asOrganization} />
-                </Accordion.Panel>
-              </Accordion.Item>
-            ))}
+            {section.items.map(item =>
+              expandable(item) ? (
+                <Accordion.Item key={item.key} value={item.key}>
+                  <Accordion.Control>
+                    <ItemSummary item={item} />
+                  </Accordion.Control>
+                  <Accordion.Panel>
+                    {'priority' in item ? (
+                      <DeficiencyDetail item={item} />
+                    ) : (
+                      <PendingDetail item={item} />
+                    )}
+                    <ItemLinks item={item} asOrganization={asOrganization} />
+                  </Accordion.Panel>
+                </Accordion.Item>
+              ) : (
+                // Nothing to expand: a plain row with the same look and column widths (the right
+                // padding takes the place of the chevron), its link under the status.
+                <Box
+                  key={item.key}
+                  px="md"
+                  py="sm"
+                  bg="light-dark(var(--mantine-color-gray-0), var(--mantine-color-dark-6))"
+                  style={{
+                    borderRadius: 'var(--mantine-radius-default)',
+                    paddingRight: 'calc(var(--mantine-spacing-md) * 2 + 15px)',
+                  }}
+                >
+                  <ItemSummary
+                    item={item}
+                    links={<ItemLinks item={item} asOrganization={asOrganization} mt={4} />}
+                  />
+                </Box>
+              )
+            )}
           </Accordion>
         </Stack>
       ))}

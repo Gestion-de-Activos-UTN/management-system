@@ -230,9 +230,11 @@ export function summarizeNetwork(
 
   const rows = history.filter(row => row.asset_key === assetKeyValue)
   const observed = new Set(observation.evaluations.map(item => item.service_key))
+  // absenceConfirmed reads asset_coverage like the asset doc does, so both callers agree on partial rows.
+  const absenceSource = { ...observation, asset_coverage: { port_scan: observation.port_scan } }
   // A past prohibited service missing from this scan is resolved only by a confirmed absence.
   for (const serviceKey of new Set(rows.map(row => row.service_key))) {
-    if (observed.has(serviceKey) || absenceConfirmed(observation, serviceKey)) continue
+    if (observed.has(serviceKey) || absenceConfirmed(absenceSource, serviceKey)) continue
     const previous = selectPreviousFinding(rows, assetKeyValue, serviceKey, observation.observed_at)
     if (previous)
       findings.set(`${serviceKey}|network.service:${serviceKey}`, {

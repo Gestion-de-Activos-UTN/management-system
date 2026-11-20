@@ -199,9 +199,21 @@ describe('selectPreviousFinding (D26)', () => {
   })
 
   it('decides absence exactly like the compliance-history loop', () => {
-    const doc = observedDoc([svc('tcp', 23, 'closed')])
-    const observation = networkObservation(doc)
-    for (const key of ['tcp:23', 'tcp:80', 'tcp:5000', 'udp:161'])
-      assert.equal(absenceConfirmed(observation, key), absenceConfirmed(doc, key), key)
+    for (const status of ['complete', 'partial'])
+      for (const key of ['tcp:23', 'tcp:5000', 'udp:161']) {
+        const doc = observedDoc([], { port_scan_coverage: [{ protocol: 'tcp', status, port_spec: '1-1000' }] } as Partial<Asset>)
+        const history = [row({ service_key: key, check_key: `network.service:${key}` })]
+        const pending = summarizeNetwork(networkObservation(doc), 'asset:g1', history).findings.some(
+          finding => finding.service_key === key && finding.state === 'not_observed'
+        )
+        assert.equal(pending, !absenceConfirmed(doc, key), `${status} ${key}`)
+      }
+  })
+
+  it('resolves a past prohibited port on a partial report row when the asset scan was complete', () => {
+    const partial = { port_scan_coverage: [{ protocol: 'tcp', status: 'partial', port_spec: '1-1000' }] } as Partial<Asset>
+    const summary = summarize([], partial, [row({})])
+    assert.equal(summary.compliance, 1)
+    assert.deepEqual(summary.findings, [])
   })
 })

@@ -16,7 +16,7 @@ import {
   TextInput,
   Tooltip,
 } from '@mantine/core'
-import { ArrowRight, Building2, Info, Monitor, Search, type LucideIcon } from 'lucide-react'
+import { Building2, ClipboardCheck, Info, Monitor, Search, type LucideIcon } from 'lucide-react'
 import type { AssessmentInstance } from '@/app/types/payload-types'
 import type { SecurityReviewSummary as SecurityReviewSummaryData } from '@/modules/assessments/service'
 import { formatDate } from '@/lib/format-date'
@@ -340,10 +340,10 @@ function AssessmentGroup({
           <Button
             component={Link}
             href={portalHref(`/portal/security-review/${latest.id}`, asOrganization)}
-            variant="subtle"
-            rightSection={<ArrowRight size={16} />}
+            variant="light"
+            leftSection={<ClipboardCheck size={16} strokeWidth={1.5} />}
           >
-            Abrir actual
+            Abrir revisión
           </Button>
         </Group>
       </Group>

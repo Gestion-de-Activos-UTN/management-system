@@ -27,8 +27,9 @@ export function AssetSecurityReviewCard({
           <div>
             <Text fw={650}>Excluido de las evaluaciones de seguridad</Text>
             <Text size="sm" c="dimmed">
-              Este activo permanece visible y puede seguir escaneándose, pero no afecta el índice
-              de deficiencias.
+              Este activo permanece visible y puede seguir escaneándose. No recibe revisiones de
+              seguridad, pero su autorización y sus servicios expuestos siguen contando en el
+              índice de deficiencias.
             </Text>
           </div>
         </Group>
