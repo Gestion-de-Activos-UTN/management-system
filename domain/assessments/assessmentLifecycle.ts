@@ -10,13 +10,45 @@ import {
 import type { SaveAssessmentDraft } from '@/modules/assessments/schema'
 import { relationId } from '@/lib/relationId'
 import { evaluateAutomaticComplianceForAssessment } from './evaluateAutomaticCompliance'
-import { evaluateControlEfficacy } from '@/domain/risk/control-efficacy'
+import {
+  evaluateControlEfficacy,
+  type ControlEfficacyResult,
+  type SubEfficacy,
+} from '@/domain/risk/control-efficacy'
+import type { ComplianceStatus } from './catalog'
+import { complianceStatusFor } from './compliance-status'
 import {
   enqueueOrganizationRiskRecalculation,
   enqueueRiskRecalculation,
 } from '@/domain/risk/enqueueRiskRecalculation'
 import { isAssetExcludedFromAssessments } from './asset-assessment-scope'
 import { transactionLock, withTransaction } from '@/domain/with-transaction'
+
+/** `answered_at`: when that sub-question was answered (provenance), not the result date. */
+export type SubEfficacySnapshot = SubEfficacy & { answered_at: string | null }
+
+/**
+ * Written at completion into assessment-answers.evaluation_effect_snapshot (replacing the draft
+ * per-answer effect) and compliance-results.evidence_snapshot.evaluation_effect.
+ */
+export type EvaluationEffectSnapshot = {
+  status: ComplianceStatus
+  reason_code: ControlEfficacyResult['status']
+  base_efficacy: number | null
+  adjusted_efficacy: number | null
+  combined_efficacy: number | null
+  sub_efficacies: SubEfficacySnapshot[]
+  applied_rules: string[]
+  source: 'exact'
+}
+
+const RESULT_EXPLANATIONS: Record<ComplianceStatus, string> = {
+  compliant: 'The current review confirms this routine is in place.',
+  partially_effective: 'The current review indicates this routine is only partially in place.',
+  non_compliant: 'The current review indicates this routine needs attention.',
+  not_evaluable: 'The current review does not provide enough evidence to evaluate this routine.',
+  not_applicable: 'The current review marks this routine as not applicable, with a justification.',
+}
 
 function questionDefinition(key: string, version: number): RiskQuestionV2 {
   const definition = RISK_QUESTIONS_V2.find(item => item.key === key && item.version === version)
@@ -78,14 +110,7 @@ function assertAnswerAllowed(
     throw new Error(`La respuesta elegida ya no está disponible para la pregunta ${answer.question_key}.`)
   if (option.requires_justification && !answer.justification?.trim())
     throw new Error('Justifica por qué esta respuesta no aplica.')
-  const status =
-    option.efficacy === null
-      ? 'not_evaluable'
-      : option.efficacy === 1
-        ? 'compliant'
-        : option.efficacy === 0
-          ? 'non_compliant'
-          : 'partially_effective'
+  const status = complianceStatusFor(option.efficacy, option.key === 'not_applicable')
   return {
     definition,
     option,
@@ -314,18 +339,18 @@ export async function completeAssessment(
         evaluateControlEfficacy(controlKey, optionKeys, policyKey),
       ])
     )
-    const counts = { compliant: 0, partially_effective: 0, non_compliant: 0, not_evaluable: 0 }
-    for (const result of controlEffects.values()) {
-      const status =
-        result.efficacy === null
-          ? 'not_evaluable'
-          : result.efficacy === 1
-            ? 'compliant'
-            : result.efficacy === 0
-              ? 'non_compliant'
-              : 'partially_effective'
-      counts[status] += 1
+    const controlStatus = (result: ControlEfficacyResult) =>
+      complianceStatusFor(result.efficacy, result.status === 'not_applicable')
+    const counts: Record<ComplianceStatus, number> = {
+      compliant: 0,
+      non_compliant: 0,
+      not_evaluable: 0,
+      partially_effective: 0,
+      not_applicable: 0,
     }
+    for (const result of controlEffects.values()) counts[controlStatus(result)] += 1
+    // The one closing timestamp: result date, completed_at, validity and automatic evaluation all
+    // reuse it, so they never drift by milliseconds.
     const completedAt = new Date().toISOString()
     const validUntilDates: string[] = []
     const persistedControls = new Set<string>()
@@ -334,21 +359,16 @@ export async function completeAssessment(
       const definition = questionDefinition(answer.question_key, answer.question_version)
       const combined = controlEffects.get(definition.control_key)!
       const sub = combined.sub.find(item => item.question_key === answer.question_key)!
-      const status: keyof typeof counts =
-        combined.efficacy === null
-          ? 'not_evaluable'
-          : combined.efficacy === 1
-            ? 'compliant'
-            : combined.efficacy === 0
-              ? 'non_compliant'
-              : 'partially_effective'
-      const effect = {
-        status,
+      const effect: EvaluationEffectSnapshot = {
+        status: controlStatus(combined),
         reason_code: combined.status,
         base_efficacy: sub.base,
         adjusted_efficacy: sub.adjusted,
         combined_efficacy: combined.efficacy,
-        sub_efficacies: combined.sub,
+        sub_efficacies: combined.sub.map(item => ({
+          ...item,
+          answered_at: answerByKey.get(item.question_key)?.answered_at ?? null,
+        })),
         applied_rules: combined.applied_rules,
         source: 'exact',
       }
@@ -381,19 +401,15 @@ export async function completeAssessment(
           manual_asset: assessment.manual_asset ? relationId(assessment.manual_asset) : null,
           control_key: definition.control_key,
           check_key: `manual:${answer.question_key}`,
-          status: effect.status === 'partially_effective' ? 'non_compliant' : effect.status,
+          status: effect.status,
           severity: controlSeverity(definition.control_key),
           policy_key: assessment.policy_key,
           policy_version: assessment.policy_version,
-          evaluated_at: answer.answered_at,
+          // Result date = closing date; each sub-answer keeps its own answered_at as provenance.
+          evaluated_at: completedAt,
           valid_until: answer.valid_until,
           reason_code: effect.reason_code,
-          explanation:
-            effect.status === 'compliant'
-              ? 'The current review confirms this routine is in place.'
-              : effect.status === 'non_compliant'
-                ? 'The current review indicates this routine needs attention.'
-                : 'The current review does not provide enough evidence to evaluate this routine.',
+          explanation: RESULT_EXPLANATIONS[effect.status],
           evidence_snapshot: {
             assessment_id: assessment.id,
             answer_id: answer.id,

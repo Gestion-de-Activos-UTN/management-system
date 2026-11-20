@@ -80,7 +80,7 @@ export default function SecurityReviewPage() {
     <Stack gap="xl">
       <PageHeader
         title="Revisión de seguridad"
-        description="Controles breves y prácticos sobre cómo se realiza el trabajo. La información faltante reduce la cobertura, pero no aumenta el riesgo; lo aumentan las protecciones ausentes o incompletas."
+        description="Controles breves y prácticos sobre cómo se realiza el trabajo. La información faltante reduce la información disponible, pero no aumenta el índice; lo aumentan las protecciones ausentes o incompletas."
         rightSection={
           canUseBulk ? (
             <Button

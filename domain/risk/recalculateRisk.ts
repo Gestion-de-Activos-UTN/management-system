@@ -2,21 +2,20 @@ import type { CollectionSlug, Payload, PayloadRequest, Where } from 'payload'
 import type { Asset, ComplianceResult, NonNetworkAsset } from '@/app/types/payload-types'
 import { relationId } from '@/lib/relationId'
 import { findActiveOffices } from '@/domain/offices/active-offices'
-import { evaluateNetworkBaseline } from '@/domain/assessments/evaluateNetworkBaseline'
 import { evaluateOfficeMonitoring } from '@/domain/assessments/evaluateAutomaticCompliance'
 import { isAssetExcludedFromAssessments } from '@/domain/assessments/asset-assessment-scope'
 import { RISK_POLICY_KEYS, type RiskPolicyKey } from './catalog-v2'
 import type { Criticality } from './constants'
-import { calculateRisk } from './engine'
 import { persistRiskEvaluation } from './persistRiskEvaluation'
 import { riskAssetTypeForManual, riskAssetTypeForScanned } from './risk-asset-type'
-import type { ServiceClassification } from './automatic-evidence'
+import { answerEvidence, assetKey, type AnswerEvidence } from './answer-evidence'
+import { networkHistoryRow, networkObservation, type NetworkHistoryRow } from './network-evidence'
 import {
-  buildRiskPairs,
-  type RiskAnswerEvidence,
+  buildDeficiencyPairs,
   type RiskInputAsset,
   type RiskOfficeMonitoring,
-} from './build-pairs'
+} from './deficiency-pairs'
+import { evaluationFromPairs } from './evaluation-from-pairs'
 
 const criticality = (value: string | null | undefined): Criticality =>
   value === 'low' || value === 'medium' || value === 'high' || value === 'critical'
@@ -46,32 +45,9 @@ async function findAll<T>(
   }
 }
 
-const asRecord = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {}
-
 function networkAsset(doc: Asset, now: Date): RiskInputAsset {
-  const coverage = doc.asset_coverage
-  const classified: ServiceClassification[] = evaluateNetworkBaseline({
-    confirmed_type: doc.confirmed_type ?? null,
-    port_coverage: coverage?.port_scan ?? 'unknown',
-    service_coverage: coverage?.service_detection ?? 'unknown',
-    services: doc.services ?? [],
-  }).map(row => ({
-    classification:
-      row.reason_code === 'network_prohibited'
-        ? 'prohibited'
-        : row.reason_code === 'network_expected'
-          ? 'expected'
-          : row.reason_code === 'network_review'
-            ? 'review'
-            : 'unmatched',
-    severity: row.severity,
-    confidence_ok: row.reason_code !== 'service_confidence_insufficient',
-  }))
   return {
-    key: `asset:${doc.id}`,
+    key: assetKey({ asset: doc.id })!,
     source: 'network',
     office_id: relationId(doc.office),
     risk_type:
@@ -82,16 +58,7 @@ function networkAsset(doc: Asset, now: Date): RiskInputAsset {
     has_owner: Boolean(doc.owner),
     cidr: doc.last_observed_cidr ?? null,
     excluded: isAssetExcludedFromAssessments(doc, now),
-    network: {
-      current: doc.status !== 'offline',
-      complete:
-        coverage?.port_scan === 'complete' &&
-        coverage?.service_detection === 'complete' &&
-        !(doc.services ?? []).some(
-          service => !['open', 'closed'].includes(service.state ?? 'unknown')
-        ),
-      services: classified,
-    },
+    observation: networkObservation(doc),
   }
 }
 
@@ -99,7 +66,7 @@ function manualAsset(doc: NonNetworkAsset, now: Date): RiskInputAsset | null {
   const riskType = riskAssetTypeForManual(doc.asset_category)
   if (!riskType) return null
   return {
-    key: `manual:${doc.id}`,
+    key: assetKey({ manual_asset: doc.id })!,
     source: 'manual',
     office_id: relationId(doc.office),
     risk_type: riskType,
@@ -110,33 +77,31 @@ function manualAsset(doc: NonNetworkAsset, now: Date): RiskInputAsset | null {
     has_owner: Boolean(doc.owner),
     cidr: null,
     excluded: isAssetExcludedFromAssessments(doc, now),
-    network: null,
+    observation: null,
   }
 }
 
-function answerEvidence(row: ComplianceResult): RiskAnswerEvidence {
-  const effect = asRecord(asRecord(row.evidence_snapshot).evaluation_effect)
-  const efficacy = typeof effect.combined_efficacy === 'number' ? effect.combined_efficacy : null
-  return {
-    control_key: row.control_key,
-    asset_key: row.asset
-      ? `asset:${relationId(row.asset)}`
-      : row.manual_asset
-        ? `manual:${relationId(row.manual_asset)}`
-        : null,
-    office_id: row.office ? relationId(row.office) : null,
-    efficacy: row.status === 'not_evaluable' ? null : efficacy,
-    evaluated_at: row.evaluated_at,
-    reason_code: row.reason_code,
-  }
+type RiskScopeInput = {
+  organizationId: string
+  officeId?: string
+  officeIds?: readonly string[]
+  now?: Date
 }
 
-/** Read-only calculation shared by persisted evaluations and assigned-office consolidations. */
-export async function calculateRiskForScope(
+/** Reads the current evidence of a scope once, for persisted evaluations, consolidations and simulations. */
+export async function loadRiskInputs(
   payload: Payload,
-  input: { organizationId: string; officeId?: string; officeIds?: readonly string[]; now?: Date },
+  input: RiskScopeInput,
   req?: PayloadRequest
-) {
+): Promise<{
+  policy: RiskPolicyKey
+  assets: RiskInputAsset[]
+  answers: AnswerEvidence[]
+  monitoring: RiskOfficeMonitoring[]
+  networkHistory: NetworkHistoryRow[]
+  officeIds: string[]
+  evaluatedAt: Date
+}> {
   if (input.officeId && input.officeIds) throw new Error('Choose one office scope')
   const now = input.now ?? new Date()
   const organization = { organization: { equals: input.organizationId } }
@@ -209,22 +174,56 @@ export async function calculateRiskForScope(
   const answers = results
     .filter(row => row.check_key.startsWith('manual:') && row.policy_key === policy)
     .map(answerEvidence)
+  // D26 context: one paginated read of the confirmed A.8.21 history of the scope, never one per
+  // port. valid_until is ignored on purpose: an expired finding can still be the antecedent.
+  // ponytail: reads the whole A.8.21 history of the scope; mark the logical head or window it if it grows.
+  const networkHistory = networkDocs.length
+    ? (
+        await findAll<ComplianceResult>(
+          payload,
+          'compliance-results',
+          {
+            and: [
+              organization,
+              { control_key: { equals: 'A.8.21' } },
+              { service_key: { exists: true } },
+              { asset: { in: networkDocs.map(doc => doc.id) } },
+              { status: { in: ['compliant', 'non_compliant'] } },
+            ],
+          },
+          req
+        )
+      ).map(networkHistoryRow)
+    : []
+  return {
+    policy,
+    assets,
+    answers,
+    monitoring,
+    networkHistory,
+    officeIds: activeOfficeIds,
+    evaluatedAt: now,
+  }
+}
 
-  const { pairs, population, alerts } = buildRiskPairs({
+/** Read-only calculation shared by persisted evaluations and assigned-office consolidations. */
+export async function calculateRiskForScope(
+  payload: Payload,
+  input: RiskScopeInput,
+  req?: PayloadRequest
+) {
+  const { policy, assets, answers, monitoring, networkHistory, officeIds, evaluatedAt } =
+    await loadRiskInputs(payload, input, req)
+  const { pairs, assetCounts, context } = buildDeficiencyPairs({
     organizationId: input.organizationId,
     policy,
     assets,
     answers,
     monitoring,
+    networkHistory,
   })
-  const result = calculateRisk(pairs, population)
-  return {
-    policy,
-    result,
-    undeterminedExposure: alerts,
-    evaluatedAt: now,
-    officeIds: activeOfficeIds,
-  }
+  const evaluation = evaluationFromPairs({ policy, pairs, assetCounts, context })
+  return { policy, evaluation, pairs, evaluatedAt, officeIds }
 }
 
 /** Loads current evidence, runs the pure engine and appends one auditable evaluation. */

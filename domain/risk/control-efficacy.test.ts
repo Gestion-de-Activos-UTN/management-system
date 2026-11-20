@@ -36,6 +36,23 @@ describe('evaluateControlEfficacy', () => {
     assert.deepEqual(result.applied_rules, ['A.8.7.no_protection_forces_updates_zero'])
   })
 
+  it('force_zero never touches a justified not_applicable target', () => {
+    for (const [control, trigger, target] of [
+      ['A.8.5', 'A.8.5.unlock', 'A.8.5.idle_lock'],
+      ['A.8.7', 'A.8.7.protection_active', 'A.8.7.protection_updates'],
+    ]) {
+      const result = evaluateControlEfficacy(
+        control,
+        { [trigger]: 'none', [target]: 'not_applicable' },
+        'essential'
+      )
+      assert.equal(result.status, 'evaluable')
+      close(result.efficacy, 0)
+      assert.deepEqual(result.applied_rules, [])
+      assert.equal(result.sub.find(item => item.question_key === target)!.adjusted, null)
+    }
+  })
+
   it('A.8.9/A.8.20: default password halves firmware efficacy', () => {
     const result = evaluateControlEfficacy(
       'A.8.9/A.8.20',

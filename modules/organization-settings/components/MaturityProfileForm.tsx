@@ -50,7 +50,7 @@ export function MaturityProfileForm({
           <Text fw={700}>Perfil de la organización</Text>
           <Text size="sm" c="dimmed">
             Nos ayuda a sugerir primero las mejoras que tu empresa puede aplicar hoy. No cambia el
-            puntaje de riesgo.
+            índice de deficiencias.
           </Text>
         </div>
         <Controller

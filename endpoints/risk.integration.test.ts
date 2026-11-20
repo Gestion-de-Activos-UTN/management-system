@@ -4,6 +4,9 @@ import { getPayload } from 'payload'
 import type { Payload, PayloadRequest } from 'payload'
 import config from '../payload.config'
 import { persistRiskEvaluation } from '@/domain/risk/persistRiskEvaluation'
+import type { DeficiencyPair } from '@/domain/risk/deficiency-pairs'
+import type { EvaluationData } from '@/domain/risk/evaluation-from-pairs'
+import type { IndexVisibility } from '@/domain/risk/deficiency-index'
 import { recalculateRisk } from '@/domain/risk/recalculateRisk'
 import { member, seedRiskOrganization } from '@/domain/risk/risk-integration-seed'
 import type { LatestRiskResponse } from '@/modules/risk/service'
@@ -54,17 +57,22 @@ test('risk endpoint: never returns another organization or an office outside the
   assert.equal(spoofed.status, 200)
   assert.notEqual(spoofed.body.evaluation?.id, String(evaluationB.id))
 
-  const own = await call(payload, admin)
+  const own = await call(payload, admin, '?list=pending&limit=50')
   assert.equal(own.status, 200)
   assert.ok(own.body.evaluation)
-  assert.ok(own.body.contributions.length > 0)
-  assert.ok(own.body.contributions.every(row => row.asset_key === `asset:${a.server.id}`))
-  // Labels are resolved only inside the caller's organization.
-  assert.ok(own.body.contributions.every(row => row.asset_label === '10.0.0.10'))
-  assert.deepEqual(
-    own.body.evaluation!.top_assets.map(item => item.asset_id),
-    [`asset:${a.server.id}`]
-  )
+  assert.equal(own.body.list, 'pending')
+  assert.ok(own.body.items.length > 0)
+  assert.equal(own.body.totals.pending, own.body.pagination.totalDocs)
+  for (const item of own.body.items) {
+    const subject = item.subject
+    // Labels are resolved only inside the caller's organization.
+    if (subject.kind === 'asset') {
+      assert.equal(subject.asset_key, `asset:${a.server.id}`)
+      assert.equal(subject.asset_label, '10.0.0.10')
+    } else if (subject.kind === 'organization') assert.equal(subject.id, orgA)
+    else assert.ok([officeA1, officeA2].includes(subject.id))
+  }
+  assert.ok(own.body.evaluation!.top_assets.every(item => item.asset_key === `asset:${a.server.id}`))
 
   const office = await call(payload, manager, `?office_id=${officeA1}`)
   assert.equal(office.status, 200)
@@ -77,86 +85,85 @@ test('risk endpoint: rejects invalid pagination instead of guessing', async () =
   const admin = await member(payload, String(a.organization.id), [String(a.office.id)], 'org_admin')
   assert.equal((await call(payload, admin, '?page=0')).status, 400)
   assert.equal((await call(payload, admin, '?page=abc')).status, 400)
-  assert.equal((await call(payload, admin, '?sort=residual_risk')).status, 400)
-  assert.equal((await call(payload, admin, '?sort=asset&direction=up')).status, 400)
+  assert.equal((await call(payload, admin, '?list=contributions')).status, 400)
+  assert.equal((await call(payload, admin, '?limit=7')).status, 400)
 })
 
-test('risk endpoint and REST: a hidden evaluation never exposes numbers', async () => {
+// Hand-built evaluation: raw index, band and per-asset numbers exist whatever the visibility.
+const handBuilt = (assetKey: string, visibility: IndexVisibility): { evaluation: EvaluationData; pairs: DeficiencyPair[] } => ({
+  evaluation: {
+    catalog_version: 2,
+    engine_version: 3,
+    policy_key: 'essential',
+    index: 60,
+    band: 'high',
+    coverage: visibility === 'banded' ? 90 : 10,
+    visibility,
+    control_summary: [
+      { control_key: 'A.8.2', importance: 8, deficiency: 1, coverage: 1, evaluated_pairs: 1, pending_pairs: 0, warning: false },
+    ],
+    warnings: [],
+    asset_summary: [{ asset_key: assetKey, index: 60, coverage: 90, visibility: 'banded', band: 'high' }],
+    counts: {
+      pairs: { compliant: 0, partially_effective: 0, non_compliant: 1, not_evaluable: 9, not_applicable: 0 },
+      assets: { in_scope: 1, excluded_from_assessment: 0, unidentified: 0, authorization_pending: 0, unauthorized: 0 },
+      deficiencies: { low: 0, medium: 0, high: 1, critical: 0 },
+      network: { pending_services: 0, assets_with_pending_services: 0 },
+    },
+    context: { office_visibility: [], shared_cidr: [] },
+  },
+  pairs: [
+    {
+      asset_key: assetKey,
+      asset_office_id: '',
+      asset_type: 'server',
+      control_key: 'A.8.2',
+      criticality: 'critical',
+      applicability: 'applicable',
+      compliance: 0,
+      status: 'non_compliant',
+      reason_code: 'evaluable',
+      evidence: { kind: 'answer_missing' },
+      reasons: [
+        {
+          key: `${assetKey}|A.8.2|A.8.2.privileged_access:generic_or_default`,
+          list: 'deficiency',
+          class: 'deficiency',
+          priority: 'high',
+          reason_code: 'answer_generic_or_default',
+          source: { kind: 'answer', question_key: 'A.8.2.privileged_access', option_key: 'generic_or_default' },
+          adjustments: [],
+        },
+      ],
+      priority: 'high',
+    },
+  ],
+})
+
+test('risk endpoint and REST: a hidden evaluation never exposes numbers, a partial select never hides them', async () => {
   const payload = await getPayload({ config })
   const a = await seedRiskOrganization(payload)
   const organizationId = String(a.organization.id)
   const assetKey = `asset:${a.server.id}`
-  // Hand-built result: a raw score exists, but coverage is below the visibility threshold.
-  await persistRiskEvaluation(payload, {
-    organizationId,
-    policy: 'essential',
-    evaluatedAt: new Date(),
-    undeterminedExposure: [],
-    result: {
-      contributions: [
-        {
-          asset_id: assetKey,
-          control_key: 'A.8.2',
-          criticality: 'critical',
-          severity: 'critical',
-          exposure: 'high',
-          exposure_source: 'scan',
-          scope_multiplier: 1,
-          efficacy: 0,
-          reason_code: 'fixture',
-          unit_kind: 'asset',
-          unit_id: assetKey,
-          status: 'non_compliant',
-          coverage_weight: 1,
-          inherent_risk: 64,
-          residual_risk: 64,
-        },
-      ],
-      controls: [
-        {
-          control_key: 'A.8.2',
-          residual_raw: 64,
-          residual_capped: 64,
-          capped: false,
-          systemic_failure: false,
-        },
-      ],
-      assets: [
-        { asset_id: assetKey, score: 60, band: 'high', inherent_risk: 64, residual_risk: 64 },
-      ],
-      riem: 1,
-      rro_raw: 1,
-      rro_adjusted: 1,
-      score: 60,
-      base_band: 'high',
-      final_band: 'high',
-      coverage: 10,
-      confidence: 'hidden',
-      effective_confidence: 'hidden',
-      unknown_percentage: 0,
-      severe_concentration_percentage: 0,
-      severe_concentration: false,
-      critical_asset_alerts: [],
-      counts: {
-        compliant: 0,
-        partially_effective: 0,
-        non_compliant: 1,
-        not_evaluable: 9,
-        excluded: 0,
-        excluded_assets: 0,
-        unconfirmed_assets: 0,
-      },
-    },
-  })
+  const hidden = handBuilt(assetKey, 'hidden')
+  hidden.pairs[0].asset_office_id = String(a.office.id)
+  await persistRiskEvaluation(payload, { organizationId, evaluatedAt: new Date(), ...hidden })
   const admin = await member(payload, organizationId, [String(a.office.id)], 'org_admin')
 
   const { status, body } = await call(payload, admin)
   assert.equal(status, 200)
-  assert.equal(body.evaluation!.score, null)
-  assert.equal(body.evaluation!.final_band, null)
+  assert.equal(body.evaluation!.index, null)
+  assert.equal(body.evaluation!.band, null)
+  assert.equal(body.evaluation!.visibility, 'hidden')
   assert.deepEqual(body.evaluation!.top_assets, [])
-  assert.deepEqual(body.evaluation!.controls, [])
-  assert.ok(body.contributions.every(row => row.residual_risk === null))
+  // Coverage and warnings stay visible; D_c follows the index.
+  assert.equal(body.evaluation!.controls.length, 1)
+  assert.equal(body.evaluation!.controls[0].deficiency, null)
+  assert.equal(body.evaluation!.controls[0].coverage, 1)
+  // The lists explain what is missing or wrong: never hidden with the index (contracts §10.5).
+  assert.equal(body.totals.deficiencies, 1)
+  assert.equal(body.list, 'deficiencies')
+  assert.equal(body.items[0].control_key, 'A.8.2')
 
   const user = { id: admin, collection: 'users' } as never
   const rest = await payload.find({
@@ -167,8 +174,11 @@ test('risk endpoint and REST: a hidden evaluation never exposes numbers', async 
     where: { organization: { equals: organizationId } },
   })
   assert.equal(rest.docs.length, 1)
-  assert.equal(rest.docs[0].score, undefined)
+  assert.equal(rest.docs[0].index, undefined)
+  assert.equal(rest.docs[0].band, undefined)
   assert.equal(rest.docs[0].asset_summary, undefined)
+  assert.equal(rest.docs[0].control_summary, undefined)
+  assert.equal(rest.docs[0].coverage, 10)
   const contributions = await payload.find({
     collection: 'risk-contributions',
     overrideAccess: false,
@@ -177,7 +187,28 @@ test('risk endpoint and REST: a hidden evaluation never exposes numbers', async 
     where: { organization: { equals: organizationId } },
   })
   assert.equal(contributions.docs.length, 1)
-  assert.equal(contributions.docs[0].residual_risk, undefined)
+  assert.equal(contributions.docs[0].compliance, 0)
+
+  // A partial select reaches field access without `visibility`: it must be looked up, not guessed.
+  const banded = handBuilt(assetKey, 'banded')
+  banded.pairs[0].asset_office_id = String(a.office.id)
+  await persistRiskEvaluation(payload, { organizationId, evaluatedAt: new Date(), ...banded })
+  const selected = await payload.find({
+    collection: 'risk-evaluations',
+    overrideAccess: false,
+    user,
+    depth: 0,
+    sort: 'evaluated_at',
+    select: { index: true, band: true },
+    where: { organization: { equals: organizationId } },
+  })
+  assert.deepEqual(
+    selected.docs.map(doc => [doc.index, doc.band]),
+    [
+      [undefined, undefined],
+      [60, 'high'],
+    ]
+  )
 })
 
 test('risk endpoint: a Viewer must name one of its offices', async () => {
@@ -213,4 +244,66 @@ test('risk endpoint: a Manager without an office reads its assigned consolidatio
   assert.equal(body.scope, 'assigned_offices')
   assert.equal(body.evaluation?.id ?? null, null)
   assert.equal((await evaluations()).totalDocs, before)
+})
+
+test('risk endpoint: a Manager consolidation never shows the monitoring notice of an office outside its scope', async () => {
+  const payload = await getPayload({ config })
+  const a = await seedRiskOrganization(payload)
+  const organizationId = String(a.organization.id)
+  const officeId = String(a.office.id)
+  const silent = await payload.create({
+    collection: 'offices',
+    overrideAccess: true,
+    data: { organization: organizationId, name: 'Sin agente activo' },
+  })
+  // An office whose agent stopped reporting long ago, with one network asset.
+  const agent = await payload.create({
+    collection: 'agents',
+    overrideAccess: true,
+    context: { systemJob: true },
+    data: {
+      id: `agent-${Math.random().toString(36).slice(2)}`,
+      office: silent.id,
+      last_heartbeat_at: new Date(Date.now() - 86_400_000).toISOString(),
+    },
+  })
+  await payload.create({
+    collection: 'assets',
+    overrideAccess: true,
+    context: { systemJob: true },
+    data: {
+      asset_id: `silent-${Math.random().toString(36).slice(2)}`,
+      agent: agent.id,
+      office: silent.id,
+      organization: organizationId,
+      ip: '10.0.1.10',
+      status: 'active',
+      identified: true,
+      confirmed_type: 'server',
+      authorization_status: 'authorized',
+      criticality: 'high',
+      asset_coverage: { port_scan: 'complete', service_detection: 'complete' },
+      services: [],
+    } as never,
+  })
+  await recalculateRisk(payload, { organizationId })
+  const silentNotice = (body: LatestRiskResponse) =>
+    body.list === 'pending' &&
+    body.items.some(item => item.control_key === 'A.8.16' && item.subject.kind === 'office' && item.subject.id === String(silent.id))
+
+  const admin = await member(payload, organizationId, [officeId, String(silent.id)], 'org_admin')
+  const organization = await call(payload, admin, '?list=pending&limit=50')
+  assert.ok(silentNotice(organization.body), 'the organization sees the silent office once')
+  assert.equal(
+    organization.body.list === 'pending'
+      ? organization.body.items.filter(item => item.control_key === 'A.8.16').length
+      : 0,
+    1
+  )
+
+  const manager = await member(payload, organizationId, [officeId], 'office_manager')
+  const assigned = await call(payload, manager, '?list=pending&limit=50')
+  assert.equal(assigned.body.scope, 'assigned_offices')
+  assert.equal(silentNotice(assigned.body), false)
+  assert.ok(!JSON.stringify(assigned.body).includes(String(silent.id)))
 })

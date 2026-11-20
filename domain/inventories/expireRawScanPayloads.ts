@@ -80,7 +80,7 @@ async function expireCopies(
         if (JSON.stringify(current.assets_dump) !== JSON.stringify(clean)) data = { assets_dump: clean }
       }
       if (!data) return false
-      // AUDIT: this action must emit an AuditLogs entry (raw evidence expiry; normalized inventory and historical score retained)
+      // AUDIT: this action must emit an AuditLogs entry (raw evidence expiry; normalized inventory and historical index retained)
       // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
       await payload.update({ collection, id, overrideAccess: true, req, data })
       return true

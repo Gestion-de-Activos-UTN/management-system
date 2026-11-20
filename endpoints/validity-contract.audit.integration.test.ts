@@ -70,6 +70,7 @@ async function parent(
         partially_effective: 0,
         non_compliant: 0,
         not_evaluable: 0,
+        not_applicable: 0,
       },
     },
   })
@@ -323,16 +324,16 @@ for (const [policy, days] of [
       officeId: f.own.office,
       now: new Date(expected),
     })
-    const currentPair = current.result.contributions.find(
-      row => row.asset_id === `manual:${asset.id}` && row.control_key === control
+    const currentPair = current.pairs.find(
+      row => row.asset_key === `manual:${asset.id}` && row.control_key === control
     )
-    const expiredPair = expired.result.contributions.find(
-      row => row.asset_id === `manual:${asset.id}` && row.control_key === control
+    const expiredPair = expired.pairs.find(
+      row => row.asset_key === `manual:${asset.id}` && row.control_key === control
     )
     expect(currentPair).toBeTruthy()
-    expect(typeof currentPair!.efficacy).toBe('number')
+    expect(typeof currentPair!.compliance).toBe('number')
     expect(expiredPair).toBeTruthy()
-    expect(expiredPair!.efficacy).toBeNull()
+    expect(expiredPair!.compliance).toBeNull()
     expect(expiredPair!.status).toBe('not_evaluable')
     expect(withDerivedAssessmentStatus(closed, new Date(Date.parse(expected) - 1)).status).toBe(
       'completed'

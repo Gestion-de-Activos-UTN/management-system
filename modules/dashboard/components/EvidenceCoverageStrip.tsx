@@ -22,7 +22,7 @@ export function EvidenceCoverageStrip({
       <Stack gap={6}>
         <Group justify="space-between" gap="sm">
           <Text size="sm" fw={600}>
-            Cobertura de evidencia
+            Información disponible
           </Text>
           <Text size="sm" fw={700}>
             {coverage} %
@@ -31,7 +31,7 @@ export function EvidenceCoverageStrip({
         <Progress value={coverage} color="pine" radius="xl" size="md" />
         <Text size="xs" c="dimmed">
           Información vigente para {evaluated} de {applicable} comprobaciones. La información
-          faltante no aumenta el riesgo, pero lo vuelve menos preciso.
+          faltante no aumenta el índice, pero lo vuelve menos preciso.
         </Text>
       </Stack>
     </Paper>

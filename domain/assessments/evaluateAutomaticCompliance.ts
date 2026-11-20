@@ -1,5 +1,5 @@
 import { networkExplanation } from './network-explanations'
-import type { Payload, PayloadRequest } from 'payload'
+import type { Payload, PayloadRequest, Where } from 'payload'
 import type { Agent, Asset, AssessmentInstance } from '@/app/types/payload-types'
 import { relationId } from '@/lib/relationId'
 import { isAgentOnline } from '@/domain/agents/agent-state'
@@ -9,7 +9,13 @@ import type { CheckEvaluation } from './evaluateCompliance'
 import { isAssetExcludedFromAssessments } from './asset-assessment-scope'
 import { findAll } from '@/lib/find-all'
 import type { ComplianceResult } from '@/app/types/payload-types'
-import { portWasCovered } from '@/domain/inventories/port-coverage'
+import { absenceConfirmed } from '@/domain/inventories/port-coverage'
+import { inventoryEfficacy } from '@/domain/risk/automatic-evidence'
+import {
+  latestFirst,
+  observationSnapshot,
+  type ObservationSnapshot,
+} from '@/domain/risk/network-evidence'
 import { normalizeFeatures } from '@/domain/subscriptions/features'
 
 type AutomaticCheck = CheckEvaluation & {
@@ -22,13 +28,13 @@ type AutomaticCheck = CheckEvaluation & {
 export function evaluateAssetFacts(
   asset: Pick<Asset, 'identified' | 'owner' | 'criticality' | 'authorization_status'>
 ): AutomaticCheck[] {
-  const inventoryComplete = Boolean(
-    asset.identified &&
-    asset.owner &&
-    asset.criticality &&
-    asset.authorization_status &&
-    asset.authorization_status !== 'pending'
-  )
+  // Same rule and projection as the index (recalculateRisk.ts: has_owner, authorization ?? 'pending').
+  const inventoryComplete =
+    inventoryEfficacy(
+      Boolean(asset.identified),
+      Boolean(asset.owner),
+      asset.authorization_status ?? 'pending'
+    ) === 1
   const authorizationStatus: ComplianceStatus =
     asset.authorization_status === 'authorized'
       ? 'compliant'
@@ -44,7 +50,7 @@ export function evaluateAssetFacts(
       reason_code: inventoryComplete ? 'inventory_fields_current' : 'inventory_fields_missing',
       explanation: inventoryComplete
         ? 'El equipo está identificado y tiene los datos de negocio necesarios para gestionarlo.'
-        : 'Falta indicar el responsable, la importancia y si el equipo está autorizado para poder evaluarlo.',
+        : 'Falta indicar el responsable o si el equipo está autorizado para poder evaluarlo.',
       evidence: {
         identified: asset.identified,
         owner: Boolean(asset.owner),
@@ -122,34 +128,46 @@ export function evaluateOfficeMonitoring(
 
 const TECHNICAL_VALIDITY_DAYS = 30
 
+/**
+ * The result a new one supersedes. A service is one chain whatever its check: TCP 23 moving from
+ * network.telnet.confirmed to network.service:tcp:23 must still link to its antecedent (D26).
+ */
+export function priorResultWhere(
+  check: { control_key: string; check_key: string; service_key?: string | null },
+  ids: { organizationId: string; officeId: string | null; assetId: string | null }
+): Where {
+  return {
+    and: [
+      { organization: { equals: ids.organizationId } },
+      ids.officeId ? { office: { equals: ids.officeId } } : { office: { exists: false } },
+      ids.assetId ? { asset: { equals: ids.assetId } } : { asset: { exists: false } },
+      ...(check.service_key
+        ? [{ control_key: { equals: check.control_key } }, { service_key: { equals: check.service_key } }]
+        : [{ check_key: { equals: check.check_key } }, { service_key: { exists: false } }]),
+    ],
+  }
+}
+
 async function persistResult(
   payload: Payload,
   assessment: AssessmentInstance,
   check: AutomaticCheck | NetworkEvaluation,
   evaluatedAt: string,
-  req?: PayloadRequest
+  req?: PayloadRequest,
+  observation?: ObservationSnapshot
 ) {
   const organizationId = relationId(assessment.organization)
   const officeId = assessment.office ? relationId(assessment.office) : null
   const assetId = assessment.asset ? relationId(assessment.asset) : null
+  const serviceKey = 'service_key' in check ? (check.service_key ?? null) : null
   const prior = await payload.find({
     collection: 'compliance-results',
     overrideAccess: true,
     req,
     depth: 0,
     limit: 1,
-    sort: '-evaluated_at',
-    where: {
-      and: [
-        { organization: { equals: organizationId } },
-        { check_key: { equals: check.check_key } },
-        officeId ? { office: { equals: officeId } } : { office: { exists: false } },
-        assetId ? { asset: { equals: assetId } } : { asset: { exists: false } },
-        'service_key' in check && check.service_key
-          ? { service_key: { equals: check.service_key } }
-          : { service_key: { exists: false } },
-      ],
-    },
+    sort: ['-evaluated_at', '-createdAt', 'id'], // same order as latestFirst
+    where: priorResultWhere({ ...check, service_key: serviceKey }, { organizationId, officeId, assetId }),
   })
   // AUDIT: this action must emit an AuditLogs entry (chain_hash over {automatic compliance result}, previous hash for this organization_id)
   // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
@@ -161,7 +179,7 @@ async function persistResult(
       organization: organizationId,
       office: officeId,
       asset: assetId,
-      service_key: 'service_key' in check ? check.service_key : null,
+      service_key: serviceKey,
       control_key: check.control_key,
       check_key: check.check_key,
       status: check.status,
@@ -174,7 +192,10 @@ async function persistResult(
       ).toISOString(),
       reason_code: check.reason_code,
       explanation: check.explanation,
-      evidence_snapshot: check.evidence as unknown as { [key: string]: unknown },
+      // Network results keep what their observation knew, so D26 can date and vet them later.
+      evidence_snapshot: (serviceKey && observation
+        ? { ...(check.evidence as object), observation }
+        : check.evidence) as unknown as { [key: string]: unknown },
       supersedes: prior.docs[0]?.id ?? null,
     },
   })
@@ -187,6 +208,7 @@ export async function evaluateAutomaticComplianceForAssessment(
   now = new Date()
 ): Promise<void> {
   const checks: Array<AutomaticCheck | NetworkEvaluation> = []
+  let observation: ObservationSnapshot | undefined
   if (assessment.scope === 'asset' && assessment.asset) {
     const asset = await payload.findByID({
       collection: 'assets',
@@ -197,6 +219,7 @@ export async function evaluateAutomaticComplianceForAssessment(
     })
     if (asset.status !== 'retired' && !isAssetExcludedFromAssessments(asset, now)) {
       checks.push(...evaluateAssetFacts(asset))
+      observation = observationSnapshot(asset)
       const networkChecks = evaluateNetworkBaseline({
         confirmed_type: asset.confirmed_type ?? null,
         port_coverage: asset.asset_coverage?.port_scan ?? 'unknown',
@@ -209,13 +232,15 @@ export async function evaluateAutomaticComplianceForAssessment(
         asset.asset_coverage?.service_detection === 'complete'
       ) {
         const currentKeys = new Set(networkChecks.map(check => check.service_key))
-        const previous = await findAll<ComplianceResult>(payload, 'compliance-results', { and: [{ asset: { equals: asset.id } }, { service_key: { exists: true } }] }, req, '-evaluated_at')
+        const previous = (
+          await findAll<ComplianceResult>(payload, 'compliance-results', { and: [{ asset: { equals: asset.id } }, { service_key: { exists: true } }] }, req, '-evaluated_at')
+        ).sort(latestFirst)
         const seen = new Set<string>()
         for (const result of previous) {
           if (!result.service_key || seen.has(result.service_key)) continue
           seen.add(result.service_key)
           if (!currentKeys.has(result.service_key) && result.status !== 'compliant') {
-            const confirmedAbsent = asset.services?.some(service => `${service.protocol}:${service.port}` === result.service_key && service.state === 'closed') || portWasCovered(asset.port_scan_coverage, result.service_key, asset.asset_coverage?.port_scan === 'complete')
+            const confirmedAbsent = absenceConfirmed(asset, result.service_key)
             checks.push({
               control_key: result.control_key,
               check_key: result.check_key,
@@ -239,7 +264,7 @@ export async function evaluateAutomaticComplianceForAssessment(
     checks.push(evaluateOfficeMonitoring(agents, now))
   }
   for (const check of checks)
-    await persistResult(payload, assessment, check, now.toISOString(), req)
+    await persistResult(payload, assessment, check, now.toISOString(), req, observation)
 }
 
 export async function reevaluateComplianceAfterScan(
@@ -325,6 +350,7 @@ export async function reevaluateComplianceAfterScan(
         partially_effective: 0,
         non_compliant: 0,
         not_evaluable: 0,
+        not_applicable: 0,
       },
       updatedAt: now.toISOString(),
       createdAt: now.toISOString(),

@@ -122,7 +122,7 @@ it('each explicit generation freezes a newly calculated office evaluation instea
     evaluation_id: evaluation.id,
     coverage: evaluation.coverage,
     evaluated_at: evaluation.evaluated_at,
-    unknown_percentage: evaluation.unknown_percentage,
+    visibility: evaluation.visibility,
   })
   expect(await stored(first.data.id)).toEqual(old)
 })
@@ -130,7 +130,7 @@ it('an empty active office gets a coherent empty inventory rather than assets fr
   const result = await generate({ office_id: f.own.second })
   expect(result.status).toBe(201)
   expect(result.data.assets_dump).toEqual({ network: [], non_network: [] })
-  expect(result.data.assessment_results_snapshot.score).toBeNull()
+  expect(result.data.assessment_results_snapshot.index).toBeNull()
 })
 it('later edits, transfer and logical deletion do not rewrite the original inventory or risk history', async () => {
   const asset = await f.createManual(f.own, { alias: 'Valor histórico original' })

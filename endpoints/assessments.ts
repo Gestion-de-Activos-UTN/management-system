@@ -28,9 +28,9 @@ import {
 } from '@/domain/assessments/reconcileAssessmentInstance'
 import { enqueueOrganizationRiskRecalculation } from '@/domain/risk/enqueueRiskRecalculation'
 import { RISK_POLICY_KEYS } from '@/domain/risk/catalog-v2'
-import { bandVisible, scoreVisible } from '@/domain/risk/constants'
+import { bandVisible, indexVisible } from '@/domain/risk/deficiency-index'
 import type { SecurityReviewSummary } from '@/modules/assessments/service'
-import type { RiskEvaluationDTO, RiskScope } from '@/modules/risk/service'
+import type { RiskScope } from '@/modules/risk/service'
 import type { RecalculationStatus } from '@/domain/risk/recalculation-status'
 import { resolveInheritedAssessmentEvidence } from '@/domain/assessments/resolveInheritedEvidence'
 import { hasOrgWideScope } from '@/access/rbac/permissions'
@@ -232,19 +232,23 @@ function riskSummaryDTO(
   scope: RiskScope,
   recalculation: RecalculationStatus
 ): SecurityReviewSummary {
-  const counts = evaluation.counts as RiskEvaluationDTO['counts']
+  const { pairs, assets } = evaluation.counts
   return {
     scope,
     recalculation,
-    risk_score: scoreVisible(evaluation.confidence) ? (evaluation.score ?? null) : null,
-    evaluated_percentage: evaluation.coverage,
+    index: indexVisible(evaluation.visibility) ? evaluation.index : null,
+    band: bandVisible(evaluation.visibility) ? evaluation.band : null,
+    visibility: evaluation.visibility,
+    evaluated_percentage: evaluation.coverage ?? 0,
+    // Applicable index pairs; a justified "No aplica" is not a check to answer.
     applicable_checks:
-      counts.compliant + counts.partially_effective + counts.non_compliant + counts.not_evaluable,
-    not_evaluable: counts.not_evaluable,
-    requires_attention: counts.non_compliant + counts.partially_effective,
-    excluded_assets: counts.excluded_assets,
-    risk_band: bandVisible(evaluation.confidence) ? (evaluation.final_band ?? null) : null,
-    unconfirmed_assets: counts.unconfirmed_assets,
+      pairs.compliant + pairs.partially_effective + pairs.non_compliant + pairs.not_evaluable,
+    not_evaluable: pairs.not_evaluable,
+    requires_attention: pairs.non_compliant + pairs.partially_effective,
+    excluded_assets: assets.excluded_from_assessment,
+    // Overlapping dimensions: shown apart, never summed.
+    unidentified_assets: assets.unidentified,
+    authorization_pending_assets: assets.authorization_pending,
   }
 }
 
@@ -286,7 +290,8 @@ export const securityReviewSummaryEndpoint: Endpoint = {
         ],
       },
     })
-    const evaluation = evaluations.docs[0]
+    // Server read with overrideAccess; riskSummaryDTO applies the visibility rule.
+    const evaluation = evaluations.docs[0] as unknown as RiskEvaluationView | undefined
     const recalculation = await riskRecalculationStatus(
       req,
       ctx.organizationId,
@@ -296,15 +301,17 @@ export const securityReviewSummaryEndpoint: Endpoint = {
     if (!evaluation)
       return json({
         scope: officeId ? 'office' : 'organization',
-        risk_score: null,
+        index: null,
+        band: null,
+        visibility: 'undetermined',
         recalculation,
         evaluated_percentage: 0,
         applicable_checks: 0,
         not_evaluable: 0,
         requires_attention: 0,
         excluded_assets: 0,
-        risk_band: null,
-        unconfirmed_assets: 0,
+        unidentified_assets: 0,
+        authorization_pending_assets: 0,
       } satisfies SecurityReviewSummary)
     return json(riskSummaryDTO(evaluation, officeId ? 'office' : 'organization', recalculation))
   },

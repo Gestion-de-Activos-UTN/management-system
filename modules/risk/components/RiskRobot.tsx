@@ -1,21 +1,24 @@
-import type { RiskBand } from '@/domain/risk/constants'
+import type { IndexBand } from '@/domain/risk/deficiency-index'
 import { RISK_BAND_COLOR } from '../risk-labels'
 
-// standby: todavía no hay puntaje · thinking: puntaje preliminar, sin nivel asignado.
-type Mood = RiskBand | 'standby' | 'thinking'
+// standby: todavía no hay índice · thinking: índice preliminar, sin banda asignada.
+// The four faces (and their CSS classes) keep their names; each index band picks one.
+type Face = 'low' | 'medium' | 'high' | 'critical'
+type Mood = Face | 'standby' | 'thinking'
+const FACE: Record<IndexBand, Face> = { low: 'low', moderate: 'medium', high: 'high', very_high: 'critical' }
 
 export const RISK_ROBOT_MESSAGE: Record<Mood, string> = {
-  low: '¡Todo bajo control! Sigamos así.',
-  medium: 'Hay cosas por mejorar, pero nada urgente.',
-  high: 'Algunos controles me preocupan. ¿Les damos prioridad?',
-  critical: '¡Alerta! Hay riesgos importantes sin tratar.',
-  thinking: 'Estoy calculando… me faltan datos para dar un nivel.',
+  low: '¡Pocas deficiencias! Sigamos así.',
+  medium: 'Hay deficiencias por corregir, pero nada urgente.',
+  high: 'Varios controles no cumplen. ¿Les damos prioridad?',
+  critical: '¡Alerta! La mayoría de los controles evaluados no cumple.',
+  thinking: 'Estoy calculando… me faltan datos para dar una banda.',
   standby: 'En espera: necesito revisiones y equipos identificados.',
 }
 
-export function riskRobotMood(score: number | null, band: RiskBand | null): Mood {
-  if (score === null) return 'standby'
-  return band ?? 'thinking'
+export function riskRobotMood(index: number | null, band: IndexBand | null): Mood {
+  if (index === null) return 'standby'
+  return band ? FACE[band] : 'thinking'
 }
 
 const EYE_Y = 50
@@ -100,15 +103,15 @@ function Mouth({ mood }: { mood: Mood }) {
  * Animaciones en app/globals.css (`.risk-robot*`), desactivadas con prefers-reduced-motion.
  */
 export function RiskRobot({
-  score,
+  index,
   band,
   size = 120,
 }: {
-  score: number | null
-  band: RiskBand | null
+  index: number | null
+  band: IndexBand | null
   size?: number
 }) {
-  const mood = riskRobotMood(score, band)
+  const mood = riskRobotMood(index, band)
   const color = band ? RISK_BAND_COLOR[band] : 'gray'
   const led = `var(--mantine-color-${color}-4)`
   return (

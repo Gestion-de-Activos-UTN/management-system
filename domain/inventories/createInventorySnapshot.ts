@@ -3,7 +3,8 @@ import type { Payload, PayloadRequest, Where } from 'payload'
 import { withTransaction } from '@/domain/with-transaction'
 import { relationId } from '@/lib/relationId'
 import { recalculateRisk } from '@/domain/risk/recalculateRisk'
-import { scoreVisible } from '@/domain/risk/constants'
+import { bandVisible, indexVisible, type IndexBand, type IndexVisibility } from '@/domain/risk/deficiency-index'
+import type { EvaluationCounts } from '@/domain/risk/evaluation-from-pairs'
 
 export type SnapshotTrigger =
   { type: 'manual'; userId: string } | { type: 'scheduled' } | { type: 'pre_audit' }
@@ -54,6 +55,7 @@ export async function createInventorySnapshot(
   // Always calculated now, never the latest stored result: a queued recalculation may still be
   // pending, and the snapshot must pair the asset dump with the risk of that same moment.
   const riskEvaluation = await recalculateRisk(payload, { organizationId, officeId }, req)
+  const visibility = riskEvaluation.visibility as IndexVisibility
   // AUDIT: immutable inventory snapshot references the exact immutable risk evaluation shown with it.
   return payload.create({
     collection: 'inventory-snapshots',
@@ -69,9 +71,11 @@ export async function createInventorySnapshot(
       assessment_results_snapshot: {
         evaluation_id: riskEvaluation.id,
         // Same visibility rule as the risk endpoint; the raw value stays behind evaluation_id.
-        score: scoreVisible(riskEvaluation.confidence) ? riskEvaluation.score : null,
-        coverage: riskEvaluation.coverage,
-        unknown_percentage: riskEvaluation.unknown_percentage,
+        index: indexVisible(visibility) ? (riskEvaluation.index ?? null) : null,
+        band: bandVisible(visibility) ? ((riskEvaluation.band ?? null) as IndexBand | null) : null,
+        visibility,
+        coverage: riskEvaluation.coverage ?? null,
+        excluded_assets: (riskEvaluation.counts as EvaluationCounts).assets.excluded_from_assessment,
         evaluated_at: riskEvaluation.evaluated_at,
       },
       assets_dump: { network: structuredClone(network), non_network: structuredClone(nonNetwork) },

@@ -830,34 +830,10 @@ export interface RiskEvaluation {
   engine_version: number;
   policy_key: 'essential' | 'reinforced';
   evaluated_at: string;
-  rro_raw: number;
-  rro_adjusted: number;
-  riem: number;
-  score?: number | null;
-  base_band?: ('low' | 'medium' | 'high' | 'critical') | null;
-  final_band?: ('low' | 'medium' | 'high' | 'critical') | null;
-  coverage: number;
-  unknown_percentage: number;
-  confidence: 'hidden' | 'preliminary' | 'warning' | 'usable' | 'reliable';
-  effective_confidence: 'hidden' | 'preliminary' | 'warning' | 'usable' | 'reliable';
-  counts:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
-  alerts:
-    | {
-        [k: string]: unknown;
-      }
-    | unknown[]
-    | string
-    | number
-    | boolean
-    | null;
+  index?: number | null;
+  band?: ('low' | 'moderate' | 'high' | 'very_high') | null;
+  coverage?: number | null;
+  visibility: 'undetermined' | 'hidden' | 'preliminary' | 'banded';
   control_summary:
     | {
         [k: string]: unknown;
@@ -867,7 +843,34 @@ export interface RiskEvaluation {
     | number
     | boolean
     | null;
+  warnings:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   asset_summary:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  counts:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  context:
     | {
         [k: string]: unknown;
       }
@@ -933,6 +936,7 @@ export interface AssessmentInstance {
     partially_effective: number;
     non_compliant: number;
     not_evaluable: number;
+    not_applicable: number;
   };
   updatedAt: string;
   createdAt: string;
@@ -995,7 +999,7 @@ export interface ComplianceResult {
   service_key?: string | null;
   control_key: string;
   check_key: string;
-  status: 'compliant' | 'non_compliant' | 'not_evaluable';
+  status: 'compliant' | 'non_compliant' | 'not_evaluable' | 'partially_effective' | 'not_applicable';
   severity: 'low' | 'medium' | 'high' | 'critical';
   policy_key: 'essential' | 'reinforced';
   policy_version: number;
@@ -1030,12 +1034,26 @@ export interface RiskContribution {
   manual_asset?: (string | null) | NonNetworkAsset;
   control_key: string;
   criticality: 'low' | 'medium' | 'high' | 'critical' | 'unknown';
-  scope_multiplier: number;
-  severity: 'low' | 'medium' | 'high' | 'critical' | 'unknown';
-  exposure: 'low' | 'medium' | 'high';
-  exposure_source?: ('scan' | 'default_unknown') | null;
-  efficacy?: number | null;
-  effect_snapshot:
+  asset_office?: (string | null) | Office;
+  asset_type?:
+    | (
+        | 'workstation'
+        | 'mobile'
+        | 'server'
+        | 'gateway'
+        | 'network_device'
+        | 'software_license'
+        | 'cloud_asset'
+        | 'information_repository'
+      )
+    | null;
+  criticality_weight: number;
+  applicability: 'applicable' | 'not_applicable';
+  compliance?: number | null;
+  status: 'compliant' | 'non_compliant' | 'not_evaluable' | 'partially_effective' | 'not_applicable';
+  reason_code: string;
+  priority?: ('low' | 'medium' | 'high' | 'critical') | null;
+  evidence:
     | {
         [k: string]: unknown;
       }
@@ -1044,12 +1062,15 @@ export interface RiskContribution {
     | number
     | boolean
     | null;
-  status: 'compliant' | 'partially_effective' | 'non_compliant' | 'not_evaluable';
-  inherent_risk?: number | null;
-  residual_risk?: number | null;
-  coverage_weight: number;
-  excluded: boolean;
-  reason_code: string;
+  reasons:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -2067,6 +2088,7 @@ export interface AssessmentInstancesSelect<T extends boolean = true> {
         partially_effective?: T;
         non_compliant?: T;
         not_evaluable?: T;
+        not_applicable?: T;
       };
   updatedAt?: T;
   createdAt?: T;
@@ -2127,20 +2149,15 @@ export interface RiskEvaluationsSelect<T extends boolean = true> {
   engine_version?: T;
   policy_key?: T;
   evaluated_at?: T;
-  rro_raw?: T;
-  rro_adjusted?: T;
-  riem?: T;
-  score?: T;
-  base_band?: T;
-  final_band?: T;
+  index?: T;
+  band?: T;
   coverage?: T;
-  unknown_percentage?: T;
-  confidence?: T;
-  effective_confidence?: T;
-  counts?: T;
-  alerts?: T;
+  visibility?: T;
   control_summary?: T;
+  warnings?: T;
   asset_summary?: T;
+  counts?: T;
+  context?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -2157,18 +2174,16 @@ export interface RiskContributionsSelect<T extends boolean = true> {
   manual_asset?: T;
   control_key?: T;
   criticality?: T;
-  scope_multiplier?: T;
-  severity?: T;
-  exposure?: T;
-  exposure_source?: T;
-  efficacy?: T;
-  effect_snapshot?: T;
+  asset_office?: T;
+  asset_type?: T;
+  criticality_weight?: T;
+  applicability?: T;
+  compliance?: T;
   status?: T;
-  inherent_risk?: T;
-  residual_risk?: T;
-  coverage_weight?: T;
-  excluded?: T;
   reason_code?: T;
+  priority?: T;
+  evidence?: T;
+  reasons?: T;
   updatedAt?: T;
   createdAt?: T;
 }

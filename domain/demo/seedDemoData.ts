@@ -20,6 +20,7 @@ import { createInventorySnapshot } from '@/domain/inventories/createInventorySna
 import { completeAssessment, saveAssessmentDraft } from '@/domain/assessments/assessmentLifecycle'
 import { RISK_QUESTIONS_V2 } from '@/domain/risk/catalog-v2'
 import { recalculateRisk } from '@/domain/risk/recalculateRisk'
+import { reevaluateComplianceAfterScan } from '@/domain/assessments/evaluateAutomaticCompliance'
 import {
   createTasks,
   claimTask,
@@ -54,6 +55,9 @@ const DAY = 24 * 60 * 60 * 1000
 const DEMO_ORGANIZATION = 'Demo Organization'
 const DEMO_AGENT_MAIN = 'demo-agent-main'
 const DEMO_AGENT_SECONDARY = 'demo-agent-secondary'
+// Índice D26: an earlier scan where the UPS still exposed Telnet; the current one only sees it filtered.
+const DEMO_D26_REPORT = 'demo-main-d26-scan-v1'
+const DEMO_EXCLUDED_ALIAS = 'Notebook del consultor externo'
 
 type DemoUserKey = 'admin' | 'viewer' | 'mainManager' | 'secondaryManager'
 type DemoUsers = Record<DemoUserKey, User>
@@ -106,18 +110,24 @@ function service(
   port: number,
   name: string,
   product: string,
-  options: { version?: string; tunnel?: string; scripts?: Record<string, string> } = {}
+  options: {
+    version?: string
+    tunnel?: string
+    scripts?: Record<string, string>
+    protocol?: 'tcp' | 'udp'
+    state?: 'open' | 'open|filtered' | 'filtered'
+  } = {}
 ) {
   return {
     port,
-    protocol: 'tcp' as const,
-    state: 'open' as const,
+    protocol: options.protocol ?? ('tcp' as const),
+    state: options.state ?? ('open' as const),
     name,
     product,
     version: options.version ?? '',
     extra_info: '',
     cpe: '',
-    reason: 'syn-ack',
+    reason: options.state && options.state !== 'open' ? 'no-response' : 'syn-ack',
     detection_method: 'probed' as const,
     confidence: 10,
     tunnel: options.tunnel ?? '',
@@ -256,6 +266,11 @@ function report(
           port_spec: '1-1024,1433,3306,3389,5432,8080,8443,9100',
           status: degraded ? ('partial' as const) : ('complete' as const),
         },
+        {
+          protocol: 'udp' as const,
+          port_spec: '53,67,123,161,500,1900',
+          status: degraded ? ('partial' as const) : ('complete' as const),
+        },
       ],
       service_detection: { status: degraded ? ('partial' as const) : ('complete' as const) },
       os_detection: { status: degraded ? ('not_attempted' as const) : ('complete' as const) },
@@ -287,6 +302,27 @@ export function buildDemoReports(now = new Date()): ScanReportPayload[] {
   const camera = operatingSystem('Linux embedded camera', 'Linux', '3.X', 'Hikvision', 'webcam')
 
   return [
+    // Índice D26, first scan (3 days ago): Telnet open on the UPS management card. It goes before the
+    // current scan so ingestion sees the scans in order.
+    report(now, {
+      id: DEMO_D26_REPORT,
+      agentId: DEMO_AGENT_MAIN,
+      network: '10.20.10.0/24',
+      gatewayIp: '10.20.10.1',
+      gatewayMac: '00:11:22:33:44:01',
+      offsetMs: -3 * DAY,
+      assets: [
+        {
+          key: 'main-ups',
+          ip: '10.20.10.60',
+          mac: '00:11:22:33:44:60',
+          vendor: 'APC',
+          hostname: 'ups-rack-01',
+          os: null,
+          services: [service(23, 'telnet', 'APC telnetd')],
+        },
+      ],
+    }),
     report(now, {
       id: 'demo-main-scan-v1',
       agentId: DEMO_AGENT_MAIN,
@@ -305,6 +341,9 @@ export function buildDemoReports(now = new Date()): ScanReportPayload[] {
           services: [
             service(53, 'domain', 'dnsmasq'),
             service(443, 'https', 'uhttpd', { tunnel: 'ssl' }),
+            // Índice D25: a valid prohibited finding (Telnet) next to an uncertain UDP service.
+            service(23, 'telnet', 'BusyBox telnetd'),
+            service(161, 'snmp', '', { protocol: 'udp', state: 'open|filtered' }),
           ],
         },
         {
@@ -365,6 +404,17 @@ export function buildDemoReports(now = new Date()): ScanReportPayload[] {
           services: [service(8080, 'http-proxy', '')],
           coverage: 'partial',
           issues: [{ stage: 'os_detection', code: 'permission_denied' }],
+        },
+        {
+          // Índice D26, current scan: Telnet is no longer seen with certainty. It becomes a pending
+          // with its dated antecedent, never a current deficiency nor a resolution.
+          key: 'main-ups',
+          ip: '10.20.10.60',
+          mac: '00:11:22:33:44:60',
+          vendor: 'APC',
+          hostname: 'ups-rack-01',
+          os: null,
+          services: [service(23, 'telnet', '', { state: 'filtered' })],
         },
       ],
     }),
@@ -597,36 +647,122 @@ async function ensureManualAsset(
   return { doc: doc as NonNetworkAsset, created: true }
 }
 
-function assessmentAnswers(assessment: AssessmentInstance, mode: 'healthy' | 'mixed' | 'weak') {
+/**
+ * Demo answer profile: `base` picks the best / middle / worst scored option of every question and
+ * `answers` overrides single questions by option key (including `unknown` and `not_applicable`).
+ */
+export type DemoAnswerProfile = {
+  base: 'good' | 'fair' | 'poor'
+  answers?: Record<string, string>
+  draft?: boolean
+}
+
+// Plan índice-deficiencias §8.18: varied, realistic answers so the index, coverage, visibility
+// bands and priority rules have something to show. Keyed by office name / asset alias; assessments
+// without a profile stay pending on purpose (coverage gaps).
+export const DEMO_ORGANIZATION_PROFILE: DemoAnswerProfile = {
+  base: 'good',
+  answers: { 'A.5.15.access_revocation': 'no', 'A.5.25.event_records': 'informal' },
+}
+export const DEMO_OFFICE_PROFILES: Record<'main' | 'secondary', DemoAnswerProfile> = {
+  main: { base: 'good' },
+  secondary: { base: 'fair', answers: { 'A.8.22.guest_wifi': 'no' } },
+}
+export const DEMO_ASSET_PROFILES: Record<string, DemoAnswerProfile> = {
+  // Casa Central Palermo: mature office with specific gaps.
+  'Servidor de archivos principal': {
+    base: 'good',
+    answers: { 'A.8.2.privileged_access': 'multiple_as_needed', 'A.8.13.backup': 'local_with_backup' },
+  },
+  'Casa central - Servidor contable': {
+    base: 'good',
+    answers: { 'A.8.19.software_installation': 'warning_only' },
+  },
+  'Gateway principal': { base: 'good', answers: { 'A.8.9-20.firmware': 'on_failure' } },
+  'UPS del rack principal': { base: 'good' },
+  'Casa central - Switch de oficina': { base: 'poor' },
+  'CRM comercial en la nube': { base: 'good' },
+  'Casa central - Almacenamiento en la nube': {
+    base: 'good',
+    answers: { 'A.8.2.privileged_access': 'multiple_as_needed' },
+  },
+  'Casa central - Licencia de diseño gráfico': { base: 'fair' },
+  'Microsoft 365 Business Premium': { base: 'good' },
+  'Repositorio documental corporativo': { base: 'good' },
+  'Notebook de Dirección': {
+    base: 'fair',
+    answers: {
+      'A.8.5.unlock': 'simple_pin',
+      'A.7.9.remote_actions': 'none',
+      'A.8.13.backup': 'corporate_cloud',
+    },
+  },
+  'Equipo de Finanzas 04': { base: 'good', draft: true },
+  // Centro Logístico Rosario: lower maturity, unknowns and justified N/A.
+  'Casa central - Portátil de operaciones': { base: 'fair' },
+  'Equipo de Logística 02': {
+    base: 'poor',
+    answers: {
+      'A.8.13.backup': 'unknown',
+      'A.8.5.unlock': 'strong_password',
+      'A.8.5.idle_lock': 'between_3m_10m',
+    },
+  },
+  'Córdoba - Notebook del mostrador': {
+    base: 'fair',
+    answers: {
+      'A.7.9.physical_protection': 'not_applicable',
+      'A.7.9.remote_actions': 'not_applicable',
+      'A.8.19.software_installation': 'direct',
+    },
+  },
+  'Depósito - Servidor contable': {
+    base: 'fair',
+    answers: {
+      'A.8.2.privileged_access': 'generic_or_default',
+      'A.8.13.backup': 'personal_cloud',
+      'A.8.19.software_installation': 'direct',
+    },
+  },
+  'Access Point depósito': { base: 'good', answers: { 'A.8.9-20.firmware': 'none' } },
+  'Depósito - Switch de oficina': {
+    base: 'good',
+    answers: { 'A.8.9-20.default_password': 'unknown', 'A.8.9-20.firmware': 'unknown' },
+  },
+  'Depósito - Licencia de diseño gráfico': { base: 'poor' },
+  // Answered, then excluded from the reviews: its answers must not reach the index (seedDemoData).
+  [DEMO_EXCLUDED_ALIAS]: { base: 'poor' },
+}
+
+const NOT_APPLICABLE_JUSTIFICATION =
+  'El equipo queda fijo en el mostrador y no sale de la oficina.'
+
+export function assessmentAnswers(assessment: AssessmentInstance, profile: DemoAnswerProfile) {
   const snapshot = Array.isArray(assessment.question_set_snapshot)
     ? assessment.question_set_snapshot
     : []
   return {
-    answers: snapshot.flatMap((item, index) => {
+    answers: snapshot.flatMap(item => {
       if (!item || typeof item !== 'object' || !('key' in item) || !('version' in item)) return []
       const definition = RISK_QUESTIONS_V2.find(question => question.key === item.key)
       if (!definition) return []
-      const desired =
-        mode === 'healthy'
-          ? 1
-          : mode === 'weak'
-            ? 0
-            : index % 3 === 0
-              ? 0
-              : index % 3 === 1
-                ? 0.5
-                : 1
-      const option =
-        definition.options.find(candidate => candidate.efficacy === desired) ??
-        definition.options[0]
+      const scored = definition.options.filter(option => option.efficacy !== null)
+      const optionKey =
+        profile.answers?.[definition.key] ??
+        (profile.base === 'good'
+          ? scored[0]
+          : profile.base === 'fair'
+            ? scored[1]
+            : scored[scored.length - 1]
+        ).key
+      const option = definition.options.find(candidate => candidate.key === optionKey)
+      if (!option) throw new Error(`Opción demo inexistente: ${definition.key}=${optionKey}`)
       return [
         {
           question_key: String(item.key),
           question_version: Number(item.version),
           option_key: option.key,
-          ...(option.requires_justification
-            ? { justification: 'Este control no aplica al alcance operativo documentado.' }
-            : {}),
+          ...(option.requires_justification ? { justification: NOT_APPLICABLE_JUSTIFICATION } : {}),
           evidence_note: 'Evidencia demostrativa validada durante la revisión inicial.',
         },
       ]
@@ -638,9 +774,9 @@ async function seedAssessment(
   payload: Payload,
   assessment: AssessmentInstance | undefined,
   userId: string,
-  mode: 'healthy' | 'mixed' | 'weak',
-  complete: boolean
+  profile: DemoAnswerProfile
 ): Promise<boolean> {
+  const complete = !profile.draft
   if (!assessment || !['pending', 'in_progress'].includes(assessment.status)) return false
   const existing = await payload.find({
     collection: 'assessment-answers',
@@ -650,7 +786,7 @@ async function seedAssessment(
     limit: 1,
   })
   if (existing.docs.length) return false
-  const command = assessmentAnswers(assessment, mode)
+  const command = assessmentAnswers(assessment, profile)
   const req = humanRequest(payload, userId)
   if (complete) await completeAssessment(payload, String(assessment.id), command, userId, req)
   else
@@ -662,6 +798,54 @@ async function seedAssessment(
       req
     )
   return complete
+}
+
+const DEMO_RELOCATED_ASSETS = new Set([
+  'Casa central - Portátil de operaciones',
+  'Córdoba - Notebook del mostrador',
+])
+
+/** Answers every open assessment that has a demo profile; returns how many were completed. */
+async function answerDemoAssessments(
+  payload: Payload,
+  core: Awaited<ReturnType<typeof requiredCore>>,
+  userId: string,
+  skipAliases: ReadonlySet<string>
+): Promise<number> {
+  const { docs } = await payload.find({
+    collection: 'assessment-instances',
+    where: {
+      and: [
+        { organization: { equals: core.organizationId } },
+        { status: { in: ['pending', 'in_progress'] } },
+      ],
+    },
+    overrideAccess: true,
+    depth: 0,
+    pagination: false,
+  })
+  let completed = 0
+  for (const assessment of docs) {
+    let profile: DemoAnswerProfile | undefined
+    if (assessment.scope === 'organization') profile = DEMO_ORGANIZATION_PROFILE
+    else if (assessment.scope === 'office') {
+      const officeId = relationId(assessment.office)
+      profile =
+        officeId === String(core.mainOffice.id)
+          ? DEMO_OFFICE_PROFILES.main
+          : officeId === String(core.secondaryOffice.id)
+            ? DEMO_OFFICE_PROFILES.secondary
+            : undefined
+    } else {
+      const target = assessment.asset
+        ? await payload.findByID({ collection: 'assets', id: relationId(assessment.asset), overrideAccess: true, depth: 0 })
+        : await payload.findByID({ collection: 'non-network-assets', id: relationId(assessment.manual_asset), overrideAccess: true, depth: 0 })
+      const alias = target.alias ?? ''
+      profile = skipAliases.has(alias) ? undefined : DEMO_ASSET_PROFILES[alias]
+    }
+    if (profile && (await seedAssessment(payload, assessment, userId, profile))) completed += 1
+  }
+  return completed
 }
 
 /**
@@ -909,7 +1093,7 @@ async function ensureDemoPortalMessages(
     {
       title: 'Completa la revisión de seguridad del trimestre',
       description:
-        'Hay controles sin responder en la revisión de seguridad vigente. Completarla mejora la precisión del puntaje de riesgo.',
+        'Hay controles sin responder en la revisión de seguridad vigente. Completarla mejora la precisión del índice de deficiencias.',
       message_type: 'actionable',
       template_key: 'security_review',
       cta_label: 'Ir a la revisión',
@@ -1077,6 +1261,28 @@ export async function seedDemoData(
     if (!result.alreadyProcessed) {
       summary.reportsProcessed += 1
       sourceChanged = true
+      if (demoReport.report_id === DEMO_D26_REPORT) {
+        // D26 only takes antecedents of confirmed devices: identify the UPS and re-evaluate it at
+        // the time of that scan, as processScanReport does, before the current scan arrives.
+        await enrichAsset(payload, 'demo-main-ups', {
+          confirmed_type: 'network_device',
+          authorization_status: 'authorized',
+          alias: 'UPS del rack principal',
+          criticality: 'high',
+          owner: adminId,
+          location: 'Rack principal',
+          type_confirmed_by: { relationTo: 'users' as const, value: adminId },
+        })
+        const ups = await findAsset(payload, 'demo-main-ups')
+        await reevaluateComplianceAfterScan(
+          payload,
+          core.organizationId,
+          mainOfficeId,
+          [String(ups.id)],
+          undefined,
+          new Date(demoReport.scan_end)
+        )
+      }
     }
   }
 
@@ -1272,6 +1478,15 @@ export async function seedDemoData(
       reviewInterval: '1m' as const,
     },
     {
+      alias: DEMO_EXCLUDED_ALIAS,
+      category: 'computer' as const,
+      criticality: 'medium' as const,
+      ownerId: core.users.secondaryManager.id,
+      officeId: secondaryOfficeId,
+      location: 'Oficina de proyectos',
+      reviewInterval: '1m' as const,
+    },
+    {
       alias: 'Licencia antivirus reemplazada',
       category: 'software_license' as const,
       criticality: 'low' as const,
@@ -1416,39 +1631,31 @@ export async function seedDemoData(
     }
   }
 
-  const openAssessments = await payload.find({
-    collection: 'assessment-instances',
-    where: {
-      and: [
-        { organization: { equals: core.organizationId } },
-        { status: { in: ['pending', 'in_progress'] } },
-      ],
-    },
-    overrideAccess: true,
-    depth: 0,
-    pagination: false,
-  })
-  const organizationAssessment = openAssessments.docs.find(row => row.scope === 'organization')
-  const mainOfficeAssessment = openAssessments.docs.find(
-    row => row.scope === 'office' && relationId(row.office) === mainOfficeId
-  )
-  const manualComputerAssessment = openAssessments.docs.find(
-    row => row.manual_asset && relationId(row.manual_asset) === String(manualDocs[0].id)
-  )
-  const networkWorkstationAssessment = openAssessments.docs.find(
-    row => row.asset && relationId(row.asset) === String(mainWorkstation.id)
-  )
-  for (const [assessment, mode, complete] of [
-    [organizationAssessment, 'mixed', true],
-    [mainOfficeAssessment, 'healthy', true],
-    [manualComputerAssessment, 'weak', true],
-    [networkWorkstationAssessment, 'mixed', false],
-  ] as Array<[AssessmentInstance | undefined, 'healthy' | 'mixed' | 'weak', boolean]>) {
-    const completed = await seedAssessment(payload, assessment, adminId, mode, complete)
-    if (completed) {
-      summary.assessmentsCompleted += 1
-      sourceChanged = true
-    }
+  // These two change office later (transfer scenario / Córdoba closure); answered in the final pass.
+  const completed = await answerDemoAssessments(payload, core, adminId, DEMO_RELOCATED_ASSETS)
+  summary.assessmentsCompleted += completed
+  sourceChanged = sourceChanged || completed > 0
+
+  // Exclusion case: answered first, then excluded through the collection hooks, before the
+  // synchronous recalculation below (the seed runs without job autoRun). After 60 days the
+  // exclusion expires and reconcileExpiredAssetExclusions includes the asset again.
+  const excluded = manualDocs[manualInputs.findIndex(input => input.alias === DEMO_EXCLUDED_ALIAS)]
+  if (excluded.assessment_scope !== 'excluded') {
+    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {manual asset, assessment scope and exclusion}, previous hash for this organization_id)
+    // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
+    await payload.update({
+      collection: 'non-network-assets',
+      id: excluded.id,
+      overrideAccess: true,
+      req: humanRequest(payload, adminId),
+      data: {
+        assessment_scope: 'excluded',
+        assessment_exclusion_reason: 'third_party_managed',
+        assessment_exclusion_note: 'Lo administra la consultora contratada; se reevalúa al renovar el contrato.',
+        assessment_excluded_until: at(now, 60 * DAY),
+      },
+    })
+    sourceChanged = true
   }
 
   const latestEvaluationByOffice = new Map<string, string>()
@@ -1545,7 +1752,7 @@ export async function seedDemoData(
       finalState: 'cancelled' as const,
     },
     {
-      title: 'Revisión histórica del riesgo de oficina',
+      title: 'Revisión histórica de las deficiencias de oficina',
       description: 'Tarea cerrada conservada como ejemplo de historial operativo.',
       priority: 'low' as const,
       officeId: secondaryOfficeId,
@@ -1704,7 +1911,7 @@ export async function seedDemoData(
           : undefined,
       },
       {
-        title: 'Revisar riesgo vigente de oficina',
+        title: 'Revisar las deficiencias vigentes de oficina',
         description:
           'Consultar el puntaje actual y comparar con la evaluación que originó esta tarea.',
         reference: {
@@ -1731,5 +1938,12 @@ export async function seedDemoData(
   }
   await ensureDemoPortalMessages(payload, core, now)
   summary.lifecycleScenarioApplied = await seedLifecycleScenario(payload, core, summary)
+  const lateCompleted = await answerDemoAssessments(payload, core, adminId, new Set())
+  if (lateCompleted > 0) {
+    summary.assessmentsCompleted += lateCompleted
+    for (const officeId of [mainOfficeId, secondaryOfficeId])
+      await recalculateRisk(payload, { organizationId: core.organizationId, officeId })
+    await recalculateRisk(payload, { organizationId: core.organizationId })
+  }
   return summary
 }

@@ -80,7 +80,7 @@ Las opciones de UI (`OFFLINE_AFTER_HOURS_OPTIONS`, `SNAPSHOT_INTERVAL_DAYS_OPTIO
 
 ### 3.3 Madurez
 
-`maturityLevel(itOwner, budget)` (`domain/organizations/maturity.ts`) devuelve `null` si falta alguna respuesta; `initial` si `no` y `none`; `advanced` si `yes` y `recurring`; `managed` en cualquier otro caso. El nivel nunca se guarda: la UI lo deriva de las dos respuestas. El comentario del dominio indica que solo prioriza recomendaciones y nunca entra en el puntaje de riesgo. En el código revisado, el único consumidor del perfil es el formulario de la página (y el seed de demostración); ningún cálculo de riesgo ni de recomendaciones lo lee.
+`maturityLevel(itOwner, budget)` (`domain/organizations/maturity.ts`) devuelve `null` si falta alguna respuesta; `initial` si `no` y `none`; `advanced` si `yes` y `recurring`; `managed` en cualquier otro caso. El nivel nunca se guarda: la UI lo deriva de las dos respuestas. El comentario del dominio indica que solo prioriza recomendaciones y nunca entra en el índice de deficiencias. En el código revisado, el único consumidor del perfil es el formulario de la página (y el seed de demostración); ningún cálculo de riesgo ni de recomendaciones lo lee.
 
 ### 3.4 Flujos
 

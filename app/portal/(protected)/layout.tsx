@@ -96,7 +96,7 @@ function PortalProtectedLayoutInner({ children }: { children: React.ReactNode })
       icon: <LayoutDashboard size={18} strokeWidth={1.5} />,
     },
     {
-      label: 'Puntaje de riesgo',
+      label: 'Índice de deficiencias',
       href: `/portal/risk-score${suffix}`,
       icon: <Gauge size={18} strokeWidth={1.5} />,
     },

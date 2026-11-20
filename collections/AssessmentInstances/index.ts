@@ -91,6 +91,7 @@ export const AssessmentInstances: CollectionConfig = {
         { name: 'partially_effective', type: 'number', required: true, defaultValue: 0 },
         { name: 'non_compliant', type: 'number', required: true, defaultValue: 0 },
         { name: 'not_evaluable', type: 'number', required: true, defaultValue: 0 },
+        { name: 'not_applicable', type: 'number', required: true, defaultValue: 0 },
       ],
     },
   ],

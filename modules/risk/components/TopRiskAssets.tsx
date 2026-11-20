@@ -5,21 +5,21 @@ import { riskAssetPath } from '@/modules/assets/asset-path'
 import { RiskBandBadge } from './RiskBandBadge'
 import type { RiskEvaluationDTO } from '../service'
 
-/** Assets with the highest residual risk, with their own score and band. */
+/** Assets with the highest deficiency index, with their own index and band. */
 export function TopRiskAssets({ assets }: { assets: RiskEvaluationDTO['top_assets'] }) {
   const href = usePortalHref()
   if (!assets.length) return null
   return (
     <Card withBorder radius="lg" p="lg">
-      <Text fw={750}>Equipos con más riesgo sin tratar</Text>
+      <Text fw={750}>Equipos con más deficiencias</Text>
       <Text size="sm" c="dimmed" mb="md">
-        El porcentaje indica qué parte del riesgo de cada equipo sigue sin tratar.
+        El índice de cada equipo va de 0 (sin deficiencias) a 100 (ningún control cumple).
       </Text>
       <Stack gap="sm">
         {assets.map(asset => {
-          const path = riskAssetPath(asset.asset_id)
+          const path = riskAssetPath(asset.asset_key)
           return (
-            <Group key={asset.asset_id} justify="space-between" wrap="nowrap" gap="md">
+            <Group key={asset.asset_key} justify="space-between" wrap="nowrap" gap="md">
               {path ? (
                 <Anchor
                   component={Link}
@@ -38,16 +38,16 @@ export function TopRiskAssets({ assets }: { assets: RiskEvaluationDTO['top_asset
                 </Text>
               )}
               <Progress
-                value={asset.score ?? 0}
+                value={asset.index}
                 w={160}
                 color="red"
-                aria-label="Riesgo sin tratar"
+                aria-label="Índice de deficiencias"
                 style={{ flexShrink: 0 }}
               />
               <Text size="sm" w={48} ta="right" style={{ flexShrink: 0 }}>
-                {asset.score === null ? '—' : `${Math.round(asset.score)}%`}
+                {Math.round(asset.index)}
               </Text>
-              {/* Columna de ancho fijo: los badges miden distinto (ALTO / CRÍTICO) y sin esto
+              {/* Columna de ancho fijo: los badges miden distinto (ALTA / MUY ALTA) y sin esto
                 desplazan la barra de cada fila. */}
               <Box w={84} style={{ flexShrink: 0 }}>
                 {asset.band ? (

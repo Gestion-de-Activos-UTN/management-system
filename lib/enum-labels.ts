@@ -92,24 +92,31 @@ export const ASSESSMENT_EXCLUSION_REASON_OPTIONS = [
   { value: 'other', label: 'Otro' },
 ] as const
 
-export const RISK_BAND_LABEL: Record<string, string> = {
-  low: 'Bajo',
-  medium: 'Medio',
-  high: 'Alto',
-  critical: 'Crítico',
+// Typed by the index enums: a legacy or missing key fails the type-check (Plan §6).
+export const RISK_BAND_LABEL: Record<import('@/domain/risk/deficiency-index').IndexBand, string> = {
+  low: 'Baja',
+  moderate: 'Moderada',
+  high: 'Alta',
+  very_high: 'Muy alta',
 }
 
-export const RISK_CONFIDENCE_LABEL: Record<string, string> = {
-  hidden: 'Datos insuficientes',
+export const RISK_VISIBILITY_LABEL: Record<
+  import('@/domain/risk/deficiency-index').IndexVisibility,
+  string
+> = {
+  undetermined: 'Sin controles para evaluar',
+  hidden: 'Información insuficiente',
   preliminary: 'Preliminar',
-  warning: 'Parcial',
-  usable: 'Utilizable',
-  reliable: 'Confiable',
+  banded: 'Con información suficiente',
 }
 
-export const RISK_PAIR_STATUS_LABEL: Record<string, string> = {
+export const RISK_PAIR_STATUS_LABEL: Record<
+  import('@/domain/risk/deficiency-pairs').PairStatus,
+  string
+> = {
   compliant: 'Cumple',
   partially_effective: 'Cumple parcialmente',
   non_compliant: 'No cumple',
   not_evaluable: 'No evaluable',
+  not_applicable: 'No aplica',
 }

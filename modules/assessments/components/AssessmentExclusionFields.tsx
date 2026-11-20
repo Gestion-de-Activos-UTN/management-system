@@ -16,7 +16,7 @@ export function AssessmentScopeHint() {
   return (
     <Text size="sm" c="dimmed">
       Los activos excluidos permanecen visibles y continúan escaneándose, pero no afectan las
-      revisiones ni el puntaje de riesgo.
+      revisiones ni el índice de deficiencias.
     </Text>
   )
 }

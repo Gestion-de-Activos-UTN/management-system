@@ -4,7 +4,7 @@ Referencia técnica del panel general de una organización (`/portal/dashboard`)
 
 El panel de **plataforma** (`GET /v1/platform-admin/dashboard`, página `/` del StaffPortal) es otro feature y está documentado en `organizations-platform-api.md`.
 
-Verificado contra el código el 2026-10-31. Si algo de este documento contradice el código, gana el código: corregir el documento.
+Verificado contra el código el 2026-10-31; resumen de riesgo actualizado al índice de deficiencias el 2026-11-20. Si algo de este documento contradice el código, gana el código: corregir el documento.
 
 Documentos relacionados: `risk-api.md` (resumen de riesgo `/v1/security-review/summary`, alcance por oficina y estados de recálculo), `task-api.md` (`GET /v1/tasks`, `view=mine`, `is_overdue`), `portal-messages-api.md` (bandeja `/v1/portal-messages`), `scanner-api.md` (agentes y heartbeat), `assets-api.md` (activos de red y manuales), `session-and-access.md` (contexto de tenant, oficina seleccionada, `?asOrganization=`).
 
@@ -16,7 +16,7 @@ Documentos relacionados: `risk-api.md` (resumen de riesgo `/v1/security-review/s
 | Cliente HTTP | `modules/dashboard/service.ts` | `getDashboardMetrics`. Importa el tipo `DashboardMetrics` del endpoint. |
 | Estado de servidor | `modules/dashboard/hooks/use-dashboard-metrics.ts` | `useDashboardMetrics`. |
 | UI | `modules/dashboard/components/RiskOverviewCard.tsx` | Tarjeta de riesgo. |
-| | `modules/dashboard/components/EvidenceCoverageStrip.tsx` | Franja de cobertura de evidencia. |
+| | `modules/dashboard/components/EvidenceCoverageStrip.tsx` | Franja «Información disponible». |
 | | `modules/dashboard/components/AttentionCard.tsx` | Lista "Requiere atención". |
 | | `modules/dashboard/components/ActivityTabsCard.tsx` | Tarjeta con pestañas "Mis tareas" y "Mensajes". |
 | | `modules/dashboard/components/MyTasksList.tsx` | Lista de tareas abiertas y helper `openTasks`. |
@@ -123,7 +123,7 @@ Dos valores distintos de oficina conviven:
 
 El cliente TanStack reintenta una vez ante errores (`lib/query-client.ts`, `retry: 1`), así que una consulta fallida queda en `isPending` hasta agotar el reintento.
 
-Las reglas del resumen de riesgo (alcance `organization`, `office` o `assigned_offices`, 403 `feature_disabled`, 503 `risk_unavailable`, estados de `recalculation`) están en `risk-api.md`. El DTO que consume el panel es `SecurityReviewSummary` (`modules/assessments/service.ts`): `scope?`, `recalculation?`, `risk_score`, `evaluated_percentage`, `applicable_checks`, `not_evaluable`, `requires_attention`, `excluded_assets`, `risk_band`, `unconfirmed_assets`. Las reglas de `view=mine` (reclamadas por el actor o con `assigned_user` igual al actor; sin tareas archivadas) y de `is_overdue` están en `task-api.md`. La bandeja de mensajes y su filtro `isInPortalMessageHistory` están en `portal-messages-api.md`.
+Las reglas del resumen de riesgo (alcance `organization`, `office` o `assigned_offices`, 403 `feature_disabled`, 503 `risk_unavailable`, estados de `recalculation`) están en `risk-api.md`. El DTO que consume el panel es `SecurityReviewSummary` (`modules/assessments/service.ts`): `scope?`, `recalculation?`, `index`, `band`, `visibility`, `evaluated_percentage`, `applicable_checks`, `not_evaluable`, `requires_attention`, `excluded_assets`, `unidentified_assets`, `authorization_pending_assets`. `index` y `band` llegan nulos cuando `visibility` los oculta (`indexVisible` / `bandVisible`, `risk-api.md`). Las reglas de `view=mine` (reclamadas por el actor o con `assigned_user` igual al actor; sin tareas archivadas) y de `is_overdue` están en `task-api.md`. La bandeja de mensajes y su filtro `isInPortalMessageHistory` están en `portal-messages-api.md`.
 
 Un PlatformAdmin visitante no consulta mensajes (`usePortalMessages` queda deshabilitado, porque `/v1/portal-messages` es personal de cada miembro) y la tarjeta muestra el texto "La bandeja de mensajes es personal de cada miembro de la organización."
 
@@ -131,10 +131,10 @@ Un PlatformAdmin visitante no consulta mensajes (`usePortalMessages` queda desha
 
 | Bloque | Componente | Datos |
 |---|---|---|
-| Riesgo | `RiskOverviewCard` (o `OfficeRiskSelectionNotice` si `requiresOfficeSelection`) | `risk.data`. Título según `scope`: `organization` "Riesgo global de la organización", `assigned_offices` "Riesgo de tus oficinas", otro "Riesgo actual". Puntaje `Math.round(risk_score)` con `%`, o `—` si es `null`. Insignia de banda (`RiskBandBadge`), o "Sin datos suficientes" (puntaje `null`) / "Preliminar" (puntaje sin banda). Si `recalculation` no es `current` ni `outdated`: insignia "Actualizando riesgo", o "No se pudo completar el cálculo" cuando es `failed`. |
+| Riesgo | `RiskOverviewCard` (o `OfficeRiskSelectionNotice` si `requiresOfficeSelection`) | `risk.data`. Título según `scope`: `organization` "Deficiencias de la organización", `assigned_offices` "Deficiencias de tus oficinas", otro "Deficiencias actuales". Índice `Math.round(index)`, o `—` si es `null`. Insignia de banda (`RiskBandBadge`), o "Sin datos suficientes" (índice `null`: visibilidad `hidden` o `undetermined`) / "Preliminar" (índice sin banda: visibilidad `preliminary`). Si `recalculation` no es `current` ni `outdated`: insignia "Actualizando el índice", o "No se pudo completar el cálculo" cuando es `failed`. |
 | Requiere atención | `AttentionCard` | Cinco ítems (§5.4). |
 | Cifras | `MetricsStrip` | `total_assets` ("activos de red"), `active_offices`, `online_scanners de total_scanners` ("escáneres en línea"), `last_scan_at` (relativo con `formatRelativeDays` y fecha con `formatDate`, o "Nunca"). |
-| Cobertura | `EvidenceCoverageStrip` (no se muestra si `requiresOfficeSelection`) | `evaluated_percentage` redondeado; `applicable_checks`; evaluadas = `max(0, applicable_checks - not_evaluable)`. |
+| Información disponible | `EvidenceCoverageStrip` (no se muestra si `requiresOfficeSelection`) | `evaluated_percentage` redondeado; `applicable_checks`; evaluadas = `max(0, applicable_checks - not_evaluable)`. |
 | Actividad | `ActivityTabsCard` | Pestaña "Mis tareas (n)" con `MyTasksList` y pestaña "Mensajes (n)" con `PortalMessagesList`. |
 
 ### 5.4 Ítems de "Requiere atención"
@@ -144,7 +144,7 @@ Un PlatformAdmin visitante no consulta mensajes (`usePortalMessages` queda desha
 | Clave | Cuenta | Origen | Enlace |
 |---|---|---|---|
 | `overdue-tasks` | Tareas con `is_overdue` en `useTasks(view=mine)` | tareas | `/portal/tasks` |
-| `unconfirmed` | `unconfirmed_assets` | resumen de riesgo | `/portal/inventory` |
+| `unconfirmed` | `unidentified_assets` | resumen de riesgo | `/portal/inventory` |
 | `controls` | `requires_attention` | resumen de riesgo | `/portal/risk-score` |
 | `manual-reviews` | `overdue_manual_reviews` | métricas | `/portal/inventory?tab=non-network` |
 | `offline-scanners` | `total_scanners - online_scanners` | métricas | `/portal/administration/offices` |
@@ -160,7 +160,7 @@ El panel no tiene un estado de error global: cada fuente falla por separado.
 | Fuente | Qué ocurre si falla |
 |---|---|
 | Métricas | `Alert` rojo "No se pudieron cargar las métricas." La franja de cifras muestra `—` en activos, oficinas y escáneres, y **"Nunca"** en el último escaneo (la rama sin dato de `last_scan_at` no distingue "sin datos" de "no cargó"). Los ítems `manual-reviews` y `offline-scanners` valen 0 y no se muestran. |
-| Riesgo | Sin dato previo: `RiskOverviewCard` muestra un `Alert` rojo "No se pudo cargar el riesgo." (en lugar de un puntaje vacío); `EvidenceCoverageStrip` no se muestra, para no dibujar un 0 % falso. Los ítems `unconfirmed` y `controls` se filtran (variable `riskUnavailable`) para no contar la falla como cero. Con un dato previo en caché, el error se ignora y se sigue mostrando ese dato. Un 403 `feature_disabled` (sin `security_assessments`, o sin `risk_score` en la rama de oficinas asignadas) se trata como cualquier otro error. |
+| Riesgo | Sin dato previo: `RiskOverviewCard` muestra un `Alert` rojo "No se pudo cargar el índice." (en lugar de un índice vacío); `EvidenceCoverageStrip` no se muestra, para no dibujar un 0 % falso. Los ítems `unconfirmed` y `controls` se filtran (variable `riskUnavailable`) para no contar la falla como cero. Con un dato previo en caché, el error se ignora y se sigue mostrando ese dato. Un 403 `feature_disabled` (sin `security_assessments`, o sin `risk_score` en la rama de oficinas asignadas) se trata como cualquier otro error. |
 | Tareas | `tasksAvailable = !tasks.isError`. Ante cualquier error (el endpoint responde 403 `feature_disabled` si la organización no tiene `tasks`, pero la página no distingue la causa) desaparece la pestaña "Mis tareas" y su contador, la tarjeta muestra solo "Mensajes" sin pestañas, y el ítem `overdue-tasks` vale 0. |
 | Mensajes | `PortalMessagesList` muestra "No se pudieron cargar los mensajes."; el contador de la pestaña queda sin número. |
 | Selección de oficina requerida | No se pide riesgo (`ready` falso); se muestra `OfficeRiskSelectionNotice`; `riskSummary` queda `undefined`, de modo que `unconfirmed` y `controls` valen 0 y no se muestran. Las demás tarjetas siguen con "todas tus oficinas asignadas". |
@@ -231,7 +231,7 @@ Estado de cobertura automática; sin pruebas de extremo a extremo por ahora.
 | Prueba | Cubre |
 |---|---|
 | `endpoints/dashboardMetrics.integration.test.ts` | Tres casos: 401 sin sesión; 403 si `office_id` está fuera del alcance del usuario; 200 con un escáner en línea dentro del alcance (`active_offices`, `online_scanners`, `total_scanners`, `overdue_manual_reviews`). |
-| `endpoints/assigned-office-risk.audit.integration.test.ts` | Un caso verifica que el resumen del panel (`/v1/security-review/summary`) y el detalle de riesgo devuelven el mismo puntaje, cobertura y conteos. |
+| `endpoints/assigned-office-risk.audit.integration.test.ts` | Un caso verifica que el resumen del panel (`/v1/security-review/summary`) y el detalle de riesgo devuelven el mismo índice, información disponible y conteos. |
 | `lib/portal-href.test.ts` | Armado de enlaces con `asOrganization` (usado por los ítems del panel). |
 | `lib/organization-request-context.audit.test.ts` | Reenvío de `asOrganization` en los requests del cliente. |
 

@@ -159,6 +159,85 @@ describe('assessment lifecycle', () => {
     assert.equal(setup.state().committed, 2)
   })
 
+  const completeWith = async (options: [string, string]) => {
+    const setup = makeLifecyclePayload()
+    await completeAssessment(
+      setup.payload,
+      'assessment-1',
+      {
+        answers: command.answers.map((answer, index) => ({
+          ...answer,
+          option_key: options[index],
+          ...(options[index] === 'not_applicable'
+            ? { justification: 'No hay sistemas compartidos.' }
+            : {}),
+        })),
+      },
+      'user-1',
+      { payload: setup.payload, context: {} } as PayloadRequest
+    )
+    return { assessment: setup.state().assessment, result: setup.results[0] }
+  }
+
+  it('persists a partial control as partially_effective, not non_compliant', async () => {
+    const { assessment, result } = await completeWith(['yes', 'no'])
+    assert.equal(result.status, 'partially_effective')
+    assert.equal(
+      (result.evidence_snapshot as { evaluation_effect: { combined_efficacy: number } })
+        .evaluation_effect.combined_efficacy,
+      0.5
+    )
+    assert.equal(
+      (assessment.completion_summary as Record<string, number>).partially_effective,
+      1
+    )
+  })
+
+  it('persists a fully not-applicable control as not_applicable, not not_evaluable', async () => {
+    const { assessment, result } = await completeWith(['not_applicable', 'not_applicable'])
+    assert.equal(result.status, 'not_applicable')
+    assert.equal(result.reason_code, 'not_applicable')
+    const summary = assessment.completion_summary as Record<string, number>
+    assert.equal(summary.not_applicable, 1)
+    assert.equal(summary.not_evaluable, 0)
+  })
+
+  it('keeps unknown answers as not_evaluable', async () => {
+    const { result } = await completeWith(['yes', 'unknown'])
+    assert.equal(result.status, 'not_evaluable')
+  })
+
+  it('dates the result at closing and keeps answered_at per sub-question', async () => {
+    const { assessment, result } = await completeWith(['yes', 'no'])
+    assert.equal(typeof assessment.completed_at, 'string')
+    assert.equal(result.evaluated_at, assessment.completed_at)
+    const subs = (
+      result.evidence_snapshot as {
+        evaluation_effect: { sub_efficacies: Array<{ question_key: string; answered_at: string }> }
+      }
+    ).evaluation_effect.sub_efficacies
+    assert.deepEqual(
+      subs.map(sub => sub.question_key),
+      ['A.5.15.individual_accounts', 'A.5.15.access_revocation']
+    )
+    for (const sub of subs) assert.equal(typeof sub.answered_at, 'string')
+  })
+
+  it('explains each persisted state differently', async () => {
+    const explanations = await Promise.all(
+      (
+        [
+          ['yes', 'yes'],
+          ['yes', 'no'],
+          ['no', 'no'],
+          ['yes', 'unknown'],
+          ['not_applicable', 'not_applicable'],
+        ] as Array<[string, string]>
+      ).map(async options => (await completeWith(options)).result.explanation)
+    )
+    assert.equal(new Set(explanations).size, 5)
+  })
+
   it('rolls back and never marks complete when a required answer is missing', async () => {
     const setup = makeLifecyclePayload()
     await assert.rejects(

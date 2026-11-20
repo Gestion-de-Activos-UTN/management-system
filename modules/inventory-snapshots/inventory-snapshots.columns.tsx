@@ -50,11 +50,11 @@ export function getInventorySnapshotsColumns(
     },
     {
       id: 'risk_score',
-      header: 'Puntaje de riesgo',
+      header: 'Índice de deficiencias',
       accessorFn: snapshot =>
-        (snapshot.assessment_results_snapshot as { score?: number | null })?.score ?? -1,
+        (snapshot.assessment_results_snapshot as { index?: number | null })?.index ?? -1,
       cell: ({ row }) => {
-        const score = (row.original.assessment_results_snapshot as { score?: number | null })?.score
+        const score = (row.original.assessment_results_snapshot as { index?: number | null })?.index
         return score == null ? (
           <Text size="sm" c="dimmed">
             No evaluable

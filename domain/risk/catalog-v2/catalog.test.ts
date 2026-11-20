@@ -36,6 +36,18 @@ describe('risk catalog v2', () => {
     assert.throws(() => validateRiskCatalogV2(typo), /missing option nonee/)
   })
 
+  it('rejects a control that mixes question scopes or asset types within a policy', () => {
+    const mixedScope = clone()
+    const scoped = mixedScope.questions.find(item => item.key === 'A.8.5.idle_lock')!
+    scoped.scope = 'office'
+    assert.throws(() => validateRiskCatalogV2(mixedScope), /A\.8\.5 mixes question scopes/)
+
+    const mixedTypes = clone()
+    const typed = mixedTypes.questions.find(item => item.key === 'A.8.5.idle_lock')!
+    typed.asset_types = ['workstation']
+    assert.throws(() => validateRiskCatalogV2(mixedTypes), /A\.8\.5 mixes question scopes/)
+  })
+
   it('rejects duplicate keys, dangling references and invalid efficacies', () => {
     const duplicate = clone()
     duplicate.questions[1].key = duplicate.questions[0].key

@@ -2,13 +2,14 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { getPayload } from 'payload'
 import config from '../../payload.config'
-import { recalculateRisk } from './recalculateRisk'
+import { calculateRiskForScope, loadRiskInputs, recalculateRisk } from './recalculateRisk'
+import { relationId } from '@/lib/relationId'
 import { manualResult, seedRiskOrganization } from './risk-integration-seed'
 
 // Integration test against Postgres: the pure engine is covered by unit tests; this checks the
 // loader (queries, pagination, aging, tenant filtering) and the transactional persistence.
 
-test('recalculateRisk: persists every applicable pair, applies aging and catalog severity', async () => {
+test('recalculateRisk: persists every applicable pair with its evidence and applies aging', async () => {
   const payload = await getPayload({ config })
   const { organization, office, server } = await seedRiskOrganization(payload)
   const ids = {
@@ -61,19 +62,23 @@ test('recalculateRisk: persists every applicable pair, applies aging and catalog
 
   const byControl = new Map(contributions.docs.map(row => [row.control_key, row]))
   const privileged = byControl.get('A.8.2')!
-  assert.equal(privileged.severity, 'critical')
   assert.equal(privileged.status, 'non_compliant')
-  assert.equal(privileged.inherent_risk, 64) // C=8 × A=1 × S=8 × X=1
-  assert.equal(privileged.residual_risk, 64)
+  assert.equal(privileged.compliance, 0)
+  assert.equal(privileged.criticality_weight, 8) // critical server, B pura
+  assert.equal(privileged.asset_office, ids.officeId)
+  assert.equal((privileged.evidence as { kind: string }).kind, 'answer')
   assert.equal(byControl.get('A.8.13')!.status, 'not_evaluable')
+  assert.equal(byControl.get('A.8.13')!.reason_code, 'answer_missing')
   assert.equal(byControl.get('A.8.16')!.status, 'compliant')
-  assert.equal(byControl.get('A.8.13')!.exposure_source, 'scan')
+  // No services observed with complete coverage: compliant within the baseline (D25).
+  assert.equal(byControl.get('A.8.21')!.status, 'compliant')
 
   assert.equal(evaluation.policy_key, 'essential')
-  const alerts = evaluation.alerts as { critical_assets: unknown[] }
-  assert.deepEqual(alerts.critical_assets, [
-    { asset_id: `asset:${ids.assetId}`, control_key: 'A.8.2' },
-  ])
+  assert.equal(evaluation.engine_version, 3)
+  const counts = evaluation.counts as { pairs: Record<string, number>; assets: { in_scope: number } }
+  assert.equal(counts.assets.in_scope, 1)
+  // A.5.9, A.5.12 and A.8.16 stay out of the index counts.
+  assert.equal(Object.values(counts.pairs).reduce((sum, value) => sum + value, 0), 11)
 })
 
 test('recalculateRisk: an office evaluation still inherits organization-level answers', async () => {
@@ -192,4 +197,68 @@ test('recalculateRisk: los activos de una oficina inactiva no cuentan en el ries
   // snapshot y el job; el job no la pide para oficinas inactivas.
   const empty = await recalculateRisk(payload, { organizationId, officeId: String(branch.id) })
   assert.ok(empty.id)
+})
+
+test('calculateRiskForScope: an assigned subset leaves out assets without office, of other offices or inactive ones', async () => {
+  const payload = await getPayload({ config })
+  const { organization, office, server } = await seedRiskOrganization(payload)
+  const organizationId = String(organization.id)
+  const make = (name: string) =>
+    payload.create({ collection: 'offices', overrideAccess: true, data: { organization: organizationId, name } })
+  const [other, inactive] = await Promise.all([make('Otra'), make('Inactiva')])
+  // Assets require an agent; an asset without office keeps the main office's agent.
+  const agentOf = async (officeId: string) =>
+    String(
+      (
+        await payload.create({
+          collection: 'agents',
+          overrideAccess: true,
+          context: { systemJob: true },
+          data: { id: `agent-${Math.random().toString(36).slice(2)}`, office: officeId },
+        })
+      ).id
+    )
+  const agents = { other: await agentOf(String(other.id)), inactive: await agentOf(String(inactive.id)) }
+  const asset = (suffix: string, officeId: string | null, agent: string, cidr: string) =>
+    payload.create({
+      collection: 'assets',
+      overrideAccess: true,
+      context: { systemJob: true },
+      data: {
+        asset_id: `scope-${suffix}-${Math.random().toString(36).slice(2)}`,
+        agent,
+        office: officeId,
+        organization: organizationId,
+        ip: '10.0.0.20',
+        status: 'active',
+        identified: false,
+        authorization_status: 'pending',
+        criticality: 'critical',
+        last_observed_cidr: cidr,
+        asset_coverage: { port_scan: 'complete', service_detection: 'complete' },
+        services: [],
+      } as never,
+    })
+  const outside = await Promise.all([
+    asset('none', null, String(relationId(server.agent)), '10.0.0.0/24'),
+    asset('other', String(other.id), agents.other, '10.0.0.0/24'),
+    asset('inactive', String(inactive.id), agents.inactive, '10.0.0.0/24'),
+  ])
+  await payload.update({ collection: 'offices', id: inactive.id, overrideAccess: true, data: { is_active: false } })
+  const outsideKeys = new Set(outside.map(doc => `asset:${doc.id}`))
+
+  for (const officeIds of [[String(office.id)], [String(office.id), String(inactive.id)]]) {
+    const scoped = await calculateRiskForScope(payload, { organizationId, officeIds })
+    assert.deepEqual([...new Set(scoped.pairs.map(pair => pair.asset_key))], [`asset:${server.id}`])
+    assert.equal(scoped.evaluation.counts.assets.in_scope, 1)
+    assert.equal(scoped.evaluation.counts.assets.unidentified, 0)
+    assert.deepEqual(
+      scoped.evaluation.context.office_visibility.map(item => item.office_id),
+      [String(office.id)]
+    )
+    // The server is critical, but no unidentified neighbour is in scope: no shared-CIDR notice.
+    assert.deepEqual(scoped.evaluation.context.shared_cidr, [])
+    const inputs = await loadRiskInputs(payload, { organizationId, officeIds })
+    assert.ok(inputs.networkHistory.every(row => !outsideKeys.has(row.asset_key)))
+  }
 })

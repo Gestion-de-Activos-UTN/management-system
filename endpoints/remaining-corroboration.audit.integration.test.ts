@@ -1397,13 +1397,111 @@ it('FOLLOWUP: compact enriched seed covers reassignment, automatic cancellation 
   ).toBe(true)
   expect(
     (await payload.count({ collection: 'assets', overrideAccess: true, where: scope })).totalDocs
-  ).toBe(21)
+  ).toBe(22) // incluye la UPS del caso D26
   expect(
     (await payload.count({ collection: 'non-network-assets', overrideAccess: true, where: scope }))
       .totalDocs
-  ).toBe(21) // 18 de la demo + 3 del cierre de Córdoba (seedLifecycleScenario, ya aplicado antes)
+  ).toBe(22) // 19 de la demo (incluido el notebook excluido) + 3 del cierre de Córdoba
   expect(tasks).toHaveLength(24) // 22 de la demo + 2 de Lucía (liberada y cancelada)
+
+  // Índice D26 and exclusion cases, read from the persisted organization evaluation.
+  const evaluation = (
+    await payload.find({
+      collection: 'risk-evaluations',
+      overrideAccess: true,
+      depth: 0,
+      limit: 1,
+      sort: ['-evaluated_at', '-createdAt'],
+      where: { and: [scope, { office: { exists: false } }] },
+    })
+  ).docs[0]
+  const contributions = (
+    await payload.find({
+      collection: 'risk-contributions',
+      overrideAccess: true,
+      depth: 0,
+      pagination: false,
+      where: { evaluation: { equals: evaluation.id } },
+    })
+  ).docs
+  const ups = (
+    await payload.find({
+      collection: 'assets',
+      overrideAccess: true,
+      depth: 0,
+      limit: 1,
+      // Same lookup as the seed (findAsset): the scanner key may live in either field.
+      where: {
+        and: [
+          scope,
+          {
+            or: [
+              { scanner_asset_id: { equals: 'demo-main-ups' } },
+              { asset_id: { equals: 'demo-main-ups' } },
+            ],
+          },
+        ],
+      },
+    })
+  ).docs[0]
+  const firstScan = await payload.findByID({
+    collection: 'scan-reports',
+    id: 'demo-main-d26-scan-v1',
+    overrideAccess: true,
+  })
+  const upsNetwork = contributions.find(
+    row => row.asset_key === `asset:${ups.id}` && row.control_key === 'A.8.21'
+  )!
+  expect(upsNetwork.status).toBe('not_evaluable')
+  const telnet = (
+    upsNetwork.evidence as { findings: Array<{ service_key: string; previous?: { date: string; date_kind: string } }> }
+  ).findings.find(finding => finding.service_key === 'tcp:23')!
+  expect(telnet.previous).toMatchObject({ date_kind: 'observation' })
+  expect(Date.parse(telnet.previous!.date)).toBe(Date.parse(String(firstScan.scan_end)))
+  const notebook = (
+    await payload.find({
+      collection: 'non-network-assets',
+      overrideAccess: true,
+      depth: 0,
+      limit: 1,
+      // By exclusion, not alias: an earlier test renames a manual asset of the demo.
+      where: { and: [scope, { assessment_scope: { equals: 'excluded' } }] },
+    })
+  ).docs[0]
+  expect(notebook.assessment_scope).toBe('excluded')
+  const automatic = new Set(['A.5.9', 'A.5.12', 'A.8.16', 'A.8.20', 'A.8.21'])
+  expect(
+    contributions.filter(
+      row => row.asset_key === `manual:${notebook.id}` && !automatic.has(row.control_key)
+    )
+  ).toHaveLength(0)
+  expect(
+    (evaluation.counts as { assets: { excluded_from_assessment: number } }).assets
+      .excluded_from_assessment
+  ).toBeGreaterThanOrEqual(1)
+  const notebookReviews = (
+    await payload.find({
+      collection: 'assessment-instances',
+      overrideAccess: true,
+      depth: 0,
+      pagination: false,
+      where: { manual_asset: { equals: notebook.id } },
+    })
+  ).docs
+  expect(notebookReviews.some(row => ['pending', 'in_progress'].includes(row.status))).toBe(false)
+  expect(notebookReviews.some(row => row.status === 'completed')).toBe(true)
+  const telnetRows = async () =>
+    (
+      await payload.count({
+        collection: 'compliance-results',
+        overrideAccess: true,
+        where: { and: [{ asset: { equals: ups.id } }, { service_key: { equals: 'tcp:23' } }] },
+      })
+    ).totalDocs
+
+  const telnetBefore = await telnetRows()
   const repeat = await seedDemoData(payload, { profile: 'expanded' })
+  expect(await telnetRows()).toBe(telnetBefore)
   expect(repeat).toMatchObject({
     reportsProcessed: 0,
     manualAssetsCreated: 0,

@@ -1,4 +1,5 @@
 import { Badge, type BadgeProps } from '@mantine/core'
+import type { IndexBand } from '@/domain/risk/deficiency-index'
 import { RISK_BAND_LABEL } from '@/lib/enum-labels'
 import { RISK_BAND_COLOR } from '../risk-labels'
 
@@ -7,10 +8,10 @@ import { RISK_BAND_COLOR } from '../risk-labels'
  * los 4 niveles necesitan 4 colores (incluido naranja para "alto") y StatusBadge sólo tiene 5
  * tonos genéricos — mapear ahí hacía que "Alto" saliera amarillo en una tarjeta y naranja en otra.
  */
-export function RiskBandBadge({ band, ...props }: { band: string } & Omit<BadgeProps, 'color'>) {
+export function RiskBandBadge({ band, ...props }: { band: IndexBand } & Omit<BadgeProps, 'color'>) {
   return (
-    <Badge color={RISK_BAND_COLOR[band] ?? 'gray'} {...props}>
-      {RISK_BAND_LABEL[band] ?? band}
+    <Badge color={RISK_BAND_COLOR[band]} {...props}>
+      {RISK_BAND_LABEL[band]}
     </Badge>
   )
 }
