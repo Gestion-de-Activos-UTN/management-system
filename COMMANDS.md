@@ -45,6 +45,7 @@ No tocan la DB — alcanza con tener `node_modules` en algún lado (host si corr
 | ----------------------- | ----------------------------------------------- | ------------------------------------------------------------------------- |
 | `pnpm test`             | Host (con deps instaladas)                      | Tests unitarios (`node --test` vía `tsx`), no tocan la DB                 |
 | `pnpm test:integration` | `docker compose exec app pnpm test:integration` | Toca Postgres real — necesita el `DATABASE_URL` del contenedor (motivo 2) |
+| `pnpm audit:coverage`   | Host (con deps instaladas)                      | Cobertura de AuditLog por módulo (`--by-phase`, `--markdown`), sin DB     |
 
 ### Regresiones de la auditoría
 
