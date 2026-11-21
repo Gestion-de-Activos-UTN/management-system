@@ -22,7 +22,7 @@ export const PORTAL_MESSAGE_SECTION_LINKS: Record<
   { label: string; href: string; icon: LucideIcon }
 > = {
   dashboard: { label: 'Panel general', href: '/portal/dashboard', icon: LayoutDashboard },
-  'risk-score': { label: 'Puntaje de riesgo', href: '/portal/risk-score', icon: Gauge },
+  'risk-score': { label: 'Índice de deficiencias', href: '/portal/risk-score', icon: Gauge },
   'security-review': {
     label: 'Revisión de seguridad',
     href: '/portal/security-review',

@@ -113,8 +113,13 @@ test('createInventorySnapshot: freezes inventory and an independently calculated
   const dump = snapshot.assets_dump as { network: unknown[]; non_network: unknown[] }
   assert.equal(dump.network.length, 2, 'debe incluir los 2 Assets de red')
   assert.equal(dump.non_network.length, 1, 'debe incluir el NonNetworkAsset manual (RF-49-54)')
-  const risk = snapshot.assessment_results_snapshot as { score: number | null; coverage: number }
-  assert.equal(risk.score, null, 'sin resultados evaluables el riesgo no debe aparentar cero')
+  const risk = snapshot.assessment_results_snapshot as {
+    index: number | null
+    coverage: number
+    visibility: string
+  }
+  assert.equal(risk.index, null, 'sin resultados evaluables el índice no debe aparentar cero')
+  assert.equal(risk.visibility, 'hidden')
   assert.equal(risk.coverage, 0)
   assert.ok(snapshot.assessment_results_snapshot)
 })
@@ -154,7 +159,7 @@ test('createInventorySnapshot: an unidentified asset is visible without becoming
 
   const dump = snapshot.assets_dump as { network: unknown[] }
   assert.equal(dump.network.length, 3, 'el no-identificado sigue en el dump')
-  assert.equal((snapshot.assessment_results_snapshot as { score: number | null }).score, null)
+  assert.equal((snapshot.assessment_results_snapshot as { index: number | null }).index, null)
 })
 
 test('createInventorySnapshot: assets_dump es una copia por valor, no una referencia viva', async () => {

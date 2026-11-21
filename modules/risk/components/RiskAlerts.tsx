@@ -1,84 +1,67 @@
 import Link from 'next/link'
-import { Alert, Anchor, Button, List, Stack, Text } from '@mantine/core'
-import { AlertTriangle, Radar } from 'lucide-react'
-import { usePortalHref } from '@/lib/use-portal-href'
-import { controlTitle } from '../risk.columns'
+import { Alert, Button, List, Stack, Text } from '@mantine/core'
+import { Info, Radar, WifiOff } from 'lucide-react'
+import { controlTitle } from '../risk-labels'
 import type { RiskEvaluationDTO } from '../service'
 
-/** Qualitative alerts (Reglas Globales §3 and §5.3). They never change the numeric score. */
+/**
+ * Warnings beside the index (Plan §6, D21): important controls with too little information, offices
+ * whose scanner is not reporting, and unidentified devices sharing a network with important ones.
+ * They never change the index.
+ */
 export function RiskAlerts({
-  alerts,
+  evaluation,
   inventoryHref,
 }: {
-  alerts: RiskEvaluationDTO['alerts']
+  evaluation: RiskEvaluationDTO
   inventoryHref: string
 }) {
-  const href = usePortalHref()
-  const exposure = alerts.undetermined_exposure
-  const priority =
-    alerts.critical_assets.length > 0 ||
-    alerts.systemic_failures.length > 0 ||
-    alerts.severe_concentration
-  if (!priority && !exposure.length) return null
+  const { context } = evaluation
+  const warnings = evaluation.controls.filter(control => control.warning)
+  const silentOffices = context.office_visibility.filter(item => item.reason_code !== 'agent_reporting')
+  const label = (key: string) => context.labels[key] ?? key
+  if (!warnings.length && !silentOffices.length && !context.shared_cidr.length) return null
   return (
     <Stack gap="md">
-      {priority && (
-        <Alert color="red" title="Alertas prioritarias" icon={<AlertTriangle size={18} />}>
+      {warnings.length > 0 && (
+        <Alert color="yellow" title="Falta información en controles importantes" icon={<Info size={18} />}>
           <List size="sm" spacing={4}>
-            {alerts.critical_assets.map(item => (
-              <List.Item key={`${item.asset_id}:${item.control_key}`}>
-                {item.asset_id.startsWith('asset:') || item.asset_id.startsWith('manual:') ? (
-                  <Anchor
-                    component={Link}
-                    href={`${href('/portal/security-review', `device=${encodeURIComponent(item.asset_id)}`)}#dispositivos`}
-                    fw={700}
-                    size="sm"
-                    c="inherit"
-                    underline="always"
-                  >
-                    {item.asset_label}
-                  </Anchor>
-                ) : (
-                  <strong>{item.asset_label}</strong>
-                )}{' '}
-                es importante para la empresa y necesita mejorar su protección de{' '}
-                {controlTitle(item.control_key).toLowerCase()} ({item.control_key}
-                ).
+            {warnings.map(control => (
+              <List.Item key={control.control_key}>
+                <strong>{controlTitle(control.control_key)}</strong> ({control.control_key}): hay
+                información para el {Math.round(control.coverage * 100)} % de lo que corresponde
+                revisar. Faltan {control.pending_pairs} comprobaciones.
               </List.Item>
             ))}
-            {alerts.systemic_failures.map(key => (
-              <List.Item key={key}>
-                <strong>Problema repetido:</strong> {controlTitle(key)} ({key}) necesita mejoras en
-                más de 1 de cada 5 casos revisados.
-              </List.Item>
-            ))}
-            {alerts.severe_concentration && (
-              <List.Item>
-                La mayor parte del riesgo ({Math.round(alerts.severe_concentration_percentage)} %)
-                se concentra en problemas importantes. Por eso el nivel de riesgo subió un nivel.
-              </List.Item>
-            )}
           </List>
         </Alert>
       )}
-      {exposure.length > 0 && (
-        <Alert color="orange" title="Exposición no determinada" icon={<Radar size={18} />}>
+      {silentOffices.length > 0 && (
+        <Alert color="orange" title="Oficinas sin monitoreo activo" icon={<WifiOff size={18} />}>
+          <List size="sm" spacing={4}>
+            {silentOffices.map(item => (
+              <List.Item key={item.office_id}>
+                <strong>{label(`office:${item.office_id}`)}</strong>:{' '}
+                {item.reason_code === 'agent_missing'
+                  ? 'no tiene un escáner activo.'
+                  : 'el escáner dejó de reportar.'}
+              </List.Item>
+            ))}
+          </List>
+        </Alert>
+      )}
+      {context.shared_cidr.length > 0 && (
+        <Alert color="orange" title="Dispositivos sin identificar junto a equipos importantes" icon={<Radar size={18} />}>
           <Stack gap="sm" align="flex-start">
-            <Text size="sm">
-              Hay dispositivos sin identificar en la misma red que estos equipos. Identifícalos para
-              poder calcular su riesgo.
-            </Text>
-            {/* Punto y coma: los nombres ya usan " · " para separar oficina y equipo. */}
-            <Text size="sm" fw={600}>
-              {exposure.map(item => item.asset_label).join('; ')}.
-            </Text>
-            <Button
-              component={Link}
-              href={inventoryHref}
-              size="sm"
-              color="orange"
-              w={{ base: '100%', xs: 'auto' }}
-            >
+            <List size="sm" spacing={4}>
+              {context.shared_cidr.map(group => (
+                <List.Item key={`${group.office_id}|${group.cidr}`}>
+                  {label(`office:${group.office_id}`)} · red {group.cidr}: {group.unidentified_assets}{' '}
+                  sin identificar junto a {group.important_assets.map(label).join('; ')}.
+                </List.Item>
+              ))}
+            </List>
+            <Button component={Link} href={inventoryHref} size="sm" color="orange" w={{ base: '100%', xs: 'auto' }}>
               Identificar dispositivos
             </Button>
           </Stack>

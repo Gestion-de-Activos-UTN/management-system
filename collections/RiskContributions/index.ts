@@ -1,8 +1,9 @@
 import type { CollectionConfig } from 'payload'
 import { orgScopedAccess } from '@/access/rbac/orgScopedAccess'
-import { whenEvaluationScoreVisible } from '../RiskEvaluations/scoreFieldAccess'
+import { COMPLIANCE_STATUSES } from '@/domain/assessments/catalog'
+import { RISK_ASSET_TYPES } from '@/domain/risk/catalog-v2/types'
 
-/** Immutable, auditable per asset/control inputs and outputs for one RiskEvaluation. */
+/** Immutable asset–control pairs of one RiskEvaluation, with their evidence and reasons (contracts §6). */
 export const RiskContributions: CollectionConfig = {
   slug: 'risk-contributions',
   access: {
@@ -37,28 +38,32 @@ export const RiskContributions: CollectionConfig = {
       options: ['low', 'medium', 'high', 'critical', 'unknown'],
       required: true,
     },
-    { name: 'scope_multiplier', type: 'number', required: true },
+    { name: 'asset_office', type: 'relationship', relationTo: 'offices', index: true },
     {
-      name: 'severity',
+      name: 'asset_type',
       type: 'select',
-      options: ['low', 'medium', 'high', 'critical', 'unknown'],
+      options: [...RISK_ASSET_TYPES],
+    },
+    { name: 'criticality_weight', type: 'number', required: true },
+    {
+      name: 'applicability',
+      type: 'select',
+      options: ['applicable', 'not_applicable'],
       required: true,
     },
-    { name: 'exposure', type: 'select', options: ['low', 'medium', 'high'], required: true },
-    { name: 'exposure_source', type: 'select', options: ['scan', 'default_unknown'] },
-    { name: 'efficacy', type: 'number' },
-    { name: 'effect_snapshot', type: 'json', required: true },
-    {
-      name: 'status',
-      type: 'select',
-      options: ['compliant', 'partially_effective', 'non_compliant', 'not_evaluable'],
-      required: true,
-    },
-    { name: 'inherent_risk', type: 'number', access: { read: whenEvaluationScoreVisible } },
-    { name: 'residual_risk', type: 'number', access: { read: whenEvaluationScoreVisible } },
-    { name: 'coverage_weight', type: 'number', required: true },
-    { name: 'excluded', type: 'checkbox', required: true },
+    { name: 'compliance', type: 'number' },
+    { name: 'status', type: 'select', options: [...COMPLIANCE_STATUSES], required: true },
     { name: 'reason_code', type: 'text', required: true },
+    {
+      // Indexed for filtering only. Never sort by it in the database: the text order is not the
+      // priority order and nulls come first; order in memory with priority.ts instead.
+      name: 'priority',
+      type: 'select',
+      options: ['low', 'medium', 'high', 'critical'],
+      index: true,
+    },
+    { name: 'evidence', type: 'json', required: true },
+    { name: 'reasons', type: 'json', required: true },
   ],
 }
 

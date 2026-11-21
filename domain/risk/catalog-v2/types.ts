@@ -1,4 +1,3 @@
-import type { RiskSeverity } from '../constants'
 
 export const RISK_POLICY_KEYS = ['essential', 'reinforced'] as const
 export type RiskPolicyKey = (typeof RISK_POLICY_KEYS)[number]
@@ -41,7 +40,8 @@ export type RiskQuestionV2 = {
 export type RiskControlV2 = {
   key: string
   title: string
-  severity: RiskSeverity | 'by_network_rule' | 'coverage_only'
+  // Catalog metadata only: B pura does not weigh controls by severity (importance does).
+  severity: 'low' | 'medium' | 'high' | 'critical' | 'unknown' | 'by_network_rule' | 'coverage_only'
   question_keys: readonly string[]
 }
 

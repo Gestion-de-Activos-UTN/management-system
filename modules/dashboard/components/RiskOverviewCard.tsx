@@ -5,6 +5,7 @@ import { ArrowRight } from 'lucide-react'
 import { RiskScopeExplanation } from '@/modules/risk/components/RiskScopeExplanation'
 import { RiskBandBadge } from '@/modules/risk/components/RiskBandBadge'
 import { RISK_ROBOT_MESSAGE, RiskRobot, riskRobotMood } from '@/modules/risk/components/RiskRobot'
+import { RISK_SCORE_MEANING } from '@/modules/risk/risk-labels'
 import type { SecurityReviewSummary } from '@/modules/assessments/service'
 
 /**
@@ -26,20 +27,20 @@ export function RiskOverviewCard({
   if (isPending) return <Skeleton height={190} radius="lg" />
   // Without a summary a failure must not read as "no risk": the card says it could not load.
   if (isError && !summary)
-    return <Alert color="red">No se pudo cargar el riesgo. Intenta de nuevo en unos minutos.</Alert>
-  const score = summary?.risk_score ?? null
-  const band = summary?.risk_band ?? null
+    return <Alert color="red">No se pudo cargar el índice. Intenta de nuevo en unos minutos.</Alert>
+  const index = summary?.index ?? null
+  const band = summary?.band ?? null
   return (
     <Card withBorder radius="lg" p="xl">
       <Group gap="xl" wrap="nowrap" align="center">
-        <RiskRobot score={score} band={band} size={128} />
+        <RiskRobot index={index} band={band} size={128} />
         <Stack gap="sm" style={{ flex: 1, minWidth: 0 }}>
           <Text fw={700} c="dimmed" size="sm" tt="uppercase">
             {summary?.scope === 'organization'
-              ? 'Riesgo global de la organización'
+              ? 'Deficiencias de la organización'
               : summary?.scope === 'assigned_offices'
-                ? 'Riesgo de tus oficinas'
-                : 'Riesgo actual'}
+                ? 'Deficiencias de tus oficinas'
+                : 'Deficiencias actuales'}
           </Text>
           <RiskScopeExplanation scope={summary?.scope} />
           {summary?.recalculation &&
@@ -50,13 +51,13 @@ export function RiskOverviewCard({
                 label={
                   summary.recalculation === 'failed'
                     ? 'No se pudo completar el cálculo'
-                    : 'Actualizando riesgo'
+                    : 'Actualizando el índice'
                 }
               />
             )}
           <Group gap="sm" align="center">
             <Text fw={800} fz={44} lh={1}>
-              {score === null ? '—' : `${Math.round(score)} %`}
+              {index === null ? '—' : Math.round(index)}
             </Text>
             {band ? (
               <RiskBandBadge band={band} size="lg" />
@@ -64,19 +65,19 @@ export function RiskOverviewCard({
               <StatusBadge
                 size="lg"
                 tone="neutral"
-                label={score === null ? 'Sin datos suficientes' : 'Preliminar'}
+                label={index === null ? 'Sin datos suficientes' : 'Preliminar'}
               />
             )}
           </Group>
           {/* Lo que "dice" el robot: globo de diálogo apuntando hacia él. */}
           <Paper withBorder radius="md" px="sm" py={8} className="robot-bubble" maw={460}>
-            <Text size="sm">{RISK_ROBOT_MESSAGE[riskRobotMood(score, band)]}</Text>
+            <Text size="sm">{RISK_ROBOT_MESSAGE[riskRobotMood(index, band)]}</Text>
           </Paper>
           <Group justify="space-between" gap="sm" wrap="wrap">
             <Text size="xs" c="dimmed">
-              {score === null
+              {index === null
                 ? 'Completa revisiones e identifica equipos para poder calcularlo.'
-                : 'Porcentaje del riesgo evaluado que sigue sin tratar.'}
+                : RISK_SCORE_MEANING}
             </Text>
             <Button
               component={Link}
@@ -85,7 +86,7 @@ export function RiskOverviewCard({
               size="xs"
               rightSection={<ArrowRight size={14} strokeWidth={1.5} />}
             >
-              Ver puntaje de riesgo
+              Ver deficiencias
             </Button>
           </Group>
         </Stack>

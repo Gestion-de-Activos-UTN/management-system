@@ -1,10 +1,10 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import type { PayloadRequest } from 'payload'
 import type { TenantContext } from '@/access/tenant/resolveTenantContext'
-import { calculateRisk } from './engine'
 import { calculateRiskForScope } from './recalculateRisk'
 import { assignedOfficeRisk } from './assigned-office-risk'
-import { evaluationFromResult } from './evaluation-from-result'
+import { evaluationFromPairs } from './evaluation-from-pairs'
+import { countAssets } from './deficiency-pairs'
 import { RISK_CATALOG_VERSION, RISK_ENGINE_VERSION } from './constants'
 
 vi.mock('./recalculateRisk', () => ({ calculateRiskForScope: vi.fn() }))
@@ -32,13 +32,7 @@ it('rejects an inactive membership before reading evidence', async () => {
   expect(calculateRiskForScope).not.toHaveBeenCalled()
 })
 it('takes scope from membership and never creates a reference to a nonexistent persisted evaluation', async () => {
-  vi.mocked(calculateRiskForScope).mockResolvedValue({
-    result: calculateRisk([], []),
-    policy: 'essential',
-    evaluatedAt: new Date('2026-10-30T00:00:00Z'),
-    undeterminedExposure: [],
-    officeIds: ['a', 'b'],
-  })
+  vi.mocked(calculateRiskForScope).mockResolvedValue({ ...calculated(), officeIds: ['a', 'b'] })
   const view = await assignedOfficeRisk(req, ctx)
   expect(calculateRiskForScope).toHaveBeenCalledWith(
     req.payload,
@@ -46,18 +40,26 @@ it('takes scope from membership and never creates a reference to a nonexistent p
     req
   )
   expect(view.evaluation.id).toBeNull()
-  expect(view.evaluation.score).toBeNull()
+  expect(view.evaluation.index).toBeNull()
+  expect(view.evaluation.visibility).toBe('undetermined')
   expect(view.contributions).toEqual([])
   expect(req.payload.create).not.toHaveBeenCalled()
 })
 
-const calculated = () => ({
-  result: calculateRisk([], []),
-  policy: 'essential' as const,
-  evaluatedAt: new Date('2026-10-30T00:00:00Z'),
-  undeterminedExposure: [],
-  officeIds: [],
-})
+function calculated() {
+  return {
+    policy: 'essential' as const,
+    evaluation: evaluationFromPairs({
+      policy: 'essential',
+      pairs: [],
+      assetCounts: countAssets([]),
+      context: { office_visibility: [], shared_cidr: [] },
+    }),
+    pairs: [],
+    evaluatedAt: new Date('2026-10-30T00:00:00Z'),
+    officeIds: [] as string[],
+  }
+}
 const withJob = (job: { id: string; processing?: boolean; hasError?: boolean } | undefined) =>
   ({
     payload: {
@@ -100,7 +102,7 @@ it('builds the live evaluation with the same fields a persisted evaluation store
   expect(view.evaluation).toEqual({
     id: null,
     evaluated_at: '2026-10-30T00:00:00.000Z',
-    ...evaluationFromResult(calculated()),
+    ...calculated().evaluation,
   })
   expect(view.evaluation.engine_version).toBe(RISK_ENGINE_VERSION)
   expect(view.evaluation.catalog_version).toBe(RISK_CATALOG_VERSION)

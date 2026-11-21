@@ -625,7 +625,7 @@ export function AssetDetailView({
           <Text size="sm">
             Este activo volverá a estar &quot;no identificado&quot;. El responsable, la criticidad,
             el alias y la ubicación quedarán guardados para completar el formulario si vuelves a
-            identificarlo, pero dejarán de contar en los cálculos de riesgo hasta entonces.
+            identificarlo, pero dejarán de contar en el índice de deficiencias hasta entonces.
           </Text>
         </ModalLayout>
       </Modal>

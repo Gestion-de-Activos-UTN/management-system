@@ -150,8 +150,8 @@ export default function SnapshotDetailPage() {
   const networkAssets = dumpArray<DumpedAsset>(dump?.network)
   const nonNetworkAssets = dumpArray<DumpedNonNetworkAsset>(dump?.non_network)
   const risk = snapshot.assessment_results_snapshot as {
-    score?: number | null
-    coverage?: number
+    index?: number | null
+    coverage?: number | null
     excluded_assets?: number
   }
 
@@ -185,16 +185,16 @@ export default function SnapshotDetailPage() {
         isPending={false}
         metrics={[
           {
-            key: 'score',
+            key: 'index',
             icon: Gauge,
-            value: risk.score == null ? 'No evaluable' : Math.round(risk.score),
-            label: 'puntaje de riesgo en ese momento',
+            value: risk.index == null ? 'No evaluable' : Math.round(risk.index),
+            label: 'índice de deficiencias en ese momento',
           },
           {
             key: 'coverage',
             icon: ShieldCheck,
-            value: risk.score == null ? '—' : `${Math.round(risk.coverage ?? 0)} %`,
-            label: 'cobertura de la evaluación',
+            value: risk.coverage == null ? '—' : `${Math.round(risk.coverage)}/100`,
+            label: 'información disponible',
           },
           { key: 'network', icon: Server, value: networkAssets.length, label: 'activos de red' },
           {
@@ -215,10 +215,10 @@ export default function SnapshotDetailPage() {
       <Tabs defaultValue="network">
         <Tabs.List>
           <Tabs.Tab value="network" leftSection={<Server size={16} strokeWidth={1.5} />}>
-            Red ({networkAssets.length})
+            Detectados en la red ({networkAssets.length})
           </Tabs.Tab>
           <Tabs.Tab value="non-network" leftSection={<Package size={16} strokeWidth={1.5} />}>
-            Activos manuales ({nonNetworkAssets.length})
+            Registrados manualmente ({nonNetworkAssets.length})
           </Tabs.Tab>
         </Tabs.List>
 

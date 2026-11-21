@@ -105,8 +105,8 @@ Acceso: `create`, `update` y `delete` en `false`; `read` por `orgScopedAccess(..
 | `taken_at` | Momento de la toma. |
 | `generated_by` | `manual` \| `scheduled` \| `pre_audit`. |
 | `triggered_by_user` | Relación polimórfica `users` \| `admins`; solo en las manuales. |
-| `risk_score` | Relación a `risk-evaluations`, requerida. Evaluación calculada en el momento de la toma. |
-| `assessment_results_snapshot` | JSON: `{ evaluation_id, score, coverage, unknown_percentage, evaluated_at }`. `score` es `null` si `scoreVisible(confidence)` es falso. |
+| `risk_score` | Relación a `risk-evaluations`, requerida (nombre histórico del campo: es una relación, no un valor). Evaluación calculada en el momento de la toma. |
+| `assessment_results_snapshot` | JSON: `{ evaluation_id, index, band, visibility, coverage, excluded_assets, evaluated_at }`, congelado con la misma regla de visibilidad que el endpoint de riesgo: `index` es `null` si `indexVisible(visibility)` es falso y `band` si `bandVisible(visibility)` es falso (`createInventorySnapshot.ts`). |
 | `assets_dump` | JSON `{ network: Asset[], non_network: NonNetworkAsset[] }`: copia por valor (`structuredClone`) de los documentos con `deleted_at` vacío, incluidos retirados y `offline`. Su `afterRead` (`redactSnapshotForViewer`) elimina `host_scripts` y `scripts` para quien no tiene `read_technical`. |
 | `display_name` | Único campo editable (≤ 80). |
 
@@ -480,7 +480,7 @@ Los agentes que pasan a `offline` por falta de heartbeat no generan evento: `Age
 `RAW_TECHNICAL_RETENTION_DAYS` = 30. Tres pasos, en orden:
 1. **Reportes.** Mientras existan `scan-reports` con `raw_payload_expires_at <= now`, en lotes de 100: `raw_payload: null` y `raw_payload_expires_at: null` (`context.systemJob`). El documento, su cobertura, estado y `error` permanecen. El plazo corre desde la recepción del reporte.
 2. **Activos.** Candidatos: `last_seen` anterior o igual a `now - 30 días` (o ausente) y `host_scripts` o `services.scripts` presentes. Por cada uno, en su transacción con `lockAssetRow`, relee y, si sigue vencido, pone `host_scripts: null` y `scripts: null` en cada servicio. Si una ingesta actualizó el activo mientras esperaba el lock, la evidencia nueva se conserva.
-3. **Instantáneas.** Candidatos por consulta SQL `assets_dump::text LIKE '%scripts"%'`. En cada una, bajo lock de fila, `expireSnapshotTechnicalEvidence` elimina `host_scripts` y `scripts` de los activos de red cuyo `last_seen` venció (`observationExpired`: un `last_seen` desconocido cuenta como vencido). El inventario normalizado y el puntaje histórico se mantienen.
+3. **Instantáneas.** Candidatos por consulta SQL `assets_dump::text LIKE '%scripts"%'`. En cada una, bajo lock de fila, `expireSnapshotTechnicalEvidence` elimina `host_scripts` y `scripts` de los activos de red cuyo `last_seen` venció (`observationExpired`: un `last_seen` desconocido cuenta como vencido). El inventario normalizado y el índice histórico (`assessment_results_snapshot`) se mantienen.
 
 Resumen: `{ expired, asset_evidence_expired, snapshot_evidence_expired }`. Es repetible: lo ya redactado no vuelve a ser candidato. No escribe en `job-runs`. Programación en §8.2.
 
@@ -546,7 +546,7 @@ Un platform admin con `?asOrganization=` lo propaga el cliente a toda request (`
 
 **Listado de informes.** Estado como filtro local (`received`, `processed`, `failed`). La columna Activos calcula aceptados y rechazados a partir de `raw_payload` y `error` (`totalAssetsInReport`, `parseRejectedAssets`). Para quien no puede leer esos campos (sin `read_technical`) o si el payload expiró, `raw_payload` llega vacío y la columna muestra "Detalle archivado". El detalle usa `!report.raw_payload` para mostrar el aviso de retención.
 
-**Instantáneas.** El botón "Generar instantánea" exige oficina seleccionada en la barra superior y `canDo(role, 'inventory-snapshots', 'create')`. El detalle lee `assessment_results_snapshot` (`score`, `coverage`, `excluded_assets`) y `assets_dump`.
+**Instantáneas.** El botón "Generar instantánea" exige oficina seleccionada en la barra superior y `canDo(role, 'inventory-snapshots', 'create')`. El detalle lee `assessment_results_snapshot` (`index`, `band`, `visibility`, `coverage`, `excluded_assets`) y `assets_dump`.
 
 **Escáneres.** El modal de la oficina permite elegir SO (`posix` o `windows`), muestra los agentes con su conectividad (`AgentConnectivityBadge`) y el cupo, y desactiva (revoca) agentes no revocados con confirmación. El botón "Generar y descargar" se deshabilita cuando `quota.available === 0`. El nombre del archivo descargado lo arma el cliente (`siam-agent-<oficina>-<plataforma>.zip`), distinto del `Content-Disposition` del servidor.
 

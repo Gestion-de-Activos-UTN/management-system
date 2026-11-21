@@ -71,12 +71,12 @@ export default function PortalDashboardPage() {
     {
       key: 'unconfirmed',
       label: plural(
-        riskSummary?.unconfirmed_assets ?? 0,
+        riskSummary?.unidentified_assets ?? 0,
         'equipo sin identificar',
         'equipos sin identificar'
       ),
-      description: 'No cuentan en el riesgo hasta que se identifican',
-      count: riskSummary?.unconfirmed_assets ?? 0,
+      description: 'No cuentan en el índice hasta que se identifican',
+      count: riskSummary?.unidentified_assets ?? 0,
       href: href('/portal/inventory'),
       icon: HelpCircle,
       color: 'yellow',

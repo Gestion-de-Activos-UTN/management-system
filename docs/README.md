@@ -22,7 +22,7 @@ Esta carpeta es la documentación oficial del sistema.
 | Documento | Contenido |
 |---|---|
 | [task-api.md](task-api.md) | Tareas: estados y flujos, asignación y elegibilidad, comandos, lock por tarea, efectos del sistema. |
-| [risk-api.md](risk-api.md) | Riesgo: motor, evaluaciones persistidas, consolidado del OfficeManager, recálculo en segundo plano, enmascarado por confianza. |
+| [risk-api.md](risk-api.md) | Índice de deficiencias: motor (B pura), importancias, listas Deficiencias y Pendientes, evaluaciones persistidas, consolidado del OfficeManager, recálculo en segundo plano, enmascarado por visibilidad (información disponible). |
 | [assessments-api.md](assessments-api.md) | Revisiones de seguridad: ciclo de vida, política, evidencia heredada, cierre masivo. |
 | [assets-api.md](assets-api.md) | Activos de red y manuales: identificación, edición de negocio, responsables, incidentes, baja lógica. |
 | [scanner-api.md](scanner-api.md) | Escáner y evidencia técnica: aprovisionamiento, heartbeat, ingesta de reportes, idempotencia, instantáneas, retención. |

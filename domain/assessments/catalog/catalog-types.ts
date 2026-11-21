@@ -9,7 +9,15 @@ export type PolicyKey = RiskPolicyKey
 export const ASSESSMENT_SCOPES = ['organization', 'office', 'asset'] as const
 export type AssessmentScope = (typeof ASSESSMENT_SCOPES)[number]
 
-export const COMPLIANCE_STATUSES = ['compliant', 'non_compliant', 'not_evaluable'] as const
+// New values go LAST: the dev schema push then only appends them (ALTER TYPE … ADD VALUE).
+// Inserting in the middle can make drizzle recreate the enum and prompt interactively.
+export const COMPLIANCE_STATUSES = [
+  'compliant',
+  'non_compliant',
+  'not_evaluable',
+  'partially_effective',
+  'not_applicable',
+] as const
 export type ComplianceStatus = (typeof COMPLIANCE_STATUSES)[number]
 
 export const SEVERITIES = ['low', 'medium', 'high', 'critical'] as const

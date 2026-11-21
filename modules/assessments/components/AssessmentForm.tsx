@@ -136,8 +136,8 @@ export function AssessmentForm(props: {
                 )}
                 {isExpired(question.key) && (
                   <Alert color="gray" variant="light">
-                    La respuesta anterior venció. Ahora no es evaluable y solo reduce la cobertura
-                    de la revisión; no agrega riesgo.
+                    La respuesta anterior venció. Ahora no es evaluable y solo reduce la información
+                    disponible de la revisión; no suma deficiencias.
                   </Alert>
                 )}
                 <Controller
@@ -286,7 +286,7 @@ export function AssessmentForm(props: {
           </Group>
           <Text size="sm" c="dimmed">
             {props.confirmationDescription ??
-              'Las respuestas desconocidas y las que no aplican reducen la cobertura, pero no agregan riesgo.'}
+              'Las respuestas desconocidas y las que no aplican reducen la información disponible, pero no suman deficiencias.'}
             {completionCounts?.unanswered
               ? ' Responde todas las preguntas antes de completar la revisión.'
               : ''}

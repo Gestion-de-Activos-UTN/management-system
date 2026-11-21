@@ -50,7 +50,7 @@ export default function InventorySnapshotsPage() {
     <Stack gap="md">
       <PageHeader
         title="Historial de instantáneas"
-        description="Instantáneas inmutables del inventario con el puntaje de riesgo de ese momento."
+        description="Instantáneas inmutables del inventario con el índice de deficiencias de ese momento."
         rightSection={
           <Tooltip
             label={

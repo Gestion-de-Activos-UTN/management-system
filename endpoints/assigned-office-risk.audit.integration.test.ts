@@ -168,14 +168,16 @@ it('consolidates the exact assigned set with the engine, not an arithmetic mean,
   const first = await calculateRiskForScope(payload, { organizationId: org, officeId: a })
   const second = await calculateRiskForScope(payload, { organizationId: org, officeId: b })
   const combined = await calculateRiskForScope(payload, { organizationId: org, officeIds: [a, b] })
-  expect(response.body.evaluation.score).toBeCloseTo(combined.result.score!, 8)
-  expect(response.body.evaluation.score).not.toBeCloseTo(
-    (first.result.score! + second.result.score!) / 2,
+  // B pura over the union of pairs: the critical asset weighs 8, the low one 1 (88.9, not 50).
+  expect(response.body.evaluation.index).toBeCloseTo(combined.evaluation.index!, 8)
+  expect(response.body.evaluation.index).not.toBeCloseTo(
+    (first.evaluation.index! + second.evaluation.index!) / 2,
     4
   )
   const all = await api(endpoint + '?limit=50')
   expect(all.status).toBe(200)
-  expect(new Set(all.body.contributions.map((r: { asset_key: string }) => r.asset_key))).toEqual(
+  // Both assigned assets are fully answered: the banded consolidation ranks exactly those two.
+  expect(new Set(all.body.evaluation.top_assets.map((r: { asset_key: string }) => r.asset_key))).toEqual(
     new Set([`manual:${assetA}`, `manual:${assetB}`])
   )
   expect(JSON.stringify(all.body)).not.toContain(outsideAsset)
@@ -184,15 +186,18 @@ it('consolidates the exact assigned set with the engine, not an arithmetic mean,
     (await payload.count({ collection: 'risk-evaluations', overrideAccess: true })).totalDocs
   ).toBe(before.totalDocs)
 })
-it('returns the same score, coverage and counts on dashboard summary and risk detail', async () => {
+it('returns the same index, coverage and counts on dashboard summary and risk detail', async () => {
   const detail = await api(endpoint),
     short = await api(summary)
   expect(short.status).toBe(200)
   expect(short.body.scope).toBe('assigned_offices')
-  expect(short.body.risk_score).toBe(detail.body.evaluation.score)
+  expect(short.body.index).toBe(detail.body.evaluation.index)
+  expect(short.body.band).toBe(detail.body.evaluation.band)
+  expect(short.body.visibility).toBe(detail.body.evaluation.visibility)
   expect(short.body.evaluated_percentage).toBe(detail.body.evaluation.coverage)
   expect(short.body.requires_attention).toBe(
-    detail.body.evaluation.counts.non_compliant + detail.body.evaluation.counts.partially_effective
+    detail.body.evaluation.counts.pairs.non_compliant +
+      detail.body.evaluation.counts.pairs.partially_effective
   )
 })
 it('ignores forged office sets and rejects concrete foreign offices and organization history', async () => {
@@ -221,13 +226,15 @@ it('rejects unauthenticated calls and validates pagination before computing', as
   expect((await api(endpoint, '')).status).toBe(401)
   expect((await api(summary, '')).status).toBe(401)
   expect((await api(endpoint + '?page=0')).status).toBe(400)
-  const ascending = await api(endpoint + '?sort=asset&direction=asc&limit=50')
-  const descending = await api(endpoint + '?sort=asset&direction=desc&limit=50')
-  expect(ascending.status).toBe(200)
-  expect(descending.status).toBe(200)
-  expect(ascending.body.pagination.totalDocs).toBe(descending.body.pagination.totalDocs)
-  expect(ascending.body.contributions[0].asset_label).toBe('Allowed critical')
-  expect(descending.body.contributions[0].asset_label).toBe('Allowed low')
+  expect((await api(endpoint + '?list=other')).status).toBe(400)
+  // The order is fixed on the server (contracts §7): a client sort is ignored, never applied.
+  for (const list of ['deficiencies', 'pending']) {
+    const plain = await api(endpoint + `?list=${list}&limit=50`)
+    const sorted = await api(endpoint + `?list=${list}&limit=50&sort=asset&direction=desc`)
+    expect(plain.status).toBe(200)
+    expect(sorted.body.items).toEqual(plain.body.items)
+    expect(plain.body.totals).toEqual(sorted.body.totals)
+  }
 })
 it('rechecks the current membership and excludes inactive offices rather than broadening the scope', async () => {
   const row = (
@@ -248,7 +255,7 @@ it('rechecks the current membership and excludes inactive offices rather than br
     const response = await api(endpoint)
     expect(response.status).toBe(200)
     expect(
-      response.body.contributions.every(
+      response.body.evaluation.top_assets.every(
         (r: { asset_key: string }) => r.asset_key === `manual:${assetA}`
       )
     ).toBe(true)
@@ -263,14 +270,14 @@ it('rechecks the current membership and excludes inactive offices rather than br
       organizationId: org,
       officeIds: [outside],
     })
-    expect(inactive.result.contributions).toEqual([])
+    expect(inactive.pairs).toEqual([])
     const empty = await calculateRiskForScope(payload, { organizationId: org, officeIds: [] })
-    expect(empty.result.contributions).toEqual([])
+    expect(empty.pairs).toEqual([])
     const foreign = await calculateRiskForScope(payload, {
       organizationId: org,
       officeIds: [foreignOffice],
     })
-    expect(foreign.result.contributions).toEqual([])
+    expect(foreign.pairs).toEqual([])
   } finally {
     await payload.update({
       collection: 'organization-memberships',
@@ -310,35 +317,33 @@ it('enforces the risk feature on both assigned-office endpoints', async () => {
   }
 })
 
-it('keeps hidden scores and bands private in the live consolidation too', async () => {
+it('keeps a hidden index and band private in the live consolidation too', async () => {
   const response = await api(endpoint, hiddenCookie)
   expect(response.status).toBe(200)
-  expect(response.body.evaluation.confidence).toBe('hidden')
-  expect(response.body.evaluation.score).toBeNull()
-  expect(response.body.evaluation.base_band).toBeNull()
-  expect(response.body.evaluation.final_band).toBeNull()
-  expect(response.body.evaluation.controls).toEqual([])
-  expect(response.body.evaluation.top_assets).toEqual([])
+  expect(response.body.evaluation.visibility).toBe('hidden')
+  expect(response.body.evaluation.index).toBeNull()
+  expect(response.body.evaluation.band).toBeNull()
+  // Coverage stays visible per control; D_c follows the index.
   expect(
-    response.body.contributions.every(
-      (row: { inherent_risk: unknown; residual_risk: unknown }) =>
-        row.inherent_risk === null && row.residual_risk === null
-    )
+    response.body.evaluation.controls.every((control: { deficiency: unknown }) => control.deficiency === null)
   ).toBe(true)
+  expect(response.body.evaluation.top_assets).toEqual([])
   const short = await api(summary, hiddenCookie)
-  expect(short.body.risk_score).toBeNull()
-  expect(short.body.risk_band).toBeNull()
+  expect(short.body.index).toBeNull()
+  expect(short.body.band).toBeNull()
 })
 
 it('reuses the consolidation across pages until the organization evidence signal changes', async () => {
   await recalculateRisk(payload, { organizationId: org })
-  const before = (await api(endpoint + '?limit=10')).body.pagination.totalDocs
+  // Assets in scope of the cached consolidation: a new fully compliant asset adds no list items.
+  const inScope = async (path: string) => (await api(path)).body.evaluation.counts.assets.in_scope
+  const before = await inScope(endpoint + '?limit=10')
   // Jobs are disabled here, so new evidence does not move the signal by itself.
   const extra = await asset(a, 'Cache probe', 'low', 1)
   try {
-    expect((await api(endpoint + '?limit=10&page=2')).body.pagination.totalDocs).toBe(before)
+    expect(await inScope(endpoint + '?limit=10&page=2&list=pending')).toBe(before)
     await recalculateRisk(payload, { organizationId: org })
-    expect((await api(endpoint + '?limit=10')).body.pagination.totalDocs).toBeGreaterThan(before)
+    expect(await inScope(endpoint + '?limit=10')).toBeGreaterThan(before)
   } finally {
     await payload.update({
       collection: 'non-network-assets',

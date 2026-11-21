@@ -52,6 +52,8 @@ export function evaluateControlEfficacy(
     if (!rule.input_question_keys.some(key => answers[key] === rule.when_option_key)) continue
     const target = sub.find(item => item.question_key === rule.target_question_key)
     if (!target) continue
+    // Plan §3.3: no conditional rule touches a justified «No aplica» target; force_zero still fixes an unknown.
+    if (target.option_key === 'not_applicable') continue
     if (rule.operation === 'force_zero') {
       // Forced even when the target is unknown: the dependency makes its value certain.
       target.adjusted = 0

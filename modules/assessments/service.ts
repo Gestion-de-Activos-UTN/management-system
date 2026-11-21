@@ -15,14 +15,17 @@ import type {
 export type SecurityReviewSummary = {
   scope?: import('@/modules/risk/service').RiskScope
   recalculation?: import('@/domain/risk/recalculation-status').RecalculationStatus
-  risk_score: number | null
+  /** Deficiency index 0–100, null when its visibility hides it. */
+  index: number | null
+  band: import('@/domain/risk/deficiency-index').IndexBand | null
+  visibility: import('@/domain/risk/deficiency-index').IndexVisibility
   evaluated_percentage: number
   applicable_checks: number
   not_evaluable: number
   requires_attention: number
   excluded_assets: number
-  risk_band: 'low' | 'medium' | 'high' | 'critical' | null
-  unconfirmed_assets: number
+  unidentified_assets: number
+  authorization_pending_assets: number
 }
 
 export type AssessmentListResponse = { docs: AssessmentInstance[]; totalDocs: number }

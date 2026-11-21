@@ -16,7 +16,7 @@ import {
   TextInput,
   Tooltip,
 } from '@mantine/core'
-import { ArrowRight, Building2, Info, Monitor, Search, type LucideIcon } from 'lucide-react'
+import { Building2, ClipboardCheck, Info, Monitor, Search, type LucideIcon } from 'lucide-react'
 import type { AssessmentInstance } from '@/app/types/payload-types'
 import type { SecurityReviewSummary as SecurityReviewSummaryData } from '@/modules/assessments/service'
 import { formatDate } from '@/lib/format-date'
@@ -48,7 +48,7 @@ export function SecurityReviewSummary({
       <Card withBorder radius="lg" p="lg">
         <Group justify="space-between" align="flex-start" wrap="wrap" gap="xl">
           <Alert color="red" style={{ flex: 1 }} miw={220}>
-            No se pudo cargar el riesgo. Intenta de nuevo en unos minutos.
+            No se pudo cargar el índice. Intenta de nuevo en unos minutos.
           </Alert>
           <Stat
             label="Revisiones por responder"
@@ -61,21 +61,21 @@ export function SecurityReviewSummary({
   const coverage = riskSummary?.evaluated_percentage ?? 0
   const applicable = riskSummary?.applicable_checks ?? 0
   const evaluated = Math.max(0, applicable - (riskSummary?.not_evaluable ?? 0))
-  const score = riskSummary?.risk_score ?? null
-  const band = riskSummary?.risk_band ?? null
+  const index = riskSummary?.index ?? null
+  const band = riskSummary?.band ?? null
   return (
     <Card withBorder radius="lg" p="lg">
       <Group justify="space-between" align="flex-start" wrap="wrap" gap="xl">
         <Box style={{ flex: 1 }} miw={220}>
           <Group justify="space-between" mb="xs">
             <Group gap={6}>
-              <Text fw={700}>Cobertura de evidencia</Text>
+              <Text fw={700}>Información disponible</Text>
               <Tooltip
                 multiline
                 w={280}
                 label="Cuánto de lo que corresponde revisar tiene información vigente. Los equipos más importantes para el negocio pesan más."
               >
-                <Info size={14} aria-label="Qué es la cobertura" />
+                <Info size={14} aria-label="Qué es la información disponible" />
               </Tooltip>
             </Group>
             <Text fw={750}>{Math.round(coverage)}%</Text>
@@ -84,7 +84,7 @@ export function SecurityReviewSummary({
           <Text size="sm" c="dimmed" mt="xs">
             Hay información vigente para {evaluated} de {applicable} comprobaciones (cada una es un
             control revisado en un equipo). Responde las revisiones pendientes o identifica los
-            equipos nuevos para subirla; la información faltante no aumenta el riesgo.
+            equipos nuevos para subirla; la información faltante no aumenta el índice.
           </Text>
         </Box>
         <Group gap="xl" align="flex-start">
@@ -100,13 +100,13 @@ export function SecurityReviewSummary({
           />
           <div>
             <Text size="xs" c="dimmed">
-              Riesgo sin tratar
+              Índice de deficiencias
             </Text>
             <Group gap={6} align="baseline">
               <Text fz={28} fw={750}>
-                {score === null ? '—' : `${Math.round(score)} %`}
+                {index === null ? '—' : Math.round(index)}
               </Text>
-              {score !== null &&
+              {index !== null &&
                 (band ? (
                   <RiskBandBadge band={band} />
                 ) : (
@@ -116,10 +116,10 @@ export function SecurityReviewSummary({
                 ))}
             </Group>
             <Text size="xs" c="dimmed" maw={220}>
-              {score === null ? 'Falta información para calcularlo.' : RISK_SCORE_SCALE}
+              {index === null ? 'Falta información para calcularlo.' : RISK_SCORE_SCALE}
             </Text>
             <Anchor component={Link} href={riskHref} size="xs">
-              Ver detalle del riesgo
+              Ver deficiencias
             </Anchor>
           </div>
         </Group>
@@ -340,10 +340,10 @@ function AssessmentGroup({
           <Button
             component={Link}
             href={portalHref(`/portal/security-review/${latest.id}`, asOrganization)}
-            variant="subtle"
-            rightSection={<ArrowRight size={16} />}
+            variant="light"
+            leftSection={<ClipboardCheck size={16} strokeWidth={1.5} />}
           >
-            Abrir actual
+            Abrir revisión
           </Button>
         </Group>
       </Group>

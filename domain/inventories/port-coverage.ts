@@ -19,3 +19,24 @@ export function portWasCovered(coverage: unknown, key: string, assetPortScanComp
     })
   })
 }
+
+/**
+ * A service missing from the current observation is resolved only when it was seen closed or its
+ * port was covered by a complete scan. The single rule shared by the compliance history (absence
+ * loop) and the deficiency index, so both reach the same verdict on the same data.
+ */
+export function absenceConfirmed(
+  asset: {
+    services?: readonly { protocol?: string | null; port?: number | null; state?: string | null }[] | null
+    port_scan_coverage?: unknown
+    asset_coverage?: { port_scan?: string | null } | null
+  },
+  serviceKey: string
+): boolean {
+  return (
+    (asset.services ?? []).some(
+      service => `${service.protocol}:${service.port}` === serviceKey && service.state === 'closed'
+    ) ||
+    portWasCovered(asset.port_scan_coverage, serviceKey, asset.asset_coverage?.port_scan === 'complete')
+  )
+}

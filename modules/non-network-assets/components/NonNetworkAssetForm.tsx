@@ -295,35 +295,6 @@ export function NonNetworkAssetForm({
         )}
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="md">
           <Controller
-            name="criticality"
-            control={control}
-            render={({ field }) => (
-              <Select
-                label="Criticidad"
-                required
-                data={CRITICALITY_OPTIONS}
-                value={field.value}
-                onChange={v => field.onChange(v ?? 'medium')}
-                error={errors.criticality?.message}
-              />
-            )}
-          />
-          <Controller
-            name="review_interval"
-            control={control}
-            render={({ field }) => (
-              <Select
-                label="Frecuencia de revisión"
-                required
-                description="Cada cuánto debe volver a confirmarse este activo"
-                data={REVIEW_INTERVAL_OPTIONS}
-                value={field.value}
-                onChange={v => field.onChange(v ?? 'never')}
-                error={errors.review_interval?.message}
-              />
-            )}
-          />
-          <Controller
             name="office"
             control={control}
             render={({ field }) => (
@@ -356,6 +327,35 @@ export function NonNetworkAssetForm({
                 onChange={value => field.onChange(value === NO_OWNER ? null : value)}
                 disabled={!selectedOffice}
                 error={errors.owner?.message}
+              />
+            )}
+          />
+          <Controller
+            name="criticality"
+            control={control}
+            render={({ field }) => (
+              <Select
+                label="Criticidad"
+                required
+                data={CRITICALITY_OPTIONS}
+                value={field.value}
+                onChange={v => field.onChange(v ?? 'medium')}
+                error={errors.criticality?.message}
+              />
+            )}
+          />
+          <Controller
+            name="review_interval"
+            control={control}
+            render={({ field }) => (
+              <Select
+                label="Frecuencia de revisión"
+                required
+                description="Cada cuánto debe volver a confirmarse este activo"
+                data={REVIEW_INTERVAL_OPTIONS}
+                value={field.value}
+                onChange={v => field.onChange(v ?? 'never')}
+                error={errors.review_interval?.message}
               />
             )}
           />

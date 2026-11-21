@@ -200,10 +200,10 @@ export default function InventoryPage() {
       >
         <Tabs.List>
           <Tabs.Tab value="network" leftSection={<Server size={16} strokeWidth={1.5} />}>
-            Red
+            Detectados en la red
           </Tabs.Tab>
           <Tabs.Tab value="non-network" leftSection={<Package size={16} strokeWidth={1.5} />}>
-            Activos manuales
+            Registrados manualmente
           </Tabs.Tab>
         </Tabs.List>
 

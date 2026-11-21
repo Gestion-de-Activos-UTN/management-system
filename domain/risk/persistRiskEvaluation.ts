@@ -1,7 +1,29 @@
 import type { Payload, PayloadRequest } from 'payload'
-import type { RiskPolicyKey } from './catalog-v2'
-import type { RiskEvaluationResult } from './engine'
-import { evaluationFromResult } from './evaluation-from-result'
+import type { RiskEvaluation } from '@/app/types/payload-types'
+import { CRITICALITY_WEIGHTS } from './constants'
+import type { DeficiencyPair } from './deficiency-pairs'
+import type { EvaluationData } from './evaluation-from-pairs'
+
+/** One stored contribution per pair; the live consolidation maps its pairs with this same function. */
+export function contributionFromPair(pair: DeficiencyPair) {
+  return {
+    asset_key: pair.asset_key,
+    asset: pair.asset_key.startsWith('asset:') ? pair.asset_key.slice('asset:'.length) : null,
+    manual_asset: pair.asset_key.startsWith('manual:') ? pair.asset_key.slice('manual:'.length) : null,
+    asset_office: pair.asset_office_id,
+    asset_type: pair.asset_type,
+    control_key: pair.control_key,
+    criticality: pair.criticality,
+    criticality_weight: CRITICALITY_WEIGHTS[pair.criticality],
+    applicability: pair.applicability,
+    compliance: pair.compliance,
+    status: pair.status,
+    reason_code: pair.reason_code,
+    priority: pair.priority,
+    evidence: pair.evidence as unknown as Record<string, unknown>,
+    reasons: pair.reasons as unknown as Record<string, unknown>[],
+  }
+}
 
 /**
  * Writes one evaluation and all its contributions in a single transaction, so a partial failure
@@ -12,9 +34,8 @@ export async function persistRiskEvaluation(
   input: {
     organizationId: string
     officeId?: string
-    policy: RiskPolicyKey
-    result: RiskEvaluationResult
-    undeterminedExposure: ReadonlyArray<{ asset_id: string; cidr: string }>
+    evaluation: EvaluationData
+    pairs: readonly DeficiencyPair[]
     // When the evidence was read, not when it was saved: a slow run over older evidence must not
     // become the latest evaluation.
     evaluatedAt: Date
@@ -27,10 +48,9 @@ export async function persistRiskEvaluation(
   const req = externalReq
     ? Object.assign(externalReq, { transactionID })
     : ({ transactionID } as PayloadRequest)
-  const { result } = input
 
   try {
-    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {risk evaluation: organization, office, score, coverage, engine_version}, previous hash for this organization_id)
+    // AUDIT: this action must emit an AuditLogs entry (chain_hash over {risk evaluation: organization, office, index, coverage, visibility, engine_version}, previous hash for this organization_id)
     // TODO(audit-feature): wire into domain/audit/builder.ts::addAuditEvent once AuditLog write path exists
     const evaluation = await payload.create({
       collection: 'risk-evaluations',
@@ -39,15 +59,27 @@ export async function persistRiskEvaluation(
       data: {
         organization: input.organizationId,
         office: input.officeId ?? null,
-        ...evaluationFromResult(input),
+        // JSON columns are typed loosely by Payload; the shape is EvaluationData (contracts §5).
+        ...(input.evaluation as unknown as Pick<
+          RiskEvaluation,
+          | 'catalog_version'
+          | 'engine_version'
+          | 'policy_key'
+          | 'index'
+          | 'band'
+          | 'coverage'
+          | 'visibility'
+          | 'control_summary'
+          | 'warnings'
+          | 'asset_summary'
+          | 'counts'
+          | 'context'
+        >),
         evaluated_at: input.evaluatedAt.toISOString(),
-        rro_raw: result.rro_raw,
-        rro_adjusted: result.rro_adjusted,
-        riem: result.riem,
       },
     })
     // ponytail: one insert per contribution; switch to a bulk insert if large fleets make this slow.
-    for (const row of result.contributions) {
+    for (const pair of input.pairs) {
       await payload.create({
         collection: 'risk-contributions',
         overrideAccess: true,
@@ -56,29 +88,7 @@ export async function persistRiskEvaluation(
           organization: input.organizationId,
           office: input.officeId ?? null,
           evaluation: evaluation.id,
-          asset_key: row.asset_id,
-          asset: row.asset_id.startsWith('asset:') ? row.asset_id.slice('asset:'.length) : null,
-          manual_asset: row.asset_id.startsWith('manual:')
-            ? row.asset_id.slice('manual:'.length)
-            : null,
-          control_key: row.control_key,
-          criticality: row.criticality,
-          scope_multiplier: row.scope_multiplier,
-          severity: row.severity,
-          exposure: row.exposure,
-          exposure_source: row.exposure_source ?? null,
-          efficacy: row.efficacy,
-          effect_snapshot: {
-            reason_code: row.reason_code,
-            unit_kind: row.unit_kind,
-            unit_id: row.unit_id,
-          },
-          status: row.status,
-          inherent_risk: row.inherent_risk,
-          residual_risk: row.residual_risk,
-          coverage_weight: row.coverage_weight,
-          excluded: Boolean(row.excluded),
-          reason_code: row.reason_code,
+          ...contributionFromPair(pair),
         },
       })
     }

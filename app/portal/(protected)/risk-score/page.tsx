@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import type { SortingState } from '@tanstack/react-table'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -17,28 +16,26 @@ import {
   SimpleGrid,
   Skeleton,
   Stack,
+  Tabs,
   Text,
 } from '@mantine/core'
+import { ClipboardList, ShieldAlert } from 'lucide-react'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { DataTable } from '@/components/ui/DataTable'
 import { OfficeRiskSelectionNotice } from '@/modules/offices/components/OfficeRiskSelectionNotice'
 import { useConcreteOfficeId } from '@/modules/offices/hooks/use-concrete-office-id'
 import { formatDateTime } from '@/lib/format-date'
-import { RISK_CONFIDENCE_LABEL } from '@/lib/enum-labels'
+import { RISK_VISIBILITY_LABEL } from '@/lib/enum-labels'
 import { useLatestRisk } from '@/modules/risk/hooks/use-latest-risk'
-import { riskContributionsColumns } from '@/modules/risk/risk.columns'
+import { RiskItemList } from '@/modules/risk/components/RiskItemList'
+import { ControlCoverage } from '@/modules/risk/components/ControlCoverage'
+import type { RiskList } from '@/modules/risk/service'
 import { RiskScopeExplanation } from '@/modules/risk/components/RiskScopeExplanation'
 import { RiskAlerts } from '@/modules/risk/components/RiskAlerts'
 import { TopRiskAssets } from '@/modules/risk/components/TopRiskAssets'
 import { RiskBandBadge } from '@/modules/risk/components/RiskBandBadge'
 import { RISK_BAND_COLOR, RISK_SCORE_MEANING, RISK_SCORE_SCALE } from '@/modules/risk/risk-labels'
-import {
-  bandVisible,
-  RISK_DEFAULT_PAGE_SIZE,
-  RISK_PAGE_SIZES,
-  type RiskSortKey,
-  scoreVisible,
-} from '@/domain/risk/constants'
+import { RISK_DEFAULT_PAGE_SIZE, RISK_PAGE_SIZES } from '@/domain/risk/constants'
+import { indexVisible } from '@/domain/risk/deficiency-index'
 import { portalHref } from '@/lib/portal-href'
 import { CreateRelatedTaskButton } from '@/modules/tasks/components/CreateRelatedTaskButton'
 import { StatusBadge } from '@/components/ui/StatusBadge'
@@ -60,22 +57,17 @@ export default function RiskScorePage() {
     tableRef.current?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })
   }
   const [pageSize, setPageSize] = useState<number>(RISK_DEFAULT_PAGE_SIZE)
-  // El servidor ordena toda la evaluación y después pagina; sin orden elegido usa el control.
-  const [sorting, setSorting] = useState<SortingState>([])
-  const sort = sorting[0]
-  // Otra oficina, organización, tamaño u orden tiene sus propias páginas: vuelve a la primera.
-  useEffect(
-    () => setPage(1),
-    [officeId, asOrganization, evaluationId, pageSize, sort?.id, sort?.desc]
-  )
+  // El servidor arma y ordena las dos listas con un orden fijo (contrato §7) y después pagina.
+  const [list, setList] = useState<RiskList>('deficiencies')
+  // Otra oficina, organización, tamaño o lista tiene sus propias páginas: vuelve a la primera.
+  useEffect(() => setPage(1), [officeId, asOrganization, evaluationId, pageSize, list])
   const query = useLatestRisk({
     officeId,
     asOrganization,
     evaluationId,
     page,
     limit: pageSize,
-    sort: sort?.id as RiskSortKey | undefined,
-    direction: sort ? (sort.desc ? 'desc' : 'asc') : undefined,
+    list,
     enabled: ready,
   })
   const data = query.data?.evaluation
@@ -89,7 +81,7 @@ export default function RiskScorePage() {
   if (requiresOfficeSelection)
     return (
       <Stack gap="xl">
-        <PageHeader title="Puntaje de riesgo" />
+        <PageHeader title="Índice de deficiencias" />
         <OfficeRiskSelectionNotice />
       </Stack>
     )
@@ -102,7 +94,7 @@ export default function RiskScorePage() {
         </Alert>
       )}
       <PageHeader
-        title="Puntaje de riesgo"
+        title="Índice de deficiencias"
         description="Una vista simple de los problemas de seguridad detectados y de la información que todavía falta revisar."
         rightSection={
           data?.id ? (
@@ -137,21 +129,22 @@ export default function RiskScorePage() {
         ) : null
       ) : (
         <>
-          {!scoreVisible(data.confidence) && (
+          {!indexVisible(data.visibility) && (
             <Alert color="orange" title="Datos insuficientes">
               Completa las revisiones pendientes, identifica dispositivos y mantén activo el agente
-              para poder mostrar el puntaje.
+              para poder mostrar el índice.
             </Alert>
           )}
-          {scoreVisible(data.confidence) && !bandVisible(data.confidence) && (
+          {data.visibility === 'preliminary' && (
             <Alert color="yellow" title="Resultado preliminar">
-              La cobertura es baja: el puntaje se muestra como orientación, sin clasificación.
+              La información disponible es menor al 80 %: el índice se muestra como orientación, sin
+              banda.
             </Alert>
           )}
           <Card withBorder radius="lg" p="xl">
             <SimpleGrid cols={{ base: 1, md: 2 }} spacing="xl">
               <Stack gap="md" style={{ minWidth: 0 }}>
-                <Text fw={700}>Riesgo actual</Text>
+                <Text fw={700}>Índice de deficiencias</Text>
                 <Flex
                   direction={{ base: 'column', sm: 'row' }}
                   gap="lg"
@@ -164,31 +157,25 @@ export default function RiskScorePage() {
                     // Without a band (preliminary result) the ring stays neutral instead of alarming.
                     sections={[
                       {
-                        value: data.score ?? 0,
-                        color: data.final_band ? RISK_BAND_COLOR[data.final_band] : 'gray',
+                        value: data.index ?? 0,
+                        color: data.band ? RISK_BAND_COLOR[data.band] : 'gray',
                       },
                     ]}
                     label={
                       <Text ta="center" fw={800} fz={30}>
-                        {data.score === null ? '—' : `${Math.round(data.score)} %`}
+                        {data.index === null ? '—' : Math.round(data.index)}
                       </Text>
                     }
                   />
                   <Stack gap="xs" w="100%" style={{ flex: 1, minWidth: 0 }}>
-                    {data.final_band && <RiskBandBadge band={data.final_band} />}
-                    {data.final_band && data.base_band !== data.final_band && (
-                      <Text size="xs" c="dimmed">
-                        El nivel subió porque varios problemas importantes se concentran en pocos
-                        controles.
-                      </Text>
-                    )}
-                    {data.score !== null && !data.final_band && (
+                    {data.band && <RiskBandBadge band={data.band} />}
+                    {data.index !== null && !data.band && (
                       <StatusBadge tone="neutral" label="Preliminar" />
                     )}
                     <Text size="sm">
-                      {data.score === null
+                      {data.index === null
                         ? 'Todavía no hay información suficiente para calcularlo.'
-                        : `El ${Math.round(data.score)} % ${RISK_SCORE_MEANING}.`}
+                        : RISK_SCORE_MEANING}
                     </Text>
                     <Text size="xs" c="dimmed">
                       {RISK_SCORE_SCALE}. Cuanto más alto, mayor es la prioridad de mejora.
@@ -198,31 +185,36 @@ export default function RiskScorePage() {
               </Stack>
               <Stack gap="md" style={{ minWidth: 0 }}>
                 <Group justify="space-between">
-                  <Text fw={700}>Cobertura</Text>
-                  <Text>{Math.round(data.coverage)}%</Text>
+                  <Text fw={700}>Información disponible</Text>
+                  <Text>{data.coverage === null ? '—' : `${Math.round(data.coverage)}/100`}</Text>
                 </Group>
-                <Progress value={data.coverage} color="pine" />
+                <Progress value={data.coverage ?? 0} color="pine" />
                 <Group justify="space-between">
                   <Text fw={700}>Dispositivos sin identificar</Text>
-                  <Text>{data.counts.unconfirmed_assets}</Text>
+                  <Text>{data.counts.assets.unidentified}</Text>
                 </Group>
-                {data.counts.unconfirmed_assets > 0 && (
+                {data.counts.assets.unidentified > 0 && (
                   <Anchor component={Link} href={inventoryHref} size="sm">
                     Identificarlos en el inventario
                   </Anchor>
                 )}
                 <Text size="sm">
-                  Confiabilidad del resultado: {RISK_CONFIDENCE_LABEL[data.effective_confidence]}
+                  Estado del resultado: {RISK_VISIBILITY_LABEL[data.visibility]}
                 </Text>
                 <Text size="xs" c="dimmed">
-                  {data.counts.not_evaluable} comprobaciones sin información suficiente
-                  {data.counts.excluded_assets > 0 &&
-                    ` · ${data.counts.excluded_assets} dispositivos fuera de la revisión`}
+                  {data.counts.pairs.not_evaluable} comprobaciones sin información suficiente
+                  {data.counts.assets.authorization_pending > 0 &&
+                    ` · ${data.counts.assets.authorization_pending} con autorización pendiente`}
+                  {data.counts.assets.excluded_from_assessment > 0 &&
+                    ` · ${data.counts.assets.excluded_from_assessment} dispositivos fuera de las revisiones`}
+                  {data.counts.network.pending_services > 0 &&
+                    ` · ${data.counts.network.pending_services} servicios de red pendientes en ${data.counts.network.assets_with_pending_services} equipos`}
                 </Text>
               </Stack>
             </SimpleGrid>
           </Card>
-          <RiskAlerts alerts={data.alerts} inventoryHref={inventoryHref} />
+          <RiskAlerts evaluation={data} inventoryHref={inventoryHref} />
+          <ControlCoverage controls={data.controls} />
           <TopRiskAssets assets={data.top_assets} />
           <Card
             ref={tableRef}
@@ -235,27 +227,42 @@ export default function RiskScorePage() {
             <Text fw={750} mb="md">
               Qué necesita atención
             </Text>
+            <Tabs value={list} onChange={value => value && setList(value as RiskList)} mb="md">
+              <Tabs.List>
+                <Tabs.Tab
+                  value="deficiencies"
+                  leftSection={<ShieldAlert size={16} strokeWidth={1.5} />}
+                >
+                  Deficiencias ({query.data?.totals.deficiencies ?? 0})
+                </Tabs.Tab>
+                <Tabs.Tab
+                  value="pending"
+                  leftSection={<ClipboardList size={16} strokeWidth={1.5} />}
+                >
+                  Pendientes ({query.data?.totals.pending ?? 0})
+                </Tabs.Tab>
+              </Tabs.List>
+            </Tabs>
             <Text size="sm" c="dimmed" mb="md">
-              Cada fila muestra qué se revisó, dónde se encontró y qué significa el resultado.
-              Empieza por los elementos marcados como &quot;Requiere atención&quot;.
+              {list === 'deficiencies'
+                ? 'Lo que no cumple, de mayor a menor prioridad. Abre cada fila para ver los motivos, incluidas las mejoras de prioridad baja.'
+                : 'Información que falta o que hay que revisar. No tiene prioridad: completa primero el estado del relevamiento.'}
             </Text>
-            <DataTable
-              columns={riskContributionsColumns}
-              data={query.data?.contributions ?? []}
-              // Sólo la carga de otra página/tamaño (datos de relleno), no el refresco de fondo de
-              // cada 30 s: si no, la tabla se atenuaba sola periódicamente.
+            {/* Sólo la carga de otra página/tamaño (datos de relleno), no el refresco de fondo de
+                cada 30 s: si no, la lista se atenuaba sola periódicamente. La key reinicia los
+                ítems abiertos al cambiar de página, lista o alcance. */}
+            <RiskItemList
+              key={`${list}|${page}|${pageSize}|${officeId ?? ''}|${asOrganization ?? ''}|${evaluationId ?? ''}`}
+              list={list}
+              items={query.data?.list === list ? query.data.items : []}
               isLoading={query.isPending || query.isPlaceholderData}
-              manualSorting
-              sorting={sorting}
-              onSortingChange={setSorting}
-              emptyLabel="Sin comprobaciones aplicables"
-              minWidth={720}
+              asOrganization={asOrganization}
             />
             {pagination && pagination.totalDocs > RISK_PAGE_SIZES[0] && (
               <Group justify="space-between" mt="md">
                 <Group gap="sm">
                   <Text size="sm" c="dimmed">
-                    {pagination.totalDocs} comprobaciones
+                    {pagination.totalDocs} {list === 'deficiencies' ? 'deficiencias' : 'pendientes'}
                   </Text>
                   <Select
                     aria-label="Filas por página"

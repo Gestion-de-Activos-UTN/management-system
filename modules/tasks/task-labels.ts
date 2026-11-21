@@ -60,7 +60,7 @@ export const TASK_REFERENCE_LABELS: Record<string, string> = {
   'compliance-results': 'Resultado de un control',
   'inventory-snapshots': 'Instantánea histórica del inventario',
   'scan-reports': 'Ejecución de escaneo',
-  'risk-evaluations': 'Evaluación de riesgo',
+  'risk-evaluations': 'Evaluación de deficiencias',
   agents: 'Agente instalado en una oficina',
 }
 
@@ -73,7 +73,7 @@ export const TASK_REFERENCE_TYPE_LABELS: Record<string, string> = {
   'compliance-results': 'Resultado de control',
   'inventory-snapshots': 'Instantánea',
   'scan-reports': 'Escaneo',
-  'risk-evaluations': 'Evaluación de riesgo',
+  'risk-evaluations': 'Evaluación de deficiencias',
   agents: 'Agente',
 }
 

@@ -255,6 +255,7 @@ export async function reconcileAssessmentInstance(
         partially_effective: 0,
         non_compliant: 0,
         not_evaluable: applicable.length,
+        not_applicable: 0,
       },
     },
   })
@@ -402,6 +403,7 @@ export async function reconcileAssetAssessmentInstance(
         partially_effective: 0,
         non_compliant: 0,
         not_evaluable: applicable.length,
+        not_applicable: 0,
       },
     },
   })
@@ -537,6 +539,7 @@ export async function reconcileManualAssetAssessmentInstance(
         partially_effective: 0,
         non_compliant: 0,
         not_evaluable: applicable.length,
+        not_applicable: 0,
       },
     },
   })

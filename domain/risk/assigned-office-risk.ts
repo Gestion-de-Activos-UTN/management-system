@@ -1,51 +1,15 @@
 import type { PayloadRequest } from 'payload'
-import type { RiskContribution, RiskEvaluation } from '@/app/types/payload-types'
 import type { TenantContext } from '@/access/tenant/resolveTenantContext'
 import { canReadAssignedOfficeRisk } from '@/access/rbac/risk-scope'
 import { calculateRiskForScope } from './recalculateRisk'
 import { createAssignedRiskCache } from './assigned-risk-cache'
-import { evaluationFromResult } from './evaluation-from-result'
+import type { EvaluationData } from './evaluation-from-pairs'
+import { contributionFromPair } from './persistRiskEvaluation'
 import { openRiskJob, riskJobStatus, type RecalculationStatus } from './recalculation-status'
 
-export type RiskEvaluationView = Omit<
-  Pick<
-    RiskEvaluation,
-    | 'id'
-    | 'evaluated_at'
-    | 'engine_version'
-    | 'catalog_version'
-    | 'policy_key'
-    | 'score'
-    | 'base_band'
-    | 'final_band'
-    | 'coverage'
-    | 'unknown_percentage'
-    | 'confidence'
-    | 'effective_confidence'
-    | 'counts'
-    | 'alerts'
-    | 'control_summary'
-    | 'asset_summary'
-  >,
-  'id'
-> & { id: string | null }
-export type RiskContributionView = Pick<
-  RiskContribution,
-  | 'id'
-  | 'asset_key'
-  | 'control_key'
-  | 'status'
-  | 'criticality'
-  | 'severity'
-  | 'exposure'
-  | 'exposure_source'
-  | 'scope_multiplier'
-  | 'efficacy'
-  | 'inherent_risk'
-  | 'residual_risk'
-  | 'excluded'
-  | 'reason_code'
->
+/** A persisted evaluation or a live consolidation: the same fields from the same function. */
+export type RiskEvaluationView = EvaluationData & { id: string | null; evaluated_at: string }
+export type RiskContributionView = ReturnType<typeof contributionFromPair> & { id: string }
 type AssignedRiskView = { evaluation: RiskEvaluationView; contributions: RiskContributionView[] }
 
 const cache = createAssignedRiskCache<AssignedRiskView>()
@@ -82,27 +46,14 @@ async function calculateAssignedRisk(
   officeIds: string[]
 ): Promise<AssignedRiskView> {
   const calculated = await calculateRiskForScope(req.payload, { organizationId, officeIds }, req)
-  const { result } = calculated
   const evaluation: RiskEvaluationView = {
+    ...calculated.evaluation,
     id: null,
     evaluated_at: calculated.evaluatedAt.toISOString(),
-    ...evaluationFromResult(calculated),
   }
-  const contributions: RiskContributionView[] = result.contributions.map(row => ({
-    id: `${row.asset_id}:${row.control_key}`,
-    asset_key: row.asset_id,
-    control_key: row.control_key,
-    status: row.status,
-    criticality: row.criticality,
-    severity: row.severity,
-    exposure: row.exposure,
-    exposure_source: row.exposure_source ?? null,
-    scope_multiplier: row.scope_multiplier,
-    efficacy: row.efficacy,
-    inherent_risk: row.inherent_risk,
-    residual_risk: row.residual_risk,
-    excluded: Boolean(row.excluded),
-    reason_code: row.reason_code,
+  const contributions: RiskContributionView[] = calculated.pairs.map(pair => ({
+    id: `${pair.asset_key}:${pair.control_key}`,
+    ...contributionFromPair(pair),
   }))
   return { evaluation, contributions }
 }

@@ -65,6 +65,8 @@ para que nuestros hooks validen el estado actual antes de agregar una sesión.
 
 Sin migraciones: el deploy de este proyecto recrea imagen y DB desde cero cada vez, así que no hay estado incremental que preservar entre versiones. Con `NODE_ENV=development` (el `docker-compose.yml` de este repo), Payload sincroniza el schema de Postgres solo, en cada arranque de la app (`pushDevSchema`, sin comando manual).
 
+Si el push detecta cambios con advertencias (posible pérdida de datos, enum recreado), Payload pide confirmación interactiva; sin terminal o al cancelar termina con `process.exit(0)`, así que un seed puede «terminar bien» sin haber aplicado nada: verificar que imprima `Seed demo integral OK.`. Para evitarlo, los cambios de schema son aditivos (valores nuevos de un enum, como `COMPLIANCE_STATUSES`, siempre al final). Si aun así aparece la confirmación en una base local, recrearla (no hay datos que preservar).
+
 ## Provisioning de Agents
 
 | Comando                                      | Dónde                  | Qué hace                                                                                                                      |

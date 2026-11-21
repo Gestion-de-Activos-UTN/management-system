@@ -27,8 +27,9 @@ export function AssetSecurityReviewCard({
           <div>
             <Text fw={650}>Excluido de las evaluaciones de seguridad</Text>
             <Text size="sm" c="dimmed">
-              Este activo permanece visible y puede seguir escaneándose, pero no afecta el puntaje
-              de riesgo.
+              Este activo permanece visible y puede seguir escaneándose. No recibe revisiones de
+              seguridad, pero su autorización y sus servicios expuestos siguen contando en el
+              índice de deficiencias.
             </Text>
           </div>
         </Group>
@@ -54,7 +55,11 @@ export function AssetSecurityReviewCard({
     )
   const summary = assessment.completion_summary
   const total =
-    (summary?.compliant ?? 0) + (summary?.non_compliant ?? 0) + (summary?.not_evaluable ?? 0)
+    (summary?.compliant ?? 0) +
+    (summary?.partially_effective ?? 0) +
+    (summary?.non_compliant ?? 0) +
+    (summary?.not_evaluable ?? 0) +
+    (summary?.not_applicable ?? 0)
   const answered = assessment.status === 'completed' ? total : 0
   const suffix = asOrganization ? '?asOrganization=' + asOrganization : ''
   return (

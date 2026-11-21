@@ -2,7 +2,7 @@
 
 Referencia técnica del feature `assessments` (en la UI, "Revisión de seguridad"): ciclos de revisión, respuestas, resultados de cumplimiento, cierre individual y masivo, reapertura, vencimiento, exclusiones y su conexión con el recálculo de riesgo. Dirigida a quien mantiene o extiende el feature. El motor de riesgo, el resumen de riesgo (`GET /v1/security-review/summary`) y la cola de recálculo se documentan en `docs/risk-api.md`; aquí solo se referencian.
 
-Verificado contra el código el 2026-10-31. Si algo de este documento contradice el código, gana el código: corregir el documento.
+Verificado contra el código el 2026-10-31; conexión con el índice de deficiencias actualizada el 2026-11-20. Si algo de este documento contradice el código, gana el código: corregir el documento.
 
 ## 1. Capas y archivos
 
@@ -59,7 +59,7 @@ Un ciclo de revisión para un destino (organización, oficina o activo).
 | `created_reason` | `initial` \| `asset_identified` \| `assessment_scope_changed` \| `office_changed` \| `policy_changed` \| `answer_expired` \| `manual_review` \| `office_reactivated` \| `organization_reactivated` | |
 | `opened_at`, `due_at` | date | `due_at` inicial = apertura + 365 días (`essential`) o 180 (`reinforced`); al completar pasa a ser el menor `valid_until` de las respuestas. |
 | `completed_at`, `completed_by` | date, relación `users` \| `admins` | |
-| `completion_summary` | grupo | Cantidades por estado de control: `compliant`, `partially_effective`, `non_compliant`, `not_evaluable`. |
+| `completion_summary` | grupo | Cantidades por estado de control: `compliant`, `partially_effective`, `non_compliant`, `not_evaluable`, `not_applicable`. |
 
 #### `assessment-answers`
 
@@ -83,9 +83,9 @@ Resultado por control. Los escriben dos orígenes (§2.4).
 |---|---|
 | `organization`, `office`, `asset`, `manual_asset`, `service_key` | Destino. Un activo exige oficina; `service_key` exige activo de red. |
 | `control_key`, `check_key` | Los resultados de revisiones usan `check_key = manual:<question_key>`. |
-| `status` | `compliant` \| `non_compliant` \| `not_evaluable` (`COMPLIANCE_STATUSES`). |
+| `status` | `compliant` \| `non_compliant` \| `not_evaluable` \| `partially_effective` \| `not_applicable` (`COMPLIANCE_STATUSES`). Los automáticos solo usan los tres primeros. Los valores nuevos se agregan siempre al final del enum (ver `COMMANDS.md`). |
 | `severity`, `policy_key`, `policy_version`, `evaluated_at`, `valid_until`, `reason_code`, `explanation`, `evidence_snapshot` | |
-| `supersedes` | Relación al resultado anterior de la misma clave (solo los automáticos la completan). |
+| `supersedes` | Relación al resultado anterior (solo los automáticos la completan). Resultados de servicio: mismo activo, A.8.21 y `service_key`, aunque cambie el `check_key` (TCP 23 de `network.telnet.confirmed` a `network.service:tcp:23` sigue la misma cadena). El resto: misma `check_key`. Orden `evaluated_at` ↓, `createdAt` ↓, `id` ↑. El hook rechaza enlazar otro activo, control o servicio. |
 
 ### 2.2 Estados
 
@@ -123,8 +123,9 @@ El activo manual `mobile_device`, `server` y `network_device` están en la pobla
 
 ### 2.4 Resultados de cumplimiento
 
-- **De revisión** (`completeAssessment`): una fila por **control** (no por pregunta), con `check_key = manual:<primera pregunta del control en el snapshot>`, `status` derivado de la eficacia combinada (`partially_effective` se guarda como `non_compliant`, porque el enum no tiene ese valor; la eficacia real queda en `evidence_snapshot.evaluation_effect.combined_efficacy`), `valid_until` = `valid_until` de la respuesta (365 o 180 días) y `reason_code` = estado de la evaluación del control (`evaluable`, `not_evaluable` o `not_applicable`). Estas filas son las que el motor de riesgo lee (`docs/risk-api.md`, §5.2).
-- **Automáticos** (`evaluateAutomaticComplianceForAssessment`): hechos del activo (A.5.9, A.5.12, A.8.20), monitoreo de oficina (A.8.16) y línea base de red (A.8.21, una fila por servicio). Validez fija de 30 días, encadenados con `supersedes`. Se generan al completar una revisión y tras procesar un reporte de escaneo (`reevaluateComplianceAfterScan`, que usa el ciclo más reciente de la política vigente o uno sintético en memoria `automatic:<id>` si el activo no tiene ciclo). El motor de riesgo **no** los lee: recalcula los controles automáticos desde la evidencia actual.
+- **De revisión** (`completeAssessment`): una fila por **control** (no por pregunta), con `check_key = manual:<primera pregunta del control en el snapshot>`, `status` derivado de la eficacia combinada con `complianceStatusFor` (`domain/assessments/compliance-status.ts`): 1 → `compliant`, 0 → `non_compliant`, intermedia → `partially_effective`, nula → `not_evaluable`, y `not_applicable` cuando todas las subpreguntas aplicables quedaron en «No aplica» justificado. `evaluated_at` = momento del cierre (el mismo valor que `completed_at` del ciclo). `valid_until` = `valid_until` de la respuesta (365 o 180 días) y `reason_code` = estado de la evaluación del control (`evaluable`, `not_evaluable` o `not_applicable`). Estas filas son las que el motor de riesgo lee (`docs/risk-api.md`, §5.2); los estados `not_evaluable` y `not_applicable` nunca aportan eficacia.
+- **Snapshot del efecto** (`EvaluationEffectSnapshot`, exportado desde `assessmentLifecycle.ts`): `evidence_snapshot.evaluation_effect` del resultado y `evaluation_effect_snapshot` de cada respuesta (al cierre reemplaza el efecto provisorio del borrador) guardan `status`, `reason_code`, `base_efficacy`, `adjusted_efficacy`, `combined_efficacy`, `applied_rules`, `source` y `sub_efficacies`. Cada elemento de `sub_efficacies` (`SubEfficacySnapshot`) tiene `question_key`, `option_key`, `base`, `adjusted` y `answered_at`: cuándo se respondió esa subpregunta (procedencia), distinto de la fecha del resultado.
+- **Automáticos** (`evaluateAutomaticComplianceForAssessment`): hechos del activo (A.5.9, A.5.12, A.8.20), monitoreo de oficina (A.8.16) y línea base de red (A.8.21, una fila por servicio). Validez fija de 30 días, encadenados con `supersedes`. Se generan al completar una revisión y tras procesar un reporte de escaneo (`reevaluateComplianceAfterScan`, que usa el ciclo más reciente de la política vigente o uno sintético en memoria `automatic:<id>` si el activo no tiene ciclo). Los resultados de red guardan además `evidence_snapshot.observation` (`observed_at` = `last_seen`, `asset_status`, `identified`, `authorization_status`, `port_scan`, `service_detection`): qué sabía la observación que los produjo. El motor de riesgo **no** los usa como cumplimiento: recalcula los controles automáticos desde la evidencia actual. Solo lee el historial A.8.21 confirmado (`compliant`/`non_compliant`) para fechar el antecedente de un servicio que antes era prohibido y ahora es incierto (D26, `domain/risk/network-evidence.ts::selectPreviousFinding`); una fila sin `observation` elegible (offline, no confirmado o cobertura incompleta) no prueba ni resuelve un hallazgo. La ausencia de un servicio la decide `port-coverage.ts::absenceConfirmed`, compartida con el índice.
 
 ### 2.5 Flujos
 
@@ -303,7 +304,7 @@ En `withTransaction`, tras un lock transaccional `assessment:<id>`:
 2. Si el ciclo ya está `completed`, confirma y lo devuelve.
 3. Guarda las respuestas recibidas con las reglas del borrador. Todas las preguntas del snapshot deben tener respuesta: si faltan, lanza `Responde todas las preguntas visibles para completar la revisión: <claves>.`
 4. `evaluateControlEfficacy` por control: aplica reglas condicionales, descarta subpreguntas `not_applicable` justificadas y promedia; una subpregunta sin eficacia (`unknown`) hace al control `not_evaluable`; si todas son `not_applicable` es `not_applicable`.
-5. Actualiza cada respuesta con `valid_until` desde el momento del cierre y el efecto (`status`, `reason_code`, eficacias, reglas aplicadas).
+5. Toma un único momento de cierre y lo reutiliza en todas las escrituras (`valid_until`, `evaluated_at` de los resultados, `completed_at` y la evaluación automática). Actualiza cada respuesta con `valid_until` y el efecto (§2.4).
 6. Crea un `compliance-results` por control (§2.4).
 7. `evaluateAutomaticComplianceForAssessment` (§2.4).
 8. Marca el ciclo `completed` con `completed_at`, `completed_by`, `due_at` = menor `valid_until` y `completion_summary` por control.
@@ -470,7 +471,7 @@ Verificados en el código; no son necesariamente defectos, pero conviene conocer
 11. **`asset_id` solo para activos de red.** El filtro del listado compara con el campo `asset`; no hay equivalente para `manual_asset`.
 12. **Hook de creación de activos.** Al crear un activo de red solo reconcilia si `confirmed_type` es `workstation`; el resto de tipos con preguntas (por ejemplo `gateway`) se reconcilian en la primera actualización que cambie su tipo confirmado, oficina, retiro o exclusión.
 13. **`canAnswerAssessment` del Viewer.** Para `org_viewer` solo se compara el dueño del activo con el usuario, no su oficina.
-14. **Efecto de `not_applicable` en el riesgo.** Una respuesta `not_applicable` justificada resulta en un control `not_applicable` y su par de riesgo `not_evaluable`: no sale del denominador de cobertura (`docs/risk-api.md`, §10).
+14. **Efecto de `not_applicable` en el riesgo.** Una respuesta `not_applicable` justificada resulta en un control `not_applicable` y un par de riesgo `not_applicable`, que queda fuera de la cobertura y del índice (`docs/risk-api.md`, §2.2). Las subpreguntas «No aplica» se descartan antes de promediar; una regla condicional (`force_zero` o `multiply`) no modifica un destino «No aplica»; `force_zero` sí fija en 0 un destino desconocido.
 15. **`policy_change_failed`.** Devuelve el texto de la excepción original en `message`, que puede ser un mensaje técnico; el cliente solo lo muestra si coincide con un prefijo permitido.
 
 ## 11. Cobertura de pruebas
@@ -479,7 +480,9 @@ Estado de cobertura automática; sin pruebas de extremo a extremo por ahora.
 
 | Prueba | Cubre |
 |---|---|
-| `domain/assessments/assessmentLifecycle.test.ts` | Copia de respuestas a un ciclo nuevo, upsert idempotente del borrador, cierre atómico y sin duplicados, reversión si falta una respuesta |
+| `domain/assessments/assessmentLifecycle.test.ts` | Copia de respuestas a un ciclo nuevo, upsert idempotente del borrador, cierre atómico y sin duplicados, reversión si falta una respuesta, estados `partially_effective` / `not_applicable` / `not_evaluable` persistidos con su nombre, fecha del resultado = cierre con `answered_at` por subpregunta, explicación distinta por estado |
+| `domain/assessments/compliance-status.test.ts` | Derivación eficacia → estado (5 estados) |
+| `domain/risk/answer-evidence.test.ts` | La evidencia de respuestas nunca puntúa `not_evaluable` ni `not_applicable`; conserva parciales, subrespuestas y procedencia |
 | `domain/assessments/reopenCopy.test.ts` | Copia 1:1 de respuestas al reabrir |
 | `domain/assessments/bulkAssessmentLifecycle.test.ts` | Firma del conjunto de preguntas y vista previa (abiertos, completados preservados, reemplazados ignorados) |
 | `domain/assessments/reconcileAssessmentInstance.test.ts` | Preguntas por tipo de activo, exclusión, retiro, oficina inactiva, preservar y reemplazar ciclos, feature apagado, activo manual, sincronización de responsable |

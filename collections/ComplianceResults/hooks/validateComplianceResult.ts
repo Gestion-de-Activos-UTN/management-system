@@ -73,6 +73,16 @@ export const validateComplianceResult: CollectionBeforeChangeHook = async ({ dat
     })
     if (relationId(previous.organization) !== organizationId)
       throw new Error('Un resultado de cumplimiento no puede reemplazar el de otra organización.')
+    // One chain per asset, control and service: never link another protocol, port or asset.
+    if (
+      optionalRelationId(previous.asset) !== assetId ||
+      optionalRelationId(previous.manual_asset) !== manualAssetId ||
+      previous.control_key !== data.control_key ||
+      (previous.service_key ?? null) !== (data.service_key ?? null)
+    )
+      throw new Error(
+        'Un resultado de cumplimiento solo puede reemplazar otro del mismo activo, control y servicio.'
+      )
   }
   return data
 }

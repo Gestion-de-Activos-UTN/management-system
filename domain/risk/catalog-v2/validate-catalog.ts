@@ -23,9 +23,6 @@ export function validateRiskCatalogV2(catalog: RiskCatalogV2): void {
   const controls = new Map(catalog.controls.map(item => [item.key, item]))
   const questions = new Map(catalog.questions.map(item => [item.key, item]))
 
-  // TODO(engine-limit): a control must not mix questions with different scope or asset_types within
-  // a policy. evaluateControlEfficacy averages all question_keys without filtering by asset type, and
-  // buildRiskPairs takes the scope from questions[0]. Not enforced here; today every control shares them.
   for (const question of catalog.questions) {
     if (!controls.has(question.control_key)) {
       throw new Error(`Question ${question.key} references missing control ${question.control_key}`)
@@ -76,6 +73,19 @@ export function validateRiskCatalogV2(catalog: RiskCatalogV2): void {
     for (const key of control.question_keys) {
       if (questions.get(key)?.control_key !== control.key) {
         throw new Error(`Control ${control.key} references an invalid question ${key}`)
+      }
+    }
+    // Pair builders take scope and target types from a control's first question, and
+    // evaluateControlEfficacy averages every question without filtering by asset type: within a
+    // policy, all questions of a control must share both.
+    for (const policy of RISK_POLICY_KEYS) {
+      const shapes = new Set(
+        catalog.questions
+          .filter(item => item.control_key === control.key && item.policies.includes(policy))
+          .map(item => `${item.scope}|${[...(item.asset_types ?? [])].sort().join(',')}`)
+      )
+      if (shapes.size > 1) {
+        throw new Error(`Control ${control.key} mixes question scopes or asset types in ${policy}`)
       }
     }
   }

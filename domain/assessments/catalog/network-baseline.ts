@@ -29,10 +29,11 @@ export const NETWORK_BASELINE = [
     severity: 'high',
     minimum_confidence: 8,
     requires_complete_port_coverage: true,
+    // The rule matches the port only: the text says what was observed, not that Telnet was confirmed.
     message:
-      'Este equipo acepta conexiones por un método antiguo que no protege la información transmitida.',
+      'Este equipo tiene abierto el puerto TCP 23, que normalmente usa Telnet, un método de conexión antiguo que no cifra lo que se transmite. El escaneo no confirma qué servicio responde.',
     recommendation:
-      'Pide a quien mantiene el equipo que lo desactive o lo reemplace por un método de conexión protegido.',
+      'Pide a quien mantiene el equipo que confirme qué servicio usa ese puerto y, si es Telnet, que lo desactive o lo reemplace por un método de conexión protegido.',
   },
   {
     key: 'network.remote_access.review',

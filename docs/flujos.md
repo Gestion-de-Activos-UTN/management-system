@@ -442,7 +442,7 @@ El plan se elige en el alta de la organización y no se puede cambiar después d
 1. El OrgAdmin elige la política distinta de la actual (**Esencial** o **Reforzada**).
 2. En el modal **¿Cambiar la política de revisión?** lee las consecuencias y pulsa **Cancelar**.
 3. Vuelve a elegirla y pulsa **Confirmar cambio**.
-4. Abre las revisiones de seguridad y luego Puntaje de riesgo.
+4. Abre las revisiones de seguridad y luego Índice de deficiencias.
 
 **Resultado esperado:** cancelar no cambia la política. Al confirmar, el modal se cierra y la tarjeta elegida muestra **Política actual**, también tras recargar. La política nueva se refleja en los ciclos aplicables y las revisiones completadas siguen disponibles como historial. Si el riesgo se está recalculando, el aviso es coherente con la existencia o ausencia de una evaluación previa. Volver a la política original es otro cambio real, no deshace los ciclos anteriores.
 
@@ -455,7 +455,7 @@ El plan se elige en el alta de la organización y no se puede cambiar después d
 3. Guarda, sale de Configuración y vuelve.
 4. Elige **No / No**.
 
-**Resultado esperado:** sin respuestas, se indica debajo de cada pregunta la opción faltante. Con Sí / Sí, de forma regular se muestra **Nivel: Avanzado** antes de guardar; con No / No, **Nivel: Inicial**. Las respuestas y el nivel persisten y se muestra la fecha de última actualización. La explicación indica que el perfil orienta recomendaciones y no modifica por sí solo el puntaje de riesgo. El autor del cambio no se muestra en el formulario.
+**Resultado esperado:** sin respuestas, se indica debajo de cada pregunta la opción faltante. Con Sí / Sí, de forma regular se muestra **Nivel: Avanzado** antes de guardar; con No / No, **Nivel: Inicial**. Las respuestas y el nivel persisten y se muestra la fecha de última actualización. La explicación indica que el perfil orienta recomendaciones y no modifica por sí solo el índice de deficiencias. El autor del cambio no se muestra en el formulario.
 
 ### SETTINGS-03 — Perfil personal de usuario y PlatformAdmin
 
@@ -559,7 +559,7 @@ El plan se elige en el alta de la organización y no se puede cambiar después d
 **Precondiciones:** una oficina activa concreta seleccionada en la barra superior.
 
 1. El actor va a **Inventario → Instantáneas** y pulsa **Generar instantánea**.
-2. Abre la fila nueva y revisa fecha, oficina, cantidades, pestañas **Red / Activos manuales** y puntaje/cobertura de ese momento.
+2. Abre la fila nueva y revisa fecha, oficina, cantidades, pestañas **Detectados en la red / Registrados manualmente** e índice de deficiencias / información disponible de ese momento.
 3. Desde el lápiz del título escribe `Inventario antes de la revisión` y guarda.
 4. Abre el lápiz, escribe otro nombre y cancela con **X** o **Escape**. Escribe un carácter inválido (`<`) y lo corrige. Deja el nombre vacío y guarda.
 5. Cambia el alias de un activo en el inventario actual y vuelve a abrir la misma instantánea.
@@ -629,27 +629,28 @@ El plan se elige en el alta de la organización y no se puede cambiar después d
 
 **Resultado esperado:** la evidencia heredada indica su origen o respuesta anterior y permite responder localmente; un cambio local persiste sin editar la revisión de origen. La evidencia vencida se presenta como vencida o sin información vigente, no como respuesta conforme. El activo excluido sigue en Inventario y su cuestionario explica o impide la respuesta según la exclusión. Al reincluirlo, el estado de revisión se actualiza.
 
-### RISK-01 — Leer el riesgo y observar cambios
+### RISK-01 — Leer el índice de deficiencias y observar cambios
 
 **Actor:** OrgAdmin; OfficeManager con dos oficinas asignadas; Viewer.
 
-1. El OrgAdmin abre **Puntaje de riesgo** con «Todas las oficinas» y luego selecciona una oficina.
-2. El OfficeManager elige «Todas las oficinas» y revisa Puntaje de riesgo, Panel general y Revisiones.
-3. El actor revisa puntaje, cobertura, confiabilidad y avisos.
-4. Completa una revisión y vuelve al riesgo.
-5. Usa paginación y ordenamiento de las filas.
-6. Pulsa un activo en las alertas.
+1. El OrgAdmin abre **Índice de deficiencias** con «Todas las oficinas» y luego selecciona una oficina.
+2. El OfficeManager elige «Todas las oficinas» y revisa Índice de deficiencias, Panel general y Revisiones.
+3. El actor revisa el índice, la información disponible, el estado del resultado (oculto, preliminar o con banda), los avisos y la tabla «Información por control».
+4. Alterna las pestañas **Deficiencias** y **Pendientes**, despliega un ítem de cada una y usa la paginación.
+5. Completa una revisión y vuelve al índice.
+6. Pulsa los enlaces de un ítem desplegado, de «Equipos con más deficiencias» y de los avisos.
 
 **Resultado esperado:**
 
 - OrgAdmin con «Todas las oficinas» ve la evaluación global persistida de la organización, con la aclaración de que es un cálculo conjunto sobre activos y controles, no un promedio de porcentajes de oficinas. Al elegir una oficina cambia el alcance.
-- OfficeManager con «Todas las oficinas» ve un consolidado de sus oficinas activas asignadas, sin que se le exija elegir una oficina, con la misma explicación en Puntaje de riesgo, Panel general y Revisiones. El consolidado es de solo lectura y no crea una evaluación histórica. Viewer consulta el riesgo por oficina concreta.
-- La cobertura indica cuánta evidencia hay. Sin datos suficientes se muestra ausencia o resultado preliminar, nunca 0 % como si todo estuviera controlado.
-- Mientras el riesgo se recalcula aparece un único aviso «Actualizando riesgo» que distingue sin evaluación, cálculo en espera/en curso y cálculo fallido, y no menciona un puntaje anterior si no existe. OfficeManager comparte el estado de recálculo de la organización con el OrgAdmin; al terminar, su consolidado se recalcula.
-- Para el OfficeManager, paginar u ordenar responde sin demoras porque el consolidado se reutiliza mientras la evidencia no cambie.
+- OfficeManager con «Todas las oficinas» ve un consolidado de sus oficinas activas asignadas, sin que se le exija elegir una oficina, con la misma explicación en Índice de deficiencias, Panel general y Revisiones. El consolidado es de solo lectura y no crea una evaluación histórica. Viewer consulta el riesgo por oficina concreta.
+- «Información disponible» indica cuánta evidencia hay. Con menos de 40 % el índice no se muestra; con menos de 80 % es preliminar y sin banda; nunca se muestra 0 como si todo estuviera controlado. La tabla por control muestra la información y la deficiencia de cada control, también con el índice oculto.
+- Mientras el riesgo se recalcula aparece un único aviso «Actualizando el índice» que distingue sin evaluación, cálculo en espera/en curso y cálculo fallido, y no menciona un índice anterior si no existe. OfficeManager comparte el estado de recálculo de la organización con el OrgAdmin; al terminar, su consolidado se recalcula.
+- Las dos listas tienen un orden fijo del servidor, sin ordenamiento manual. Deficiencias: prioridad, importancia del control y criticidad; solo prioridad media o mayor, y los motivos bajos se ven al desplegar un ítem. Pendientes: primero «Estado del relevamiento» (criticidad, inventario y monitoreo), después por importancia. Una declaración compartida aparece una sola vez («alcanza N equipos»). Un equipo con un servicio prohibido y otros por revisar aparece en las dos listas.
+- Para el OfficeManager, paginar o cambiar de lista responde sin demoras porque el consolidado se reutiliza mientras la evidencia no cambie.
 - Si el riesgo no puede obtenerse, se informa el error sin mostrar contadores en 0.
-- El cálculo incluye controles evaluables no conformes o parcialmente efectivos según su peso y eficacia; «No lo sé» o información no evaluable no equivale a cumplimiento ni añade riesgo por sí sola.
-- Pulsar un activo en las alertas abre Revisión de seguridad → Dispositivos filtrada por ese activo (incluidos los manuales), conservando la organización visitada; «Ver todos los dispositivos» quita el filtro. En Dispositivos, el nombre de cada dispositivo enlaza a su detalle de inventario.
+- El índice incluye controles evaluables no conformes o con cumplimiento parcial según su importancia y la criticidad de los equipos; «No lo sé» o información no evaluable no equivale a cumplimiento ni suma deficiencias: va a Pendientes y baja la información disponible.
+- En un ítem desplegado, «Ir a revisiones» abre Revisión de seguridad; «Abrir en el inventario» y «Ver equipo» abren el detalle del equipo de red, la fila filtrada del activo manual o el inventario de la oficina. Un aviso de agente de oficina no tiene enlace. «Equipos con más deficiencias» enlaza a cada equipo e «Identificar dispositivos» (aviso de red compartida) al inventario. Todos los enlaces conservan la organización visitada.
 
 ### Reglas del sistema
 
@@ -733,7 +734,7 @@ El plan se elige en el alta de la organización y no se puede cambiar después d
 2. Repite desde una revisión, una instantánea o un escaneo, y con una referencia a una oficina.
 3. Abre tareas con referencias antiguas: activo retirado, ciclo reemplazado o evaluación histórica.
 
-**Resultado esperado:** la entidad queda identificada y fija en el formulario, y el alcance se deriva de ella. El enlace abre la entidad correcta. Las referencias se muestran con nombres legibles, sin UUID: las instantáneas e informes usan su nombre o, si no tienen, la fecha, con el sufijo de la oficina. En el selector general, la opción se llama «Evaluación de riesgo», con la ayuda «Vincula la tarea al resultado guardado que motivó su creación»; «Resultado de un control» no se ofrece, aunque las tareas existentes con esa referencia conservan su etiqueta y enlace. En el consolidado de oficinas asignadas, quien puede crear tareas ve la indicación de seleccionar una oficina para vincularla a su evaluación; una evaluación guardada ofrece Crear tarea.
+**Resultado esperado:** la entidad queda identificada y fija en el formulario, y el alcance se deriva de ella. El enlace abre la entidad correcta. Las referencias se muestran con nombres legibles, sin UUID: las instantáneas e informes usan su nombre o, si no tienen, la fecha, con el sufijo de la oficina. En el selector general, la opción se llama «Evaluación de deficiencias», con la ayuda «Vincula la tarea al resultado guardado que motivó su creación»; «Resultado de un control» no se ofrece, aunque las tareas existentes con esa referencia conservan su etiqueta y enlace. En el consolidado de oficinas asignadas, quien puede crear tareas ve la indicación de seleccionar una oficina para vincularla a su evaluación; una evaluación guardada ofrece Crear tarea.
 
 ### Reglas del sistema
 
@@ -888,7 +889,7 @@ El plan se elige en el alta de la organización y no se puede cambiar después d
 3. Se restaura la conexión y vuelve a guardar.
 4. Sin conexión, recarga el Panel general y Revisión de seguridad.
 
-**Resultado esperado:** sin conexión se informa el fallo, se conservan los campos y el botón deja de mostrar carga; no se informa éxito. Al reconectar se guarda sin volver a escribir los datos. En Panel general y Revisión de seguridad, la tarjeta de riesgo muestra «No se pudo cargar el riesgo. Intenta de nuevo en unos minutos.», sin mostrar «0 controles requieren atención», «0 equipos sin identificar» ni cobertura de 0 %. Al restaurar la conexión, los datos vuelven solos en la siguiente consulta automática.
+**Resultado esperado:** sin conexión se informa el fallo, se conservan los campos y el botón deja de mostrar carga; no se informa éxito. Al reconectar se guarda sin volver a escribir los datos. En Panel general y Revisión de seguridad, la tarjeta de riesgo muestra «No se pudo cargar el índice. Intenta de nuevo en unos minutos.», sin mostrar «0 controles requieren atención», «0 equipos sin identificar» ni cobertura de 0 %. Al restaurar la conexión, los datos vuelven solos en la siguiente consulta automática.
 
 ### ERROR-03 — Datos modificados por otra persona
 
