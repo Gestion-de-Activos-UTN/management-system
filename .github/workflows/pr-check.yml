@@ -3,6 +3,11 @@ name: PR Check
 on:
   pull_request:
 
+# Un push nuevo al mismo PR cancela la corrida anterior: ahorra minutos de Actions.
+concurrency:
+  group: pr-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -27,3 +32,45 @@ jobs:
           # payload.config.ts exige un origen HTTPS canónico en producción (lib/platform-origin.ts).
           # Este build no se despliega: alcanza con un origen reservado (.invalid, RFC 6761).
           NEXT_PUBLIC_SITE_URL: https://ci.invalid
+
+  # Tests de integración (*.integration.test.ts, node:test) contra un PostgreSQL real y vacío.
+  # Cada suite siembra sus propios datos; Payload crea el schema al arrancar porque
+  # NODE_ENV=test no es producción (pushDevSchema). La base nace y muere con el job.
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    services:
+      postgres:
+        # Misma imagen que docker-compose.yml.
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: payload
+          POSTGRES_PASSWORD: payload
+          POSTGRES_DB: siam_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U payload -d siam_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run test:integration
+        env:
+          DATABASE_URL: postgresql://payload:payload@localhost:5432/siam_ci
+          # Solo firma sesiones de una base descartable: no es un secreto.
+          PAYLOAD_SECRET: ci-only-not-a-secret

@@ -216,26 +216,30 @@ test('POST /v1/agents/provision: 400 con un platform desconocido', async () => {
 })
 
 test('POST /v1/agents/provision: 409 cuando la organización agotó sus agentes', async () => {
-  const payload = await getPayload({ config })
-  const { office, user } = await seedTenant(payload, 'org_admin')
-  // Plan 'basic' permite 1 agente por oficina (agents_per_office) — provisionar uno ya la agota,
-  // sin depender de ningún override de límite (max_active_agents no existe más, ver limits.ts).
-  await payload.create({
-    collection: 'agents',
-    data: {
-      id: `agent-${Math.random()}`,
-      office: office.id,
-      is_active: true,
-      lifecycle_status: 'active',
-    },
-    overrideAccess: true,
-  })
-  const res = await agentProvisioningEndpoint.handler(
-    fakeRequest(payload, {
-      user: { id: String(user.id), collection: 'users' },
-      body: { office_id: String(office.id) },
+  // El handler arma el ZIP antes de chequear la cuota (ver agentProvisioning.ts): sin el
+  // fixture dependería de ../scanner-prototype, que no existe en CI.
+  await withScannerFixture(async () => {
+    const payload = await getPayload({ config })
+    const { office, user } = await seedTenant(payload, 'org_admin')
+    // Plan 'basic' permite 1 agente por oficina (agents_per_office) — provisionar uno ya la agota,
+    // sin depender de ningún override de límite (max_active_agents no existe más, ver limits.ts).
+    await payload.create({
+      collection: 'agents',
+      data: {
+        id: `agent-${Math.random()}`,
+        office: office.id,
+        is_active: true,
+        lifecycle_status: 'active',
+      },
+      overrideAccess: true,
     })
-  )
-  assert.equal(res.status, 409)
-  assert.equal((await res.json()).error, 'agent_limit_reached')
+    const res = await agentProvisioningEndpoint.handler(
+      fakeRequest(payload, {
+        user: { id: String(user.id), collection: 'users' },
+        body: { office_id: String(office.id) },
+      })
+    )
+    assert.equal(res.status, 409)
+    assert.equal((await res.json()).error, 'agent_limit_reached')
+  })
 })
