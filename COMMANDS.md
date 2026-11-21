@@ -50,12 +50,31 @@ No tocan la DB — alcanza con tener `node_modules` en algún lado (host si corr
 ### Regresiones de la auditoría
 
 `pnpm test:audit` ejecuta las pruebas unitarias nuevas con Vitest, sin base de datos.
-`pnpm test:audit:integration` requiere Node >=22 y una PostgreSQL **desechable** con
-una base **vacía** con URL como
-`DATABASE_URL=postgresql://siam_audit@127.0.0.1:55443/siam_audit_security_run1`.
-El guard exige host, puerto, usuario y prefijo de nombre aislados; no usar la base de desarrollo.
-Crear otra base vacía para repetir la suite completa: la primera prueba verifica el seed desde cero.
-La suite crea usuarios, activos y jobs de prueba, y también arranca otro proceso de Payload.
+
+Las suites `*.audit.integration.test.ts` requieren Node >=22 y una PostgreSQL **desechable**.
+Cada suite tiene en su `beforeAll` un guard que exige **su propia base vacía**, con usuario,
+puerto y prefijo de nombre fijos (por ejemplo `siam_audit@127.0.0.1:55443/siam_permissions_*`,
+`siam_test@127.0.0.1:55447/siam_org_details_*`); nunca usar la base de desarrollo. Por eso
+`pnpm test:audit:integration` con una sola `DATABASE_URL` no corre la suite completa: las suites
+cuyo guard no coincide fallan en `beforeAll`.
+
+`pnpm test:audit:integration:all` (`scripts/audit-integration-all.sh`, el mismo que usa el CI)
+crea una base vacía nueva por suite y las corre de a una, con un resumen al final. La tabla
+suite → usuario/puerto/prefijo está en el script; si aparece una suite que no figura ahí, falla
+y dice qué agregar. Necesita un servidor en `127.0.0.1` que escuche en 55443, 55447 y 55448, en
+modo `trust` (las URLs de los guards no llevan contraseña):
+
+```bash
+docker run --rm -d --name siam-audit-pg -e POSTGRES_HOST_AUTH_METHOD=trust \
+  -p 127.0.0.1:55443:5432 -p 127.0.0.1:55447:5432 -p 127.0.0.1:55448:5432 postgres:17-alpine
+PAYLOAD_SECRET=local-not-a-secret pnpm test:audit:integration:all   # ~7 min; requiere psql en el host
+PAYLOAD_SECRET=local-not-a-secret pnpm test:audit:integration:all bulk-scope   # una sola suite
+docker stop siam-audit-pg   # --rm: se borra junto con todas sus bases
+```
+
+`remaining-corroboration` (`SIAM_AUDIT_REMAINING=1`) solo corre con `--with-remaining` o
+nombrándola. Las suites crean usuarios, activos y jobs de prueba; `security-policy`,
+`audit-fixes` y `remaining-corroboration` también arrancan otro proceso de Payload.
 
 El lockfile aplica `patches/@payloadcms__drizzle@3.86.0.patch` y `patches/payload@3.86.0.patch`
 durante la instalación. Al actualizar Payload/Drizzle, revisar ambos parches y repetir las pruebas

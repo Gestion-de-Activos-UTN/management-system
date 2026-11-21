@@ -2,6 +2,9 @@ name: PR Check
 
 on:
   pull_request:
+    # ready_for_review: al sacar un PR de borrador corre todo. Los borradores no corren
+    # ningún job (ver el `if` de cada uno): se itera en draft sin gastar minutos de Actions.
+    types: [opened, synchronize, reopened, ready_for_review]
 
 # Un push nuevo al mismo PR cancela la corrida anterior: ahorra minutos de Actions.
 concurrency:
@@ -10,6 +13,7 @@ concurrency:
 
 jobs:
   build:
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -37,6 +41,7 @@ jobs:
   # Cada suite siembra sus propios datos; Payload crea el schema al arrancar porque
   # NODE_ENV=test no es producción (pushDevSchema). La base nace y muere con el job.
   integration:
+    if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -73,4 +78,46 @@ jobs:
         env:
           DATABASE_URL: postgresql://payload:payload@localhost:5432/siam_ci
           # Solo firma sesiones de una base descartable: no es un secreto.
+          PAYLOAD_SECRET: ci-only-not-a-secret
+
+  # Suites *.audit.integration.test.ts (Vitest): permisos, alcance por tenant y contratos.
+  # Cada suite exige en su guarda su propia base vacía (usuario, puerto y prefijo fijos), así
+  # que el script crea una por suite. Un solo Postgres atiende los tres puertos de las guardas.
+  audit-integration:
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          # Las URLs de las guardas no llevan contraseña; la base nace y muere con el job.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 55443:5432
+          - 55447:5432
+          - 55448:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: 'pnpm'
+          cache-dependency-path: pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+      # remaining-corroboration queda afuera por ahora (se corre con --with-remaining).
+      - run: pnpm run test:audit:integration:all
+        env:
           PAYLOAD_SECRET: ci-only-not-a-secret
