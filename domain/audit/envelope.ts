@@ -106,7 +106,9 @@ export const AuditEnvelopeV1Schema = z
     else if (category !== envelope.category_code)
       issue('action_code', 'La acción no pertenece a esa categoría.')
 
-    // Autor: la colección corresponde al tipo; el sistema no tiene id, colección ni rol.
+    // Autor: la colección corresponde al tipo; el sistema no tiene id, colección ni rol. El rol
+    // es obligatorio solo para personas y PlatformAdmins: un agente no tiene rol de RBAC
+    // (Tani, 22/11), así que puede ir null.
     if (envelope.actor_collection !== ACTOR_COLLECTION[envelope.actor_type])
       issue('actor_collection', 'No corresponde al tipo de autor.')
     if (envelope.actor_type === 'system') {
@@ -114,7 +116,8 @@ export const AuditEnvelopeV1Schema = z
       if (envelope.actor_role !== null) issue('actor_role', 'El sistema no tiene rol.')
     } else {
       if (envelope.actor_id === null) issue('actor_id', 'Falta el id del autor.')
-      if (envelope.actor_role === null) issue('actor_role', 'Falta el rol del autor.')
+      if (envelope.actor_role === null && envelope.actor_type !== 'agent')
+        issue('actor_role', 'Falta el rol del autor.')
     }
 
     // Iniciador: los dos campos juntos o ninguno.

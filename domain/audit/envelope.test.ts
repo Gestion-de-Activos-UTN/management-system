@@ -45,6 +45,19 @@ test('acepta un evento de plataforma y uno del sistema', () => {
   )
 })
 
+test('un agente puede no tener rol; una persona o un PlatformAdmin no', () => {
+  const agent = { actor_type: 'agent', actor_collection: 'agents', origin: 'agent' }
+  assert.doesNotThrow(() => parseAuditEnvelope(with_({ ...agent, actor_role: null })))
+  assert.doesNotThrow(() => parseAuditEnvelope(with_({ ...agent, actor_role: 'scanner' })))
+  for (const [actor_type, actor_collection] of [
+    ['user', 'users'],
+    ['platform_admin', 'admins'],
+  ]) {
+    const issues = issuesFor(with_({ actor_type, actor_collection, actor_role: null }))
+    assert.deepEqual(issues, ['actor_role: Falta el rol del autor.'], actor_type)
+  }
+})
+
 test('rechaza cada regla del sobre indicando el campo', () => {
   const ORG2 = '1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f'
   const cases: Array<[string, Record<string, unknown>, string]> = [
@@ -100,6 +113,11 @@ test('rechaza cada regla del sobre indicando el campo', () => {
     ['colección que no corresponde al autor', { actor_collection: 'admins' }, 'actor_collection'],
     ['persona sin id', { actor_id: null }, 'actor_id'],
     ['persona sin rol', { actor_role: null }, 'actor_role'],
+    [
+      'PlatformAdmin sin rol',
+      { actor_type: 'platform_admin', actor_collection: 'admins', actor_role: null },
+      'actor_role',
+    ],
     [
       'sistema con id',
       { actor_type: 'system', actor_collection: null, actor_role: null },
