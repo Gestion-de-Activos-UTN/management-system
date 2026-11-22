@@ -39,31 +39,35 @@ export const AUDIT_CATEGORIES = {
 
 export type AuditCategoryCode = keyof typeof AUDIT_CATEGORIES
 
-export type AuditEntityType =
-  | 'organization'
-  | 'office'
-  | 'member'
-  | 'account'
-  | 'user'
-  | 'platform_admin'
-  | 'organization_settings'
-  | 'asset'
-  | 'manual_asset'
-  | 'inventory_incident'
-  | 'agent'
-  | 'scan_report'
-  | 'inventory_snapshot'
-  | 'assessment'
-  | 'compliance_result'
-  | 'task'
-  | 'risk_evaluation'
-  | 'portal_message'
-  | 'platform_visit'
-  | 'audit_log'
-  | 'export'
-  | 'ai_request'
-  | 'job'
-  | 'operation'
+// Lista en tiempo de ejecución: el sobre (envelope.ts) valida entity_type contra ella.
+export const AUDIT_ENTITY_TYPES = [
+  'organization',
+  'office',
+  'member',
+  'account',
+  'user',
+  'platform_admin',
+  'organization_settings',
+  'asset',
+  'manual_asset',
+  'inventory_incident',
+  'agent',
+  'scan_report',
+  'inventory_snapshot',
+  'assessment',
+  'compliance_result',
+  'task',
+  'risk_evaluation',
+  'portal_message',
+  'platform_visit',
+  'audit_log',
+  'export',
+  'ai_request',
+  'job',
+  'operation',
+] as const
+
+export type AuditEntityType = (typeof AUDIT_ENTITY_TYPES)[number]
 
 export interface AuditActionSpec {
   code: string
