@@ -21,7 +21,12 @@ export const AUDIT_KEY_VARIABLES = {
 /** Minúsculas, dígitos y guiones; 3 a 64 caracteres; empieza con letra o dígito. */
 export const AUDIT_KEY_ID_PATTERN = /^[a-z0-9][a-z0-9-]{2,63}$/
 
-/** Prefijo de las claves de desarrollo: producción no arranca con una clave activa así. */
+/**
+ * Prefijo de las claves de desarrollo. En producción no se admite ninguna, ni siquiera como
+ * versión vieja: el verificador acepta cualquier clave del llavero, y las de desarrollo están
+ * en las notebooks del equipo, así que con una de ellas se podrían fabricar eventos que
+ * verifican. Producción nunca firma con claves dev-.
+ */
 export const AUDIT_DEV_KEY_PREFIX = 'dev-'
 
 export const AUDIT_KEY_BYTES = 32
@@ -99,7 +104,7 @@ function parseKeyring(
   errors: AuditKeyError[]
 ): { entries: ParsedEntry[]; keyring?: AuditKeyring } {
   const before = errors.length
-  const entries = parseEntries(names.keys, env[names.keys], errors)
+  const entries = parseEntries(names.keys, env[names.keys], options, errors)
   const keyringOk = errors.length === before
 
   const activeKeyId = parseActiveKeyId(names.activeKeyId, env[names.activeKeyId], errors)
@@ -116,23 +121,18 @@ function parseKeyring(
     )
     return { entries }
   }
-  if (options.production && activeKeyId.startsWith(AUDIT_DEV_KEY_PREFIX)) {
-    push(
-      errors,
-      names.activeKeyId,
-      undefined,
-      'dev_key_in_production',
-      `en producción la clave activa no puede ser de desarrollo (id con prefijo "${AUDIT_DEV_KEY_PREFIX}")`
-    )
-    return { entries }
-  }
   if (errors.length > before) return { entries }
 
   const keys = new Map(entries.map(entry => [entry.id, createSecretKey(entry.bytes)]))
   return { entries, keyring: { activeKeyId, active: keys.get(activeKeyId)!, keys } }
 }
 
-function parseEntries(variable: string, value: string | undefined, errors: AuditKeyError[]) {
+function parseEntries(
+  variable: string,
+  value: string | undefined,
+  options: { production: boolean },
+  errors: AuditKeyError[]
+) {
   if (value === undefined) {
     push(errors, variable, undefined, 'missing', 'falta la variable')
     return []
@@ -190,6 +190,9 @@ function parseEntries(variable: string, value: string | undefined, errors: Audit
     if (!AUDIT_KEY_ID_PATTERN.test(id)) {
       valid = false
       push(errors, variable, position, 'invalid_id', ID_RULE)
+    } else if (options.production && id.startsWith(AUDIT_DEV_KEY_PREFIX)) {
+      valid = false
+      push(errors, variable, position, 'dev_key_in_production', DEV_RULE)
     }
     const bytes = decodeKey(encoded)
     if (!bytes) {
@@ -269,6 +272,7 @@ function checkSharedKeys(hmac: ParsedEntry[], network: ParsedEntry[], errors: Au
 
 const ID_RULE =
   'id inválido: solo minúsculas, dígitos y guiones, de 3 a 64 caracteres, empezando con letra o dígito'
+const DEV_RULE = `en producción no se admiten claves de desarrollo (id con prefijo "${AUDIT_DEV_KEY_PREFIX}"), ni activas ni viejas`
 const KEY_RULE =
   'la clave no es base64 estándar de 32 bytes (44 caracteres terminados en "="; se genera con openssl rand -base64 32)'
 

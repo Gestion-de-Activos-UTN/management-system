@@ -257,27 +257,51 @@ test('junta todos los errores de los dos llaveros', () => {
   )
 })
 
-test('en producción rechaza una clave activa de desarrollo', () => {
-  const errors = errorsFor({}, true)
+const PROD = {
+  AUDIT_HMAC_KEYS: `prod-2027-01:${H1},prod-2027-02:${H2}`,
+  AUDIT_HMAC_ACTIVE_KEY_ID: 'prod-2027-02',
+  AUDIT_NETWORK_KEYS: `prod-2027-01:${N1}`,
+  AUDIT_NETWORK_ACTIVE_KEY_ID: 'prod-2027-01',
+}
+
+function productionErrors(env: Record<string, string>) {
+  const result = parseAuditKeys(env, { production: true })
+  assert.equal(result.ok, false, 'se esperaba que la configuración fuera rechazada')
+  return (result as { errors: readonly AuditKeyError[] }).errors.map(error => [
+    error.variable,
+    error.position,
+    error.code,
+  ])
+}
+
+test('en producción acepta llaveros sin claves de desarrollo', () => {
+  const result = parseAuditKeys(PROD, { production: true })
+  assert.ok(result.ok)
+  assert.equal(result.keys.hmac.activeKeyId, 'prod-2027-02')
+  assert.equal(result.keys.network.activeKeyId, 'prod-2027-01')
+})
+
+test('en producción rechaza cada clave dev-, activa o no, en los dos llaveros', () => {
+  assert.deepEqual(productionErrors(VALID), [
+    ['AUDIT_HMAC_KEYS', 1, 'dev_key_in_production'],
+    ['AUDIT_HMAC_KEYS', 2, 'dev_key_in_production'],
+    ['AUDIT_NETWORK_KEYS', 1, 'dev_key_in_production'],
+  ])
+})
+
+test('en producción rechaza una clave dev- vieja aunque la activa no sea de desarrollo', () => {
+  // El verificador acepta cualquier clave del llavero: con una dev- (que está en las
+  // notebooks del equipo) se podrían fabricar eventos que verifican.
   assert.deepEqual(
-    errors.map(error => [error.variable, error.code]),
-    [
-      ['AUDIT_HMAC_ACTIVE_KEY_ID', 'dev_key_in_production'],
-      ['AUDIT_NETWORK_ACTIVE_KEY_ID', 'dev_key_in_production'],
-    ]
+    productionErrors({ ...PROD, AUDIT_HMAC_KEYS: `dev-20261122-a1b2:${H1},prod-2027-02:${H2}` }),
+    [['AUDIT_HMAC_KEYS', 1, 'dev_key_in_production']]
+  )
+  assert.deepEqual(
+    productionErrors({ ...PROD, AUDIT_NETWORK_KEYS: `prod-2027-01:${N1},dev-viejo:${key(0x44)}` }),
+    [['AUDIT_NETWORK_KEYS', 2, 'dev_key_in_production']]
   )
 })
 
-test('en producción acepta claves activas que no son de desarrollo, aunque queden dev- viejas', () => {
-  const result = parseAuditKeys(
-    {
-      AUDIT_HMAC_KEYS: `dev-20261122-a1b2:${H1},prod-2027-01:${H2}`,
-      AUDIT_HMAC_ACTIVE_KEY_ID: 'prod-2027-01',
-      AUDIT_NETWORK_KEYS: `prod-2027-01:${N1}`,
-      AUDIT_NETWORK_ACTIVE_KEY_ID: 'prod-2027-01',
-    },
-    { production: true }
-  )
-  assert.ok(result.ok)
-  assert.equal(result.keys.hmac.activeKeyId, 'prod-2027-01')
+test('fuera de producción las claves dev- se aceptan', () => {
+  assert.ok(parseAuditKeys(VALID, { production: false }).ok)
 })
