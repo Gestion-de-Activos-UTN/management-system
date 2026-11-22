@@ -1,0 +1,2 @@
+# Lo genera y reescribe ESLint (pnpm lint:prune); con Prettier cada vuelta cambiaría el formato.
+eslint-suppressions.json
