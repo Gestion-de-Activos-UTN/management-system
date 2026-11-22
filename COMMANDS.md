@@ -39,6 +39,7 @@ No tocan la DB — alcanza con tener `node_modules` en algún lado (host si corr
 | `pnpm format`      | Host (con deps instaladas)                                                                                                                               | Prettier sobre todo el repo    |
 | `pnpm type-check`  | Host (con deps instaladas)                                                                                                                               | `tsc --noEmit`                 |
 | `pnpm spell-check` | Host (con deps instaladas)                                                                                                                               | cspell manual (no corre en CI) |
+| `pnpm audit:keys:init` | Host (con deps instaladas)                                                                                                                               | Genera los llaveros de desarrollo del AuditLog en `.env.local` (permisos 600) si faltan; nunca pisa ni imprime claves. `--file <ruta>` para otro archivo |
 
 ### Lint y baseline
 

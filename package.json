@@ -20,6 +20,7 @@
     "test:audit": "vitest run --config vitest.audit.config.ts",
     "test:components": "vitest run --config vitest.components.config.ts",
     "audit:coverage": "node --import tsx scripts/audit-coverage.ts",
+    "audit:keys:init": "node --import tsx scripts/audit-keys-init.ts",
     "test:audit:integration": "cross-env SIAM_AUDIT_INTEGRATION=1 vitest run --config vitest.audit.config.ts",
     "test:audit:integration:all": "bash scripts/audit-integration-all.sh"
   },
