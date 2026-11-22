@@ -58,6 +58,23 @@ const TC14 = {
   T: hex('d0d1c8a799996bf0265b98b5d48ab919'),
 }
 
+// Vector oficial de NIST CAVP (Cryptographic Algorithm Validation Program), bajado el
+// 22/11/2026 de
+// https://csrc.nist.gov/CSRC/media/Projects/Cryptographic-Algorithm-Validation-Program/documents/mac/gcmtestvectors.zip
+// (sha256 del zip f9fc479e134cde2980b3bb7cddbcb567b2cd96fd753835243ed067699f26a023).
+// Archivo gcmEncryptExtIV256.rsp ("CAVS 14.0, GCM Encrypt with keysize 256", sha256
+// 4448b4998c3f58cd9f5542ddf7c573189a721ff3d3ac24cd5177bb4910a787f8), sección
+// [Keylen = 256] [IVlen = 96] [PTlen = 256] [AADlen = 160] [Taglen = 128], Count = 0
+// (línea 15007). Valores copiados del archivo.
+const CAVP = {
+  K: hex('5853c020946b35f2c58ec427152b840420c40029636adcbb027471378cfdde0f'),
+  IV: hex('eec313dd07cc1b3e6b068a47'),
+  P: hex('ce7458e56aef9061cb0c42ec2315565e6168f5a6249ffd31610b6d17ab64935e'),
+  A: hex('1389b522c24a774181700553f0246bbabdd38d6f'),
+  C: hex('eadc3b8766a77ded1a58cb727eca2a9790496c298654cda78febf0da16b6903b'),
+  T: hex('3d49a5b32fde7eafcce90079217ffb57'),
+}
+
 // Llavero de red de prueba: activa la 02; la 01 queda como versión vieja.
 const RESULT = parseAuditKeys(
   {
@@ -101,6 +118,16 @@ test('descifra el Test Case 16 de la especificación de GCM (con AAD)', () => {
 
 test('descifra el Test Case 14 de la especificación de GCM (sin AAD)', () => {
   assert.deepEqual(decryptAesGcm(TC14.K, TC14.IV, TC14.A, TC14.C, TC14.T), TC14.P)
+})
+
+test('descifra el vector de NIST CAVP (IV de 96 bits, tag de 128, con AAD)', () => {
+  assert.deepEqual(decryptAesGcm(CAVP.K, CAVP.IV, CAVP.A, CAVP.C, CAVP.T), CAVP.P)
+  const tampered = Buffer.from(CAVP.T)
+  tampered[0]! ^= 0x80
+  assert.throws(
+    () => decryptAesGcm(CAVP.K, CAVP.IV, CAVP.A, CAVP.C, tampered),
+    AuditNetworkDecryptError
+  )
 })
 
 test('con el vector publicado, alterar tag, AAD, nonce o ciphertext hace fallar la autenticación', () => {
