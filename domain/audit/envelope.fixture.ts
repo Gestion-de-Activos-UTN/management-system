@@ -1,4 +1,5 @@
 import type { AuditEnvelopeV1 } from './envelope'
+import type { NetworkContextV1 } from './network-context'
 
 // Datos fijos para los tests del sobre y del HMAC (no son secretos). El texto canónico y los
 // hashes esperados están escritos a mano en hmac.test.ts y se pueden recalcular con openssl.
@@ -49,8 +50,8 @@ export const FIXTURE_ENVELOPE: AuditEnvelopeV1 = {
   previous_hash: '00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff',
 }
 
-/** Contexto de red de prueba para el digest (su esquema real se define en el paso 4). */
-export const FIXTURE_NETWORK_CONTEXT = {
+/** Contexto de red de prueba (cumple NetworkContextV1Schema de network-context.ts). */
+export const FIXTURE_NETWORK_CONTEXT: NetworkContextV1 = {
   source: 'trusted_proxy',
   ip: '203.0.113.7',
   family: 'ipv4',

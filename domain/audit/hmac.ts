@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual, type KeyObject } from 'node:crypto'
 import { auditCanonicalJson } from './canonical'
 import { parseAuditEnvelope } from './envelope'
+import { parseNetworkContext } from './network-context'
 
 // HMAC-SHA256 del AuditLog (documentation/planes/audit-log/03-seguridad-y-claves.md §3), solo
 // con node:crypto. Dos usos de la misma clave HMAC, separados por una etiqueta fija al
@@ -39,13 +40,14 @@ export function computeChainHash(envelope: unknown, keys: AuditHmacKeys): string
 export interface NetworkDigestInput {
   chain_id: string
   event_id: string
-  /** Contexto de red en claro; su esquema se define en network-context.ts. */
-  context: Record<string, unknown>
+  /** Contexto de red en claro; se valida con el esquema de network-context.ts. */
+  context: unknown
 }
 
-/** Texto exacto que se firma como network_digest. */
+/** Texto exacto que se firma como network_digest. Valida el contexto antes. */
 export function networkDigestInput(input: NetworkDigestInput): string {
-  const { chain_id, event_id, context } = input
+  const { chain_id, event_id } = input
+  const context = parseNetworkContext(input.context)
   return `${AUDIT_NETWORK_DIGEST_LABEL}\n${auditCanonicalJson({ chain_id, context, event_id })}`
 }
 
