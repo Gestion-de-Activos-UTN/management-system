@@ -34,10 +34,27 @@ No tocan la DB — alcanza con tener `node_modules` en algún lado (host si corr
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ |
 | `pnpm dev`         | No hace falta correrlo manual: `docker compose up` ya lo ejecuta dentro del contenedor. Si preferís correrlo en el host, necesitás `pnpm install` local. | Next dev server (Turbopack)    |
 | `pnpm build`       | Host (con deps instaladas)                                                                                                                               | Build de producción de Next    |
-| `pnpm lint`        | Host (con deps instaladas)                                                                                                                               | ESLint                         |
+| `pnpm lint`        | Host (con deps instaladas)                                                                                                                               | ESLint sobre todo el repo; falla solo por errores nuevos (ver "Lint y baseline") |
+| `pnpm lint:prune`  | Host (con deps instaladas)                                                                                                                               | Saca de la baseline los errores que ya se arreglaron |
 | `pnpm format`      | Host (con deps instaladas)                                                                                                                               | Prettier sobre todo el repo    |
 | `pnpm type-check`  | Host (con deps instaladas)                                                                                                                               | `tsc --noEmit`                 |
 | `pnpm spell-check` | Host (con deps instaladas)                                                                                                                               | cspell manual (no corre en CI) |
+
+### Lint y baseline
+
+`pnpm lint` corre `eslint .` (no `next lint`, que solo mira `app/`, `components/` y `lib/`) con
+`eslint.config.mjs`. Los errores que ya existían cuando se activó lint en CI están en
+`eslint-suppressions.json` (baseline nativa de ESLint, por archivo y regla). Así:
+
+- un error nuevo falla, también en un archivo que ya está en la baseline (la cuenta no puede crecer).
+  En ese caso ESLint muestra todos los errores de esa regla en ese archivo, no solo el nuevo;
+- arreglar un error de la baseline no hace fallar lint (`--pass-on-unpruned-suppressions`), pero
+  deja margen: antes de cada PR, correr `pnpm lint:prune` y commitear el `eslint-suppressions.json`
+  que cambie.
+
+No agregar errores a la baseline a mano ni con `--suppress-all`: se corrigen o, si la regla no
+aplica, se desactiva con motivo en `eslint.config.mjs`. `next build` no lintea
+(`eslint.ignoreDuringBuilds` en `next.config.mjs`): lint es un paso propio de `pr-check.yml`.
 
 ## Tests
 
@@ -45,6 +62,7 @@ No tocan la DB — alcanza con tener `node_modules` en algún lado (host si corr
 | ----------------------- | ----------------------------------------------- | ------------------------------------------------------------------------- |
 | `pnpm test`             | Host (con deps instaladas)                      | Tests unitarios (`node --test` vía `tsx`), no tocan la DB                 |
 | `pnpm test:integration` | `docker compose exec app pnpm test:integration` | Toca Postgres real — necesita el `DATABASE_URL` del contenedor (motivo 2) |
+| `pnpm test:components`  | Host (con deps instaladas)                      | Componentes React (`*.component.test.tsx`, Vitest + happy-dom), sin DB    |
 | `pnpm audit:coverage`   | Host (con deps instaladas)                      | Cobertura de AuditLog por módulo (`--by-phase`, `--markdown`), sin DB     |
 
 ### Regresiones de la auditoría
@@ -73,7 +91,7 @@ docker stop siam-audit-pg   # --rm: se borra junto con todas sus bases
 ```
 
 `remaining-corroboration` (`SIAM_AUDIT_REMAINING=1`) solo corre con `--with-remaining` o
-nombrándola. Las suites crean usuarios, activos y jobs de prueba; `security-policy`,
+nombrándola; en CI va en un paso aparte del mismo job. Las suites crean usuarios, activos y jobs de prueba; `security-policy`,
 `audit-fixes` y `remaining-corroboration` también arrancan otro proceso de Payload.
 
 El lockfile aplica `patches/@payloadcms__drizzle@3.86.0.patch` y `patches/payload@3.86.0.patch`

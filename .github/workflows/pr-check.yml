@@ -28,9 +28,14 @@ jobs:
           cache: 'pnpm'
           cache-dependency-path: pnpm-lock.yaml
 
-      - run: pnpm install
+      - run: pnpm install --frozen-lockfile
+      # Todo el repo. Los errores previos están en eslint-suppressions.json: solo falla por
+      # errores nuevos (los arreglados sin podar no fallan; se podan con pnpm lint:prune).
+      - run: pnpm run lint
       - run: pnpm run type-check
       - run: pnpm run test
+      # Componentes React (Vitest + happy-dom, *.component.test.tsx). Sin base de datos.
+      - run: pnpm run test:components
       - run: pnpm run build
         env:
           # payload.config.ts exige un origen HTTPS canónico en producción (lib/platform-origin.ts).
@@ -117,7 +122,11 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
-      # remaining-corroboration queda afuera por ahora (se corre con --with-remaining).
       - run: pnpm run test:audit:integration:all
+        env:
+          PAYLOAD_SECRET: ci-only-not-a-secret
+      # Paso aparte para ver su tiempo y sus fallos por separado: corre la seed sobre una base
+      # vacía y tiene pruebas de concurrencia. Si resulta inestable en Actions, se saca de acá.
+      - run: pnpm run test:audit:integration:all remaining-corroboration
         env:
           PAYLOAD_SECRET: ci-only-not-a-secret
