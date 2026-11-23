@@ -66,6 +66,7 @@ aplica, se desactiva con motivo en `eslint.config.mjs`. `next build` no lintea
 | `pnpm test:integration:files <archivos>` | `docker compose exec app pnpm test:integration:files <archivos>` | Solo esos `*.integration.test.ts`, con la misma configuración que `test:integration` |
 | `pnpm test:components`  | Host (con deps instaladas)                      | Componentes React (`*.component.test.tsx`, Vitest + happy-dom), sin DB    |
 | `pnpm audit:coverage`   | Host (con deps instaladas)                      | Cobertura de AuditLog por módulo (`--by-phase`, `--markdown`), sin DB     |
+| `pnpm audit:verify [--chain <id>]...` | `docker compose exec app pnpm audit:verify` | Verifica las cadenas del AuditLog (solo lectura). Exit 0 OK, 1 errores o anomalías, 2 uso incorrecto |
 
 `pnpm test` y `pnpm test:integration` muestran la salida en formato spec y terminan con una línea
 `completitud: OK, N archivos, M tests` (en stderr). Si dice `completitud: FALLA`, los resultados
@@ -97,6 +98,22 @@ y los datos del AuditLog usan organizaciones con el prefijo de prueba; los dos s
 empezar y al terminar cada archivo (`testing/audit-test-data.ts`, `onIntegrationTeardown` en
 `testing/integration-teardown.ts`). Ojo: los tests de integración anteriores al AuditLog siembran
 organizaciones, personas y activos y no los borran; contra la base de desarrollo, se acumulan.
+
+### Verificación del AuditLog (`pnpm audit:verify`)
+
+Verificación local de solo lectura (`domain/audit/verify.ts`): por cada cadena, en orden de
+secuencia, revisa que no haya huecos, que cada evento enlace con el anterior y que el HMAC
+recalculado coincida, y descifra el contexto de red para compararlo con su digest. Informa el
+primer error de cada cadena (hueco, enlace roto, hash incorrecto, clave ausente, secuencia o sobre
+inválido) con el rango verificado, las anomalías del contexto de red (faltante antes de vencer,
+alterado) y los contextos sin evento. Lee por lotes en una transacción de solo lectura, sin
+sincronizar el schema, y nunca imprime payloads, IPs ni claves. Necesita las claves por el entorno,
+como la app (en Docker ya están).
+
+**Límite conocido:** no detecta que se borren los **últimos** eventos de una cadena (lo que queda
+sigue siendo válido), ni una reescritura completa hecha por alguien con acceso a la base y a la
+clave HMAC. Por eso imprime la **cabeza** de cada cadena (secuencia y `chain_hash`): guardarla
+fuera del sistema y compararla en la próxima verificación detecta un borrado de la cola.
 
 ### Claves del AuditLog en tests
 
