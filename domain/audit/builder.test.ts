@@ -8,7 +8,9 @@ import {
   addAuditEvent,
   buildPendingAuditEvent,
   discardAuditEvents,
-  pendingAuditTransactionCount,
+  bufferedAuditEvents,
+  openAuditTransaction,
+  openAuditTransactionCount,
   takeAuditEvents,
   type AuditEventInput,
   type PendingAuditEvent,
@@ -291,7 +293,7 @@ test('payload: JSON estricto y con tope de tamaño; los errores no muestran valo
   assert.ok(!issues.join('\n').includes('Usuario-Secreto'))
 })
 
-test('addAuditEvent: sin transacción activa no acumula', async () => {
+test('addAuditEvent: sin transacción activa, o no abierta por withTransaction, no acumula', async () => {
   const noTransaction = { payload: { db: { sessions: {} } } } as unknown as PayloadRequest
   await assert.rejects(addAuditEvent(noTransaction, input()), AuditBuilderError)
   const closed = {
@@ -299,32 +301,73 @@ test('addAuditEvent: sin transacción activa no acumula', async () => {
     payload: { db: { sessions: {} } },
   } as unknown as PayloadRequest
   await assert.rejects(addAuditEvent(closed, input()), AuditBuilderError)
+  // Sesión activa pero abierta por Payload (sin buffer): nadie escribiría el evento.
+  const payloadOwned = fakeReq()
+  await assert.rejects(addAuditEvent(payloadOwned, input()), (error: unknown) => {
+    assert.ok(error instanceof AuditBuilderError)
+    assert.match(error.issues[0]!, /no la abrió withTransaction/)
+    return true
+  })
 })
 
-test('buffer: acumula en orden por transacción; tomar o descartar lo vacía', async () => {
-  const baseline = pendingAuditTransactionCount()
+test('buffer: acumula en orden por transacción; tomar o descartar borra la entrada', async () => {
+  const baseline = openAuditTransactionCount()
   const txA = randomUUID()
+  openAuditTransaction(txA)
   const req = fakeReq(txA)
   // Un comando anidado con otro objeto req pero la misma transacción va al mismo buffer.
   const nested = fakeReq(txA)
   const rootId = await addAuditEvent(req, input())
   const childId = await addAuditEvent(nested, input({ parentEventId: rootId }))
-  const reqB = fakeReq()
-  await addAuditEvent(reqB, input())
-  assert.equal(pendingAuditTransactionCount(), baseline + 2)
+  const txB = randomUUID()
+  openAuditTransaction(txB)
+  await addAuditEvent(fakeReq(txB), input())
+  assert.equal(openAuditTransactionCount(), baseline + 2)
 
   const events = takeAuditEvents(txA)
   assert.deepEqual(
     events.map(event => event.draft.id),
     [rootId, childId]
   )
-  assert.deepEqual(takeAuditEvents(txA), [], 'tomar vacía el buffer')
-  discardAuditEvents(reqB.transactionID as string)
-  assert.deepEqual(takeAuditEvents(reqB.transactionID as string), [])
-  assert.equal(pendingAuditTransactionCount(), baseline)
+  assert.deepEqual(takeAuditEvents(txA), [], 'tomar borra la entrada')
+  await assert.rejects(addAuditEvent(req, input()), AuditBuilderError, 'cerrada, ya no acumula')
+  discardAuditEvents(txB)
+  assert.deepEqual(bufferedAuditEvents(txB), [])
+  assert.equal(openAuditTransactionCount(), baseline)
 
   // Un evento rechazado no queda a medias en el buffer.
-  const txC = fakeReq()
-  await assert.rejects(addAuditEvent(txC, input({ outcome: 'failed' })), AuditBuilderError)
-  assert.equal(pendingAuditTransactionCount(), baseline)
+  const txC = randomUUID()
+  openAuditTransaction(txC)
+  await assert.rejects(addAuditEvent(fakeReq(txC), input({ outcome: 'failed' })), AuditBuilderError)
+  assert.deepEqual(bufferedAuditEvents(txC), [])
+  discardAuditEvents(txC)
+  assert.equal(openAuditTransactionCount(), baseline)
+})
+
+test('un id de transacción ya abierto no se reabre: nunca hereda eventos', async () => {
+  const tx = randomUUID()
+  openAuditTransaction(tx)
+  await addAuditEvent(fakeReq(tx), input())
+  assert.throws(() => openAuditTransaction(tx), AuditBuilderError)
+  assert.equal(bufferedAuditEvents(tx).length, 1, 'el buffer existente no se pisa')
+  discardAuditEvents(tx)
+  // Una vez cerrado, el mismo id empieza vacío.
+  openAuditTransaction(tx)
+  assert.deepEqual(bufferedAuditEvents(tx), [])
+  discardAuditEvents(tx)
+})
+
+test('todas las copias del módulo comparten el mismo buffer (globalThis + Symbol.for)', async () => {
+  // Una segunda instancia del módulo, como la que puede cargar Next en otro bundle.
+  const copy = (await import(`./builder.ts?copia=${randomUUID()}`)) as typeof import('./builder')
+  assert.notEqual(copy.addAuditEvent, addAuditEvent, 'tiene que ser otra instancia del módulo')
+  const tx = randomUUID()
+  copy.openAuditTransaction(tx) // abre en una copia (como withTransaction)
+  const id = await addAuditEvent(fakeReq(tx), input()) // acumula en otra (como un hook)
+  assert.deepEqual(
+    copy.takeAuditEvents(tx).map(event => event.draft.id),
+    [id],
+    'el cierre lee lo que acumuló la otra copia'
+  )
+  assert.equal(openAuditTransactionCount(), copy.openAuditTransactionCount())
 })

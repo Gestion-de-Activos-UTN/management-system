@@ -39,10 +39,12 @@ import {
 //   error claro, nunca se trunca).
 // El payload se copia y se congela al acumularlo: lo que se firma es lo que había en ese momento.
 //
-// Buffer (03 §4): uno por intento de transacción, indexado por su id (UUID de Payload). Los comandos
-// anidados que heredan la transacción solo acumulan; el dueño lo toma al confirmar o lo descarta al
-// revertir, así un reintento empieza vacío. Mapa del módulo y no un campo del `req`: si otro `req`
-// usara la misma transacción, sus eventos irían al mismo buffer en vez de perderse.
+// Buffer (03 §4): uno por intento de transacción, indexado por su id. Payload genera cada id con
+// crypto.randomUUID (uuid 13 v4, en beginTransaction de @payloadcms/drizzle): único y aleatorio.
+// withTransaction abre el buffer al empezar una transacción propia y todo camino de cierre
+// (commit, rollback, excepción) borra la entrada, así un reintento empieza vacío. Los comandos
+// anidados que heredan la transacción solo acumulan. Mapa compartido y no un campo del `req`: si
+// otro `req` usara la misma transacción, sus eventos irían al mismo buffer en vez de perderse.
 
 export const AUDIT_PAYLOAD_MAX_BYTES = 256 * 1024
 
@@ -120,38 +122,68 @@ const ACTOR_COLLECTION = {
 } as const
 const REQUEST_ORIGINS = new Set<AuditOrigin>(['interactive', 'agent'])
 
-type TransactionId = string | number
-const buffers = new Map<TransactionId, PendingAuditEvent[]>()
+export type AuditTransactionId = string | number
+
+// Un solo mapa por proceso, en globalThis con una clave Symbol.for (como Payload con su instancia):
+// Next puede cargar este módulo más de una vez (una copia por bundle) y cada copia tendría su
+// propio mapa; si un hook acumulara en una y el cierre leyera de otra, el evento se perdería en
+// silencio (Tani, 23/11). Symbol.for devuelve el mismo símbolo en todas las copias.
+const BUFFERS_KEY = Symbol.for('siam.audit.transaction-buffers')
+type Buffers = Map<AuditTransactionId, PendingAuditEvent[]>
+const registry = globalThis as typeof globalThis & { [BUFFERS_KEY]?: Buffers }
+const buffers: Buffers = (registry[BUFFERS_KEY] ??= new Map())
+
+/**
+ * Para withTransaction, al abrir una transacción propia: registra su buffer vacío. Solo se
+ * acumula en transacciones registradas así, porque solo ellas pasan por el cierre con auditoría:
+ * en una transacción que Payload abre y confirma por su cuenta, el evento se perdería. Un id ya
+ * registrado es un error: una transacción nueva nunca hereda eventos de otra.
+ */
+export function openAuditTransaction(transactionId: AuditTransactionId): void {
+  if (buffers.has(transactionId))
+    throw new AuditBuilderError(['transacción: el id ya tiene un buffer abierto.'])
+  buffers.set(transactionId, [])
+}
 
 /**
  * Valida el evento y lo acumula en el buffer de la transacción de `req`. Devuelve su id (para
- * usarlo como parent_event_id de los hijos). Lanza AuditBuilderError si no cumple; sin
- * transacción activa no hay dónde acumular, así que también lanza.
+ * usarlo como parent_event_id de los hijos). Lanza AuditBuilderError si no cumple, y también si
+ * no hay una transacción abierta por withTransaction: no habría quién lo escriba.
  */
 export async function addAuditEvent(req: PayloadRequest, input: AuditEventInput): Promise<string> {
   const transactionId = await activeTransactionId(req)
-  const buffer = buffers.get(transactionId) ?? []
+  const buffer = buffers.get(transactionId)
+  if (!buffer)
+    throw new AuditBuilderError([
+      'transacción: no la abrió withTransaction, así que nadie escribiría el evento al cerrar.',
+    ])
   const event = buildPendingAuditEvent(input, buffer)
   buffer.push(event)
-  buffers.set(transactionId, buffer)
   return event.draft.id
 }
 
-/** Para el dueño de la transacción al confirmar: entrega los eventos en orden y vacía el buffer. */
-export function takeAuditEvents(transactionId: TransactionId): readonly PendingAuditEvent[] {
+/** Para el dueño de la transacción al confirmar: entrega los eventos en orden y borra la entrada. */
+export function takeAuditEvents(transactionId: AuditTransactionId): readonly PendingAuditEvent[] {
   const events = buffers.get(transactionId) ?? []
   buffers.delete(transactionId)
   return events
 }
 
-/** Para el dueño de la transacción al revertir: los eventos se descartan con el resto. */
-export function discardAuditEvents(transactionId: TransactionId): void {
+/** Para el dueño de la transacción al revertir o ante una excepción: borra la entrada. */
+export function discardAuditEvents(transactionId: AuditTransactionId): void {
   buffers.delete(transactionId)
 }
 
-/** Solo para tests: transacciones con eventos sin tomar ni descartar. */
-export function pendingAuditTransactionCount(): number {
+/** Solo para tests: transacciones con buffer abierto (sin tomar ni descartar). */
+export function openAuditTransactionCount(): number {
   return buffers.size
+}
+
+/** Solo para tests: copia de los eventos acumulados en una transacción. */
+export function bufferedAuditEvents(
+  transactionId: AuditTransactionId
+): readonly PendingAuditEvent[] {
+  return [...(buffers.get(transactionId) ?? [])]
 }
 
 /**
@@ -289,7 +321,7 @@ export function buildPendingAuditEvent(
   return { draft: deepFreeze(draft), network: network ? Object.freeze({ ...network }) : null }
 }
 
-async function activeTransactionId(req: PayloadRequest): Promise<TransactionId> {
+async function activeTransactionId(req: PayloadRequest): Promise<AuditTransactionId> {
   const id = await req.transactionID
   if (id === undefined || id === null || id === '' || !req.payload?.db?.sessions?.[id])
     throw new AuditBuilderError([
