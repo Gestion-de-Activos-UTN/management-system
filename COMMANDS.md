@@ -39,7 +39,7 @@ No tocan la DB — alcanza con tener `node_modules` en algún lado (host si corr
 | `pnpm format`      | Host (con deps instaladas)                                                                                                                               | Prettier sobre todo el repo    |
 | `pnpm type-check`  | Host (con deps instaladas)                                                                                                                               | `tsc --noEmit`                 |
 | `pnpm spell-check` | Host (con deps instaladas)                                                                                                                               | cspell manual (no corre en CI) |
-| `pnpm audit:keys:init` | Host (con deps instaladas)                                                                                                                               | Genera los llaveros de desarrollo del AuditLog en `.env.local` (permisos 600) si faltan; nunca pisa ni imprime claves. `--file <ruta>` para otro archivo |
+| `pnpm audit:keys:init` | Host (con deps instaladas)                                                                                                                               | Genera los llaveros de desarrollo del AuditLog en `.env.local` (permisos 600) si faltan; nunca pisa ni imprime claves. `--file <ruta>` para otro archivo. **Obligatorio** antes del primer `docker compose up` (sin claves Payload no inicia); después, `docker compose up -d` para recrear el contenedor |
 
 ### Lint y baseline
 
@@ -72,6 +72,43 @@ de algún archivo llegaron incompletos y el comando sale con 1 aunque todos los 
 la corrida no vale. Un `*.test.ts` sin tests también la hace fallar. No usar `--test-force-exit`
 (ver `SYSTEM_PROMPT.md` §8).
 
+### Claves del AuditLog en tests
+
+Payload no termina de iniciar sin los llaveros `AUDIT_HMAC_*` y `AUDIT_NETWORK_*`
+(`domain/audit/runtime-keys.ts`): todo lo que lo inicia (integración, suites
+`*.audit.integration.test.ts`, la app) los necesita. `pnpm test`, `test:components` y `build` no.
+
+Los tests corren con `NODE_ENV=test`, y con ese valor **no se lee `.env.local`**: las claves
+llegan siempre por el entorno.
+
+- Con `docker compose exec app …` ya están: Compose las carga del `env_file` al crear el
+  contenedor (después de `pnpm audit:keys:init`, `docker compose up -d`).
+- En CI, `scripts/ci-audit-keys.sh` genera claves nuevas en cada corrida.
+- En el host, exportar solo las cuatro variables de `.env.local`, sin imprimirlas, en un
+  subshell para que no queden en la terminal:
+
+```bash
+( set -a; . <(grep -E '^AUDIT_(HMAC|NETWORK)_' .env.local); set +a; pnpm test:integration )
+```
+
+Si faltan, el arranque falla enseguida con un mensaje que nombra cada variable y dice qué hacer,
+sin abrir ninguna conexión a Postgres (la validación corre antes de crear el adaptador de base).
+
+### Claves del AuditLog en el CLI de Payload
+
+Los comandos de `pnpm exec payload …` que inician Payload también pasan por esa validación:
+`migrate*`, `jobs:run`, `jobs:handle-schedules` y `generate:db-schema` (este último aunque no se
+conecte a la base). `payload run <script>` depende de si el script inicia Payload.
+`generate:types` y `generate:importmap` solo leen la config: no necesitan claves.
+
+- Con `docker compose exec app pnpm exec payload …` ya las tienen (vienen del `env_file`).
+- En el host, el CLI carga `.env.local` por su cuenta (`loadEnv` de Payload, con `@next/env`),
+  salvo con `NODE_ENV=test`. En ese caso, o para usar otras claves, pasarlas como en los tests:
+
+```bash
+( set -a; . <(grep -E '^AUDIT_(HMAC|NETWORK)_' .env.local); set +a; NODE_ENV=test pnpm exec payload jobs:run )
+```
+
 ### Regresiones de la auditoría
 
 `pnpm test:audit` ejecuta las pruebas unitarias nuevas con Vitest, sin base de datos.
@@ -92,8 +129,11 @@ modo `trust` (las URLs de los guards no llevan contraseña):
 ```bash
 docker run --rm -d --name siam-audit-pg -e POSTGRES_HOST_AUTH_METHOD=trust \
   -p 127.0.0.1:55443:5432 -p 127.0.0.1:55447:5432 -p 127.0.0.1:55448:5432 postgres:17-alpine
-PAYLOAD_SECRET=local-not-a-secret pnpm test:audit:integration:all   # ~7 min; requiere psql en el host
-PAYLOAD_SECRET=local-not-a-secret pnpm test:audit:integration:all bulk-scope   # una sola suite
+# Las claves del AuditLog, desde .env.local (ver "Claves del AuditLog en tests").
+( set -a; . <(grep -E '^AUDIT_(HMAC|NETWORK)_' .env.local); set +a
+  PAYLOAD_SECRET=local-not-a-secret pnpm test:audit:integration:all )   # ~7 min; requiere psql en el host
+( set -a; . <(grep -E '^AUDIT_(HMAC|NETWORK)_' .env.local); set +a
+  PAYLOAD_SECRET=local-not-a-secret pnpm test:audit:integration:all bulk-scope )   # una sola suite
 docker stop siam-audit-pg   # --rm: se borra junto con todas sus bases
 ```
 

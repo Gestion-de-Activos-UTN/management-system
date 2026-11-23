@@ -2,6 +2,7 @@ import './lib/zod-config'
 import { InventoryIncidents } from './collections/InventoryIncidents'
 import { resolveInventoryIncidentEndpoint } from './endpoints/inventoryIncidents'
 import { recoverJobsOnStartup } from './domain/risk/recover-jobs'
+import { withAuditKeysCheck } from './domain/audit/runtime-keys'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { postgresAdapter } from '@payloadcms/db-postgres'
@@ -96,14 +97,18 @@ export default buildConfig({
   csrf: [platformOrigin()],
   cors: [platformOrigin()],
   secret: process.env.PAYLOAD_SECRET as string,
-  db: postgresAdapter({
-    // Applies to every collection without its own `id` field — Agents/ScanReports
-    // define a custom text id (agent_id/report_id) and are unaffected.
-    idType: 'uuid',
-    pool: {
-      connectionString: process.env.DATABASE_URL as string,
-    },
-  }),
+  // Sin llaveros del AuditLog válidos, Payload no inicia y no abre ninguna conexión: la
+  // validación corre antes de crear el adaptador (domain/audit/runtime-keys.ts, 03 §5, G3).
+  db: withAuditKeysCheck(
+    postgresAdapter({
+      // Applies to every collection without its own `id` field — Agents/ScanReports
+      // define a custom text id (agent_id/report_id) and are unaffected.
+      idType: 'uuid',
+      pool: {
+        connectionString: process.env.DATABASE_URL as string,
+      },
+    })
+  ),
   editor: lexicalEditor(),
   // El login prueba admins primero y users después (modules/auth/service.ts) — un login de
   // usuario normal SIEMPRE dispara un 401 de admins antes del intento real. Ese 401 ya se
