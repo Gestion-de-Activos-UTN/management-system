@@ -1,6 +1,12 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { AUDIT_ACTIONS, AUDIT_CATEGORIES } from './catalog'
+import {
+  AUDIT_ACTIONS,
+  AUDIT_CATEGORIES,
+  AUDIT_CATEGORY_SECTION,
+  AUDIT_OUTCOMES,
+  AUDIT_SECTIONS,
+} from './catalog'
 
 test('cada código de acción es único', () => {
   const codes = AUDIT_ACTIONS.map(action => action.code)
@@ -40,4 +46,36 @@ test('los códigos tienen la forma entidad.verbo en minúsculas', () => {
     malformed.map(action => action.code),
     []
   )
+})
+
+test('cada categoría tiene una sección existente, y solo las categorías tienen sección', () => {
+  assert.deepEqual(Object.keys(AUDIT_CATEGORY_SECTION).sort(), Object.keys(AUDIT_CATEGORIES).sort())
+  const unknown = Object.entries(AUDIT_CATEGORY_SECTION).filter(
+    ([, section]) => !(section in AUDIT_SECTIONS)
+  )
+  assert.deepEqual(unknown, [])
+})
+
+test('toda sección tiene al menos una categoría', () => {
+  const used = new Set<string>(Object.values(AUDIT_CATEGORY_SECTION))
+  assert.deepEqual(
+    Object.keys(AUDIT_SECTIONS).filter(section => !used.has(section)),
+    [],
+    'Una sección sin categorías no se borra (la usan eventos viejos): marcarla como retirada y ajustar este test.'
+  )
+})
+
+test('secciones y resultados: códigos en minúsculas y etiquetas no vacías', () => {
+  for (const list of [AUDIT_SECTIONS, AUDIT_OUTCOMES]) {
+    for (const [code, label] of Object.entries(list)) {
+      assert.match(code, /^[a-z][a-z0-9_]*$/)
+      assert.ok(label.trim(), `etiqueta vacía: ${code}`)
+    }
+  }
+})
+
+test('los resultados son exactamente success, failed y denied', () => {
+  // La lista solo crece (el sobre valida eventos viejos con ella): agregar un valor es una
+  // decisión que se registra; quitar uno, nunca.
+  assert.deepEqual(Object.keys(AUDIT_OUTCOMES), ['success', 'failed', 'denied'])
 })

@@ -1,6 +1,12 @@
 import { z } from 'zod'
 import { AuditCanonicalError, auditCanonicalJson } from './canonical'
-import { AUDIT_ACTIONS, AUDIT_CATEGORIES, AUDIT_ENTITY_TYPES } from './catalog'
+import {
+  AUDIT_ACTIONS,
+  AUDIT_CATEGORIES,
+  AUDIT_ENTITY_TYPES,
+  AUDIT_OUTCOMES,
+  AUDIT_SECTIONS,
+} from './catalog'
 import { AUDIT_KEY_ID_PATTERN } from './config'
 
 // Sobre v1 de un evento de AuditLog: todo lo que cubre el HMAC de la cadena, es decir, el
@@ -9,22 +15,21 @@ import { AUDIT_KEY_ID_PATTERN } from './config'
 // antes de firmar y el verificador después de leer: un sobre que no cumple no se firma ni se
 // da por bueno. Objeto estricto: un campo de más se rechaza, porque se firmaría sin guardarse.
 //
-// Pendiente para F1b: `section_code` y `outcome` validan solo el formato. Sus listas cerradas
-// (una sección por categoría en catalog.ts) se definen como primer paso de F1b; cerrarlas no
-// cambia los bytes que se firman. Las acciones retiradas se aceptan: el verificador tiene que
-// poder leer eventos viejos (el builder no debe crearlas: F1b).
+// Permisivo con el catálogo, porque el verificador tiene que poder leer eventos viejos: acepta
+// acciones retiradas, cualquier `entity_type` del catálogo y cualquier `section_code` u `outcome`
+// de sus listas (que solo crecen), sin exigir que la sección sea la actual de la categoría. Esas
+// reglas de eventos nuevos las aplica el builder (criterio sobre permisivo / builder estricto).
 
 export const AUDIT_ENVELOPE_VERSION = 1
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
 const HASH = /^[0-9a-f]{64}$/
-const CODE = /^[a-z][a-z0-9_]*$/
 /** ISO 8601 en UTC con milisegundos, como lo escribe Date#toISOString. */
 const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
 
 const uuid = z.string().regex(UUID, 'UUID en minúsculas.')
 const hash = z.string().regex(HASH, 'Hash hex de 64 caracteres en minúsculas.')
-const code = z.string().regex(CODE, 'Código en minúsculas, dígitos y "_".')
+const codeOf = (list: Record<string, string>) => z.enum(Object.keys(list) as [string, ...string[]])
 const reference = z.string().min(1).max(256)
 // Una sola comprobación: la forma exacta y que la fecha exista (2026-02-30 tiene la forma).
 const isInstant = (value: string) =>
@@ -51,9 +56,9 @@ export const AuditEnvelopeV1Schema = z
     sequence: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
     created_at: instant,
     occurred_at: instant.nullable(),
-    category_code: z.enum(Object.keys(AUDIT_CATEGORIES) as [string, ...string[]]),
+    category_code: codeOf(AUDIT_CATEGORIES),
     action_code: z.string().min(1),
-    section_code: code,
+    section_code: codeOf(AUDIT_SECTIONS),
     entity_type: z.enum(AUDIT_ENTITY_TYPES),
     entity_id: reference,
     actor_type: z.enum(['user', 'platform_admin', 'agent', 'system']),
@@ -66,7 +71,7 @@ export const AuditEnvelopeV1Schema = z
     parent_event_id: uuid.nullable(),
     visit_id: uuid.nullable(),
     origin: z.enum(['interactive', 'agent', 'job', 'demo', 'migration']),
-    outcome: code,
+    outcome: codeOf(AUDIT_OUTCOMES),
     payload: z.record(z.string(), z.unknown()),
     network_digest: hash.nullable(),
     network_expires_at: instant.nullable(),
