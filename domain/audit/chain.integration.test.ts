@@ -7,7 +7,7 @@ import { sql, type PostgresAdapter } from '@payloadcms/db-postgres'
 import config from '../../payload.config'
 import { withTransaction } from '../with-transaction'
 import { addAuditEvent, type AuditEventInput } from './builder'
-import { auditOrganizationLockKey } from './chain'
+import { auditOrganizationLockKey, configureAuditHeadPool } from './chain'
 import { parseAuditEnvelope } from './envelope'
 import { computeChainHash, computeNetworkDigest } from './hmac'
 import { decryptNetworkContext } from './network-crypto'
@@ -214,7 +214,7 @@ test('REPEATABLE READ con lock al inicio: escritores concurrentes esperan, sin r
   assert.equal(rows[0]!.actor_type, 'user')
 })
 
-test('REPEATABLE READ sin lock al inicio: cabeza vieja → 23505 → reintento completo', async () => {
+test('REPEATABLE READ sin lock al inicio: la cabeza se lee fuera de su foto, sin reintento', async () => {
   const org = newOrg()
   const payload = await payloadFor()
   const snapshotTaken = deferred()
@@ -238,12 +238,84 @@ test('REPEATABLE READ sin lock al inicio: cabeza vieja → 23505 → reintento c
   await withTransaction(payload, undefined, req => addAuditEvent(req, event(org)))
   otherCommitted.resolve()
   await stale
-  assert.equal(
-    attempts,
-    2,
-    'la unicidad (chain_id, sequence) convirtió la cabeza vieja en reintento'
-  )
+  // Su foto no ve el evento confirmado después, pero el cierre lee la cabeza aparte (03 §4.4,
+  // cambio del 23/11): no hay cabeza vieja ni 23505.
+  assert.equal(attempts, 1, 'confirmó al primer intento')
   await assertValidChain(org, 2)
+})
+
+test('cierres REPEATABLE READ simultáneos con el pool de lectura al mínimo (1 conexión)', async () => {
+  const [orgA, orgB] = [newOrg(), newOrg()]
+  const payload = await payloadFor()
+  configureAuditHeadPool(payload, { max: 1 })
+  try {
+    let attempts = 0
+    await Promise.all(
+      Array.from({ length: 8 }, (_, index) =>
+        withTransaction(
+          payload,
+          undefined,
+          async req => {
+            attempts += 1
+            await addAuditEvent(req, event(index % 2 === 0 ? orgA : orgB))
+            await addAuditEvent(req, event(index % 2 === 0 ? orgB : orgA))
+          },
+          { isolationLevel: 'repeatable read' }
+        )
+      )
+    )
+    assert.equal(attempts, 8, 'ninguno se reintentó')
+    await assertValidChain(orgA, 8)
+    await assertValidChain(orgB, 8)
+  } finally {
+    configureAuditHeadPool(payload)
+  }
+})
+
+test('pool de lectura agotado: error claro después del tiempo máximo, sin cambio de negocio', async () => {
+  const org = newOrg()
+  const payload = await payloadFor()
+  const pool = configureAuditHeadPool(payload, { max: 1, timeoutMs: 300 })
+  const busy = await pool.connect() // la única conexión, ocupada
+  try {
+    const started = Date.now()
+    await assert.rejects(
+      withTransaction(
+        payload,
+        undefined,
+        async req => {
+          await (await sessionDb(req)).execute(sql`INSERT INTO ${PROBE} VALUES ('p', 1)`)
+          await addAuditEvent(req, event(org))
+        },
+        { isolationLevel: 'repeatable read' }
+      ),
+      /no hubo una conexión libre para leer la cabeza de la cadena a tiempo/
+    )
+    const elapsed = Date.now() - started
+    assert.ok(elapsed >= 300 && elapsed < 5000, `esperó ${elapsed} ms`)
+  } finally {
+    busy.release()
+    configureAuditHeadPool(payload)
+  }
+  assert.equal((await chainRows(org)).length, 0)
+  const probe = await drizzle(payload).execute(
+    sql`SELECT count(*)::int AS n FROM ${PROBE} WHERE id = 'p'`
+  )
+  assert.equal((probe.rows[0] as { n: number }).n, 0, 'sin auditoría no hay cambio')
+})
+
+test('READ COMMITTED no usa el pool de lectura aparte', async () => {
+  const org = newOrg()
+  const payload = await payloadFor()
+  const pool = configureAuditHeadPool(payload, { max: 1, timeoutMs: 300 })
+  const busy = await pool.connect() // si el cierre READ COMMITTED lo usara, fallaría por tiempo
+  try {
+    await withTransaction(payload, undefined, req => addAuditEvent(req, event(org)))
+  } finally {
+    busy.release()
+    configureAuditHeadPool(payload)
+  }
+  await assertValidChain(org, 1)
 })
 
 test('deadlock entre fila de negocio y lock de la cadena: se detecta y se reintenta', async () => {

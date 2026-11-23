@@ -14,16 +14,20 @@ import { reportsEndpoint } from '../endpoints/reports'
 // DESCARTABLE con la demo sembrada (seed:navigation + seed:demo). Escribe eventos en la cadena de la
 // organización demo de esa base.
 //
-// Sintético porque en F1b ningún escaneo toma audit:<org> (eso llega en F8): una transacción
-// REPEATABLE READ toma `auditOrganizationLockKey(org)` al inicio con lockKeys, lo retiene lo que
-// tarda de verdad procesar el reporte más grande de la demo (medido antes por POST /v1/reports),
-// actualiza filas que también editan los escritores (el cruce de locks de 03 §4.5) y escribe su
+// Sintético porque en F1b ningún escaneo escribe eventos (eso llega en F8): una transacción
+// REPEATABLE READ dura lo que tarda de verdad procesar el reporte más grande de la demo (medido
+// antes por POST /v1/reports), actualiza filas que también editan los escritores y escribe su
 // evento. Los escritores son comandos READ COMMITTED que editan una fila y escriben un evento al
 // cerrar. Los jobs risk (cada 15 s) y maintenance (cada minuto) corren en este proceso, con
 // recálculos de riesgo encolados en las fases con escaneo. La medición real se repite en F8.
 //
-// Variante (SIAM_AUDIT_PROBE_SCAN_LOCK=none): el escaneo no toma el lock al inicio; solo lo toma al
-// cerrar, y una cabeza vieja termina en 23505 y reintento (03 §4.4, sin el lock adelantado).
+// Variantes (SIAM_AUDIT_PROBE_VARIANT):
+// - close (por defecto): el mecanismo vigente desde el 23/11; el escaneo toma audit:<org> al cerrar,
+//   como todos, y lee la cabeza fuera de su foto.
+// - start: el mecanismo anterior de 03 §4.4; el escaneo toma audit:<org> al inicio (lockKeys) y lo
+//   retiene mientras procesa (cruce de locks de 03 §4.5).
+// - off: referencia sin AuditLog; mismas transacciones y filas, sin eventos. Muestra los
+//   conflictos (40001, 40P01) que ya había antes de la auditoría.
 //
 // Uso: SIAM_AUDIT_PROBE=1 DATABASE_URL=postgresql://…@127.0.0.1:…/<base descartable> \
 //      PAYLOAD_SECRET=… AUDIT_*=… NODE_ENV=test pnpm audit:contention-probe
@@ -47,7 +51,14 @@ const PHASES = [
     pause: [1000, 3000],
   },
 ] as const
-const SCAN_LOCK = process.env.SIAM_AUDIT_PROBE_SCAN_LOCK === 'none' ? 'none' : 'start'
+function parseVariant(): 'close' | 'start' | 'off' {
+  const value = process.env.SIAM_AUDIT_PROBE_VARIANT ?? 'close'
+  if (value === 'close' || value === 'start' || value === 'off') return value
+  console.error('SIAM_AUDIT_PROBE_VARIANT tiene que ser close, start u off.')
+  process.exit(2)
+}
+const VARIANT = parseVariant()
+const AUDITED = VARIANT !== 'off'
 const SCHEMA = 'siam_test_contention'
 const ROWS = 20
 
@@ -194,9 +205,12 @@ async function main() {
     `Reporte de la demo: ${scan.assets} activos, procesamiento real p50 ${scan.ms} ms (3 corridas).`
   )
   console.log(
-    SCAN_LOCK === 'start'
-      ? 'El escaneo sintético toma audit:<org> al inicio y lo retiene ese tiempo en cada corrida.\n'
-      : 'Variante: el escaneo sintético dura ese tiempo sin el lock y solo toma audit:<org> al cerrar.\n'
+    {
+      close:
+        'Variante close: el escaneo dura ese tiempo y toma audit:<org> al cerrar (cabeza aparte).\n',
+      start: 'Variante start: el escaneo toma audit:<org> al inicio y lo retiene ese tiempo.\n',
+      off: 'Variante off: referencia sin AuditLog (mismas transacciones, sin eventos).\n',
+    }[VARIANT]
   )
 
   let index = 0
@@ -216,7 +230,7 @@ async function main() {
               await (
                 await sessionDb(req)
               ).execute(sql`UPDATE ${probeTable} SET n = n + 1 WHERE id = ${1 + pick(ROWS)}`)
-              await addAuditEvent(req, renameEvent(org, (index += 1)))
+              if (AUDITED) await addAuditEvent(req, renameEvent(org, (index += 1)))
             })
           )
         )
@@ -233,25 +247,28 @@ async function main() {
               undefined,
               async req => {
                 count()
-                await sleep(scan.ms) // lo que tarda procesar el reporte, con el lock tomado
+                // Como processScanReport, lee apenas empieza: en REPEATABLE READ eso fija su foto.
+                await (await sessionDb(req)).execute(sql`SELECT count(*) FROM ${probeTable}`)
+                await sleep(scan.ms) // lo que tarda procesar el reporte
                 const tx = await sessionDb(req)
                 for (let row = 0; row < 5; row++)
                   await tx.execute(
                     sql`UPDATE ${probeTable} SET n = n + 1 WHERE id = ${1 + pick(ROWS)}`
                   )
-                await addAuditEvent(req, {
-                  action: 'scan.process',
-                  scope: { kind: 'organization', organizationId: org },
-                  entity: { type: 'scan_report', id: `probe-scan-${(index += 1)}` },
-                  actor: { type: 'agent', id: 'probe-agent' },
-                  origin: 'agent',
-                  payload: { probe: true },
-                  network: unknownNetwork(),
-                })
+                if (AUDITED)
+                  await addAuditEvent(req, {
+                    action: 'scan.process',
+                    scope: { kind: 'organization', organizationId: org },
+                    entity: { type: 'scan_report', id: `probe-scan-${(index += 1)}` },
+                    actor: { type: 'agent', id: 'probe-agent' },
+                    origin: 'agent',
+                    payload: { probe: true },
+                    network: unknownNetwork(),
+                  })
               },
               {
                 isolationLevel: 'repeatable read',
-                lockKeys: SCAN_LOCK === 'start' ? [auditOrganizationLockKey(org)] : [],
+                lockKeys: VARIANT === 'start' ? [auditOrganizationLockKey(org)] : [],
               }
             )
           )

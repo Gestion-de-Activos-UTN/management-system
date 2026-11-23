@@ -1,5 +1,5 @@
 import { sql } from '@payloadcms/db-postgres'
-import type { PayloadRequest } from 'payload'
+import type { Payload, PayloadRequest } from 'payload'
 import { transactionDb, transactionLock } from '../transaction-locks'
 import type { PendingAuditEvent } from './builder'
 import type { AuditKeys } from './config'
@@ -19,9 +19,18 @@ import { getAuditKeys } from './runtime-keys'
 // 3. Por evento: fija sequence y created_at antes de firmar, cifra el contexto de red y calcula su
 //    digest, valida el sobre completo, calcula chain_hash e inserta el evento y su contexto.
 // Todas las consultas van de a una, con await, dentro de la transacción: nunca en paralelo sobre
-// el mismo cliente (Tani, 23/11; pg@9 deja de admitirlo). La restricción única (chain_id,
-// sequence) es la última defensa: en REPEATABLE READ una cabeza vieja termina en 23505 y
-// withTransaction reintenta el comando entero.
+// el mismo cliente (Tani, 23/11; pg@9 deja de admitirlo).
+//
+// Transacciones REPEATABLE READ o SERIALIZABLE (cambio a 03 §4.4 decidido por Tani el 23/11, con
+// los números del prototipo de concurrencia): toman el lock al cerrar, como todas, y leen la cabeza
+// FUERA de su foto, con una consulta READ COMMITTED aparte, mientras retienen el lock: nadie más
+// puede agregar a la cadena, así que la cabeza leída es la última confirmada. Su foto se fijó al
+// empezar y no ve los eventos que otros confirmaron después; leer la cabeza ahí daría una cabeza
+// vieja (23505 y reintento del comando entero). La lectura aparte usa un pool propio y chico, no el
+// de Payload: tomar una segunda conexión del pool principal mientras la transacción retiene la
+// primera puede trabarlo cuando varios cierres coinciden con el pool lleno. Si en
+// AUDIT_HEAD_READ_TIMEOUT_MS no hay conexión libre, falla con un error claro (la transacción se
+// revierte). La restricción única (chain_id, sequence) sigue siendo la última defensa.
 
 export const AUDIT_NETWORK_RETENTION_DAYS = 365
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -62,6 +71,72 @@ interface ChainHead {
   chainHash: string
 }
 
+/** Tiempo máximo para conseguir una conexión del pool de lectura de cabezas. */
+export const AUDIT_HEAD_READ_TIMEOUT_MS = 5000
+const HEAD_POOL_MAX = 2
+
+// Tipos mínimos de pg-pool (el repo no tiene @types/pg como dependencia directa). El pool de
+// lectura se crea con el mismo constructor que el de Payload: no se importa pg.
+interface HeadClient {
+  query(text: string, values: unknown[]): Promise<{ rows: unknown[] }>
+  release(): void
+}
+interface HeadPool {
+  options: Record<string, unknown>
+  connect(): Promise<HeadClient>
+  end(): Promise<void>
+  on(event: 'error', listener: () => void): void
+}
+type HeadPoolConstructor = new (options: Record<string, unknown>) => HeadPool
+
+// Un pool de lectura por pool de Payload, compartido entre copias del módulo (como el buffer).
+const HEAD_POOLS_KEY = Symbol.for('siam.audit.head-pools')
+const registry = globalThis as typeof globalThis & { [HEAD_POOLS_KEY]?: WeakMap<object, HeadPool> }
+const headPools: WeakMap<object, HeadPool> = (registry[HEAD_POOLS_KEY] ??= new WeakMap())
+
+function mainPool(payload: Payload): HeadPool {
+  const pool = (payload.db as unknown as { pool?: HeadPool }).pool
+  if (!pool) throw new AuditChainError('el adaptador de base no expone su pool de conexiones.')
+  return pool
+}
+
+/**
+ * Crea (o recrea) el pool de lectura de cabezas: mismas credenciales que Payload, pocas conexiones,
+ * que se cierran solas al quedar libres y no impiden que el proceso termine. Los tests lo usan para
+ * achicarlo o acortar el tiempo de espera.
+ */
+export function configureAuditHeadPool(
+  payload: Payload,
+  options: { max?: number; timeoutMs?: number } = {}
+): HeadPool {
+  const main = mainPool(payload)
+  const previous = headPools.get(main)
+  if (previous) void previous.end().catch(() => {})
+  const Pool = main.constructor as HeadPoolConstructor
+  const pool = new Pool({
+    ...main.options,
+    max: options.max ?? HEAD_POOL_MAX,
+    min: 0,
+    idleTimeoutMillis: 1000,
+    connectionTimeoutMillis: options.timeoutMs ?? AUDIT_HEAD_READ_TIMEOUT_MS,
+    allowExitOnIdle: true,
+  })
+  pool.on('error', () => {}) // un cliente libre que se cae no tiene que tirar el proceso
+  headPools.set(main, pool)
+  return pool
+}
+
+function headPool(payload: Payload): HeadPool {
+  return headPools.get(mainPool(payload)) ?? configureAuditHeadPool(payload)
+}
+
+async function readsOutsideSnapshot(req: PayloadRequest): Promise<boolean> {
+  const result = await (
+    await transactionDb(req)
+  ).execute(sql`SELECT current_setting('transaction_isolation') AS isolation`)
+  return (result.rows[0] as { isolation?: unknown } | undefined)?.isolation !== 'read committed'
+}
+
 /** Escribe los eventos de una transacción en sus cadenas. Sin eventos, no hace nada. */
 export async function writeAuditEvents(
   req: PayloadRequest,
@@ -77,19 +152,50 @@ export async function writeAuditEvents(
     byChain.set(event.draft.chain_id, chain)
   }
 
+  const outsideSnapshot = await readsOutsideSnapshot(req)
   for (const chainId of [...byChain.keys()].sort()) {
     await transactionLock(req, auditChainLockKey(chainId))
-    let head = await readChainHead(req, chainId)
+    let head = outsideSnapshot
+      ? await readCommittedHead(req.payload, chainId)
+      : await readChainHead(req, chainId)
     for (const event of byChain.get(chainId)!) head = await appendEvent(req, event, head, keys)
   }
 }
 
+/** Cabeza dentro de la transacción (READ COMMITTED: cada consulta ve lo último confirmado). */
 async function readChainHead(req: PayloadRequest, chainId: string): Promise<ChainHead | null> {
   const db = await transactionDb(req)
   const result = await db.execute(
     sql`SELECT sequence, chain_hash FROM audit_logs WHERE chain_id = ${chainId} ORDER BY sequence DESC LIMIT 1`
   )
-  const row = result.rows[0] as { sequence?: unknown; chain_hash?: unknown } | undefined
+  return parseHead(result.rows[0])
+}
+
+/** Cabeza confirmada, leída fuera de la transacción (que retiene el lock de la cadena). */
+async function readCommittedHead(payload: Payload, chainId: string): Promise<ChainHead | null> {
+  let client: HeadClient
+  try {
+    client = await headPool(payload).connect()
+  } catch (error) {
+    if (error instanceof Error && /timeout/i.test(error.message))
+      throw new AuditChainError(
+        'no hubo una conexión libre para leer la cabeza de la cadena a tiempo (pool de lectura del AuditLog agotado).'
+      )
+    throw error
+  }
+  try {
+    const result = await client.query(
+      'SELECT sequence, chain_hash FROM audit_logs WHERE chain_id = $1 ORDER BY sequence DESC LIMIT 1',
+      [chainId]
+    )
+    return parseHead(result.rows[0])
+  } finally {
+    client.release()
+  }
+}
+
+function parseHead(value: unknown): ChainHead | null {
+  const row = value as { sequence?: unknown; chain_hash?: unknown } | undefined
   if (!row) return null
   if (typeof row.chain_hash !== 'string')
     throw new AuditChainError('la cabeza de la cadena no tiene chain_hash.')
