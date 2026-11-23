@@ -66,6 +66,12 @@ aplica, se desactiva con motivo en `eslint.config.mjs`. `next build` no lintea
 | `pnpm test:components`  | Host (con deps instaladas)                      | Componentes React (`*.component.test.tsx`, Vitest + happy-dom), sin DB    |
 | `pnpm audit:coverage`   | Host (con deps instaladas)                      | Cobertura de AuditLog por módulo (`--by-phase`, `--markdown`), sin DB     |
 
+`pnpm test` y `pnpm test:integration` muestran la salida en formato spec y terminan con una línea
+`completitud: OK, N archivos, M tests` (en stderr). Si dice `completitud: FALLA`, los resultados
+de algún archivo llegaron incompletos y el comando sale con 1 aunque todos los tests hayan pasado:
+la corrida no vale. Un `*.test.ts` sin tests también la hace fallar. No usar `--test-force-exit`
+(ver `SYSTEM_PROMPT.md` §8).
+
 ### Regresiones de la auditoría
 
 `pnpm test:audit` ejecuta las pruebas unitarias nuevas con Vitest, sin base de datos.
