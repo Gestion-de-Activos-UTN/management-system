@@ -15,8 +15,8 @@ import {
 // Buffer de auditoría y caminos de cierre de withTransaction contra PostgreSQL real (F1b, paso 4b,
 // pedido de Tani del 23/11): todo cierre (commit, rollback, excepción, reintento, lock ocupado,
 // rollback que falla) borra la entrada de su transacción, y una transacción nueva nunca ve
-// eventos de una anterior revertida. El commit con eventos todavía falla cerrado: la escritura en
-// la cadena llega en el commit siguiente del paso 4b.
+// eventos de una anterior revertida. Las filas de auditoría que se escriben se borran con SQL
+// directo al terminar cada test (no deben quedar en una base de desarrollo).
 
 const ORG = randomUUID()
 const PROBE = 'audit_f1b_buffer_probe'
@@ -58,6 +58,9 @@ before(async () => {
 // afterEach y no after: el after del preload de integración cierra Payload primero.
 afterEach(async () => {
   assert.equal(openAuditTransactionCount(), baseline, 'quedó una entrada del buffer abierta')
+  const db = drizzle(await payloadFor())
+  await db.execute(sql`DELETE FROM audit_network_contexts WHERE chain_id = ${`org:${ORG}`}`)
+  await db.execute(sql`DELETE FROM audit_logs WHERE chain_id = ${`org:${ORG}`}`)
   await drizzle(await payloadFor()).execute(sql`DROP TABLE IF EXISTS ${sql.identifier(PROBE)}`)
   await drizzle(await payloadFor()).execute(
     sql`CREATE TABLE IF NOT EXISTS ${sql.identifier(PROBE)} (id text PRIMARY KEY)`
@@ -118,23 +121,21 @@ test('reintento por conflicto (40001): el intento nuevo tiene otro id y empieza 
   assert.deepEqual(bufferedAuditEvents(ids[0]!), [])
 })
 
-test('commit con eventos: falla cerrado hasta tener la cadena, sin cambio de negocio', async () => {
+test('commit con eventos: escribe en la cadena y confirma junto con el cambio de negocio', async () => {
   const payload = await payloadFor()
-  await assert.rejects(
-    withTransaction(payload, undefined, async req => {
-      const id = (await req.transactionID) as string
-      await sessionDb(req, id).execute(sql`INSERT INTO ${sql.identifier(PROBE)} VALUES ('b')`)
-      await addAuditEvent(req, event())
-    }),
-    /todavía no está implementada/
-  )
-  assert.equal(await probeCount(), 0, 'sin auditoría no hay cambio')
-  // Sin eventos, la transacción confirma normal.
+  let eventId = ''
   await withTransaction(payload, undefined, async req => {
     const id = (await req.transactionID) as string
-    await sessionDb(req, id).execute(sql`INSERT INTO ${sql.identifier(PROBE)} VALUES ('c')`)
+    await sessionDb(req, id).execute(sql`INSERT INTO ${sql.identifier(PROBE)} VALUES ('b')`)
+    eventId = await addAuditEvent(req, event())
   })
   assert.equal(await probeCount(), 1)
+  const written = await payload.findByID({
+    collection: 'audit-logs',
+    id: eventId,
+    overrideAccess: true,
+  })
+  assert.equal(written.chain_id, `org:${ORG}`)
 })
 
 test('una transacción heredada solo acumula; la cierra su dueño', async () => {
