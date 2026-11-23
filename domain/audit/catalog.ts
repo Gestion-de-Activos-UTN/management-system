@@ -143,6 +143,8 @@ export interface AuditActionSpec {
   entity: AuditEntityType
   orgLevelVisibleToOfficeRoles?: true
   retired?: true
+  /** Resultados que el builder admite para la acción; sin este campo, solo `success`. */
+  outcomes?: readonly AuditOutcomeCode[]
 }
 
 // `const C` conserva el literal del código para derivar el tipo AuditActionCode.
@@ -151,7 +153,11 @@ function action<const C extends string>(
   category: AuditCategoryCode,
   label: string,
   entity: AuditEntityType,
-  options: { orgLevelVisibleToOfficeRoles?: true; retired?: true } = {}
+  options: {
+    orgLevelVisibleToOfficeRoles?: true
+    retired?: true
+    outcomes?: readonly AuditOutcomeCode[]
+  } = {}
 ) {
   return { code, category, label, entity, ...options }
 }
