@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
-    "test": "cross-env NODE_ENV=test PAYLOAD_DISABLE_JOBS=1 node --import tsx --test $(find . -name \"*.test.ts\" -not -name \"*.integration.test.ts\" -not -name \"*.audit.test.ts\" -not -name \"*.audit.integration.test.ts\" -not -path \"./node_modules/*\" -not -path \"./.next/*\")",
-    "test:integration": "cross-env NODE_ENV=test PAYLOAD_DISABLE_JOBS=1 node --import tsx --test --test-concurrency=1 --test-force-exit $(find . -name \"*.integration.test.ts\" -not -name \"*.audit.integration.test.ts\" -not -path \"./node_modules/*\" -not -path \"./.next/*\")",
+    "test": "cross-env NODE_ENV=test PAYLOAD_DISABLE_JOBS=1 node --import tsx --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./scripts/test-completeness-reporter.ts --test-reporter-destination=stderr $(find . -name \"*.test.ts\" -not -name \"*.integration.test.ts\" -not -name \"*.audit.test.ts\" -not -name \"*.audit.integration.test.ts\" -not -path \"./node_modules/*\" -not -path \"./.next/*\")",
+    "test:integration": "cross-env NODE_ENV=test PAYLOAD_DISABLE_JOBS=1 node --import tsx --test --test-concurrency=1 --test-force-exit --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./scripts/test-completeness-reporter.ts --test-reporter-destination=stderr $(find . -name \"*.integration.test.ts\" -not -name \"*.audit.integration.test.ts\" -not -path \"./node_modules/*\" -not -path \"./.next/*\")",
     "type-check": "tsc --noEmit",
     "lint": "eslint . --pass-on-unpruned-suppressions",
     "lint:prune": "eslint . --prune-suppressions",
