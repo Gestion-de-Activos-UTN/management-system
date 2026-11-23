@@ -39,7 +39,7 @@ No tocan la DB — alcanza con tener `node_modules` en algún lado (host si corr
 | `pnpm format`      | Host (con deps instaladas)                                                                                                                               | Prettier sobre todo el repo    |
 | `pnpm type-check`  | Host (con deps instaladas)                                                                                                                               | `tsc --noEmit`                 |
 | `pnpm spell-check` | Host (con deps instaladas)                                                                                                                               | cspell manual (no corre en CI) |
-| `pnpm audit:keys:init` | Host (con deps instaladas)                                                                                                                               | Genera los llaveros de desarrollo del AuditLog en `.env.local` (permisos 600) si faltan; nunca pisa ni imprime claves. `--file <ruta>` para otro archivo |
+| `pnpm audit:keys:init` | Host (con deps instaladas)                                                                                                                               | Genera los llaveros de desarrollo del AuditLog en `.env.local` (permisos 600) si faltan; nunca pisa ni imprime claves. `--file <ruta>` para otro archivo. **Obligatorio** antes del primer `docker compose up` (sin claves Payload no inicia); después, `docker compose up -d` para recrear el contenedor |
 
 ### Lint y baseline
 
@@ -63,14 +63,99 @@ aplica, se desactiva con motivo en `eslint.config.mjs`. `next build` no lintea
 | ----------------------- | ----------------------------------------------- | ------------------------------------------------------------------------- |
 | `pnpm test`             | Host (con deps instaladas)                      | Tests unitarios (`node --test` vía `tsx`), no tocan la DB                 |
 | `pnpm test:integration` | `docker compose exec app pnpm test:integration` | Toca Postgres real — necesita el `DATABASE_URL` del contenedor (motivo 2) |
+| `pnpm test:integration:files <archivos>` | `docker compose exec app pnpm test:integration:files <archivos>` | Solo esos `*.integration.test.ts`, con la misma configuración que `test:integration` |
 | `pnpm test:components`  | Host (con deps instaladas)                      | Componentes React (`*.component.test.tsx`, Vitest + happy-dom), sin DB    |
 | `pnpm audit:coverage`   | Host (con deps instaladas)                      | Cobertura de AuditLog por módulo (`--by-phase`, `--markdown`), sin DB     |
+| `pnpm audit:verify [--chain <id>]...` | `docker compose exec app pnpm audit:verify` | Verifica las cadenas del AuditLog (solo lectura). Exit 0 OK, 1 errores o anomalías, 2 uso incorrecto |
 
 `pnpm test` y `pnpm test:integration` muestran la salida en formato spec y terminan con una línea
 `completitud: OK, N archivos, M tests` (en stderr). Si dice `completitud: FALLA`, los resultados
 de algún archivo llegaron incompletos y el comando sale con 1 aunque todos los tests hayan pasado:
 la corrida no vale. Un `*.test.ts` sin tests también la hace fallar. No usar `--test-force-exit`
 (ver `SYSTEM_PROMPT.md` §8).
+
+### Integración: archivos sueltos y corridas cortadas
+
+Para correr algunos archivos de integración, siempre `pnpm test:integration:files`, nunca
+`node --test …` armado a mano:
+
+```bash
+docker compose exec app pnpm test:integration:files \
+  domain/audit/chain.integration.test.ts domain/audit/transaction-buffer.integration.test.ts
+```
+
+Los dos scripts pasan por `scripts/test-integration-files.sh`, la única definición de la
+configuración: `NODE_ENV=test`, jobs de Payload apagados (`PAYLOAD_DISABLE_JOBS=1`; si no, los
+crons dejan vivo el proceso al final), un archivo por vez (`--test-concurrency=1`; dos a la vez
+sincronizan el schema al mismo tiempo y se traban), el preload que cierra Payload y el detector de
+completitud. Rechaza archivos que no sean `*.integration.test.ts` y las suites de seguridad.
+
+Cortar una corrida con Ctrl+C no deja nada que rompa la siguiente. Los tests no pueden crear
+tablas propias en `public`: Payload compara ese schema con el suyo al iniciar, y una tabla que no
+conoce con filas lo frena con "DATA LOSS WARNING" (sin terminal, sale enseguida y todos los tests
+fallan; también los seeds del contenedor). Las tablas auxiliares van en un schema `siam_test_*`,
+y los datos del AuditLog usan organizaciones con el prefijo de prueba; los dos se limpian al
+empezar y al terminar cada archivo (`testing/audit-test-data.ts`, `onIntegrationTeardown` en
+`testing/integration-teardown.ts`). Ojo: los tests de integración anteriores al AuditLog siembran
+organizaciones, personas y activos y no los borran; contra la base de desarrollo, se acumulan.
+
+### Verificación del AuditLog (`pnpm audit:verify`)
+
+Verificación local de solo lectura (`domain/audit/verify.ts`): por cada cadena, en orden de
+secuencia, revisa que no haya huecos, que cada evento enlace con el anterior y que el HMAC
+recalculado coincida, y descifra el contexto de red para compararlo con su digest. Informa el
+primer error de cada cadena (hueco, enlace roto, hash incorrecto, clave ausente, secuencia o sobre
+inválido) con el rango verificado, las anomalías del contexto de red (faltante antes de vencer,
+alterado) y los contextos sin evento. Lee por lotes en una transacción de solo lectura, sin
+sincronizar el schema, y nunca imprime payloads, IPs ni claves. Necesita las claves por el entorno,
+como la app (en Docker ya están).
+
+**Límite conocido:** no detecta que se borren los **últimos** eventos de una cadena (lo que queda
+sigue siendo válido), ni una reescritura completa hecha por alguien con acceso a la base y a la
+clave HMAC. Por eso imprime la **cabeza** de cada cadena (secuencia y `chain_hash`): guardarla
+fuera del sistema y compararla en la próxima verificación detecta un borrado de la cola.
+
+### Claves del AuditLog en tests
+
+Payload no termina de iniciar sin los llaveros `AUDIT_HMAC_*` y `AUDIT_NETWORK_*`
+(`domain/audit/runtime-keys.ts`): todo lo que lo inicia (integración, suites
+`*.audit.integration.test.ts`, la app) los necesita. `pnpm test`, `test:components` y `build` no.
+
+Los tests corren con `NODE_ENV=test`, y con ese valor **no se lee `.env.local`**: las claves
+llegan siempre por el entorno.
+
+- Con `docker compose exec app …` ya están: Compose las carga del `env_file` al crear el
+  contenedor (después de `pnpm audit:keys:init`, `docker compose up -d`).
+- En CI, `scripts/ci-audit-keys.sh` genera claves nuevas en cada corrida.
+- En el host, exportar solo las cuatro variables de `.env.local`, sin imprimirlas, en un
+  subshell para que no queden en la terminal:
+
+```bash
+( set -a; . <(grep -E '^AUDIT_(HMAC|NETWORK)_' .env.local); set +a; pnpm test:integration )
+( set -a; . <(grep -E '^AUDIT_(HMAC|NETWORK)_' .env.local); set +a; pnpm test:integration:files <archivos> )
+```
+
+En el host, además, `DATABASE_URL` tiene que apuntar a una base alcanzable desde el host (por
+ejemplo una descartable); el `.env.local` usa el hostname `postgres`, que solo existe adentro de
+Compose (motivo 2).
+
+Si faltan, el arranque falla enseguida con un mensaje que nombra cada variable y dice qué hacer,
+sin abrir ninguna conexión a Postgres (la validación corre antes de crear el adaptador de base).
+
+### Claves del AuditLog en el CLI de Payload
+
+Los comandos de `pnpm exec payload …` que inician Payload también pasan por esa validación:
+`migrate*`, `jobs:run`, `jobs:handle-schedules` y `generate:db-schema` (este último aunque no se
+conecte a la base). `payload run <script>` depende de si el script inicia Payload.
+`generate:types` y `generate:importmap` solo leen la config: no necesitan claves.
+
+- Con `docker compose exec app pnpm exec payload …` ya las tienen (vienen del `env_file`).
+- En el host, el CLI carga `.env.local` por su cuenta (`loadEnv` de Payload, con `@next/env`),
+  salvo con `NODE_ENV=test`. En ese caso, o para usar otras claves, pasarlas como en los tests:
+
+```bash
+( set -a; . <(grep -E '^AUDIT_(HMAC|NETWORK)_' .env.local); set +a; NODE_ENV=test pnpm exec payload jobs:run )
+```
 
 ### Regresiones de la auditoría
 
@@ -92,8 +177,11 @@ modo `trust` (las URLs de los guards no llevan contraseña):
 ```bash
 docker run --rm -d --name siam-audit-pg -e POSTGRES_HOST_AUTH_METHOD=trust \
   -p 127.0.0.1:55443:5432 -p 127.0.0.1:55447:5432 -p 127.0.0.1:55448:5432 postgres:17-alpine
-PAYLOAD_SECRET=local-not-a-secret pnpm test:audit:integration:all   # ~7 min; requiere psql en el host
-PAYLOAD_SECRET=local-not-a-secret pnpm test:audit:integration:all bulk-scope   # una sola suite
+# Las claves del AuditLog, desde .env.local (ver "Claves del AuditLog en tests").
+( set -a; . <(grep -E '^AUDIT_(HMAC|NETWORK)_' .env.local); set +a
+  PAYLOAD_SECRET=local-not-a-secret pnpm test:audit:integration:all )   # ~7 min; requiere psql en el host
+( set -a; . <(grep -E '^AUDIT_(HMAC|NETWORK)_' .env.local); set +a
+  PAYLOAD_SECRET=local-not-a-secret pnpm test:audit:integration:all bulk-scope )   # una sola suite
 docker stop siam-audit-pg   # --rm: se borra junto con todas sus bases
 ```
 

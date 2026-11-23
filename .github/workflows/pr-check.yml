@@ -82,6 +82,8 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
+      # Payload no inicia sin llaveros del AuditLog: claves nuevas en cada corrida, enmascaradas.
+      - run: bash scripts/ci-audit-keys.sh
       - run: pnpm run test:integration
         env:
           DATABASE_URL: postgresql://payload:payload@localhost:5432/siam_ci
@@ -125,6 +127,8 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
 
       - run: pnpm install --frozen-lockfile
+      # Igual que en `integration`: estas suites también inician Payload.
+      - run: bash scripts/ci-audit-keys.sh
       - run: pnpm run test:audit:integration:all
         env:
           PAYLOAD_SECRET: ci-only-not-a-secret

@@ -2,9 +2,9 @@ import { isIPv4, isIPv6 } from 'node:net'
 import { z } from 'zod'
 
 // Contexto de red de una solicitud, en claro: lo que se cifra en AuditNetworkContexts y lo que
-// firma network_digest (documentation/planes/audit-log/02-modelo-y-captura.md §6 y 03 §3).
-// Solo el esquema y la forma canónica de una IP; requestNetwork (leer la IP de la solicitud
-// según el proxy confiable) se implementa en F1b.
+// firma network_digest (documentation/planes/audit-log/02-modelo-y-captura.md §6 y 03 §3): el
+// esquema, la forma canónica de una IP y requestNetwork, que lee la IP de la solicitud según el
+// proxy confiable. Sin "cliente declarado" (user agent): fuera del contexto v1 (Tani, 23/11).
 //
 // La IP se guarda en forma canónica para que la misma dirección dé siempre el mismo digest:
 // IPv4 en decimal sin ceros a la izquierda; IPv6 comprimida en minúsculas (RFC 5952, como la
@@ -91,4 +91,63 @@ export function parseNetworkContext(value: unknown): NetworkContextV1 {
       return `${field}: valor inválido.`
     })
   )
+}
+
+// --- IP de la solicitud (02 §6) ---------------------------------------------------------------
+//
+// AUDIT_TRUSTED_PROXY_HOPS = cantidad de proxies confiables delante de la app (0 a 5; sin la
+// variable, 0). Contrato de despliegue: cada proxy confiable agrega a X-Forwarded-For la dirección
+// que vio (o el único proxy la sobrescribe), y el puerto de la app no se alcanza sin pasar por
+// ellos. Así la IP del cliente es la entrada N contando desde la derecha: lo que haya más a la
+// izquierda lo pudo escribir el cliente y se ignora. Nunca la primera entrada.
+// - 0 (hoy: el compose no tiene proxy) → fuente `unknown`, aunque venga la cabecera: sin proxy,
+//   cualquiera la puede falsificar.
+// - Cabecera ausente, más corta que N, demasiado larga, o entrada que no es una IP literal admitida
+//   (con puerto, zona, nombre, vacía) → `unknown`. No se adivina ni se toma otra entrada.
+// - `direct` (dirección del socket) queda reservada: Next/Payload no la exponen a los endpoints.
+// Nunca se guarda la cabecera cruda ni otra cabecera; solo la IP canónica, su familia y la hora.
+
+export const AUDIT_TRUSTED_PROXY_HOPS_VARIABLE = 'AUDIT_TRUSTED_PROXY_HOPS'
+export const AUDIT_MAX_TRUSTED_PROXY_HOPS = 5
+/** Cabeceras más largas no se interpretan (fuente `unknown`). */
+const MAX_FORWARDED_FOR_LENGTH = 4096
+const HOPS = /^[0-9]$/
+
+type Env = Readonly<Record<string, string | undefined>>
+
+export class AuditNetworkConfigError extends Error {
+  constructor(message: string) {
+    super(`AuditLog: ${message}`)
+    this.name = 'AuditNetworkConfigError'
+  }
+}
+
+/** Proxies confiables configurados. Lanza si el valor no es un entero de 0 a 5 (sin mostrarlo). */
+export function trustedProxyHops(env: Env): number {
+  const raw = env[AUDIT_TRUSTED_PROXY_HOPS_VARIABLE]
+  if (raw === undefined) return 0
+  if (!HOPS.test(raw) || Number(raw) > AUDIT_MAX_TRUSTED_PROXY_HOPS)
+    throw new AuditNetworkConfigError(
+      `${AUDIT_TRUSTED_PROXY_HOPS_VARIABLE} tiene que ser un entero de 0 a ${AUDIT_MAX_TRUSTED_PROXY_HOPS} (cantidad de proxies confiables delante de la app).`
+    )
+  return Number(raw)
+}
+
+/** Contexto de red de una solicitud (para addAuditEvent). Ver las reglas arriba. */
+export function requestNetwork(
+  req: { headers?: Headers },
+  options: { env?: Env; now?: Date } = {}
+): NetworkContextV1 {
+  const hops = trustedProxyHops(options.env ?? process.env)
+  const captured_at = (options.now ?? new Date()).toISOString()
+  const unknown: NetworkContextV1 = { source: 'unknown', ip: null, family: null, captured_at }
+  if (hops === 0) return unknown
+
+  const header = req.headers?.get('x-forwarded-for')
+  if (!header || header.length > MAX_FORWARDED_FOR_LENGTH) return unknown
+  const entries = header.split(',').map(entry => entry.trim())
+  if (entries.length < hops) return unknown
+  const client = canonicalIp(entries[entries.length - hops]!)
+  if (!client) return unknown
+  return parseNetworkContext({ source: 'trusted_proxy', ...client, captured_at })
 }

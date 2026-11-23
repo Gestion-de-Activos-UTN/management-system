@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { AuditEnvelopeError, parseAuditEnvelope, type AuditEnvelopeV1 } from './envelope'
 import { FIXTURE_ENVELOPE } from './envelope.fixture'
+import { AUDIT_CATEGORY_SECTION, AUDIT_OUTCOMES, AUDIT_SECTIONS } from './catalog'
 
 const with_ = (patch: Record<string, unknown>) => ({ ...FIXTURE_ENVELOPE, ...patch })
 
@@ -58,6 +59,23 @@ test('un agente puede no tener rol; una persona o un PlatformAdmin no', () => {
   }
 })
 
+test('acepta cada sección y cada resultado de las listas', () => {
+  for (const section_code of Object.keys(AUDIT_SECTIONS))
+    assert.doesNotThrow(() => parseAuditEnvelope(with_({ section_code })), section_code)
+  for (const outcome of Object.keys(AUDIT_OUTCOMES))
+    assert.doesNotThrow(() => parseAuditEnvelope(with_({ outcome })), outcome)
+})
+
+test('no exige que la sección sea la actual de la categoría (eso lo valida el builder)', () => {
+  // scan.rename es de inventory_evidence, hoy en la sección inventory. Un evento firmado con
+  // otra sección (por ejemplo, antes de reorganizar el menú) tiene que seguir verificando.
+  assert.equal(
+    AUDIT_CATEGORY_SECTION[FIXTURE_ENVELOPE.category_code as 'inventory_evidence'],
+    'inventory'
+  )
+  assert.doesNotThrow(() => parseAuditEnvelope(with_({ section_code: 'tasks' })))
+})
+
 test('rechaza cada regla del sobre indicando el campo', () => {
   const ORG2 = '1c2d3e4f-5a6b-4c7d-8e9f-0a1b2c3d4e5f'
   const cases: Array<[string, Record<string, unknown>, string]> = [
@@ -108,6 +126,7 @@ test('rechaza cada regla del sobre indicando el campo', () => {
     ['acción desconocida', { action_code: 'scan.delete_everything' }, 'action_code'],
     ['acción de otra categoría', { action_code: 'task.create' }, 'action_code'],
     ['sección con mayúsculas', { section_code: 'Inventario' }, 'section_code'],
+    ['sección desconocida', { section_code: 'reports' }, 'section_code'],
     ['tipo de entidad desconocido', { entity_type: 'banana' }, 'entity_type'],
     ['entidad sin id', { entity_id: '' }, 'entity_id'],
     ['colección que no corresponde al autor', { actor_collection: 'admins' }, 'actor_collection'],
@@ -127,6 +146,7 @@ test('rechaza cada regla del sobre indicando el campo', () => {
     ['id de iniciador sin tipo', { initiated_by_id: 'x' }, 'initiated_by_id'],
     ['origen desconocido', { origin: 'api' }, 'origin'],
     ['resultado con espacios', { outcome: 'not ok' }, 'outcome'],
+    ['resultado desconocido', { outcome: 'rolled_back' }, 'outcome'],
     ['payload que es un array', { payload: [] }, 'payload'],
     ['payload con NaN', { payload: { changes: [{ value: NaN }] } }, 'payload'],
     ['digest sin vencimiento', { network_expires_at: null }, 'network_expires_at'],

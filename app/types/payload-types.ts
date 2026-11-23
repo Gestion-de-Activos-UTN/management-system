@@ -91,6 +91,8 @@ export interface Config {
     'portal-messages': PortalMessage;
     'portal-message-receipts': PortalMessageReceipt;
     'inventory-incidents': InventoryIncident;
+    'audit-logs': AuditLog;
+    'audit-network-contexts': AuditNetworkContext;
     'payload-kv': PayloadKv;
     'payload-jobs': PayloadJob;
     'payload-locked-documents': PayloadLockedDocument;
@@ -122,6 +124,8 @@ export interface Config {
     'portal-messages': PortalMessagesSelect<false> | PortalMessagesSelect<true>;
     'portal-message-receipts': PortalMessageReceiptsSelect<false> | PortalMessageReceiptsSelect<true>;
     'inventory-incidents': InventoryIncidentsSelect<false> | InventoryIncidentsSelect<true>;
+    'audit-logs': AuditLogsSelect<false> | AuditLogsSelect<true>;
+    'audit-network-contexts': AuditNetworkContextsSelect<false> | AuditNetworkContextsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-jobs': PayloadJobsSelect<false> | PayloadJobsSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
@@ -1343,6 +1347,65 @@ export interface InventoryIncident {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "audit-logs".
+ */
+export interface AuditLog {
+  id: string;
+  schema_version: number;
+  scope_kind: string;
+  chain_id: string;
+  organization_id?: string | null;
+  office_ids?: string[] | null;
+  sequence: number;
+  created_at: string;
+  occurred_at?: string | null;
+  category_code: string;
+  action_code: string;
+  section_code: string;
+  entity_type: string;
+  entity_id: string;
+  actor_type: string;
+  actor_id?: string | null;
+  actor_collection?: string | null;
+  actor_role?: string | null;
+  initiated_by_type?: string | null;
+  initiated_by_id?: string | null;
+  operation_id: string;
+  parent_event_id?: string | null;
+  visit_id?: string | null;
+  origin: string;
+  outcome: string;
+  payload:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  network_digest?: string | null;
+  network_expires_at?: string | null;
+  hmac_key_id: string;
+  previous_hash?: string | null;
+  chain_hash: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "audit-network-contexts".
+ */
+export interface AuditNetworkContext {
+  id: string;
+  event_id: string;
+  chain_id: string;
+  cipher_version: number;
+  key_id: string;
+  nonce: string;
+  tag: string;
+  ciphertext: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "payload-kv".
  */
 export interface PayloadKv {
@@ -2288,6 +2351,56 @@ export interface InventoryIncidentsSelect<T extends boolean = true> {
   resolved_by?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "audit-logs_select".
+ */
+export interface AuditLogsSelect<T extends boolean = true> {
+  id?: T;
+  schema_version?: T;
+  scope_kind?: T;
+  chain_id?: T;
+  organization_id?: T;
+  office_ids?: T;
+  sequence?: T;
+  created_at?: T;
+  occurred_at?: T;
+  category_code?: T;
+  action_code?: T;
+  section_code?: T;
+  entity_type?: T;
+  entity_id?: T;
+  actor_type?: T;
+  actor_id?: T;
+  actor_collection?: T;
+  actor_role?: T;
+  initiated_by_type?: T;
+  initiated_by_id?: T;
+  operation_id?: T;
+  parent_event_id?: T;
+  visit_id?: T;
+  origin?: T;
+  outcome?: T;
+  payload?: T;
+  network_digest?: T;
+  network_expires_at?: T;
+  hmac_key_id?: T;
+  previous_hash?: T;
+  chain_hash?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "audit-network-contexts_select".
+ */
+export interface AuditNetworkContextsSelect<T extends boolean = true> {
+  event_id?: T;
+  chain_id?: T;
+  cipher_version?: T;
+  key_id?: T;
+  nonce?: T;
+  tag?: T;
+  ciphertext?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

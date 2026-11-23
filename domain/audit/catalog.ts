@@ -39,6 +39,73 @@ export const AUDIT_CATEGORIES = {
 
 export type AuditCategoryCode = keyof typeof AUDIT_CATEGORIES
 
+// Secciones: dimensión aparte de categoría → acción, para el filtro Sección → Categoría → Acción
+// (documento 01 §1 y 04 §4). Siguen el menú del portal y del Staff. Decisión de Tani (23/11).
+// La lista solo crece: un código no se borra ni cambia de significado, porque el sobre la usa
+// para validar eventos viejos. Si una sección queda sin categorías, se conserva igual.
+export const AUDIT_SECTIONS = {
+  administration: 'Administración',
+  people: 'Personas y accesos',
+  inventory: 'Inventario',
+  security_review: 'Revisión de seguridad',
+  tasks: 'Tareas',
+  deficiency_index: 'Índice de deficiencias',
+  platform: 'Plataforma',
+  audit: 'Auditoría',
+  ai: 'Asistente de IA',
+  system: 'Sistema',
+} as const
+
+export type AuditSectionCode = keyof typeof AUDIT_SECTIONS
+
+// Sección actual de cada categoría (una sola). La exige el builder para los eventos nuevos; el
+// sobre no, así que reorganizar este mapeo no invalida eventos viejos: siguen verificando con la
+// sección con la que se firmaron (criterio sobre permisivo / builder estricto, Tani 23/11).
+export const AUDIT_CATEGORY_SECTION = {
+  organization_lifecycle: 'administration',
+  office_lifecycle: 'administration',
+  organization_settings: 'administration',
+  scanner_management: 'administration',
+  member_access: 'people',
+  account_access: 'people',
+  profile_changes: 'people',
+  asset_lifecycle: 'inventory',
+  asset_changes: 'inventory',
+  inventory_incidents: 'inventory',
+  scan_processing: 'inventory',
+  inventory_evidence: 'inventory',
+  assessment_scope: 'security_review',
+  assessment_lifecycle: 'security_review',
+  compliance_results: 'security_review',
+  task_creation: 'tasks',
+  task_editing: 'tasks',
+  task_lifecycle: 'tasks',
+  risk_processing: 'deficiency_index',
+  portal_messages: 'platform',
+  platform_visits: 'platform',
+  data_access: 'audit',
+  exports: 'audit',
+  ai_processing: 'ai',
+  maintenance: 'system',
+} as const satisfies Record<AuditCategoryCode, AuditSectionCode>
+
+// Resultado de la acción misma, no el veredicto del dominio (documento 02 §2). Decisión de Tani
+// (23/11). Un rollback no deja evento, así que no hay "revertido". Un escaneo fallido o parcial
+// que informa el escáner es `success`: la plataforma lo recibió y guardó, y el fallo lo dicen la
+// acción (scan.record_failure / scan.record_partial) y el payload. Igual que las secciones, la
+// lista solo crece. El sobre acepta cualquiera; el builder admite solo `success` salvo que la
+// acción habilite otro en la fase que lo necesite.
+export const AUDIT_OUTCOMES = {
+  /** La acción se ejecutó y sus efectos quedaron confirmados en la misma transacción. */
+  success: 'Completada',
+  /** Intento fallido registrado después del rollback, sin declarar cambios (02 §7). */
+  failed: 'Fallida',
+  /** Intento rechazado por una regla de acceso (accesos a cuentas, con Descope). */
+  denied: 'Rechazada',
+} as const
+
+export type AuditOutcomeCode = keyof typeof AUDIT_OUTCOMES
+
 // Lista en tiempo de ejecución: el sobre (envelope.ts) valida entity_type contra ella.
 export const AUDIT_ENTITY_TYPES = [
   'organization',
@@ -76,6 +143,8 @@ export interface AuditActionSpec {
   entity: AuditEntityType
   orgLevelVisibleToOfficeRoles?: true
   retired?: true
+  /** Resultados que el builder admite para la acción; sin este campo, solo `success`. */
+  outcomes?: readonly AuditOutcomeCode[]
 }
 
 // `const C` conserva el literal del código para derivar el tipo AuditActionCode.
@@ -84,7 +153,11 @@ function action<const C extends string>(
   category: AuditCategoryCode,
   label: string,
   entity: AuditEntityType,
-  options: { orgLevelVisibleToOfficeRoles?: true; retired?: true } = {}
+  options: {
+    orgLevelVisibleToOfficeRoles?: true
+    retired?: true
+    outcomes?: readonly AuditOutcomeCode[]
+  } = {}
 ) {
   return { code, category, label, entity, ...options }
 }

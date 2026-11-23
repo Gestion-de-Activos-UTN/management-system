@@ -27,9 +27,13 @@ services:
     ports:
       - '127.0.0.1:3001:3001'
     env_file:
-      # Opcional: management-system/.env.local no es necesario para levantar el stack local —
-      # todo lo que Postgres/Payload necesitan ya está hardcodeado abajo en `environment:`.
-      # Solo hace falta ese archivo para secretos reales (Auth0, etc.), no para desarrollo local.
+      # Obligatorio desde el AuditLog: management-system/.env.local tiene que traer los llaveros
+      # AUDIT_HMAC_* y AUDIT_NETWORK_* (se generan con `pnpm audit:keys:init` en el host; nunca
+      # valores fijos acá). Sin ellos Payload no inicia y el log dice qué falta. Lo demás que
+      # necesitan Postgres/Payload sigue fijo abajo en `environment:`.
+      # Compose lee este archivo al crear el contenedor: después de cambiarlo, `docker compose up -d`
+      # lo recrea. `required: false` a propósito: si falta, falla la validación propia (con su
+      # mensaje y el comando) en vez del error genérico de Compose.
       - path: .env.local
         required: false
     environment:

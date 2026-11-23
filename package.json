@@ -7,7 +7,8 @@
     "dev": "next dev --turbopack",
     "build": "next build",
     "test": "cross-env NODE_ENV=test PAYLOAD_DISABLE_JOBS=1 node --import tsx --test --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./scripts/test-completeness-reporter.ts --test-reporter-destination=stderr $(find . -name \"*.test.ts\" -not -name \"*.integration.test.ts\" -not -name \"*.audit.test.ts\" -not -name \"*.audit.integration.test.ts\" -not -path \"./node_modules/*\" -not -path \"./.next/*\")",
-    "test:integration": "cross-env NODE_ENV=test PAYLOAD_DISABLE_JOBS=1 node --import tsx --import ./testing/integration-teardown.ts --test --test-concurrency=1 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=./scripts/test-completeness-reporter.ts --test-reporter-destination=stderr $(find . -name \"*.integration.test.ts\" -not -name \"*.audit.integration.test.ts\" -not -path \"./node_modules/*\" -not -path \"./.next/*\")",
+    "test:integration": "sh scripts/test-integration-files.sh $(find . -name \"*.integration.test.ts\" -not -name \"*.audit.integration.test.ts\" -not -path \"./node_modules/*\" -not -path \"./.next/*\")",
+    "test:integration:files": "sh scripts/test-integration-files.sh",
     "type-check": "tsc --noEmit",
     "lint": "eslint . --pass-on-unpruned-suppressions",
     "lint:prune": "eslint . --prune-suppressions",
@@ -21,6 +22,8 @@
     "test:components": "vitest run --config vitest.components.config.ts",
     "audit:coverage": "node --import tsx scripts/audit-coverage.ts",
     "audit:keys:init": "node --import tsx scripts/audit-keys-init.ts",
+    "audit:verify": "node --import tsx scripts/audit-verify.ts",
+    "audit:contention-probe": "node --import tsx scripts/audit-contention-probe.ts",
     "test:audit:integration": "cross-env SIAM_AUDIT_INTEGRATION=1 vitest run --config vitest.audit.config.ts",
     "test:audit:integration:all": "bash scripts/audit-integration-all.sh"
   },
