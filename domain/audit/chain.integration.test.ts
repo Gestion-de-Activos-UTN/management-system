@@ -12,17 +12,20 @@ import { parseAuditEnvelope } from './envelope'
 import { computeChainHash, computeNetworkDigest } from './hmac'
 import { decryptNetworkContext } from './network-crypto'
 import { AuditKeysConfigError, getAuditKeys, resetAuditKeysCache } from './runtime-keys'
+import { auditTestOrganizationId, prepareAuditTestData } from '@/testing/audit-test-data'
 
 // Cadena y cierre transaccional contra PostgreSQL real (F1b, paso 4b; plan 06 §3 y §7):
 // secuencias sin bifurcar con escrituras concurrentes, primer evento bajo carrera, rollback sin
 // evento, varias cadenas en una transacción, REPEATABLE READ con lock al inicio y con cabeza
 // vieja (23505 → reintento), deadlock detectado y reintentado, rotación de clave, contexto de red
 // cifrado y ligado al evento, claves validadas al cerrar y consultas del cierre en secuencia sobre
-// el mismo cliente (Tani, 23/11). Cada test usa organizaciones nuevas y el afterEach borra sus
-// filas con SQL directo (no deben quedar en una base de desarrollo). Sin la cadena `platform`: es
-// compartida, y borrar filas de prueba ahí cortaría la cadena real de una base de desarrollo.
+// el mismo cliente (Tani, 23/11). Datos de prueba según testing/audit-test-data.ts: organizaciones
+// de prueba nuevas en cada test, limpieza al empezar (restos de una corrida cortada), después de
+// cada test y al terminar; sin la cadena `platform`.
 
-const PROBE = 'audit_f1b_chain_probe'
+// Tabla auxiliar en un schema propio, nunca en public (testing/audit-test-data.ts).
+const SCHEMA = 'siam_test_audit_chain'
+const PROBE = sql`${sql.identifier(SCHEMA)}.probe`
 const touchedOrgs = new Set<string>()
 
 let cached: Payload | undefined
@@ -33,7 +36,7 @@ const sessionDb = async (req: PayloadRequest) =>
     .db as unknown as PostgresAdapter['drizzle']
 
 function newOrg() {
-  const org = randomUUID()
+  const org = auditTestOrganizationId()
   touchedOrgs.add(org)
   return org
 }
@@ -89,9 +92,9 @@ async function assertValidChain(org: string, expected: number) {
 }
 
 before(async () => {
-  await drizzle(await payloadFor()).execute(
-    sql`CREATE TABLE IF NOT EXISTS ${sql.identifier(PROBE)} (id text PRIMARY KEY, n int NOT NULL)`
-  )
+  const payload = await payloadFor()
+  await prepareAuditTestData(payload, { schema: SCHEMA })
+  await drizzle(payload).execute(sql`CREATE TABLE ${PROBE} (id text PRIMARY KEY, n int NOT NULL)`)
 })
 
 afterEach(async () => {
@@ -101,7 +104,7 @@ afterEach(async () => {
     await db.execute(sql`DELETE FROM audit_logs WHERE chain_id = ${`org:${org}`}`)
   }
   touchedOrgs.clear()
-  await db.execute(sql`DELETE FROM ${sql.identifier(PROBE)}`)
+  await db.execute(sql`DELETE FROM ${PROBE}`)
 })
 
 test('un evento: secuencia 1, sin anterior, HMAC que se recalcula', async () => {
@@ -159,17 +162,13 @@ test('rollback: ni el cambio de negocio ni el evento', async () => {
   const payload = await payloadFor()
   await assert.rejects(
     withTransaction(payload, undefined, async req => {
-      await (
-        await sessionDb(req)
-      ).execute(sql`INSERT INTO ${sql.identifier(PROBE)} VALUES ('r', 1)`)
+      await (await sessionDb(req)).execute(sql`INSERT INTO ${PROBE} VALUES ('r', 1)`)
       await addAuditEvent(req, event(org))
       throw new Error('falla después de acumular')
     })
   )
   assert.equal((await chainRows(org)).length, 0)
-  const probe = await drizzle(payload).execute(
-    sql`SELECT count(*)::int AS n FROM ${sql.identifier(PROBE)}`
-  )
+  const probe = await drizzle(payload).execute(sql`SELECT count(*)::int AS n FROM ${PROBE}`)
   assert.equal((probe.rows[0] as { n: number }).n, 0)
 })
 
@@ -250,11 +249,9 @@ test('REPEATABLE READ sin lock al inicio: cabeza vieja → 23505 → reintento c
 test('deadlock entre fila de negocio y lock de la cadena: se detecta y se reintenta', async () => {
   const org = newOrg()
   const payload = await payloadFor()
-  await drizzle(payload).execute(sql`INSERT INTO ${sql.identifier(PROBE)} VALUES ('x', 0)`)
+  await drizzle(payload).execute(sql`INSERT INTO ${PROBE} VALUES ('x', 0)`)
   const update = async (req: PayloadRequest) =>
-    (await sessionDb(req)).execute(
-      sql`UPDATE ${sql.identifier(PROBE)} SET n = n + 1 WHERE id = 'x'`
-    )
+    (await sessionDb(req)).execute(sql`UPDATE ${PROBE} SET n = n + 1 WHERE id = 'x'`)
   const scanHasLock = deferred()
   const editHasRow = deferred()
   let scanAttempts = 0
@@ -284,9 +281,7 @@ test('deadlock entre fila de negocio y lock de la cadena: se detecta y se reinte
   })
   await Promise.all([scan, edit])
   assert.ok(scanAttempts + editAttempts >= 3, 'uno de los dos se reintentó')
-  const probe = await drizzle(payload).execute(
-    sql`SELECT n FROM ${sql.identifier(PROBE)} WHERE id = 'x'`
-  )
+  const probe = await drizzle(payload).execute(sql`SELECT n FROM ${PROBE} WHERE id = 'x'`)
   assert.equal((probe.rows[0] as { n: number }).n, 2, 'cada comando aplicó su cambio una vez')
   await assertValidChain(org, 2)
 })
@@ -367,9 +362,7 @@ test('sin claves al cerrar: la transacción falla entera (segunda línea de defe
     resetAuditKeysCache()
     await assert.rejects(
       withTransaction(payload, undefined, async req => {
-        await (
-          await sessionDb(req)
-        ).execute(sql`INSERT INTO ${sql.identifier(PROBE)} VALUES ('k', 1)`)
+        await (await sessionDb(req)).execute(sql`INSERT INTO ${PROBE} VALUES ('k', 1)`)
         await addAuditEvent(req, event(org))
       }),
       AuditKeysConfigError
@@ -379,9 +372,7 @@ test('sin claves al cerrar: la transacción falla entera (segunda línea de defe
     resetAuditKeysCache()
   }
   assert.equal((await chainRows(org)).length, 0)
-  const probe = await drizzle(payload).execute(
-    sql`SELECT count(*)::int AS n FROM ${sql.identifier(PROBE)}`
-  )
+  const probe = await drizzle(payload).execute(sql`SELECT count(*)::int AS n FROM ${PROBE}`)
   assert.equal((probe.rows[0] as { n: number }).n, 0, 'sin auditoría no hay cambio')
 })
 

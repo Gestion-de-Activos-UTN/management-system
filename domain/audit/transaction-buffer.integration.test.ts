@@ -11,15 +11,18 @@ import {
   openAuditTransactionCount,
   type AuditEventInput,
 } from './builder'
+import { auditTestOrganizationId, prepareAuditTestData } from '@/testing/audit-test-data'
 
 // Buffer de auditoría y caminos de cierre de withTransaction contra PostgreSQL real (F1b, paso 4b,
 // pedido de Tani del 23/11): todo cierre (commit, rollback, excepción, reintento, lock ocupado,
 // rollback que falla) borra la entrada de su transacción, y una transacción nueva nunca ve
-// eventos de una anterior revertida. Las filas de auditoría que se escriben se borran con SQL
-// directo al terminar cada test (no deben quedar en una base de desarrollo).
+// eventos de una anterior revertida. Datos de prueba según testing/audit-test-data.ts: limpieza
+// al empezar (restos de una corrida cortada), después de cada test y al terminar.
 
-const ORG = randomUUID()
-const PROBE = 'audit_f1b_buffer_probe'
+const ORG = auditTestOrganizationId()
+// Tabla auxiliar en un schema propio, nunca en public (testing/audit-test-data.ts).
+const SCHEMA = 'siam_test_audit_buffer'
+const PROBE = sql`${sql.identifier(SCHEMA)}.probe`
 
 let cached: Payload | undefined
 const payloadFor = async () => (cached ??= await getPayload({ config }))
@@ -41,7 +44,7 @@ function event(): AuditEventInput {
 
 async function probeCount() {
   const result = await drizzle(await payloadFor()).execute(
-    sql`SELECT count(*)::int AS n FROM ${sql.identifier(PROBE)}`
+    sql`SELECT count(*)::int AS n FROM ${PROBE}`
   )
   return (result.rows[0] as { n: number }).n
 }
@@ -49,9 +52,8 @@ async function probeCount() {
 let baseline = 0
 before(async () => {
   const payload = await payloadFor()
-  await drizzle(payload).execute(
-    sql`CREATE TABLE IF NOT EXISTS ${sql.identifier(PROBE)} (id text PRIMARY KEY)`
-  )
+  await prepareAuditTestData(payload, { schema: SCHEMA })
+  await drizzle(payload).execute(sql`CREATE TABLE ${PROBE} (id text PRIMARY KEY)`)
   baseline = openAuditTransactionCount()
 })
 
@@ -61,10 +63,7 @@ afterEach(async () => {
   const db = drizzle(await payloadFor())
   await db.execute(sql`DELETE FROM audit_network_contexts WHERE chain_id = ${`org:${ORG}`}`)
   await db.execute(sql`DELETE FROM audit_logs WHERE chain_id = ${`org:${ORG}`}`)
-  await drizzle(await payloadFor()).execute(sql`DROP TABLE IF EXISTS ${sql.identifier(PROBE)}`)
-  await drizzle(await payloadFor()).execute(
-    sql`CREATE TABLE IF NOT EXISTS ${sql.identifier(PROBE)} (id text PRIMARY KEY)`
-  )
+  await db.execute(sql`DELETE FROM ${PROBE}`)
 })
 
 test('excepción en medio de la transacción: rollback y el mapa queda sin la entrada', async () => {
@@ -73,7 +72,7 @@ test('excepción en medio de la transacción: rollback y el mapa queda sin la en
   await assert.rejects(
     withTransaction(payload, undefined, async req => {
       id = (await req.transactionID) as string
-      await sessionDb(req, id).execute(sql`INSERT INTO ${sql.identifier(PROBE)} VALUES ('a')`)
+      await sessionDb(req, id).execute(sql`INSERT INTO ${PROBE} VALUES ('a')`)
       await addAuditEvent(req, event())
       assert.equal(bufferedAuditEvents(id).length, 1)
       throw new Error('falla en medio del comando')
@@ -126,7 +125,7 @@ test('commit con eventos: escribe en la cadena y confirma junto con el cambio de
   let eventId = ''
   await withTransaction(payload, undefined, async req => {
     const id = (await req.transactionID) as string
-    await sessionDb(req, id).execute(sql`INSERT INTO ${sql.identifier(PROBE)} VALUES ('b')`)
+    await sessionDb(req, id).execute(sql`INSERT INTO ${PROBE} VALUES ('b')`)
     eventId = await addAuditEvent(req, event())
   })
   assert.equal(await probeCount(), 1)

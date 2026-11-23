@@ -1,4 +1,4 @@
-import { afterEach, test } from 'node:test'
+import { afterEach, before, test } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { getPayload, type Payload, type PayloadRequest, type RequestContext } from 'payload'
@@ -9,16 +9,16 @@ import {
   pendingInternalAuditWrites,
   revokeInternalAuditWrite,
 } from '@/domain/audit/internal-write'
+import { auditTestOrganizationId, prepareAuditTestData } from '@/testing/audit-test-data'
 
 // Colecciones AuditLogs y AuditNetworkContexts contra PostgreSQL real (F1b, paso 3): id propio
 // aceptado, office_ids en orden en audit_logs_texts, fechas tal cual, create solo con la marca
 // interna, update/delete rechazados aun con overrideAccess, lectura directa denegada y unicidad
-// de (chain_id, sequence) y de event_id. Las filas no tienen hashes reales: el `afterEach` las
-// borra con SQL directo (el guard de la aplicación no lo permite, y no deben quedar en una base
-// de desarrollo, donde audit:verify las reportaría). afterEach y no after: el `after` del preload
-// de integración (testing/integration-teardown.ts) se registra antes y cierra Payload primero.
+// de (chain_id, sequence) y de event_id. Las filas no tienen hashes reales: se borran con SQL
+// directo (el guard de la aplicación no lo permite) al empezar, después de cada test y al
+// terminar (testing/audit-test-data.ts); en una base de desarrollo, audit:verify las reportaría.
 
-const ORG = randomUUID()
+const ORG = auditTestOrganizationId()
 const CHAIN = `org:${ORG}`
 const OFFICES = [
   '00000000-0000-4000-8000-000000000001',
@@ -117,6 +117,10 @@ async function countRows(table: 'audit_logs' | 'audit_network_contexts') {
   )
   return (result.rows[0] as { n: number }).n
 }
+
+before(async () => {
+  await prepareAuditTestData(await payloadFor())
+})
 
 afterEach(async () => {
   const payload = await payloadFor()

@@ -63,6 +63,7 @@ aplica, se desactiva con motivo en `eslint.config.mjs`. `next build` no lintea
 | ----------------------- | ----------------------------------------------- | ------------------------------------------------------------------------- |
 | `pnpm test`             | Host (con deps instaladas)                      | Tests unitarios (`node --test` vía `tsx`), no tocan la DB                 |
 | `pnpm test:integration` | `docker compose exec app pnpm test:integration` | Toca Postgres real — necesita el `DATABASE_URL` del contenedor (motivo 2) |
+| `pnpm test:integration:files <archivos>` | `docker compose exec app pnpm test:integration:files <archivos>` | Solo esos `*.integration.test.ts`, con la misma configuración que `test:integration` |
 | `pnpm test:components`  | Host (con deps instaladas)                      | Componentes React (`*.component.test.tsx`, Vitest + happy-dom), sin DB    |
 | `pnpm audit:coverage`   | Host (con deps instaladas)                      | Cobertura de AuditLog por módulo (`--by-phase`, `--markdown`), sin DB     |
 
@@ -71,6 +72,31 @@ aplica, se desactiva con motivo en `eslint.config.mjs`. `next build` no lintea
 de algún archivo llegaron incompletos y el comando sale con 1 aunque todos los tests hayan pasado:
 la corrida no vale. Un `*.test.ts` sin tests también la hace fallar. No usar `--test-force-exit`
 (ver `SYSTEM_PROMPT.md` §8).
+
+### Integración: archivos sueltos y corridas cortadas
+
+Para correr algunos archivos de integración, siempre `pnpm test:integration:files`, nunca
+`node --test …` armado a mano:
+
+```bash
+docker compose exec app pnpm test:integration:files \
+  domain/audit/chain.integration.test.ts domain/audit/transaction-buffer.integration.test.ts
+```
+
+Los dos scripts pasan por `scripts/test-integration-files.sh`, la única definición de la
+configuración: `NODE_ENV=test`, jobs de Payload apagados (`PAYLOAD_DISABLE_JOBS=1`; si no, los
+crons dejan vivo el proceso al final), un archivo por vez (`--test-concurrency=1`; dos a la vez
+sincronizan el schema al mismo tiempo y se traban), el preload que cierra Payload y el detector de
+completitud. Rechaza archivos que no sean `*.integration.test.ts` y las suites de seguridad.
+
+Cortar una corrida con Ctrl+C no deja nada que rompa la siguiente. Los tests no pueden crear
+tablas propias en `public`: Payload compara ese schema con el suyo al iniciar, y una tabla que no
+conoce con filas lo frena con "DATA LOSS WARNING" (sin terminal, sale enseguida y todos los tests
+fallan; también los seeds del contenedor). Las tablas auxiliares van en un schema `siam_test_*`,
+y los datos del AuditLog usan organizaciones con el prefijo de prueba; los dos se limpian al
+empezar y al terminar cada archivo (`testing/audit-test-data.ts`, `onIntegrationTeardown` en
+`testing/integration-teardown.ts`). Ojo: los tests de integración anteriores al AuditLog siembran
+organizaciones, personas y activos y no los borran; contra la base de desarrollo, se acumulan.
 
 ### Claves del AuditLog en tests
 
@@ -89,7 +115,12 @@ llegan siempre por el entorno.
 
 ```bash
 ( set -a; . <(grep -E '^AUDIT_(HMAC|NETWORK)_' .env.local); set +a; pnpm test:integration )
+( set -a; . <(grep -E '^AUDIT_(HMAC|NETWORK)_' .env.local); set +a; pnpm test:integration:files <archivos> )
 ```
+
+En el host, además, `DATABASE_URL` tiene que apuntar a una base alcanzable desde el host (por
+ejemplo una descartable); el `.env.local` usa el hostname `postgres`, que solo existe adentro de
+Compose (motivo 2).
 
 Si faltan, el arranque falla enseguida con un mensaje que nombra cada variable y dice qué hacer,
 sin abrir ninguna conexión a Postgres (la validación corre antes de crear el adaptador de base).

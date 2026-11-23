@@ -13,25 +13,65 @@
  * hook ahí crearía un segundo árbol de tests.
  */
 import { after } from 'node:test'
-import { assertSupportedPgPool, closePool, readInstalledPgPoolVersion, type PgPool } from './pg-pool-teardown'
+import {
+  assertSupportedPgPool,
+  closePool,
+  readInstalledPgPoolVersion,
+  type PgPool,
+} from './pg-pool-teardown'
 
 type ClosablePayload = { destroy: () => Promise<void>; db?: { pool?: PgPool } }
 type CachedPayload = { payload: ClosablePayload | null; promise: Promise<ClosablePayload> | null }
+type Cleanup = () => Promise<void>
+
+// Limpiezas que un archivo de tests necesita hacer con Payload todavía abierto. Un `after` del
+// propio archivo corre después que el de este preload (se registra antes), cuando Payload ya está
+// cerrado. En globalThis con Symbol.for: si el archivo importa este módulo por otra ruta, comparte
+// el mismo registro.
+const CLEANUPS_KEY = Symbol.for('siam.testing.integration-cleanups')
+const registry = globalThis as typeof globalThis & { [CLEANUPS_KEY]?: Cleanup[] }
+const cleanups: Cleanup[] = (registry[CLEANUPS_KEY] ??= [])
+
+/**
+ * Registra una limpieza que corre al terminar el archivo, antes de cerrar Payload (en orden de
+ * registro). Para restos de la corrida actual; los de una corrida interrumpida se limpian al
+ * empezar (ver testing/audit-test-data.ts).
+ */
+export function onIntegrationTeardown(cleanup: Cleanup) {
+  cleanups.push(cleanup)
+}
 
 if (process.env.NODE_TEST_CONTEXT === 'child-v8') {
   assertSupportedPgPool(readInstalledPgPoolVersion())
 
   after(async () => {
-    // getPayload guarda sus instancias en global._payload (Map por `key`; payload 3.x).
-    const cache = (globalThis as { _payload?: Map<string, CachedPayload> })._payload
-    if (!cache) return
-    for (const entry of cache.values()) {
-      const payload = entry.payload ?? (await entry.promise?.catch(() => null)) ?? null
-      if (!payload) continue
-      const pool = payload.db?.pool
-      await payload.destroy()
-      if (pool) await closePool(pool)
+    // Primero las limpiezas de los archivos; si alguna falla, Payload se cierra igual.
+    let cleanupError: unknown
+    for (const cleanup of cleanups.splice(0)) {
+      try {
+        await cleanup()
+      } catch (error) {
+        cleanupError ??= error
+      }
     }
-    cache.clear()
+    try {
+      await closeCachedPayloads()
+    } finally {
+      if (cleanupError) throw cleanupError
+    }
   })
+}
+
+async function closeCachedPayloads() {
+  // getPayload guarda sus instancias en global._payload (Map por `key`; payload 3.x).
+  const cache = (globalThis as { _payload?: Map<string, CachedPayload> })._payload
+  if (!cache) return
+  for (const entry of cache.values()) {
+    const payload = entry.payload ?? (await entry.promise?.catch(() => null)) ?? null
+    if (!payload) continue
+    const pool = payload.db?.pool
+    await payload.destroy()
+    if (pool) await closePool(pool)
+  }
+  cache.clear()
 }
