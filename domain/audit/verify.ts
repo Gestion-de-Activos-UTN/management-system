@@ -24,7 +24,8 @@ import { getAuditKeys } from './runtime-keys'
 // del sistema. Nunca devuelve ni imprime payloads, IPs ni claves.
 //
 // Lee por SQL directo, en lotes (keyset por sequence), dentro de una transacción REPEATABLE READ de
-// solo lectura: una foto coherente y sin cargar toda la cadena en memoria. Rearma el sobre campo
+// solo lectura, comprobada al empezar: toda la verificación ve una sola foto aunque la app esté
+// escribiendo, y sin cargar toda la cadena en memoria. Rearma el sobre campo
 // por campo, con conversiones explícitas: `numeric` llega como texto ("2" no firma igual que 2) y
 // solo se acepta un entero exacto; las fechas se piden en UTC con milisegundos; el payload se lee
 // como texto y se parsea; office_ids sale de audit_logs_texts en su orden.
@@ -80,6 +81,8 @@ export interface AuditChainReport {
 }
 
 export interface AuditVerifyReport {
+  /** Foto de la base en la que se verificó (comprobada al empezar). */
+  snapshot: { isolation: string; readOnly: true }
   chains: AuditChainReport[]
   /** Contextos de red cuyo evento no existe. */
   orphanNetworkContexts: number
@@ -94,6 +97,8 @@ export interface AuditVerifyOptions {
   now?: Date
   /** Por defecto, los llaveros del proceso. */
   keys?: AuditKeys
+  /** Solo para tests: corre antes de leer cada lote después del primero de una cadena. */
+  beforeNextBatch?: (info: { chainId: string; batch: number }) => Promise<void>
 }
 
 type Db = PostgresAdapter['drizzle']
@@ -121,17 +126,45 @@ export async function verifyAuditChains(
   if (!transaction) throw new Error('El verificador necesita transacciones de PostgreSQL.')
   try {
     const db = payload.db.sessions![transaction]!.db as unknown as Db
+    // Primera sentencia: en REPEATABLE READ fija la foto que ve toda la verificación.
+    const snapshot = await assertSingleSnapshot(db)
     const chainIds = options.chainIds ? [...new Set(options.chainIds)].sort() : await listChains(db)
     const chains: AuditChainReport[] = []
     for (const chainId of chainIds)
-      chains.push(await verifyChain(db, chainId, { keys, batchSize, now }))
+      chains.push(
+        await verifyChain(db, chainId, {
+          keys,
+          batchSize,
+          now,
+          beforeNextBatch: options.beforeNextBatch,
+        })
+      )
     const orphanNetworkContexts = await countOrphanContexts(db, options.chainIds)
     const ok =
       orphanNetworkContexts === 0 && chains.every(c => !c.error && c.anomalies.length === 0)
-    return { chains, orphanNetworkContexts, ok }
+    return { snapshot, chains, orphanNetworkContexts, ok }
   } finally {
     await payload.db.rollbackTransaction(transaction)
   }
+}
+
+/**
+ * Toda la verificación ve una sola foto (Tani, 23/11): con READ COMMITTED, verificar mientras la
+ * app escribe daría resultados de momentos distintos (una cabeza leída antes que eventos más
+ * nuevos, contextos y eventos de fotos diferentes). Falla cerrado si la transacción no es
+ * REPEATABLE READ (o SERIALIZABLE) y de solo lectura.
+ */
+async function assertSingleSnapshot(db: Db): Promise<AuditVerifyReport['snapshot']> {
+  const result = await db.execute(
+    sql`SELECT current_setting('transaction_isolation') AS isolation, current_setting('transaction_read_only') AS read_only`
+  )
+  const row = result.rows[0] as { isolation?: unknown; read_only?: unknown } | undefined
+  const isolation = String(row?.isolation)
+  if (!['repeatable read', 'serializable'].includes(isolation) || row?.read_only !== 'on')
+    throw new Error(
+      `El verificador necesita una foto única de solo lectura (aislamiento ${isolation}, solo lectura ${String(row?.read_only)}).`
+    )
+  return { isolation, readOnly: true }
 }
 
 async function listChains(db: Db): Promise<string[]> {
@@ -153,7 +186,12 @@ async function listChains(db: Db): Promise<string[]> {
 async function verifyChain(
   db: Db,
   chainId: string,
-  context: { keys: AuditKeys; batchSize: number; now: Date }
+  context: {
+    keys: AuditKeys
+    batchSize: number
+    now: Date
+    beforeNextBatch?: AuditVerifyOptions['beforeNextBatch']
+  }
 ): Promise<AuditChainReport> {
   const report: AuditChainReport = {
     chainId,
@@ -169,6 +207,7 @@ async function verifyChain(
   let expected = 1
 
   for (;;) {
+    if (report.batches > 0) await context.beforeNextBatch?.({ chainId, batch: report.batches + 1 })
     const rows = await readBatch(db, chainId, lastSequence, context.batchSize)
     if (rows.length === 0) return report
     report.batches += 1
@@ -331,6 +370,9 @@ function parsePayload(value: unknown): unknown {
 const utc = (column: string) =>
   sql.raw(`to_char(${column} AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS ${column}`)
 
+// Ojo: las columnas numeric se piden como texto con el mismo nombre (sequence::text AS sequence), y
+// en PostgreSQL un ORDER BY con un nombre suelto usa la columna de salida: ordenaría como texto
+// (1, 10, 11, …, 2). Por eso se ordena siempre por audit_logs.sequence, la columna numeric.
 async function readBatch(
   db: Db,
   chainId: string,
@@ -345,8 +387,8 @@ async function readBatch(
     previous_hash, chain_hash`
   const result = await db.execute(
     after === null
-      ? sql`SELECT ${columns} FROM audit_logs WHERE chain_id = ${chainId} ORDER BY sequence LIMIT ${limit}`
-      : sql`SELECT ${columns} FROM audit_logs WHERE chain_id = ${chainId} AND sequence > ${after}::numeric ORDER BY sequence LIMIT ${limit}`
+      ? sql`SELECT ${columns} FROM audit_logs WHERE chain_id = ${chainId} ORDER BY audit_logs.sequence LIMIT ${limit}`
+      : sql`SELECT ${columns} FROM audit_logs WHERE chain_id = ${chainId} AND audit_logs.sequence > ${after}::numeric ORDER BY audit_logs.sequence LIMIT ${limit}`
   )
   return result.rows as StoredRow[]
 }
@@ -385,7 +427,7 @@ async function readNetworkContexts(
 
 async function readHead(db: Db, chainId: string): Promise<AuditChainReport['head']> {
   const result = await db.execute(
-    sql`SELECT sequence::text AS sequence, chain_hash FROM audit_logs WHERE chain_id = ${chainId} ORDER BY sequence DESC LIMIT 1`
+    sql`SELECT sequence::text AS sequence, chain_hash FROM audit_logs WHERE chain_id = ${chainId} ORDER BY audit_logs.sequence DESC LIMIT 1`
   )
   const row = result.rows[0] as { sequence: string; chain_hash: unknown } | undefined
   return row ? { sequence: row.sequence, chainHash: String(row.chain_hash) } : null

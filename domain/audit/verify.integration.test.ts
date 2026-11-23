@@ -109,6 +109,16 @@ test('ida y vuelta: escribir, leer por SQL en lotes, recalcular el HMAC y compar
   })
 })
 
+test('más de 9 eventos: lotes y cabeza en orden numérico, no de texto', async () => {
+  // Regresión: con sequence pedida como texto, ORDER BY sequence ordenaba 1, 10, 11, …, 2.
+  const chainId = await writeChain(12)
+  const { chain } = await verify(chainId, { batchSize: 5 })
+  assert.equal(chain.error, null, chain.error?.detail)
+  assert.equal(chain.verified, 12)
+  assert.equal(chain.batches, 3)
+  assert.equal(chain.head?.sequence, '12')
+})
+
 test('numeric llega como texto: sin conversión explícita el sobre no se puede rearmar', async () => {
   const chainId = await writeChain(2)
   const raw = await (
@@ -288,4 +298,100 @@ test('pnpm audit:verify: informe con cabeza y límite conocido, sin payloads ni 
   const usage = await runCli(['--cadena', chainId])
   assert.equal(usage.code, 2)
   assert.match(usage.output, /uso: pnpm audit:verify/)
+})
+
+test('una sola foto: la verificación corre en REPEATABLE READ de solo lectura', async () => {
+  const chainId = await writeChain(1)
+  const { report } = await verify(chainId)
+  assert.deepEqual(report.snapshot, { isolation: 'repeatable read', readOnly: true })
+})
+
+test('eventos confirmados entre dos lotes no entran: cabeza y verificado son de la misma foto', async () => {
+  const chainId = await writeChain(4)
+  const org = chainId.slice('org:'.length)
+  const payload = await payloadFor()
+  let written = 0
+  const { chain } = await verify(chainId, {
+    beforeNextBatch: async ({ batch }) => {
+      if (batch !== 2) return
+      // Otra transacción confirma tres eventos más mientras el verificador va por la mitad.
+      for (let index = 5; index <= 7; index++)
+        await withTransaction(payload, undefined, req => addAuditEvent(req, event(org, index)))
+      written = 3
+    },
+  })
+  assert.equal(written, 3, 'el hook corrió entre lotes')
+  assert.equal(chain.error, null, chain.error?.detail)
+  assert.deepEqual(chain.anomalies, [])
+  assert.equal(chain.verified, 4, 'no ve lo confirmado después de su foto')
+  assert.equal(chain.head?.sequence, '4', 'la cabeza es la de la misma foto')
+  // Una verificación nueva ve los siete.
+  assert.equal((await verify(chainId)).chain.verified, 7)
+})
+
+test('verificar mientras otro proceso escribe eventos: sin errores ni anomalías', async () => {
+  const org = auditTestOrganizationId()
+  const chainId = `org:${org}`
+  const total = 30
+  const writer = `(async () => {
+    const { getPayload } = await import('payload')
+    const { default: config } = await import('./payload.config.ts')
+    const { withTransaction } = await import('./domain/with-transaction.ts')
+    const { addAuditEvent } = await import('./domain/audit/builder.ts')
+    const payload = await getPayload({ config })
+    console.log('listo')
+    for (let index = 1; index <= ${total}; index++) {
+      await withTransaction(payload, undefined, req => addAuditEvent(req, {
+        action: 'scan.rename',
+        scope: { kind: 'organization', organizationId: '${org}', officeIds: ${JSON.stringify(OFFICES)} },
+        entity: { type: 'scan_report', id: 'report-' + index },
+        actor: { type: 'user', id: '5e4d3c2b-1a09-4f8e-b7d6-c5b4a3928170', role: 'org_admin' },
+        origin: 'interactive',
+        payload: { index },
+        network: index % 2 === 0
+          ? { source: 'trusted_proxy', ip: '${IP}', family: 'ipv4', captured_at: new Date().toISOString() }
+          : { source: 'unknown', ip: null, family: null, captured_at: new Date().toISOString() },
+      }))
+    }
+    process.exit(0)
+  })().catch(error => { console.error(error); process.exit(1) })`
+  const env: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: 'test', PAYLOAD_DISABLE_JOBS: '1' }
+  delete env.NODE_TEST_CONTEXT
+  const child = spawn(process.execPath, ['--import', 'tsx', '-e', writer], { cwd: ROOT, env })
+  let output = ''
+  const ready = new Promise<void>(resolve =>
+    child.stdout.on('data', chunk => {
+      output += chunk
+      if (output.includes('listo')) resolve()
+    })
+  )
+  child.stderr.on('data', chunk => (output += chunk))
+  let exited = false
+  const exit = new Promise<number | null>(resolve =>
+    child.on('exit', code => {
+      exited = true
+      resolve(code)
+    })
+  )
+  await Promise.race([ready, exit])
+
+  const seen = new Set<number>()
+  let runs = 0
+  while (!exited) {
+    const { report, chain } = await verify(chainId, { batchSize: 3 })
+    runs += 1
+    assert.equal(chain.error, null, `corrida ${runs}: ${chain.error?.detail}`)
+    assert.deepEqual(chain.anomalies, [], `corrida ${runs}: anomalías`)
+    assert.equal(report.orphanNetworkContexts, 0, `corrida ${runs}: contextos sin evento`)
+    assert.equal(chain.verified, Number(chain.head?.sequence ?? 0), `corrida ${runs}: misma foto`)
+    seen.add(chain.verified)
+  }
+  assert.equal(await exit, 0, output)
+  assert.ok(
+    seen.size >= 3,
+    `las verificaciones se superpusieron con la escritura (${[...seen].join(', ')})`
+  )
+  const final = await verify(chainId)
+  assert.equal(final.chain.verified, total)
+  assert.ok(final.report.ok)
 })
