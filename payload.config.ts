@@ -31,6 +31,8 @@ import { RiskContributions } from './collections/RiskContributions'
 import { Tasks } from './collections/Tasks'
 import { PortalMessages } from './collections/PortalMessages'
 import { PortalMessageReceipts } from './collections/PortalMessageReceipts'
+import { AuditLogs } from './collections/AuditLogs'
+import { AuditNetworkContexts } from './collections/AuditNetworkContexts'
 import { latestRiskEvaluationEndpoint } from './endpoints/risk'
 import { taskEndpoints } from './endpoints/tasks'
 import { portalMessageEndpoints } from './endpoints/portalMessages'
@@ -142,6 +144,9 @@ export default buildConfig({
     PortalMessages,
     PortalMessageReceipts,
     InventoryIncidents,
+    // AuditLog: solo agregado, acceso directo denegado (03 §2).
+    AuditLogs,
+    AuditNetworkContexts,
   ],
   // Servidos vía app/(payload)/api/[...slug]/route.ts (catch-all de Next que reexporta
   // REST_GET/REST_POST/... de @payloadcms/next/routes) — sin ese archivo, Payload no recibe
