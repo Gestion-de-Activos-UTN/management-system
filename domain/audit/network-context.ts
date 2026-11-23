@@ -135,7 +135,7 @@ export function trustedProxyHops(env: Env): number {
 
 /** Contexto de red de una solicitud (para addAuditEvent). Ver las reglas arriba. */
 export function requestNetwork(
-  req: { headers: Headers },
+  req: { headers?: Headers },
   options: { env?: Env; now?: Date } = {}
 ): NetworkContextV1 {
   const hops = trustedProxyHops(options.env ?? process.env)
@@ -143,7 +143,7 @@ export function requestNetwork(
   const unknown: NetworkContextV1 = { source: 'unknown', ip: null, family: null, captured_at }
   if (hops === 0) return unknown
 
-  const header = req.headers.get('x-forwarded-for')
+  const header = req.headers?.get('x-forwarded-for')
   if (!header || header.length > MAX_FORWARDED_FOR_LENGTH) return unknown
   const entries = header.split(',').map(entry => entry.trim())
   if (entries.length < hops) return unknown

@@ -793,10 +793,11 @@ export const AUDIT_MARKERS: readonly MarkerEntry[] = [
     id: 'A095',
     file: 'endpoints/evidenceNames.ts',
     text: 'this action must emit an AuditLogs entry (chain_hash over {collection, id, display_name}, previous hash for this organization_id)',
-    status: 'pending',
+    status: 'implemented',
+    implementedIn: 'endpoints/evidenceNames.ts',
     actions: ['scan.rename', 'snapshot.rename'],
     phase: 'F1',
-    note: 'Primer evento real del núcleo (F1).',
+    note: 'Primer evento real del núcleo (F1b): display_name antes y después, en la transacción del renombre con la fila bloqueada; sin cambio real, sin evento.',
   },
   {
     id: 'A096',
