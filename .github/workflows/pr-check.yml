@@ -15,6 +15,9 @@ jobs:
   build:
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
+    # Hoy tarda ~2 min. `pnpm test` ya no usa --test-force-exit: un test que deje algo abierto
+    # colgaría el job; con este límite falla en vez de consumir minutos hasta el tope de Actions.
+    timeout-minutes: 15
     permissions:
       contents: read
 
