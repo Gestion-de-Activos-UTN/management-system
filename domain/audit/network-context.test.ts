@@ -3,7 +3,14 @@ import assert from 'node:assert/strict'
 import { createSecretKey } from 'node:crypto'
 import { FIXTURE_ENVELOPE, FIXTURE_NETWORK_CONTEXT } from './envelope.fixture'
 import { computeNetworkDigest } from './hmac'
-import { AuditNetworkContextError, canonicalIp, parseNetworkContext } from './network-context'
+import {
+  AuditNetworkConfigError,
+  AuditNetworkContextError,
+  canonicalIp,
+  parseNetworkContext,
+  requestNetwork,
+  trustedProxyHops,
+} from './network-context'
 
 function issuesFor(value: unknown): string[] {
   try {
@@ -102,4 +109,91 @@ test('el digest no se calcula sobre un contexto inválido', () => {
     context: { ...FIXTURE_NETWORK_CONTEXT, ip: '2001:DB8::1', family: 'ipv6' },
   }
   assert.throws(() => computeNetworkDigest(input, 'test-2026-11', keys), AuditNetworkContextError)
+})
+
+// --- requestNetwork (02 §6) ---
+
+const NOW = new Date('2026-11-23T12:34:56.789Z')
+const withHeader = (value?: string) => ({
+  headers: new Headers(value === undefined ? {} : { 'x-forwarded-for': value }),
+})
+const network = (hops: string | undefined, header?: string) =>
+  requestNetwork(withHeader(header), { env: { AUDIT_TRUSTED_PROXY_HOPS: hops }, now: NOW })
+const UNKNOWN = { source: 'unknown', ip: null, family: null, captured_at: NOW.toISOString() }
+
+test('requestNetwork sin proxy configurado: unknown, aunque venga X-Forwarded-For', () => {
+  assert.deepEqual(network(undefined, '203.0.113.7'), UNKNOWN)
+  assert.deepEqual(network('0', '203.0.113.7'), UNKNOWN)
+  assert.deepEqual(requestNetwork(withHeader('203.0.113.7'), { env: {}, now: NOW }), UNKNOWN)
+})
+
+test('requestNetwork con un proxy: la entrada de más a la derecha, nunca la primera', () => {
+  assert.deepEqual(network('1', '203.0.113.7'), {
+    source: 'trusted_proxy',
+    ip: '203.0.113.7',
+    family: 'ipv4',
+    captured_at: NOW.toISOString(),
+  })
+  // Un cliente que manda su propio X-Forwarded-For: el proxy agrega la dirección real al final.
+  assert.equal(network('1', '10.0.0.1, 192.0.2.99,198.51.100.4').ip, '198.51.100.4')
+})
+
+test('requestNetwork con varios proxies: la entrada N desde la derecha', () => {
+  assert.equal(network('2', 'falsa, 203.0.113.7, 10.0.0.2').ip, '203.0.113.7')
+  assert.equal(network('3', '203.0.113.7, 10.0.0.3, 10.0.0.2').ip, '203.0.113.7')
+  // Menos entradas que proxies: el pedido no pasó por todos (o la configuración no coincide).
+  assert.deepEqual(network('2', '203.0.113.7'), UNKNOWN)
+})
+
+test('requestNetwork normaliza IPv6 e IPv4 mapeada', () => {
+  assert.deepEqual(
+    [network('1', '2001:DB8:0:0::1').ip, network('1', '2001:DB8:0:0::1').family],
+    ['2001:db8::1', 'ipv6']
+  )
+  assert.deepEqual(
+    [network('1', '::ffff:203.0.113.7').ip, network('1', '::ffff:203.0.113.7').family],
+    ['203.0.113.7', 'ipv4']
+  )
+})
+
+test('requestNetwork: lo que no es una IP literal admitida da unknown', () => {
+  for (const header of [
+    '',
+    '203.0.113.7:8080',
+    '[2001:db8::1]:443',
+    'fe80::1%eth0',
+    'proxy.interno',
+    'unknown',
+    '203.0.113.7,',
+    '203.0.113.256',
+    `${'1.1.1.1, '.repeat(500)}203.0.113.7`,
+  ])
+    assert.deepEqual(network('1', header), UNKNOWN, JSON.stringify(header).slice(0, 40))
+  assert.deepEqual(network('1'), UNKNOWN, 'sin la cabecera')
+})
+
+test('requestNetwork devuelve solo el contexto v1: nunca la cabecera cruda', () => {
+  const context = network('1', 'cliente-falso, 203.0.113.7')
+  assert.deepEqual(Object.keys(context).sort(), ['captured_at', 'family', 'ip', 'source'])
+  assert.ok(!JSON.stringify(context).includes('cliente-falso'))
+  assert.deepEqual(parseNetworkContext(context), context)
+})
+
+test('AUDIT_TRUSTED_PROXY_HOPS: entero de 0 a 5; el error no muestra el valor', () => {
+  assert.equal(trustedProxyHops({}), 0)
+  for (const [raw, expected] of [
+    ['0', 0],
+    ['1', 1],
+    ['5', 5],
+  ] as const)
+    assert.equal(trustedProxyHops({ AUDIT_TRUSTED_PROXY_HOPS: raw }), expected)
+  for (const raw of ['', '6', '-1', '01', '1.0', ' 1', 'dos', '10']) {
+    assert.throws(
+      () => trustedProxyHops({ AUDIT_TRUSTED_PROXY_HOPS: raw }),
+      (error: unknown) =>
+        error instanceof AuditNetworkConfigError && !error.message.includes(`"${raw}"`),
+      JSON.stringify(raw)
+    )
+    assert.throws(() => network(raw, '203.0.113.7'), AuditNetworkConfigError)
+  }
 })

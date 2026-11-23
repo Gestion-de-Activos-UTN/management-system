@@ -22,8 +22,10 @@ const VALID = {
   AUDIT_NETWORK_KEYS: `dev-20261123-e5f6:${N1}`,
   AUDIT_NETWORK_ACTIVE_KEY_ID: 'dev-20261123-e5f6',
 }
-// NEXT_PHASE también se guarda y se restaura: lo usa la excepción del build.
-const NAMES = [...Object.keys(VALID), 'NEXT_PHASE'] as Array<keyof typeof VALID | 'NEXT_PHASE'>
+// NEXT_PHASE y AUDIT_TRUSTED_PROXY_HOPS también se guardan y se restauran: los usa el arranque.
+const NAMES = [...Object.keys(VALID), 'NEXT_PHASE', 'AUDIT_TRUSTED_PROXY_HOPS'] as Array<
+  keyof typeof VALID | 'NEXT_PHASE' | 'AUDIT_TRUSTED_PROXY_HOPS'
+>
 const SECRETS = [H1, N1, 'dev-20261123-a1b2', 'dev-20261123-e5f6']
 
 function messageFor(env: Record<string, string | undefined>): string {
@@ -148,6 +150,28 @@ test('durante next build no se piden claves al iniciar Payload', () => {
   withProcessEnv({ NEXT_PHASE: 'phase-production-build' }, () => {
     const { adapter, calls } = fakeAdapter()
     assert.doesNotThrow(() => withAuditKeysCheck(adapter).init({ payload: {} } as never))
+    assert.equal(calls.length, 1)
+  })
+})
+
+test('withAuditKeysCheck: un AUDIT_TRUSTED_PROXY_HOPS inválido también frena el arranque', () => {
+  for (const hops of ['-1', '01', '6', 'uno', ' 1', '']) {
+    withProcessEnv({ ...VALID, AUDIT_TRUSTED_PROXY_HOPS: hops }, () => {
+      const { adapter, calls } = fakeAdapter()
+      assert.throws(
+        () => withAuditKeysCheck(adapter).init({ payload: {} } as never),
+        (error: unknown) =>
+          error instanceof Error &&
+          /AUDIT_TRUSTED_PROXY_HOPS tiene que ser un entero de 0 a 5/.test(error.message) &&
+          (hops === '' || !error.message.includes(`"${hops}"`)),
+        JSON.stringify(hops)
+      )
+      assert.equal(calls.length, 0, 'no tiene que crear el adaptador')
+    })
+  }
+  withProcessEnv({ ...VALID, AUDIT_TRUSTED_PROXY_HOPS: '2' }, () => {
+    const { adapter, calls } = fakeAdapter()
+    withAuditKeysCheck(adapter).init({ payload: {} } as never)
     assert.equal(calls.length, 1)
   })
 })

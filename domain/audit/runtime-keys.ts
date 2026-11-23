@@ -1,6 +1,7 @@
 import { PHASE_PRODUCTION_BUILD } from 'next/constants'
 import type { DatabaseAdapterObj } from 'payload'
 import { formatAuditKeyErrors, parseAuditKeys, type AuditKeyError, type AuditKeys } from './config'
+import { trustedProxyHops } from './network-context'
 
 // Llaveros del AuditLog de este proceso (documentation/planes/audit-log/03-seguridad-y-claves.md
 // §5: verificar presencia, longitud, ids y versión activa antes de aceptar escrituras auditables).
@@ -54,14 +55,19 @@ export function auditKeysRequiredAtInit(env: Env): boolean {
 }
 
 /**
- * Envuelve el adaptador de base para validar los llaveros antes de crearlo: Payload llama a este
- * `init` antes de `db.init()` y de `db.connect()`, así que sin claves no se abre ninguna conexión.
+ * Envuelve el adaptador de base para validar la configuración del AuditLog antes de crearlo:
+ * Payload llama a este `init` antes de `db.init()` y de `db.connect()`, así que con una
+ * configuración inválida no se abre ninguna conexión. Valida los llaveros y
+ * AUDIT_TRUSTED_PROXY_HOPS (un valor inválido frena el arranque, no la primera escritura).
  */
 export function withAuditKeysCheck(adapter: DatabaseAdapterObj): DatabaseAdapterObj {
   return {
     ...adapter,
     init: args => {
-      if (auditKeysRequiredAtInit(process.env)) getAuditKeys()
+      if (auditKeysRequiredAtInit(process.env)) {
+        getAuditKeys()
+        trustedProxyHops(process.env)
+      }
       return adapter.init(args)
     },
   }
