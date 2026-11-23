@@ -16,7 +16,12 @@ Andamiaje inicial, basado en la arquitectura de SafeLink (multi-tenant, RBAC, ri
    cp .env.example .env.local
    ```
 
-   Completar `PAYLOAD_SECRET`, `AUDIT_LOG_ENCRYPTION_KEY` y credenciales de Auth0.
+   Completar `PAYLOAD_SECRET` y credenciales de Auth0. Generar los llaveros de desarrollo del
+   AuditLog (los agrega a `.env.local` con permisos 600, sin pisar nada ni imprimir claves):
+
+   ```bash
+   pnpm audit:keys:init
+   ```
 
 2. Levantar Postgres + app:
 
